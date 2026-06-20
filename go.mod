@@ -1,4 +1,4 @@
-module changeme
+module skill-box
 
 go 1.25
 

@@ -3,7 +3,37 @@
     "allow": [
       "Bash(grep -n \"ginp.RouterAppend\\\\|RouterItem{\" /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/*.go)",
       "Bash(grep -rln \"Menu.*Menu\\\\|OnClick\\\\|NewMenu\" /Users/brody/go/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.60/pkg/application/menu*.go)",
-      "Bash(grep -n \"^func.*SystemTray\\\\|NewSystemTray\\\\|SetIcon\\\\|SetMenu\\\\|OnClick\" /Users/brody/go/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.60/pkg/application/system_tray*.go)"
+      "Bash(grep -n \"^func.*SystemTray\\\\|NewSystemTray\\\\|SetIcon\\\\|SetMenu\\\\|OnClick\" /Users/brody/go/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.60/pkg/application/system_tray*.go)",
+      "Bash(/tmp/web-srv)",
+      "Bash(echo \"started pid=$!\")",
+      "Bash(echo \"pid=$!\")",
+      "Bash(go build:*)",
+      "Bash(rm:*)",
+      "Bash(echo \"web pid=$!\")",
+      "Bash(nc -w 2 127.0.0.1 8082)",
+      "Bash(printf 'GET /api/health HTTP/1.1\\\\r\\\\nHost: 127.0.0.1:8082\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n')",
+      "Bash(printf 'GET / HTTP/1.1\\\\r\\\\nHost: 127.0.0.1:8082\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n')",
+      "Bash(printf 'GET /users/123 HTTP/1.1\\\\r\\\\nHost: 127.0.0.1:8082\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n')",
+      "Bash(printf 'GET /assets/index-BZNm2K6j.js HTTP/1.1\\\\r\\\\nHost: 127.0.0.1:8082\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n')",
+      "Bash(printf 'GET /style.css HTTP/1.1\\\\r\\\\nHost: 127.0.0.1:8082\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n')",
+      "Bash(/tmp/sb_web --config /Volumes/MyDrive/Home/dicoder/projects/skill-box/configs.yaml)",
+      "Bash(kill b5rbv78di:*)",
+      "Bash(xargs -r kill)",
+      "Bash(rm -f /tmp/data.db)",
+      "Bash(/tmp/sb_web --config /tmp/sb_config_test.yaml)",
+      "Bash(nc -z 127.0.0.1 8082)",
+      "Bash(printf \"GET / HTTP/1.1\\\\r\\\\nHost: 127.0.0.1\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\")",
+      "Bash(nc -w2 127.0.0.1 8082)",
+      "Bash(printf \"GET /users/123 HTTP/1.1\\\\r\\\\nHost: 127.0.0.1\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\")",
+      "Bash(printf \"GET /assets/index-D9Rjc5w9.js HTTP/1.1\\\\r\\\\nHost: 127.0.0.1\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\")",
+      "Bash(printf \"GET /api/health HTTP/1.1\\\\r\\\\nHost: 127.0.0.1\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\")",
+      "Bash(printf \"GET /assets/index-BZNm2K6j.js HTTP/1.1\\\\r\\\\nHost: 127.0.0.1\\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\")",
+      "Bash(rm -f data.db)",
+      "Bash(/tmp/sb_gapi --config ./configs.yaml)",
+      "Bash(/tmp/sb_desktop:*)",
+      "Bash(nc -w2 127.0.0.1 8083)",
+      "Bash(gofmt -w api-server/cmd/server/server.go api-server/internal/gapi/start/run.go main.go)",
+      "Bash(gofmt -l api-server/cmd/bootstrap api-server/cmd/server api-server/cmd/web/main.go api-server/cmd/gapi/main.go api-server/internal/gapi/start/run.go main.go desktop/wails_app.go)"
     ]
   }
 }

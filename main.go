@@ -1,84 +1,69 @@
+// Package main 桌面端入口。
+//
+// 双部署形态:
+//   - Web 端: 编译 api-server/cmd/web,一份二进制 = 静态前端 + 业务接口。
+//   - 桌面端: 编译本 main.go,启动 in-process api-server + Wails Webview 加载它。
+//
+// 启动流程:
+//  1. 调 bootstrap.Boot(在另一个 goroutine)→ 跑 cfg→DB→Task→Logger,返回 *Backend
+//  2. 调 bootstrap.Serve(在另一个 goroutine)→ 阻塞跑 gin HTTP server
+//  3. 调 desktop.NewApp + App.Run 跑 Wails 主循环
+//
+// 客户端(Wails 窗口)是可选的——可以只跑 backend(供 CLI / 测试 / 第三方前端用)。
+// 客户端和后端的边界很清晰:
+//
+//	bootstrap.Boot + bootstrap.Serve  ←  进程内起后端,必启动
+//	desktop.NewApp + App.Run           ←  构造 Wails 窗口/菜单/托盘,可选
 package main
 
 import (
 	"embed"
-	_ "embed"
+	"flag"
+	"io/fs"
 	"log"
-	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"ginp-api/cmd/bootstrap"
+	"skill-box/desktop"
 )
 
-// Wails 使用 Go 的 `embed` 包将前端文件嵌入到二进制文件中。
-// frontend/dist 文件夹中的任何文件都会被嵌入到二进制中，
-// 并提供给前端访问。
-// 更多信息请参见 https://pkg.go.dev/embed。
-
 //go:embed all:frontend/dist
-var assets embed.FS
+var frontendFS embed.FS
 
-func init() {
-	// 注册一个数据类型为 string 的自定义事件。
-	// 这一步不是必需的，但绑定生成器会识别已注册的事件，
-	// 并为它们提供强类型的 JS/TS API。
-	application.RegisterEvent[string]("time")
-}
-
-// main 函数作为应用程序的入口点。它会初始化应用程序、创建窗口，
-// 并启动一个 goroutine，每秒发送一个基于时间的事件。随后运行应用程序，
-// 并在出现错误时进行日志记录。
 func main() {
+	configPath := flag.String("config", bootstrap.DefaultConfigFile, "配置文件路径(yaml)")
+	flag.Parse()
 
-	// 通过提供必要的选项来创建一个新的 Wa7ils 应用程序。
-	// 'Name' 和 'Description' 用于设置应用程序的元数据。
-	// 'Assets' 通过 'FS' 变量配置资源服务器，指向前端文件。
-	// 'Bind' 是 Go 结构体实例的列表，前端可以访问这些实例的方法。
-	// 'Mac' 选项用于在 macOS 上运行时定制应用程序。
-	app := application.New(application.Options{
-		Name:        "skill-box",
-		Description: "A demo of using raw HTML & CSS",
-		Services: []application.Service{
-			application.NewService(&GreetService{}),
-		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
-		},
-	})
-
-	// 使用必要的选项创建一个新窗口。
-	// 'Title' 是窗口的标题。
-	// 'Mac' 选项用于在 macOS 上运行时定制窗口。
-	// 'BackgroundColour' 是窗口的背景颜色。
-	// 'URL' 是将在 webview 中加载的地址。
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Window 1",
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		BackgroundColour: application.NewRGB(27, 38, 54),
-		URL:              "/",
-	})
-
-	// 创建一个 goroutine，每秒发送一个包含当前时间的事件。
-	// 前端可以监听此事件并相应地更新 UI。
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
-		}
-	}()
-
-	// 运行应用程序。此调用会一直阻塞，直到应用程序退出。
-	err := app.Run()
-
-	// 如果运行应用程序时发生错误，记录该错误并退出。
+	// embed 路径 "frontend/dist" 在 fs 里保留了目录前缀,先 Sub 出 dist 子 FS。
+	distFS, err := fs.Sub(frontendFS, "frontend/dist")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("sub frontend/dist failed: %v", err)
+	}
+
+	// 1) 后端:直接调 bootstrap.Boot + bootstrap.Serve(和 web/gapi 同一份启动流程)。
+	//    Serve 是阻塞的,放 goroutine 里跑;Wails 主循环在另一个 goroutine。
+	backend, err := bootstrap.Boot(bootstrap.BootOptions{
+		ConfigFile: *configPath,
+		ServerOptions: func() bootstrap.ServerOptions {
+			return bootstrap.ServerOptions{
+				StaticFS:    distFS,
+				FrontRootFS: distFS,
+			}
+		},
+	})
+	if err != nil {
+		log.Fatalf("bootstrap: Boot failed: %v", err)
+	}
+	log.Printf("desktop: backend ready at %s", backend.URL())
+	go bootstrap.Serve(backend)
+
+	// 2) 客户端:启动 Wails。如果以后要做"只跑后端 + 第三方前端"模式,
+	// 把这一段替换成 select{} 阻塞即可。
+	app := desktop.NewApp(desktop.AppConfig{
+		Name: "Skill Box",
+	}, backend)
+
+	// 3) 运行 Wails 主循环(阻塞)
+	if err := app.Run(); err != nil {
+		log.Printf("app run error: %v", err)
 	}
 }

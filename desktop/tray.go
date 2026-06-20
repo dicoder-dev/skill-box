@@ -12,10 +12,10 @@ type TrayManager struct {
 // NewTrayManager 构造并创建托盘。
 func NewTrayManager(app *application.App, onShow func(), onQuit func()) *TrayManager {
 	t := app.SystemTray.New()
-	t.SetLabel("Skill Box").
-		SetTooltip("Skill Box").
-		OnClick(onShow).
-		OnDoubleClick(onShow)
+	t.SetLabel("Skill Box")
+	t.SetTooltip("Skill Box")
+	t.OnClick(onShow)
+	t.OnDoubleClick(onShow)
 	t.SetMenu(buildTrayMenu(app, onShow, onQuit))
 	t.Show()
 	return &TrayManager{tray: t}
@@ -33,7 +33,7 @@ func buildTrayMenu(app *application.App, onShow func(), onQuit func()) *applicat
 	menu.AddSeparator()
 	menu.Add("关于 Skill Box").
 		OnClick(func(_ *application.Context) {
-			app.Dialog.InfoDialog().
+			app.Dialog.Info().
 				SetTitle("关于").
 				SetMessage("Skill Box\n桌面端 + Web 端双部署").
 				Show()

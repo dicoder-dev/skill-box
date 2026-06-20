@@ -1,0 +1,46 @@
+2026/06/21 01:21:20 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/pkg/server.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/pkg/server.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/pkg/server.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/pkg/server.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/internal/gapi/controller/system/cdemotable.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func5 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func5 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.4.RegisterHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/pkg/server.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 01:21:20 | 200 |     748.167µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 01:21:20 | 200 |     132.208µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 01:21:20 | 200 |     137.625µs |       127.0.0.1 | GET      "/assets/index-BZNm2K6j.js"
+[GIN] 2026/06/21 - 01:21:20 | 200 |      20.292µs |       127.0.0.1 | GET      "/assets/index-DRnENS_v.css"
+[GIN] 2026/06/21 - 01:21:20 | 200 |       36.25µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:20 | 200 |      61.708µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 01:21:20 | 200 |      24.416µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 01:21:20 | 200 |       16.25µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:20 | 200 |     377.459µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 01:21:23 | 200 |      23.834µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:24 | 200 |      29.334µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:25 | 200 |      25.041µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:25 | 200 |      47.833µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:25 | 200 |      12.792µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:25 | 200 |        46.5µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:26 | 200 |      30.917µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:27 | 200 |      25.666µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:29 | 200 |       36.25µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:21:29 | 200 |       22.25µs |       127.0.0.1 | GET      "/users/123"

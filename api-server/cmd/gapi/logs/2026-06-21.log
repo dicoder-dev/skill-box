@@ -1,0 +1,80 @@
+2026/06/21 00:57:34 start: http server on :8083 (disk static)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/internal/gapi/controller/system/cdemotable.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func5 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func5 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.4.RegisterHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/internal/gapi/controller/system/cdemotable.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func5 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func5 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.4.RegisterHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+2026/06/21 01:05:40 bootstrap: http server on :8083
+[GIN] 2026/06/21 - 01:06:00 | 200 |      88.625µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 01:06:23 | 404 |         1.5µs |       127.0.0.1 | GET      "/"
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/internal/gapi/controller/system/cdemotable.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/internal/gapi/controller/system/cdemotable.init.1.RegisterHandler.func5 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func2 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func3 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func4 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.3.RegisterHandler.func5 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.4.RegisterHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN] 2026/06/21 - 01:21:51 | 200 |     212.125µs |       127.0.0.1 | GET      "/api/health"

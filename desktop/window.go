@@ -11,7 +11,8 @@ import (
 type WindowManager struct {
 	mu      sync.Mutex
 	primary application.Window
-	// 后续可加 secondary、toolbox 等多窗口
+
+	alwaysOnTop bool // v3 alpha 60 Window 接口无 getter,自己维护
 }
 
 // NewWindowManager 创建窗口管理器。
@@ -34,17 +35,15 @@ func (m *WindowManager) Primary() application.Window {
 }
 
 // ToggleAlwaysOnTop 切换主窗口的"窗口置顶"状态,返回切换后的值。
-// Wails v3 alpha 60 未提供 AlwaysOnTop() getter,直接从 options 字段读取。
 func (m *WindowManager) ToggleAlwaysOnTop() bool {
 	if m.primary == nil {
 		return false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	opts := m.primary.Options()
-	next := !opts.AlwaysOnTop
-	m.primary.SetAlwaysOnTop(next)
-	return next
+	m.alwaysOnTop = !m.alwaysOnTop
+	m.primary.SetAlwaysOnTop(m.alwaysOnTop)
+	return m.alwaysOnTop
 }
 
 // ShowPrimary 如果主窗口被最小化/隐藏,把它恢复并置前。
@@ -54,6 +53,7 @@ func (m *WindowManager) ShowPrimary() {
 	}
 	m.primary.Show()
 	if m.primary.IsMinimised() {
-		m.primary.ToggleMaximise() // v3 alpha 暂未提供 UnMinimise 公开 API,这里只是兜底
+		m.primary.UnMinimise()
 	}
+	m.primary.Focus()
 }
