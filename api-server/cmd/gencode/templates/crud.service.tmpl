@@ -1,0 +1,17 @@
+package s$PACKAGE_NAME$
+
+import (
+	"ginp-api/internal/gapi/model/$PARENT_DIR$m$PACKAGE_NAME$"
+	"ginp-api/internal/db/dbs"
+)
+
+var $ENTITY_NAME$ *m$PACKAGE_NAME$.Model
+
+func Model() *m$PACKAGE_NAME$.Model {
+	if $ENTITY_NAME$ == nil {
+		dbRead := dbs.GetReadDb()
+		dbWrite := dbs.GetWriteDb()
+		$ENTITY_NAME$ = m$PACKAGE_NAME$.NewModel(dbRead, dbWrite)
+	}
+	return $ENTITY_NAME$
+}

@@ -1,0 +1,553 @@
+definitions:
+    demo_table:
+        type: object
+        properties:
+            created_at:
+                description: ""
+                example: ""
+                type: object
+            id:
+                description: ""
+                example: 0
+                type: number
+            updated_at:
+                description: ""
+                example: ""
+                type: object
+    req_search:
+        type: object
+        properties:
+            extra:
+                description: ""
+                example: ""
+                type: object
+            wheres:
+                description: ""
+                example: ""
+                type: object
+    request_demo_add_api:
+        type: object
+        properties: {}
+    request_login_by_email:
+        type: object
+        properties:
+            email:
+                description: ""
+                example: ""
+                type: string
+            password:
+                description: ""
+                example: ""
+                type: string
+    request_login_by_username:
+        type: object
+        properties:
+            password:
+                description: ""
+                example: ""
+                type: string
+            username:
+                description: ""
+                example: ""
+                type: string
+    request_register_by_email:
+        type: object
+        properties:
+            email:
+                description: ""
+                example: ""
+                type: string
+            email_code:
+                description: ""
+                example: ""
+                type: string
+            password:
+                description: ""
+                example: ""
+                type: string
+            username:
+                description: ""
+                example: ""
+                type: string
+    request_update_user_info:
+        type: object
+        properties:
+            email_code:
+                description: ""
+                example: ""
+                type: string
+            new_pwd:
+                description: ""
+                example: ""
+                type: string
+            user_info:
+                description: ""
+                example: ""
+                type: object
+    respond_data:
+        type: object
+        properties:
+            code:
+                description: 状态码1正常,0异常,401未登录,403无操作权限
+                example: 1
+                type: number
+            data:
+                description: 返回的数据
+                example: ""
+                type: object
+            msg:
+                description: 提示消息
+                example: OK
+                type: string
+    user:
+        type: object
+        properties:
+            avatar_url:
+                description: ""
+                example: ""
+                type: string
+            created_at:
+                description: ""
+                example: ""
+                type: object
+            email:
+                description: ""
+                example: ""
+                type: string
+            huawei_push_token:
+                description: ""
+                example: ""
+                type: string
+            id:
+                description: ""
+                example: 0
+                type: number
+            is_cancel:
+                description: ""
+                example: false
+                type: boolean
+            mini_app_open_id:
+                description: ""
+                example: ""
+                type: string
+            password:
+                description: ""
+                example: ""
+                type: string
+            phone:
+                description: ""
+                example: ""
+                type: string
+            points:
+                description: ""
+                example: 0
+                type: number
+            status:
+                description: ""
+                example: 0
+                type: number
+            updated_at:
+                description: ""
+                example: ""
+                type: object
+            username:
+                description: ""
+                example: ""
+                type: string
+            vip_end_at:
+                description: ""
+                example: ""
+                type: object
+            vip_permanent:
+                description: ""
+                example: false
+                type: boolean
+            wechat_open_id:
+                description: ""
+                example: ""
+                type: string
+info:
+    description: API 文档
+    title: API 文档
+    version: "2.0"
+paths:
+    /:
+        get:
+            consumes:
+                - application/json
+            description: ' '
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: ' '
+            tags:
+                - ""
+    /api/demo_table/create:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: DemoTable
+                  schema:
+                    $ref: '#/definitions/demo_table'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: create demo_table
+            tags:
+                - demo_table
+    /api/demo_table/delete:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: DemoTable
+                  schema:
+                    $ref: '#/definitions/demo_table'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: delet demo_table
+            tags:
+                - demo_table
+    /api/demo_table/demo_add_api:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: RequestDemoAddApi
+                  schema:
+                    $ref: '#/definitions/request_demo_add_api'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: demo_add_api
+            tags:
+                - demo_table
+    /api/demo_table/findbyid:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: DemoTable
+                  schema:
+                    $ref: '#/definitions/demo_table'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: find demo_table by id
+            tags:
+                - demo_table
+    /api/demo_table/search:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: ReqSearch
+                  schema:
+                    $ref: '#/definitions/req_search'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: search demo_table
+            tags:
+                - demo_table
+    /api/demo_table/update:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: DemoTable
+                  schema:
+                    $ref: '#/definitions/demo_table'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: modify demo_table
+            tags:
+                - demo_table
+    /api/sys_user/create:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: User
+                  schema:
+                    $ref: '#/definitions/user'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: create user
+            tags:
+                - sys_user
+    /api/sys_user/delete:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: User
+                  schema:
+                    $ref: '#/definitions/user'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: delet user
+            tags:
+                - sys_user
+    /api/sys_user/findbyid:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: User
+                  schema:
+                    $ref: '#/definitions/user'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: find user by id
+            tags:
+                - sys_user
+    /api/sys_user/login_by_email:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: RequestLoginByEmail
+                  schema:
+                    $ref: '#/definitions/request_login_by_email'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: login_by_email
+            tags:
+                - sys_user
+    /api/sys_user/login_by_username:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: RequestLoginByUsername
+                  schema:
+                    $ref: '#/definitions/request_login_by_username'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: login_by_username
+            tags:
+                - sys_user
+    /api/sys_user/search:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: ReqSearch
+                  schema:
+                    $ref: '#/definitions/req_search'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: search user
+            tags:
+                - sys_user
+    /api/sys_user/update:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: User
+                  schema:
+                    $ref: '#/definitions/user'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: modify user
+            tags:
+                - sys_user
+    /api/user/register_by_email:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: RequestRegisterByEmail
+                  schema:
+                    $ref: '#/definitions/request_register_by_email'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: register_by_email
+            tags:
+                - user
+    /api/user/update_user_info:
+        post:
+            consumes:
+                - application/json
+            description: ""
+            parameters:
+                - in: body
+                  name: RequestUpdateUserInfo
+                  schema:
+                    $ref: '#/definitions/request_update_user_info'
+            produces:
+                - application/json
+            responses:
+                "200":
+                    description: OK，返回正常
+                    schema:
+                        $ref: '#/definitions/respond_data'
+                "401":
+                    description: 需要登录，当前未登录！
+                "403":
+                    description: 无操作权限！
+            summary: update_user_info
+            tags:
+                - user
+swagger: "2.0"

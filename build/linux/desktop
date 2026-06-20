@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A skill-box application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/skill-box %u
+Terminal=false
+Type=Application
+Icon=skill-box
+Categories=Utility;
+StartupWMClass=skill-box
+
+ 

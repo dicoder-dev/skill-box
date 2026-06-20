@@ -1,0 +1,4 @@
+/vendor
+/build
+.Ds_Store
+cmd/gapi/__debug_bin*

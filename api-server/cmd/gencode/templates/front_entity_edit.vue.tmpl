@@ -1,0 +1,82 @@
+<template>
+  <DataEdit
+    v-model="visible"
+    :dialog-type="dialogType"
+    :edit-data="editData as Record<string, unknown>"
+    :fields="$ENTITY_NAME$Fields.list()"
+    add-title="添加$ENTITY_TITLE$"
+    edit-title="编辑$ENTITY_TITLE$"
+    :on-create="create$ENTITY_NAME$"
+    :on-update="update$ENTITY_NAME$"
+    :closeOnSuccess="true"
+    @success="handleSuccess"
+  />
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
+import type { $ENTITY_NAME$ } from './$ENTITY_LINE$';
+import { $ENTITY_NAME$Fields } from './$ENTITY_LINE$.f';
+import { $ENTITY_NAME$Service } from './$ENTITY_LINE$.s';
+import DataEdit from '@/components/admin/dataTable/DataEdit.vue';
+
+// Props
+interface Props {
+  modelValue: boolean;
+  dialogType: 'add' | 'edit';
+  editData?: $ENTITY_NAME$;
+}
+
+// Emits
+interface Emits {
+  (e: 'update:modelValue', value: boolean): void;
+  (e: 'success'): void;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  modelValue: false,
+  dialogType: 'add',
+  editData: undefined
+});
+
+const emit = defineEmits<Emits>();
+
+// 响应式数据
+const visible = ref(false);
+
+// 监听 props 变化
+watch(() => props.modelValue, (newVal) => {
+  visible.value = newVal;
+});
+
+watch(visible, (newVal) => {
+  emit('update:modelValue', newVal);
+});
+
+// CRUD 操作
+const create$ENTITY_NAME$ = async (formData: Record<string, unknown>): Promise<boolean> => {
+  try {
+    await $ENTITY_NAME$Service.create(formData as $ENTITY_NAME$);
+    return true;
+  } catch {
+   // ElMessage.error('添加$ENTITY_TITLE$失败');
+    return false;
+  }
+};
+
+const update$ENTITY_NAME$ = async (id: number, formData: Record<string, unknown>): Promise<boolean> => {
+  try {
+    await $ENTITY_NAME$Service.update(id, formData as $ENTITY_NAME$);
+    return true;
+  } catch {
+    ElMessage.error('更新$ENTITY_TITLE$失败');
+    return false;
+  }
+};
+
+// 事件处理
+const handleSuccess = () => {
+  emit('success');
+};
+</script>

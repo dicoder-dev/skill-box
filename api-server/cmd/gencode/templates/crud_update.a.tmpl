@@ -1,0 +1,47 @@
+package c$PACKAGE_NAME$
+
+import (
+	"ginp-api/internal/gapi/entity"
+	"ginp-api/internal/gapi/service/$PARENT_DIR$s$PACKAGE_NAME$"
+	"ginp-api/pkg/ginp"
+	"ginp-api/pkg/where"
+)
+
+func init() {
+	//API init:修改$ENTITY_TITLE$
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/update",                //api路径
+		AliasePaths:    []string{},                                                     //别名路径
+		Handler:        ginp.BindParamsHandler(Update, &UpdateDto{}),                  //对应控制器
+		ParamTypes:     []interface{}{&UpdateDto{}},                                   //参数类型（自动提取到SwaggerInfo.RequestParams）
+		HttpType:       ginp.HttpPost,                                                  //http请求类型
+		NeedLogin:      true,                                                           //是否需要登录
+		NeedPermission: true,                                                           //是否需要鉴权
+		PermissionName: "$ENTITY_LINE$.update",                                        //完整的权限名称,会跟权限表匹配
+		OperationType:  ginp.OpUpdate,                                                  //操作类型
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "修改$ENTITY_TITLE$",
+			Description: "修改$ENTITY_TITLE$信息",
+			// RequestParams 会自动从 ParamTypes[0] 提取
+		},
+	})
+}
+
+func Update(ctx *ginp.ContextPlus, params *UpdateDto) error {
+	wheres := where.Format(where.OptEqual("id", params.ID))
+	//也可以自己创建并传入读写db: tables.New$ENTITY_NAME$(wdb,rdb)
+	err := s$PACKAGE_NAME$.Model().Update(wheres, params.UpdateData, params.UpdateFields...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type UpdateDto struct {
+	ID         int                `json:"id"`
+	//更新的实体数据
+	UpdateData *entity.$ENTITY_NAME$ `json:"update_data"`
+	//指定更新字段 空数组表示自动更新非零值
+	UpdateFields []string `json:"update_fields"`
+}
+

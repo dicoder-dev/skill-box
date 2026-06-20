@@ -1,0 +1,142 @@
+<template>
+  <div>
+    <!-- 搜索表单 -->
+    <DataTableSearch
+      :fields="$ENTITY_NAME$Fields.list()"
+      :data-table-ref="dataTableRef"
+      :entity-config="$ENTITY_NAME$EntityConfig"
+      :on-search="handleSearch"
+    />
+
+    <!-- 数据表格 -->
+    <DataTable
+      ref="dataTableRef"
+      :data-list="dataList"
+      :data-total="dataTotal"
+      :columns="$ENTITY_NAME$Fields.getColumnsFields()"
+      :pagination="dataListExtra"
+      :fields-list="fieldsList"
+      :entity-config="$ENTITY_NAME$EntityConfig"
+        @refresh="handleRefresh"
+      @add="handleAdd"
+      @edit="handleEdit"
+      @delete="handleDelete"
+      @size-change="handleSizeChange"
+      @current-change="handleCurrentChange"
+    />
+
+    <!-- 添加/编辑弹窗 -->
+    <$ENTITY_NAME$Edit
+      v-model="dialogVisible"
+      :dialog-type="dialogType"
+      :edit-data="currentEditData"
+      @success="handleEditSuccess"
+    />
+  </div>
+</template>
+
+<script setup lang="ts" name="$ENTITY_NAME$Management">
+import { ref, onMounted } from 'vue';
+import type { $ENTITY_NAME$ } from './$ENTITY_LINE$';
+import type { Extra } from '@/utils/where/extra';
+import DataTable from '@/components/admin/dataTable/DataTable.vue';
+import DataTableSearch from '@/components/admin/dataTable/DataTableSearch.vue';
+import $ENTITY_NAME$Edit from './$ENTITY_NAME$Edit.vue';
+import { $ENTITY_NAME$Service } from './$ENTITY_LINE$.s';
+import { $ENTITY_NAME$Fields } from './$ENTITY_LINE$.f';
+import { $ENTITY_NAME$EntityConfig } from './$ENTITY_LINE$.s';
+
+
+// 状态管理
+const dataList = ref<$ENTITY_NAME$[]>([]);
+const dataTotal = ref(0);
+const dialogVisible = ref(false);
+const dialogType = ref<'add' | 'edit'>('add');
+const currentEditData = ref<$ENTITY_NAME$ | undefined>(undefined);
+const dataListExtra = ref<Extra>({
+  page_size: 10,
+  page_num: 1
+})
+
+// DataTable 引用
+const dataTableRef = ref<InstanceType<typeof DataTable>>();
+
+// 字段列表
+const fieldsList = $ENTITY_NAME$Fields.list();
+
+// 生命周期钩子
+onMounted(async () => {
+    searchDataList();
+});
+
+// 数据加载
+const searchDataList = async (formData?: Record<string, unknown>) => {
+    const result = await $ENTITY_NAME$Service.search$ENTITY_NAME$List(
+        formData || {},
+        dataListExtra.value
+    );
+    dataList.value = result.list;
+    dataTotal.value = result.total;
+};
+
+// 搜索处理
+const handleSearch = (formData: Record<string, unknown>) => {
+    searchDataList(formData);
+};
+
+
+// $ENTITY_TITLE$操作处理
+const handleAdd = () => {
+    dialogType.value = 'add';
+    currentEditData.value = undefined;
+    dialogVisible.value = true;
+};
+
+const handleEdit = (row: Record<string, unknown>) => {
+    dialogType.value = 'edit';
+    currentEditData.value = row as $ENTITY_NAME$;
+    dialogVisible.value = true;
+};
+
+const handleEditSuccess = async () => {
+    await searchDataList();
+};
+
+const handleDelete = async (row: Record<string, unknown>) => {
+    if (dataTableRef.value) {
+        const success = await dataTableRef.value.deleteWithConfirm(
+            row as  Record<string, unknown>,
+            $ENTITY_NAME$Service.delete,
+            'name',
+            '删除成功',
+            '删除$ENTITY_TITLE$失败'
+        );
+        if (success) {
+            await searchDataList();
+        }
+        return success;
+    }
+    return false;
+};
+
+
+// 分页处理
+const handleSizeChange = async (val: number) => {
+    dataListExtra.value.page_size = val;
+    await searchDataList();
+};
+
+const handleCurrentChange = async (val: number) => {
+    dataListExtra.value.page_num = val;
+    await searchDataList();
+};
+
+const handleRefresh = () => {
+    searchDataList();
+};
+
+</script>
+
+<style scoped>
+/* 页面样式可以在这里添加 */
+</style>

@@ -1,0 +1,38 @@
+import type { FieldConfig, TableColumnConfig } from '@/utils/dataTable/fields';
+import { FieldsRuleConvert } from '@/utils/dataTable/fieldsRuleConvert';
+import { FieldUtils } from '@/utils/dataTable/fieldUtils';
+
+const $ENTITY_NAME$FieldModules = import.meta.glob(['./fields/*.ts'], { eager: true});
+
+export class $ENTITY_NAME$Fields {
+    private static fields: FieldConfig[] | null = null;
+
+    // 获取所有字段配置（使用缓存）
+    public static list(): FieldConfig[] {
+        if (!this.fields) {
+            this.fields = FieldUtils.parseFieldModules($ENTITY_NAME$FieldModules);
+        }
+        return this.fields;
+    }
+
+    // 获取单个字段配置
+    public static getFieldConfig(field: string): FieldConfig | null {
+        const fieldConfig = this.list().find(f => f.name === field);
+        if (!fieldConfig) {
+            return null;
+        }
+        return fieldConfig;
+    }
+
+    // 获取表格列配置
+    public static getColumnsFields(): TableColumnConfig[] {
+        return FieldsRuleConvert.ToListRule(this.list());
+    }
+
+    //获取参与更新字段，根据isShow配置
+    public static getUpdateFields(): string[] {
+        return this.list().filter(f => f.update?.isShow).map(f => f.name);
+    }
+
+
+}

@@ -1,0 +1,39 @@
+package c$PACKAGE_NAME$
+
+import (
+	"ginp-api/internal/gapi/dto/comdto"
+	"ginp-api/internal/gapi/service/$PARENT_DIR$s$PACKAGE_NAME$"
+	"ginp-api/pkg/ginp"
+)
+
+
+func init() {
+	//API init:通过ID查询$ENTITY_TITLE$
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/find_by_id",                //api路径
+		AliasePaths:    []string{},                                                         //别名路径
+		Handler:        ginp.BindParamsHandler(FindByID, &comdto.ReqFindById{}),           //对应控制器
+		ParamTypes:     []interface{}{&comdto.ReqFindById{}},                              //参数类型（自动提取到SwaggerInfo.RequestParams）
+		HttpType:       ginp.HttpPost,                                                      //http请求类型
+		NeedLogin:      false,                                                              //是否需要登录
+		NeedPermission: false,                                                              //是否需要鉴权
+		PermissionName: "$ENTITY_LINE$.findById",                                          //完整的权限名称,会跟权限表匹配
+		OperationType:  ginp.OpRead,                                                        //操作类型
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "查询$ENTITY_TITLE$",
+			Description: "",
+			// RequestParams 会自动从 ParamTypes[0] 提取
+		},
+	})
+}
+
+func FindByID(ctx *ginp.ContextPlus, params *comdto.ReqFindById) error {
+	info, err := s$PACKAGE_NAME$.Model().FindOneById(params.ID)
+	if err != nil {
+		return err
+	}
+	ctx.SuccessData(info)
+	return nil
+}
+
+

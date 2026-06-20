@@ -1,0 +1,98 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_dicoder/core/types/entity/$ENTITY_LINE$.dart';
+import 'package:flutter_dicoder/core/utils/http/constants.dart';
+import 'package:flutter_dicoder/core/utils/http/request.dart';
+import 'package:flutter_dicoder/core/utils/where/where_export.dart';
+
+class $ENTITY_NAME$Service {
+  static final $ENTITY_NAME$Service _instance =
+      $ENTITY_NAME$Service._internal();
+  factory $ENTITY_NAME$Service() => _instance;
+  $ENTITY_NAME$Service._internal();
+
+  // 创建$ENTITY_TITLE$
+  static Future<$ENTITY_NAME$?> create$ENTITY_NAME$(
+      $ENTITY_NAME$ $ENTITY_SMALL$) async {
+    final res = await _post(
+      "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/create",
+      data: $ENTITY_SMALL$,
+    );
+    if (res == null || res.data == null) return null;
+    if (res.code == HttpCode.success) {
+      return $ENTITY_NAME$.fromJson(res.data);
+    }
+    return null;
+  }
+
+  // 根据ID查找$ENTITY_TITLE$
+  static Future<$ENTITY_NAME$?> findTripItemById(int id) async {
+    final res = await _post(
+      "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/find_by_id",
+      data: {'id': id},
+    );
+    if (res == null || res.data == null) return null;
+    if (res.code == HttpCode.success && res.data is Map<String, dynamic>) {
+      return $ENTITY_NAME$.fromJson(res.data as Map<String, dynamic>);
+    }
+    return null;
+  }
+
+  // 搜索$ENTITY_TITLE$
+  static Future<List<$ENTITY_NAME$>> search({
+    required WhereManager whereManager,
+  }) async {
+    final res = await _post(
+      "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/search",
+      data: whereManager.toSearchMap(),
+    );
+
+    if (res == null || res.data == null) return [];
+
+    if (res.code == HttpCode.success && res.data is Map<String, dynamic>) {
+      final data = res.data as Map<String, dynamic>;
+      final list = data['list'];
+      if (list is List) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map($ENTITY_NAME$.fromJson)
+            .toList();
+      }
+    }
+    return [];
+  }
+
+  // 更新$ENTITY_TITLE$
+  static Future<bool> updateTripItem($ENTITY_NAME$ tripItem,
+      {List<String>? updateFields}) async {
+    // 如果没有指定更新字段，则使用所有字段（留空则表示更新所有非零值）
+    final fieldsToUpdate = updateFields ?? [];
+
+    final res = await _post(
+      "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/update",
+      data: {
+        'id': tripItem.iD,
+        'update_data': tripItem.toJson(),
+        "update_fields": fieldsToUpdate,
+      },
+    );
+    return res != null && res.code == HttpCode.success;
+  }
+
+  // 删除$ENTITY_TITLE$
+  static Future<bool> deleteTripItem(int id) async {
+    final res = await _post(
+      "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/delete",
+      data: {'id': id},
+    );
+    return res != null && res.code == HttpCode.success;
+  }
+
+  static Future<dynamic> _post(String path, {Object? data}) async {
+    try {
+      return await request.post(path, data: data);
+    } catch (e, s) {
+      debugPrint('$ENTITY_NAME$Service $path error: $e\n$s');
+      return null;
+    }
+  }
+}

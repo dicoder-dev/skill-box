@@ -1,0 +1,15 @@
+{
+    //doc url : http://go.microsoft.com/fwlink/?LinkId=733558
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",// auto, debug, or release
+            "program": "${workspaceFolder}/cmd/gapi",
+            "env": {},
+            "args": []
+        }
+    ]
+}

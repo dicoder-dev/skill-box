@@ -1,0 +1,48 @@
+db:
+    mysql:
+        dbname: ""
+        ip: 127.0.0.1
+        port: "3306"
+        pwd: "123456"
+        user: root
+    pgsql:
+        dbname: ""
+        ip: 127.0.0.1
+        port: "5432"
+        pwd: "123456"
+        user: root
+    sqlite:
+        db_path: data.db
+    use_type: sqlite
+email:
+    client:
+        account: dicoder@126.com
+        host: smtp.126.com
+        port: 465
+        pwd: "12345"
+mysql:
+    dbname: z_test
+    ip: 127.0.0.1
+    port: "3306"
+    pwd: 123456
+    user: root
+server:
+    port: "8083"
+sqlite:
+    db_path: data.db
+system:
+    app:
+        name: dianji
+    db:
+        type: mysql
+    usercenter:
+        url: http://localhost:8082
+tencent:
+    cos:
+        allow_prefix: ""
+        bucket_appid: ""
+        bucket_name: ""
+        duration: 0
+        region: ""
+        secret_id: ""
+        secret_key: ""

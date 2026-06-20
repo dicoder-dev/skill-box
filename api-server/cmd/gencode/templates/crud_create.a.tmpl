@@ -1,0 +1,41 @@
+package c$PACKAGE_NAME$
+
+import (
+	"ginp-api/internal/gapi/entity"
+	"ginp-api/internal/gapi/service/$PARENT_DIR$s$PACKAGE_NAME$"
+	"ginp-api/pkg/ginp"
+)
+
+
+func init() {
+	//API init: create $ENTITY_TITLE$
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/create",                //api路径
+		AliasePaths:    []string{},                                                      //别名路径
+		Handler:        ginp.BindParamsHandler(Create, &entity.$ENTITY_NAME${}),        //对应控制器
+		ParamTypes:     []interface{}{&entity.$ENTITY_NAME${}},                         //参数类型（自动提取到SwaggerInfo.RequestParams）
+		HttpType:       ginp.HttpPost,                                                   //http请求类型
+		NeedLogin:      false,                                                           //是否需要登录
+		NeedPermission: false,                                                           //是否需要鉴权
+		PermissionName: "$ENTITY_LINE$.create",                                         //完整的权限名称,会跟权限表匹配
+		OperationType:  ginp.OpCreate,                                                   //操作类型
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "创建$ENTITY_TITLE$",
+			Description: "",
+			// RequestParams 会自动从 ParamTypes[0] 提取
+		},
+	})
+}
+
+func Create(ctx *ginp.ContextPlus, params *entity.$ENTITY_NAME$) error {
+	//也可以自己创建并传入读写db: tables.New$ENTITY_NAME$(wdb,rdb)
+	info, err := s$PACKAGE_NAME$.Model().Create(params)
+	if err != nil {
+		return err
+	}
+	ctx.SuccessData(info)
+	return nil
+}
+
+
+

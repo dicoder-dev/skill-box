@@ -1,0 +1,76 @@
+import { request } from "@/utils/http/request";
+import type { $ENTITY_NAME$ } from "./$ENTITY_LINE$.d";
+import { $ENTITY_NAME$Fields } from './$ENTITY_LINE$.f';
+import { SearchUtils } from "@/utils/dataTable/search";
+import type { Extra } from '@/utils/where/extra';
+import type {  DataTableEntityConfig } from '@/components/admin/dataTable/dataTable.d';
+
+//实体配置
+export const $ENTITY_NAME$EntityConfig:DataTableEntityConfig = {
+  entityName: '$ENTITY_NAME$',//实体名称
+  entityLineName: '$ENTITY_LINE$',//实体行下划线命名
+  entityTitle: '$ENTITY_TITLE$',//实体标题
+  parentFolderName: '$PARENT_DIR_PREFIX$',//父级目录
+}
+
+/**
+ * $ENTITY_NAME$ 服务类
+ * 提供$ENTITY_TITLE$相关的 CRUD 操作和列表搜索
+ */
+export class $ENTITY_NAME$Service {
+
+  /**
+   * 创建$ENTITY_TITLE$
+   */
+  static create<T = $ENTITY_NAME$>(data: object): Promise<T> {
+    return request.post<T>("api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/create", data);
+  }
+
+  /**
+   * 更新$ENTITY_TITLE$
+   */
+  static update<T = $ENTITY_NAME$>(id: number, data: object): Promise<T> {
+    return request.post<T>("api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/update", {
+      id,
+      update_data: data,
+      update_fields: $ENTITY_NAME$Fields.getUpdateFields() // 空数组表示自动更新非零值,传入视为要避免0值不生效的问题
+
+    });
+  }
+
+  /**
+   * 删除$ENTITY_TITLE$
+   */
+  static delete<T = $ENTITY_NAME$>(id: number): Promise<T> {
+    return request.post<T>("api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/delete", { id });
+  }
+
+  /**
+   * 根据 ID 获取$ENTITY_TITLE$
+   */
+  static async findById<T = $ENTITY_NAME$>(id: number): Promise<T> {
+    return request.post<T>("api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/find_by_id", { id });
+  }
+
+  /**
+   * 搜索$ENTITY_TITLE$列表
+   * @param searchData 搜索条件
+   * @param extra 分页和排序参数
+   */
+  static async search$ENTITY_NAME$List(
+    searchData: Record<string, unknown>,
+    extra: Extra
+  ): Promise<{ list: $ENTITY_NAME$[], total: number }> {
+    const where = SearchUtils.formatSearchParams(
+      searchData,
+      $ENTITY_NAME$Fields.list(),
+      extra
+    );
+
+    const result = await SearchUtils.getList<$ENTITY_NAME$>("api$PARENT_DIR_PREFIX$/$ENTITY_LINE$/search", where);
+    return {
+      list: result.list,
+      total: result.total
+    };
+  }
+}
