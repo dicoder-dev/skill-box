@@ -13,7 +13,7 @@ func Register(r *gin.Engine) {
 	r.Use(CORSMiddleware())
 
 	//登录鉴权检验
-	// r.Use(ginp.RegisterHandler(AuthorizationCheck))
+	// r.Use(ginp.BindHandler(AuthorizationCheck))
 
 	//权限验证
 	// r.Use(ginp.ConvHandler(permissionCheck))

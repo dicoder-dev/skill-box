@@ -44,7 +44,7 @@ func main() {
 		ConfigFile: *configPath,
 		ServerOptions: func() bootstrap.ServerOptions {
 			return bootstrap.ServerOptions{
-				Addr:        "0.0.0.0:" + configs.ServerPort(),
+				Addr:        "0.0.0.0:" + configs.Server.Port,
 				StaticFS:    distFS,
 				FrontRootFS: distFS,
 			}

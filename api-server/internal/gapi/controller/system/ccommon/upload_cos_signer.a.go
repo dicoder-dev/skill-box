@@ -38,14 +38,14 @@ func UploadCosSigner(c *ginp.ContextPlus) {
 	}
 
 	config := &cos.STSConfig{
-		SecretID:  configs.TencentCosSecretID(),
-		SecretKey: configs.TencentCosSecretKey(),
-		Bucket:    configs.TencentCosBucketName(),
-		Region:    configs.TencentCosRegion(),
-		AppID:     configs.TencentCosBucketAppId(),
+		SecretID:  configs.Tencent.Cos.SecretID,
+		SecretKey: configs.Tencent.Cos.SecretKey,
+		Bucket:    configs.Tencent.Cos.BucketName,
+		Region:    configs.Tencent.Cos.Region,
+		AppID:     configs.Tencent.Cos.BucketAppID,
 		//自定义文件名
 		CustomFileName: req.CustomFileName,
-		Duration:       int64(configs.TencentCosDuration()), //单位秒
+		Duration:       int64(configs.Tencent.Cos.Duration), //单位秒
 		UserId:         userId,                              //用户ID
 		StudioId:       req.StudioId,                        //工作室ID，如果为0则表示为用户上传的数据
 	}
@@ -78,7 +78,7 @@ func UploadCosSigner(c *ginp.ContextPlus) {
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           ApiUploadCosSigner,                    //api路径
-		Handlers:       ginp.RegisterHandler(UploadCosSigner), //对应控制器
+		Handlers:       ginp.BindHandler(UploadCosSigner), //对应控制器
 		HttpType:       ginp.HttpPost,                         //http请求类型
 		NeedLogin:      false,                                 //是否需要登录
 		NeedPermission: false,                                 //是否需要鉴权

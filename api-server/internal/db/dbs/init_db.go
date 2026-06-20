@@ -23,24 +23,24 @@ func InitDb(dbType string) {
 
 func initMysql() {
 	mysql.InitDb(
-		configs.MysqlIp(),
-		configs.MysqlPort(),
-		configs.MysqlUser(),
-		configs.MysqlDb(),
-		configs.MysqlPwd(),
+		configs.Db.Mysql.Ip,
+		configs.Db.Mysql.Port,
+		configs.Db.Mysql.User,
+		configs.Db.Mysql.Db,
+		configs.Db.Mysql.Pwd,
 	)
 }
 
 func initPgsql() {
 	pgsql.InitDb(
-		configs.PgsqlIp(),
-		configs.PgsqlPort(),
-		configs.PgsqlUser(),
-		configs.PgsqlDb(),
-		configs.PgsqlPwd(),
+		configs.Db.Pgsql.Ip,
+		configs.Db.Pgsql.Port,
+		configs.Db.Pgsql.User,
+		configs.Db.Pgsql.Db,
+		configs.Db.Pgsql.Pwd,
 	)
 }
 
 func initSqlite() {
-	sqlite.InitdDb(configs.SqliteDbPath())
+	sqlite.InitdDb(configs.Db.Sqlite.DbPath)
 }

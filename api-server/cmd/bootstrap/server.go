@@ -61,7 +61,7 @@ func New(opts ServerOptions) *http.Server {
 
 	addr := opts.Addr
 	if addr == "" {
-		addr = ":" + configs.ServerPort()
+		addr = ":" + configs.Server.Port
 	}
 	return &http.Server{Addr: addr, Handler: r}
 }

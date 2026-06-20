@@ -9,7 +9,7 @@ import (
 func TestXxx(t *testing.T) {
 	r := gin.Default()
 	SetSuccessCode(100)
-	r.GET("/", RegisterHandler(index))
+	r.GET("/", BindHandler(index))
 	r.Run(":8082")
 }
 

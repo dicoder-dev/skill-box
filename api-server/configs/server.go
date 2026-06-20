@@ -2,24 +2,14 @@ package configs
 
 import "ginp-api/pkg/cfg"
 
-const (
-	ConfigKeyServerPort = "server.port"
-)
+// Server 全局配置变量
+var Server = new(ServerConfig)
 
-const (
-	defaultServerPort = "8082"
-)
-
-// 初始化配置
-func init() {
-	cfg.SetDefault(ConfigKeyServerPort, defaultServerPort)
+// ServerConfig 服务配置
+type ServerConfig struct {
+	Port string `default:"8082"`
 }
 
-// 获取服务端口
-func ServerPort() string {
-	port := cfg.GetString(ConfigKeyServerPort)
-	if port == "" {
-		return defaultServerPort
-	}
-	return port
+func init() {
+	cfg.ParseConfigStruct(Server)
 }

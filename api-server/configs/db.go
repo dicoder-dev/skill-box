@@ -2,86 +2,40 @@ package configs
 
 import "ginp-api/pkg/cfg"
 
-// 适用的数据库类型: mysql,pgsql,sqlite
-const ConfigKeySystemDbType = "db.use_type"
+// Db 全局配置变量
+var Db = new(DbConfig)
 
-const defaultSystemDbType = "mysql"
-
-// -------------------------Mysql-------------------------
-const ConfigKeyMysqlPort = "db.mysql.port"
-const ConfigKeyMysqlIp = "db.mysql.ip"
-const ConfigKeyMysqlUser = "db.mysql.user"
-const ConfigKeyMysqlPwd = "db.mysql.pwd"
-const ConfigKeyMysqlDb = "db.mysql.dbname"
-
-func init() { // 设置默认值
-	cfg.SetDefault(ConfigKeySystemDbType, defaultSystemDbType)
-	cfg.SetDefault(ConfigKeyMysqlIp, "127.0.0.1")
-	cfg.SetDefault(ConfigKeyMysqlPort, "3306")
-	cfg.SetDefault(ConfigKeyMysqlUser, "root")
-	cfg.SetDefault(ConfigKeyMysqlDb, "")
-	cfg.SetDefault(ConfigKeyMysqlPwd, "123456")
-}
-func MysqlIp() string {
-	return cfg.GetString(ConfigKeyMysqlIp)
-}
-func MysqlPort() string {
-	return cfg.GetString(ConfigKeyMysqlPort)
+// DbConfig 数据库配置
+type DbConfig struct {
+	UseType string `default:"mysql"` // 适用的数据库类型: mysql,pgsql,sqlite
+	Mysql   MysqlConfig
+	Sqlite  SqliteConfig
+	Pgsql   PgsqlConfig
 }
 
-func MysqlUser() string {
-	return cfg.GetString(ConfigKeyMysqlUser)
-}
-func MysqlPwd() string {
-	return cfg.GetString(ConfigKeyMysqlPwd)
-}
-func MysqlDb() string {
-	return cfg.GetString(ConfigKeyMysqlDb)
-}
-
-func SystemDbType() string {
-	return cfg.GetString(ConfigKeySystemDbType)
+// MysqlConfig MySQL配置
+type MysqlConfig struct {
+	Ip   string `default:"127.0.0.1"`
+	Port string `default:"3306"`
+	User string `default:"root"`
+	Pwd  string `default:"123456"`
+	Db   string `default:""`
 }
 
-// -------------------------Sqlite-------------------------
-// sqlite数据库文件路径
-const ConfigKeySqliteDbPath = "db.sqlite.db_path"
-
-// 设置默认值
-func init() {
-	cfg.SetDefault(ConfigKeySqliteDbPath, "data.db")
+// SqliteConfig Sqlite配置
+type SqliteConfig struct {
+	DbPath string `default:"data.db"`
 }
 
-func SqliteDbPath() string {
-	return cfg.GetString(ConfigKeySqliteDbPath)
+// PgsqlConfig Pgsql配置
+type PgsqlConfig struct {
+	Ip   string `default:"127.0.0.1"`
+	Port string `default:"5432"`
+	User string `default:"root"`
+	Pwd  string `default:"123456"`
+	Db   string `default:""`
 }
-
-// -------------------------Pgsql-------------------------
-const ConfigKeyPgsqlPort = "db.pgsql.port"
-const ConfigKeyPgsqlIp = "db.pgsql.ip"
-const ConfigKeyPgsqlUser = "db.pgsql.user"
-const ConfigKeyPgsqlPwd = "db.pgsql.pwd"
-const ConfigKeyPgsqlDb = "db.pgsql.dbname"
 
 func init() {
-	cfg.SetDefault(ConfigKeyPgsqlIp, "127.0.0.1")
-	cfg.SetDefault(ConfigKeyPgsqlPort, "5432")
-	cfg.SetDefault(ConfigKeyPgsqlUser, "root")
-	cfg.SetDefault(ConfigKeyPgsqlDb, "")
-	cfg.SetDefault(ConfigKeyPgsqlPwd, "123456")
-}
-func PgsqlIp() string {
-	return cfg.GetString(ConfigKeyPgsqlIp)
-}
-func PgsqlPort() string {
-	return cfg.GetString(ConfigKeyPgsqlPort)
-}
-func PgsqlUser() string {
-	return cfg.GetString(ConfigKeyPgsqlUser)
-}
-func PgsqlPwd() string {
-	return cfg.GetString(ConfigKeyPgsqlPwd)
-}
-func PgsqlDb() string {
-	return cfg.GetString(ConfigKeyPgsqlDb)
+	cfg.ParseConfigStruct(Db)
 }

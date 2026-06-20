@@ -29,7 +29,7 @@ type Respond$API_NAME_BIG$ struct {
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           Api$API_NAME_BIG$,                //api路径
-		Handlers:       ginp.RegisterHandler($API_NAME_BIG$), //对应控制器
+		Handlers:       ginp.BindHandler($API_NAME_BIG$), //对应控制器
 		HttpType:       ginp.HttpPost,                //http请求类型
 		NeedLogin:      false,                        //是否需要登录
 		NeedPermission: false,                        //是否需要鉴权

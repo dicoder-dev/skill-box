@@ -40,7 +40,10 @@
       "Bash(mkdir -p diff-tools)",
       "Bash(grep -o \"Authorization\\\\|localStorage\\\\|core/utils/requests\" dist/assets/index-*.js)",
       "Bash(nohup /tmp/skill-box-web --config=/Volumes/MyDrive/Home/dicoder/projects/skill-box/configs.yaml)",
-      "Bash(disown)"
+      "Bash(disown)",
+      "Bash(xargs sed:*)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(md5:*)"
     ]
   }
 }

@@ -41,7 +41,7 @@ type RespondUpdateUserInfo struct {
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           ApiUpdateUserInfo,                    //api路径
-		Handlers:       ginp.RegisterHandler(UpdateUserInfo), //对应控制器
+		Handlers:       ginp.BindHandler(UpdateUserInfo), //对应控制器
 		HttpType:       ginp.HttpPost,                        //http请求类型
 		NeedLogin:      false,                                //是否需要登录
 		NeedPermission: false,                                //是否需要鉴权

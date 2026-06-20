@@ -82,7 +82,7 @@ func Boot(opts BootOptions) (*Backend, error) {
 		return nil, err
 	}
 	// 关键:dbs 包的 useDbType 需要在 cfg 加载完后同步过来。
-	dbs.SetDbType(configs.SystemDbType())
+	dbs.SetDbType(configs.Db.UseType)
 
 	if !opts.DisableLogger {
 		StartGinLogger()
@@ -145,7 +145,7 @@ func buildServerOptions(builder ServerOptionsBuilder) (ServerOptions, error) {
 		}
 	}
 	if srvOpts.Addr == "" {
-		srvOpts.Addr = "127.0.0.1:" + configs.ServerPort()
+		srvOpts.Addr = "127.0.0.1:" + configs.Server.Port
 	}
 	return srvOpts, nil
 }

@@ -12,7 +12,7 @@ import (
 // 注意:调用前必须已经 SetDbType() 过(useDbType 由 bootstrap 入口同步),
 // 否则 GetWriteDb 内部 switch 会拿到错误的 DB 实现。
 func StartDB() {
-	dbType := configs.SystemDbType()
+	dbType := configs.Db.UseType
 
 	switch dbType {
 	case "pgsql", "postgresql":

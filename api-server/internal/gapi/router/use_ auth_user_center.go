@@ -26,7 +26,7 @@ var keySet jwk.Set
 // InitJWK 初始化 JWKS 加载器
 func InitJWK() error {
 	// 设置全局变量
-	JwksURL = configs.SystemUserCenterUrl() + "/.well-known/jwks.json"
+	JwksURL = configs.System.UserCenterUrl + "/.well-known/jwks.json"
 
 	ctx := context.Background()
 

@@ -13,13 +13,13 @@ func TestRegisterRouter(t *testing.T) {
 
 	RouterAppend(RouterItem{
 		Path:     "/test",
-		Handlers: RegisterHandler(mockHandler),
+		Handlers: BindHandler(mockHandler),
 		HttpType: HttpGet,
 	})
 
 	RouterAppend(RouterItem{
 		Path:     "/test1",
-		Handlers: RegisterHandler(mockHandler),
+		Handlers: BindHandler(mockHandler),
 		HttpType: HttpGet,
 	})
 

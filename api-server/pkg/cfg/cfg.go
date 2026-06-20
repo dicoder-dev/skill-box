@@ -149,3 +149,10 @@ func (c *Config) Set(key string, value interface{}) error {
 	}
 	return nil
 }
+
+// setWithoutWrite 设置值但不写入文件（用于初始化默认值）
+func (c *Config) setWithoutWrite(key string, value interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.v.Set(key, value)
+}
