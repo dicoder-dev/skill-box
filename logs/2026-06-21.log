@@ -118,3 +118,79 @@
 [GIN] 2026/06/21 - 01:14:30 | 200 |       31.25µs |       127.0.0.1 | GET      "/api/health"
 [GIN] 2026/06/21 - 01:14:33 | 200 |      82.209µs |       127.0.0.1 | GET      "/api/health"
 [GIN] 2026/06/21 - 01:14:33 | 200 |      22.625µs |       127.0.0.1 | GET      "/users/123"
+2026/06/21 02:09:24 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/pkg/ginp.BindHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 02:09:26 | 200 |    1.494458ms |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 02:09:26 | 200 |        49.5µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 02:09:26 | 200 |     208.125µs |       127.0.0.1 | GET      "/assets/index-0A5g8oC4.js"
+[GIN] 2026/06/21 - 02:09:26 | 200 |          38µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 02:09:26 | 200 |      54.167µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:26 | 200 |     186.583µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 02:09:26 | 200 |      11.375µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 02:09:26 | 200 |      17.875µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:26 | 200 |     556.292µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 02:09:29 | 200 |      41.334µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:30 | 200 |      34.542µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:31 | 200 |      36.708µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:31 | 200 |      38.167µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:37 | 200 |      43.917µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:38 | 200 |       36.75µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:38 | 200 |          45µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:38 | 200 |      40.791µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:38 | 200 |      37.458µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:38 | 200 |      66.583µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:39 | 200 |        39.5µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:39 | 200 |      34.375µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:39 | 200 |      39.292µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:40 | 200 |      33.375µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:40 | 200 |      35.333µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:09:40 | 200 |      39.208µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:10:01 | 200 |      40.792µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:10:02 | 200 |      38.583µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:10:03 | 200 |      39.041µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:10:03 | 200 |      21.291µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:10:03 | 200 |      35.709µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:54 | 200 |      70.625µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:57 | 200 |      30.458µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 02:13:57 | 200 |      26.875µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 02:13:57 | 200 |      92.083µs |       127.0.0.1 | GET      "/assets/index-0A5g8oC4.js"
+[GIN] 2026/06/21 - 02:13:57 | 200 |       21.25µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 02:13:57 | 200 |       11.75µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:57 | 200 |       67.25µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 02:13:57 | 200 |      10.458µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 02:13:57 | 200 |       9.167µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:57 | 200 |     108.792µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      42.833µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 02:13:59 | 200 |       71.75µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 02:13:59 | 200 |     188.375µs |       127.0.0.1 | GET      "/assets/index-0A5g8oC4.js"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      17.583µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      33.917µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      87.542µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      20.458µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 02:13:59 | 200 |      13.458µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:13:59 | 200 |     214.709µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"

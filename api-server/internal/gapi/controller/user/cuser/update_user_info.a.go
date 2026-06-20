@@ -7,14 +7,23 @@ import (
 	"ginp-api/pkg/ginp"
 )
 
-const ApiUpdateUserInfo = "/api/user/update_user_info" //API Path
+func init() {
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/user/update_user_info",                                   //api路径
+		Handler:        ginp.BindParamsHandler(UpdateUserInfo, RequestUpdateUserInfo{}), //对应控制器
+		HttpType:       ginp.HttpPost,                                                 //http请求类型
+		NeedLogin:      false,                                                         //是否需要登录
+		NeedPermission: false,                                                         //是否需要鉴权
+		PermissionName: "user.update_user_info",                                       //完整的权限名称,会跟权限表匹配
+		Swagger: &ginp.SwaggerInfo{
+			Title:         "update_user_info",
+			Description:   "",
+			RequestParams: RequestUpdateUserInfo{},
+		},
+	})
+}
 
-func UpdateUserInfo(c *ginp.ContextPlus) {
-	var requestParams *RequestUpdateUserInfo
-	if err := c.ShouldBindJSON(&requestParams); err != nil {
-		c.Fail("request param error:" + err.Error())
-		return
-	}
+func UpdateUserInfo(c *ginp.ContextPlus, requestParams *RequestUpdateUserInfo) {
 	if requestParams.NewPwd != "" {
 		//因为UserInfo.Password的json标签是-，因此无法直接获取，需要单独获取
 		requestParams.UserInfo.Password = requestParams.NewPwd
@@ -36,20 +45,4 @@ type RequestUpdateUserInfo struct {
 }
 
 type RespondUpdateUserInfo struct {
-}
-
-func init() {
-	ginp.RouterAppend(ginp.RouterItem{
-		Path:           ApiUpdateUserInfo,                    //api路径
-		Handlers:       ginp.BindHandler(UpdateUserInfo), //对应控制器
-		HttpType:       ginp.HttpPost,                        //http请求类型
-		NeedLogin:      false,                                //是否需要登录
-		NeedPermission: false,                                //是否需要鉴权
-		PermissionName: "user.update_user_info",              //完整的权限名称,会跟权限表匹配
-		Swagger: &ginp.SwaggerInfo{
-			Title:       "update_user_info",
-			Description: "",
-			RequestDto:  RequestUpdateUserInfo{},
-		},
-	})
 }

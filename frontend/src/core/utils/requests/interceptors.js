@@ -13,6 +13,7 @@
 //   interceptors.response.use((resp) => { return resp.data }, (err) => Promise.reject(err))
 
 import { BusinessError, HttpError } from './errors.js'
+import { getRuntime } from '../runtime.js'
 
 function createManager() {
   const handlers = []
@@ -81,15 +82,20 @@ export const interceptors = {
 
 /**
  * 安装默认拦截器:
- *   1) request  - 从 localStorage.token 注入 Authorization
- *   2) response - HTTP 401 时清 token 并跳 /login(只在浏览器环境执行)
+ *   1) request  - needAuth=true 时从 localStorage.token 注入 Authorization
+ *   2) response - HTTP 401 兜底:needAuth=true 跳 /login;needAuth=false 仅清 token
  *   3) response - 业务码剥离:code === 1 返回 data,否则抛 BusinessError
+ *
+ * 行为受后端注入的 window.__APP_RUNTIME__.needAuth 控制:
+ *   - 桌面端(needAuth=false):不注入 token、不自动跳 /login
+ *   - Web 端 (needAuth=true) :按上面的常规行为
  *
  * 桌面端和 Web 端都用同一套;Webview 内部 localStorage 可用,location.href 也可用。
  */
 export function installDefaultInterceptors() {
-  // (1) token 注入
+  // (1) token 注入 — needAuth=false 时跳过
   request.use((cfg) => {
+    if (!getRuntime().needAuth) return cfg
     try {
       const token = typeof localStorage !== 'undefined' && localStorage.getItem('token')
       if (token) {
@@ -101,17 +107,20 @@ export function installDefaultInterceptors() {
     return cfg
   })
 
-  // (2) HTTP 401 兜底:JWT 失败由后端走非统一结构 {error:"..."} 直接 401
+  // (2) HTTP 401 兜底:按 needAuth 分流
   response.use(
     null,
     async (err) => {
-      if (err instanceof HttpError && err.status === 401) {
-        try {
-          localStorage.removeItem('token')
-        } catch (_) {
-          // ignore
-        }
-        // 避免重复跳转:记录一个标记
+      if (!(err instanceof HttpError) || err.status !== 401) {
+        throw err
+      }
+      try {
+        localStorage.removeItem('token')
+      } catch (_) {
+        // ignore
+      }
+      // needAuth=true 才跳 /login;桌面端由业务自己决定如何处理 401
+      if (getRuntime().needAuth) {
         try {
           if (!window.__SKILL_BOX_401_REDIRECTING__) {
             window.__SKILL_BOX_401_REDIRECTING__ = true

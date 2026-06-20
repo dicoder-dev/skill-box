@@ -1,25 +1,57 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import App from './App.vue'
 import { resolveBaseURL } from './api/http.js'
 import { http } from './core/utils/requests'
+import { getRuntime, dumpRuntime } from './core/utils/runtime.js'
+import { enableDebug, dlog, isDebug } from './core/utils/debug.js'
 import { platform } from './platform/index.js'
+import { useAppStore } from './store/app.js'
 
 // 双部署入口:
-// 1) 解析后端 baseURL(Web 走相对路径,桌面走 http://127.0.0.1:<port>)
+// 1) 注册 pinia 并一次性写 store(runtime + platform + baseURL)
 // 2) 探测一次健康检查,确认后端真的在跑(桌面端尤其重要:Webview 加载时后端可能还在初始化)
 // 3) 再 mount Vue,确保首次业务请求能找到后端
 async function bootstrap() {
+  const pinia = createPinia()
+  const app = createApp(App)
+  app.use(pinia)
+
+  const store = useAppStore()
+
+  // 1) 运行时配置(同步读 __APP_RUNTIME__)
+  store.setRuntime(getRuntime())
+  // 2) 平台能力(同步检测)
+  store.setPlatform(platform)
+  // 3) 解析 baseURL
   const base = await resolveBaseURL()
+  store.setBaseURL(base)
+
+  // 4) 调试模式:Vite dev 自动开,生产可由 ?debug=req 触发
+  const wantDebug = import.meta.env.DEV ||
+    (typeof location !== 'undefined' &&
+      /(^|[?&])(debug|debug=req|debug=1)\b/.test(location.search))
+  if (wantDebug) enableDebug()
   // 暴露到全局,方便调试
   window.__APP_CONFIG__ = { baseURL: base, isDesktop: platform.isDesktop }
+  window.__APP_STORE__ = store
+  dlog('bootstrap ready', {
+    runtime: getRuntime(),
+    isDesktop: platform.isDesktop,
+    baseURL: base,
+    debug: isDebug(),
+  })
 
+  // 5) 健康检查(走完整请求层,顺便验证拦截器)
   try {
     await http.get('/api/health')
+    dlog('health ok')
   } catch (e) {
     console.warn('health check failed,业务接口可能暂时不可用:', e.message)
   }
 
-  createApp(App).mount('#app')
+  // 6) 挂载
+  app.mount('#app')
 }
 
 bootstrap()

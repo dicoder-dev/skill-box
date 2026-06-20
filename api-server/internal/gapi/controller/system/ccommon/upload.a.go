@@ -11,17 +11,18 @@ import (
 	"ginp-api/pkg/ginp"
 )
 
-const ApiCommonUpload = "/api/common/upload" //这是一个测试接口连通性的接口
-
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           ApiCommonUpload,              //api路径
-		Handlers:       ginp.BindHandler(Upload), //对应控制器
-		HttpType:       ginp.HttpPost,                //http请求类型
-		NeedLogin:      true,                         //是否需要登录
-		NeedPermission: true,                         //是否需要鉴权
-		PermissionName: "Common.upload",              //完整的权限名称,会跟权限表匹配
+		Path:           "/api/common/upload",                            //api路径
+		Handler:        ginp.BindParamsHandler(Upload, RequestUpload{}), //对应控制器
+		HttpType:       ginp.HttpPost,                                   //http请求类型
+		NeedLogin:      true,                                            //是否需要登录
+		NeedPermission: true,                                            //是否需要鉴权
+		PermissionName: "Common.upload",                                 //完整的权限名称,会跟权限表匹配
 	})
+}
+
+type RequestUpload struct {
 }
 
 const baseUploadDir = "./static/upload"
@@ -40,7 +41,7 @@ var fileTypeDirMap = map[string]string{
 	".pdf":  "documents",
 }
 
-func Upload(c *ginp.ContextPlus) {
+func Upload(c *ginp.ContextPlus, requestParams *RequestUpload) {
 	// 获取上传的保存路径参数，默认为空字符串（相对路径）
 	relativeSavePath := c.DefaultPostForm("save_path", "")
 	// 获取上传的文件

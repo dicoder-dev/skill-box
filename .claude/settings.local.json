@@ -43,7 +43,9 @@
       "Bash(disown)",
       "Bash(xargs sed:*)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(md5:*)"
+      "Bash(md5:*)",
+      "Bash(grep -o \"\\\\[req\\\\]→\\\\|\\\\[req\\\\]←\\\\|\\\\[req\\\\]✗\\\\|store/app\\\\|__APP_STORE__\\\\|__skillBoxDebug\" dist/assets/index-*.js)",
+      "Bash(grep:*)"
     ]
   }
 }

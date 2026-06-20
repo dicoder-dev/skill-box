@@ -55,9 +55,9 @@ func (s *SwaGen) AddApis(routers []ginp.RouterItem) {
 		s.viper.Set(preKey+apiPathTags, getTags(r))                                                                              //获取分组
 
 		//请求参数
-		if r.Swagger != nil && r.Swagger.RequestDto != nil {
-			s.createDefinitions(r.Swagger.RequestDto) //创建一个schema
-			entityName := reflect.TypeOf(r.Swagger.RequestDto).Name()
+		if r.Swagger != nil && r.Swagger.RequestParams != nil {
+			s.createDefinitions(r.Swagger.RequestParams) //创建一个schema
+			entityName := reflect.TypeOf(r.Swagger.RequestParams).Name()
 			params := []ParamInfo{
 				{
 					In:     "body",

@@ -14,6 +14,7 @@
 import { resolveBaseURL } from '@/api/http.js'
 import { request as clientRequest } from './client.js'
 import { interceptors } from './interceptors.js'
+import { dlog, derr } from '../debug.js'
 
 /**
  * 把 params 对象拼成 query string。空值跳过。
@@ -68,15 +69,28 @@ async function doRequest(method, path, bodyOrParams, options = {}) {
     raw: !!raw,
   }
 
-  // request 拦截器链
-  cfg = await interceptors.request.run(cfg)
+  dlog(`→ ${method} ${realPath}`, { params: bodyOrParams, base })
 
-  // 底层请求
-  const resp = await clientRequest(cfg)
+  const t0 = Date.now()
+  try {
+    // request 拦截器链
+    cfg = await interceptors.request.run(cfg)
 
-  // response 拦截器链(raw 模式跳过业务码剥离)
-  if (cfg.raw) return resp
-  return interceptors.response.run(resp)
+    // 底层请求
+    const resp = await clientRequest(cfg)
+    const latency = Date.now() - t0
+    dlog(`← ${method} ${realPath} ${resp.status} (${latency}ms)`, resp.data)
+
+    // response 拦截器链(raw 模式跳过业务码剥离)
+    if (cfg.raw) return resp
+    const data = await interceptors.response.run(resp)
+    dlog(`✓ ${method} ${realPath} resolved`, data)
+    return data
+  } catch (err) {
+    const latency = Date.now() - t0
+    derr(`✗ ${method} ${realPath} (${latency}ms)`, err && err.message, err)
+    throw err
+  }
 }
 
 export const http = {

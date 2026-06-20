@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"bytes"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"path/filepath"
@@ -121,13 +123,17 @@ func mountFileServer(r *gin.Engine, prefix string, root fs.FS) {
 // 重要：必须放在 router.Register(r) 之后注册,否则会与业务路由冲突。
 // 这里不用 r.StaticFS("/") 那个 catch-all 形式,因为它会和 /static、/api 等具体路由冲突。
 // 拆成 r.GET("/", ...) + r.NoRoute(...) 后,/api/xxx 永远命中业务路由,/assets/xxx 走 StaticFS。
+//
+// index.html 会在写回响应体之前被注入一段 <script>window.__APP_RUNTIME__={...}</script>,
+// 把当前运行模式 / 是否启用鉴权 / 应用名告知前端。注入失败时静默放行,前端兜底走默认值。
 func mountFrontRoot(r *gin.Engine, opts ServerOptions) {
 	if opts.FrontRootFS == nil {
 		return
 	}
+	runtimeScript := buildRuntimeScript()
 	fileServer := http.FileServer(http.FS(opts.FrontRootFS))
 	r.GET("/", func(c *gin.Context) {
-		fileServer.ServeHTTP(c.Writer, c.Request)
+		serveIndexWithRuntime(c, opts.FrontRootFS, runtimeScript)
 	})
 	r.NoRoute(func(c *gin.Context) {
 		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
@@ -135,23 +141,38 @@ func mountFrontRoot(r *gin.Engine, opts ServerOptions) {
 			return
 		}
 		if spaFallback(opts.SPAFallback) {
-			serveSpaFallback(c, opts.FrontRootFS, fileServer)
+			serveSpaFallback(c, opts.FrontRootFS, fileServer, runtimeScript)
 			return
 		}
 		fileServer.ServeHTTP(c.Writer, c.Request)
 	})
 }
 
+// serveIndexWithRuntime 返回被注入运行时配置的 index.html。
+// 路径 "/" 直接命中首页,文件存在则读出来注入 script,否则走 fileServer 兜底。
+func serveIndexWithRuntime(c *gin.Context, root fs.FS, runtimeScript []byte) {
+	indexBytes, err := fs.ReadFile(root, "index.html")
+	if err != nil || len(indexBytes) == 0 {
+		// 没找到就让 fileServer 自己处理(404 / 别的 fallback)
+		http.FileServer(http.FS(root)).ServeHTTP(c.Writer, c.Request)
+		return
+	}
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(http.StatusOK)
+	_, _ = c.Writer.Write(injectRuntimeScript(indexBytes, runtimeScript))
+}
+
 // serveSpaFallback 提供静态文件,文件不存在时回落到 index.html,实现 SPA 路由能力。
-func serveSpaFallback(c *gin.Context, root fs.FS, fileServer http.Handler) {
+// fallback 到 index.html 时同样会注入运行时配置 script。
+func serveSpaFallback(c *gin.Context, root fs.FS, fileServer http.Handler, runtimeScript []byte) {
 	upath := c.Request.URL.Path
 	if upath == "" || upath == "/" {
-		fileServer.ServeHTTP(c.Writer, c.Request)
+		serveIndexWithRuntime(c, root, runtimeScript)
 		return
 	}
 	clean := strings.TrimPrefix(upath, "/")
 	if clean == "" {
-		fileServer.ServeHTTP(c.Writer, c.Request)
+		serveIndexWithRuntime(c, root, runtimeScript)
 		return
 	}
 	if f, err := root.Open(clean); err == nil {
@@ -166,7 +187,7 @@ func serveSpaFallback(c *gin.Context, root fs.FS, fileServer http.Handler) {
 	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Status(http.StatusOK)
-	_, _ = c.Writer.Write(indexBytes)
+	_, _ = c.Writer.Write(injectRuntimeScript(indexBytes, runtimeScript))
 }
 
 func spaFallback(p *bool) bool {
@@ -179,4 +200,72 @@ func spaFallback(p *bool) bool {
 // subFS 包装 io/fs.Sub,便于错误处理集中。
 func subFS(root fs.FS, dir string) (fs.FS, error) {
 	return fs.Sub(root, dir)
+}
+
+// runtimePayload 描述下发给前端的运行时配置。
+type runtimePayload struct {
+	RunMode  string `json:"runMode"`
+	NeedAuth bool   `json:"needAuth"`
+	AppName  string `json:"appName"`
+}
+
+// buildRuntimeScript 从当前 system 配置生成要注入的 <script>...</script> 片段。
+//
+// 只读一次 configs.System,在 mountFrontRoot 启动时调用,后续请求复用。
+// 字段缺失时给出安全默认值(runMode=web、needAuth=true)。
+func buildRuntimeScript() []byte {
+	cfg := configs.System
+	if cfg == nil {
+		// bootstrap 早期出错时可能为 nil,这里兜底
+		cfg = &configs.SystemConfig{RunMode: "web", NeedAuth: true, AppName: "skill-box"}
+	}
+	payload := runtimePayload{
+		RunMode:  defaultStr(cfg.RunMode, "web"),
+		NeedAuth: cfg.NeedAuth,
+		AppName:  defaultStr(cfg.AppName, "skill-box"),
+	}
+	js, err := json.Marshal(payload)
+	if err != nil {
+		// 序列化失败兜底
+		js = []byte(`{"runMode":"web","needAuth":true,"appName":"skill-box"}`)
+	}
+	return []byte(`<script>window.__APP_RUNTIME__=` + string(js) + `;</script>`)
+}
+
+// injectRuntimeScript 把 runtime script 注入 index.html 的 </head> 之前。
+//
+// 找不到 </head> 时退回到 body 起始位置之前;两者都找不到时直接拼接在头部。
+// 注入只发生在内存中,FS 不被修改。
+func injectRuntimeScript(html, script []byte) []byte {
+	if len(script) == 0 {
+		return html
+	}
+	// 优先 </head>
+	if idx := bytes.Index(html, []byte("</head>")); idx >= 0 {
+		out := make([]byte, 0, len(html)+len(script))
+		out = append(out, html[:idx]...)
+		out = append(out, script...)
+		out = append(out, html[idx:]...)
+		return out
+	}
+	// 退而求其次 <body>
+	if idx := bytes.Index(html, []byte("<body")); idx >= 0 {
+		out := make([]byte, 0, len(html)+len(script))
+		out = append(out, html[:idx]...)
+		out = append(out, script...)
+		out = append(out, html[idx:]...)
+		return out
+	}
+	// 都找不到就拼在头部
+	out := make([]byte, 0, len(script)+len(html))
+	out = append(out, script...)
+	out = append(out, html...)
+	return out
+}
+
+func defaultStr(s, dv string) string {
+	if s == "" {
+		return dv
+	}
+	return s
 }

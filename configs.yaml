@@ -1,11 +1,13 @@
 db:
     mysql:
+        db: ""
         dbname: ""
         ip: 127.0.0.1
         port: "3306"
         pwd: "123456"
         user: root
     pgsql:
+        db: ""
         dbname: ""
         ip: 127.0.0.1
         port: "5432"
@@ -13,7 +15,7 @@ db:
         user: root
     sqlite:
         db_path: data.db
-    use_type: mysql
+    use_type: sqlite
 email:
     client:
         account: dicoder@126.com
@@ -25,11 +27,16 @@ server:
 system:
     app:
         name: dianji
+    app_name: dianji
+    user_center_url: http://localhost:8082
     usercenter:
         url: http://localhost:8082
+    run_mode: web       # web | desktop
+    need_auth: true     # true | false
 tencent:
     cos:
         allow_prefix: ""
+        bucket_app_id: ""
         bucket_appid: ""
         bucket_name: ""
         duration: 0

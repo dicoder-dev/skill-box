@@ -13,7 +13,7 @@ func init() {
 	//访问方式：域名/swagger/index.html
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           "/swagger/*any",
-		Handlers:       ginSwagger.WrapHandler(swaggerfiles.Handler, url),
+		Handler:        ginSwagger.WrapHandler(swaggerfiles.Handler, url),
 		HttpType:       ginp.HttpGet,
 		NeedLogin:      false,
 		NeedPermission: false,
