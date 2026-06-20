@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { resolveBaseURL } from './api/http.js'
+import { http } from './core/utils/requests'
 import { platform } from './platform/index.js'
 
 // 双部署入口:
@@ -13,10 +14,9 @@ async function bootstrap() {
   window.__APP_CONFIG__ = { baseURL: base, isDesktop: platform.isDesktop }
 
   try {
-    const url = base ? `${base}/api/health` : '/api/health'
-    await fetch(url, { method: 'GET' })
+    await http.get('/api/health')
   } catch (e) {
-    console.warn('health check failed,业务接口可能暂时不可用:', e)
+    console.warn('health check failed,业务接口可能暂时不可用:', e.message)
   }
 
   createApp(App).mount('#app')

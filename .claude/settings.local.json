@@ -33,7 +33,14 @@
       "Bash(/tmp/sb_desktop:*)",
       "Bash(nc -w2 127.0.0.1 8083)",
       "Bash(gofmt -w api-server/cmd/server/server.go api-server/internal/gapi/start/run.go main.go)",
-      "Bash(gofmt -l api-server/cmd/bootstrap api-server/cmd/server api-server/cmd/web/main.go api-server/cmd/gapi/main.go api-server/internal/gapi/start/run.go main.go desktop/wails_app.go)"
+      "Bash(gofmt -l api-server/cmd/bootstrap api-server/cmd/server api-server/cmd/web/main.go api-server/cmd/gapi/main.go api-server/internal/gapi/start/run.go main.go desktop/wails_app.go)",
+      "Read(//Volumes/MyDrive/Home/dicoder/projects/ginp-api/pkg/ginp/**)",
+      "Read(//Volumes/MyDrive/Home/dicoder/projects/**)",
+      "Read(//private/tmp/**)",
+      "Bash(mkdir -p diff-tools)",
+      "Bash(grep -o \"Authorization\\\\|localStorage\\\\|core/utils/requests\" dist/assets/index-*.js)",
+      "Bash(nohup /tmp/skill-box-web --config=/Volumes/MyDrive/Home/dicoder/projects/skill-box/configs.yaml)",
+      "Bash(disown)"
     ]
   }
 }

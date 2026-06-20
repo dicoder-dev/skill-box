@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { http } from '../api/http.js'
+import { http } from '@/core/utils/requests'
 import { platform } from '../platform/index.js'
 
 defineProps({
