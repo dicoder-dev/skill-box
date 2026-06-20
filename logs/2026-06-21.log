@@ -194,3 +194,87 @@
 [GIN] 2026/06/21 - 02:13:59 | 200 |      20.458µs |       127.0.0.1 | GET      "/vue.svg"
 [GIN] 2026/06/21 - 02:13:59 | 200 |      13.458µs |       127.0.0.1 | GET      "/api/health"
 [GIN] 2026/06/21 - 02:13:59 | 200 |     214.709µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+2026/06/21 02:41:30 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 02:41:33 | 200 |          82µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 02:41:33 | 200 |    1.748833ms |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 02:41:33 | 200 |      242.25µs |       127.0.0.1 | GET      "/assets/index-CtCxK1Os.js"
+[GIN] 2026/06/21 - 02:41:33 | 200 |      27.625µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 02:41:33 | 200 |     190.708µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:33 | 200 |      76.209µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 02:41:33 | 200 |      10.834µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 02:41:33 | 200 |      14.917µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:33 | 200 |         243µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 02:41:40 | 200 |      52.791µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:40 | 200 |          46µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:41 | 200 |      53.209µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:41 | 200 |      58.667µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:41 | 200 |          46µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:42 | 200 |      46.125µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:45 | 200 |      54.042µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:46 | 200 |      63.583µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:47 | 200 |      61.541µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:41:49 | 200 |      49.167µs |       127.0.0.1 | GET      "/api/health"
+2026/06/21 02:43:48 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 02:43:48 | 200 |       62.25µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 02:43:48 | 200 |    1.373291ms |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 02:43:48 | 200 |     458.291µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 02:43:48 | 200 |     788.167µs |       127.0.0.1 | GET      "/assets/index-CtCxK1Os.js"
+[GIN] 2026/06/21 - 02:43:48 | 200 |      419.75µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:43:48 | 200 |      70.375µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 02:43:48 | 200 |      10.791µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 02:43:48 | 200 |     177.209µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:43:48 | 200 |     532.333µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 02:43:53 | 200 |     541.584µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 02:43:57 | 200 |     582.083µs |       127.0.0.1 | GET      "/api/health"
