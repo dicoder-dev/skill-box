@@ -119,121 +119,142 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="market">
+  <div class="market">
     <header class="head">
-      <div class="title">三方市场</div>
-      <div class="row">
-        <span class="label">作用域:</span>
-        <select v-model="installScope">
-          <option value="global">全局 (global)</option>
-          <option value="project" disabled>项目 (暂未启用)</option>
-        </select>
-        <input
-          v-model="keyword"
-          type="text"
-          placeholder="按 name 搜索…"
-          @keyup.enter="onSearch"
-        />
-        <button @click="onSearch">搜索</button>
-        <button :disabled="refreshing || !activeSourceId" @click="onRefresh">
-          {{ refreshing ? '刷新中…' : '刷新源' }}
-        </button>
-      </div>
+      <h2>🛒 三方市场</h2>
+      <p class="muted">从 skillhub.cn / skills.sh 等三方源拉取 skill,直接装到 Skill Box 本地 store。</p>
     </header>
 
-    <nav class="srcbar">
-      <button
-        v-for="s in sources"
-        :key="s.id"
-        :class="{ active: s.id === activeSourceId }"
-        @click="onSelectSource(s.id)"
-      >
-        {{ s.name }}
-        <span class="src-type">{{ s.type }}</span>
-      </button>
-    </nav>
+    <div class="card">
+      <div class="toolbar">
+        <div class="row">
+          <span class="label">作用域:</span>
+          <select v-model="installScope">
+            <option value="global">全局 (global)</option>
+            <option value="project" disabled>项目 (暂未启用)</option>
+          </select>
+          <input
+            v-model="keyword"
+            type="text"
+            placeholder="按 name 搜索…"
+            @keyup.enter="onSearch"
+          />
+          <button @click="onSearch">搜索</button>
+        </div>
+        <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefresh">
+          <span v-if="refreshing" class="spinner"></span>
+          {{ refreshing ? '刷新中…' : '↻ 刷新源' }}
+        </button>
+      </div>
 
-    <div v-if="error" class="err">{{ error }}</div>
-    <div v-if="lastRefresh" class="ok">
-      上次刷新:pulled {{ lastRefresh.pulled_count }} / inserted {{ lastRefresh.inserted }} / updated {{ lastRefresh.updated }} ({{ lastRefresh.finished_at }})
+      <nav class="srcbar">
+        <button
+          v-for="s in sources"
+          :key="s.id"
+          :class="{ active: s.id === activeSourceId }"
+          @click="onSelectSource(s.id)"
+        >
+          <span class="src-icon">📡</span>
+          {{ s.name }}
+          <span class="src-type">{{ s.type }}</span>
+        </button>
+        <span v-if="!sources.length && !loading" class="src-empty">没有可用的源</span>
+      </nav>
+
+      <div v-if="error" class="err">⚠️ {{ error }}</div>
+      <div v-if="lastRefresh" class="ok">
+        ✅ 上次刷新:pulled {{ lastRefresh.pulled_count }} · 新增 {{ lastRefresh.inserted }} · 更新 {{ lastRefresh.updated }}
+        <span class="muted">({{ lastRefresh.finished_at }})</span>
+      </div>
+      <div v-if="installOk" class="ok">✅ {{ installOk }}</div>
+      <div v-if="installError" class="err">⚠️ {{ installError }}</div>
+
+      <table v-if="items.length > 0" class="grid">
+        <thead>
+          <tr>
+            <th>name</th>
+            <th>version</th>
+            <th>author</th>
+            <th>description</th>
+            <th>tags</th>
+            <th style="width: 90px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="it in items" :key="it.remote_id">
+            <td>
+              <span class="name">{{ it.name }}</span>
+              <span class="rid">{{ it.remote_id }}</span>
+            </td>
+            <td><code>{{ it.version || '—' }}</code></td>
+            <td>{{ it.author || '—' }}</td>
+            <td class="desc">{{ it.description || '—' }}</td>
+            <td>
+              <span v-for="t in (it.tags || '').split(',').filter(Boolean)" :key="t" class="tag">
+                {{ t }}
+              </span>
+            </td>
+            <td>
+              <button class="link primary-link" :disabled="installing" @click="onInstall(it)">
+                {{ installing ? '装中…' : '安装' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!loading" class="empty-state">
+        <span class="empty-icon">📡</span>
+        当前源还没拉过。点 "↻ 刷新源" 把三方目录拉到本地。
+      </div>
+      <div v-else class="empty-state">
+        <span class="spinner"></span>
+        <p style="margin: 8px 0 0">加载中…</p>
+      </div>
+
+      <footer v-if="totalPages > 1" class="pager">
+        <button :disabled="page <= 1" @click="page--; fetchSkills()">上一页</button>
+        <span>第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
+        <button :disabled="page >= totalPages" @click="page++; fetchSkills()">下一页</button>
+      </footer>
     </div>
-    <div v-if="installOk" class="ok">{{ installOk }}</div>
-    <div v-if="installError" class="err">{{ installError }}</div>
-
-    <table v-if="items.length > 0" class="grid">
-      <thead>
-        <tr>
-          <th>name</th>
-          <th>version</th>
-          <th>author</th>
-          <th>description</th>
-          <th>tags</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="it in items" :key="it.remote_id">
-          <td>
-            <span class="name">{{ it.name }}</span>
-            <span class="rid">{{ it.remote_id }}</span>
-          </td>
-          <td>{{ it.version || '—' }}</td>
-          <td>{{ it.author || '—' }}</td>
-          <td class="desc">{{ it.description || '—' }}</td>
-          <td>
-            <span v-for="t in (it.tags || '').split(',').filter(Boolean)" :key="t" class="tag">
-              {{ t }}
-            </span>
-          </td>
-          <td>
-            <button :disabled="installing" @click="onInstall(it)">
-              {{ installing ? '装中…' : '安装' }}
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div v-else-if="!loading" class="empty">
-      当前源还没拉过。点 "刷新源" 把三方目录拉到本地。
-    </div>
-
-    <footer v-if="totalPages > 1" class="pager">
-      <button :disabled="page <= 1" @click="page--; fetchSkills()">上一页</button>
-      <span>第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
-      <button :disabled="page >= totalPages" @click="page++; fetchSkills()">下一页</button>
-    </footer>
-  </section>
+  </div>
 </template>
 
 <style scoped>
-.market { padding: 20px; max-width: 1100px; margin: 0 auto; }
-.head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-.title { font-size: 18px; font-weight: 600; }
+.market { max-width: 1100px; margin: 0 auto; }
+.head h2 { margin: 0 0 4px; font-size: 18px; }
+.head p { margin: 0 0 16px; font-size: 13px; }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .row { display: flex; gap: 8px; align-items: center; }
-.label { color: #6b7280; }
-.row input[type="text"] { flex: 1; max-width: 320px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; }
-.row select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; }
-.row button, .pager button, table button {
-  padding: 6px 12px; border: 1px solid #d1d5db; background: #ffffff;
-  border-radius: 4px; cursor: pointer; font-size: 13px;
-}
-.row button:disabled, .pager button:disabled, table button:disabled { opacity: 0.5; cursor: not-allowed; }
-.srcbar { display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+.label { color: var(--text-dim); font-size: 13px; }
+.row input[type="text"] { width: 240px; }
+
+.srcbar { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
 .srcbar button {
-  border: none; background: transparent; padding: 8px 12px;
-  border-bottom: 2px solid transparent; cursor: pointer; color: #6b7280;
+  border: none; background: transparent; padding: 8px 14px;
+  border-bottom: 2px solid transparent; cursor: pointer; color: var(--text-dim);
+  display: inline-flex; align-items: center; gap: 6px; font-size: 14px;
 }
-.srcbar button.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
-.src-type { font-size: 11px; color: #9ca3af; margin-left: 4px; }
-.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; }
-.ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; }
-.grid { width: 100%; border-collapse: collapse; margin-top: 10px; }
-.grid th, .grid td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; text-align: left; vertical-align: top; font-size: 13px; }
-.grid th { background: #f9fafb; font-weight: 600; color: #374151; }
-.name { font-weight: 500; color: #111827; display: block; }
-.rid { font-size: 11px; color: #9ca3af; font-family: ui-monospace, monospace; }
-.desc { color: #4b5563; max-width: 360px; }
+.srcbar button:hover:not(.active) { color: var(--text); }
+.srcbar button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.src-icon { font-size: 13px; }
+.src-type { font-size: 11px; color: var(--text-faint); }
+.srcbar button.active .src-type { color: var(--primary); }
+.src-empty { padding: 8px 12px; color: var(--text-faint); font-size: 13px; }
+
+.err { background: var(--danger-dim); color: var(--danger); border: 1px solid #fecaca; padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 13px; }
+.ok { background: var(--success-dim); color: var(--success); border: 1px solid #bbf7d0; padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 13px; }
+
+.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.grid th, .grid td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid #f3f4f6; }
+.grid th { background: #f9fafb; color: var(--text-dim); font-weight: 600; }
+.name { font-weight: 500; color: var(--text); display: block; }
+.rid { font-size: 11px; color: var(--text-faint); font-family: ui-monospace, monospace; }
+.desc { color: var(--text-dim); max-width: 360px; }
 .tag { display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 3px; padding: 1px 6px; font-size: 11px; margin-right: 4px; }
-.empty { padding: 30px; text-align: center; color: #9ca3af; }
-.pager { margin-top: 12px; display: flex; gap: 12px; align-items: center; justify-content: flex-end; color: #6b7280; font-size: 13px; }
+.link.primary-link { color: var(--success); font-weight: 500; }
+.link.primary-link:hover:not(:disabled) { background: var(--success-dim); }
+
+.pager { margin-top: 12px; display: flex; gap: 12px; align-items: center; justify-content: flex-end; color: var(--text-dim); font-size: 13px; }
 </style>

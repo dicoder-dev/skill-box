@@ -403,11 +403,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 <template>
   <div class="skills-layout"><section class="skills-view" :class="{ 'with-ai': aiOpen }">
-    <header class="bar">
-      <h2>Skills</h2>
+    <header class="head">
+      <h2>📚 Skills</h2>
+      <p class="muted">浏览 / 编辑 / 测试 / 落工具 / 打 tag / 回滚。AI 侧栏一键改写 frontmatter 与 body。</p>
+    </header>
+
+    <div class="bar">
       <div class="tabs">
-        <button :class="{ active: scope === 'global' }" @click="switchScope('global')">全局</button>
-        <button :class="{ active: scope === 'project' }" @click="switchScope('project')">项目</button>
+        <button :class="{ active: scope === 'global' }" @click="switchScope('global')">🌐 全局</button>
+        <button :class="{ active: scope === 'project' }" @click="switchScope('project')">📁 项目</button>
       </div>
       <div class="search">
         <input
@@ -416,30 +420,36 @@ onMounted(() => { reload(); checkUpdateBadge() })
           @keyup.enter="() => { page = 1; reload() }"
         />
         <button @click="() => { page = 1; reload() }">搜索</button>
-        <button @click="toggleAI">{{ aiOpen ? '关闭 AI' : '打开 AI' }}</button>
-        <button class="primary" @click="startNew">新建 Skill</button>
       </div>
-    </header>
+      <div class="actions">
+        <button @click="toggleAI">{{ aiOpen ? '🤖 关闭 AI' : '🤖 打开 AI' }}</button>
+        <button class="primary" @click="startNew">+ 新建 Skill</button>
+      </div>
+    </div>
 
     <div class="apply-bar">
       <span class="apply-label">Apply 目标工具:</span>
       <select v-model="applyTool">
         <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
       </select>
-      <button @click="checkUpdateBadge" :disabled="updating">
-        {{ updating ? '检测中…' : '检测更新' }}
+      <button class="sm" @click="checkUpdateBadge" :disabled="updating">
+        <span v-if="updating" class="spinner"></span>
+        {{ updating ? '检测中…' : '🔄 检测更新' }}
       </button>
       <span v-if="updateBadge.updates > 0" class="update-badge danger">
-        {{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
+        ⚠️ {{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
       </span>
       <span v-else-if="updateBadge.total > 0" class="update-badge ok">
-        {{ updateBadge.total }} 个 skill 已是最新
+        ✅ {{ updateBadge.total }} 个 skill 已是最新
       </span>
       <p v-if="applyMessage" class="apply-msg">{{ applyMessage }}</p>
       <p v-if="applyError" class="error">{{ applyError }}</p>
     </div>
 
-    <form v-if="editing" class="editor" @submit.prevent="submit">
+    <form v-if="editing" class="card editor" @submit.prevent="submit">
+      <h3>{{ editingKey ? '编辑 Skill' : '新建 Skill' }}
+        <span v-if="editingKey" class="card-sub"><code>{{ editingKey.name }}@{{ editingKey.version }}</code></span>
+      </h3>
       <div class="row">
         <label>
           <span>Name</span>
@@ -474,15 +484,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <textarea v-model="draft.body" rows="14" class="code" />
       </label>
       <div class="actions">
-        <button type="button" @click="editing = false">取消</button>
+        <button type="button" class="ghost" @click="editing = false">取消</button>
         <button type="submit" class="primary">{{ editingKey ? '保存' : '创建' }}</button>
       </div>
     </form>
 
-    <div v-if="applyHistory.length" class="apply-history">
+    <div v-if="applyHistory.length" class="card apply-history">
       <header class="ah-head">
-        <h4>最近 Apply 历史</h4>
-        <span class="ah-count">{{ applyHistory.length }} 条</span>
+        <h3>最近 Apply 历史</h3>
+        <span class="card-sub">{{ applyHistory.length }} 条</span>
       </header>
       <ul>
         <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`status-${h.Status}`">
@@ -490,12 +500,12 @@ onMounted(() => { reload(); checkUpdateBadge() })
           <span class="ah-tool">{{ h.Tool }}</span>
           <span class="ah-status">{{ h.Status }}</span>
           <span class="ah-time">{{ h.AppliedAt?.slice(0, 19) || '—' }}</span>
-          <button v-if="h.Status === 'applied'" class="link" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? '撤销中…' : '撤销' }}</button>
+          <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? '撤销中…' : '撤销' }}</button>
         </li>
       </ul>
     </div>
 
-    <div v-if="selectedSkill" class="tag-panel">
+    <div v-if="selectedSkill" class="card tag-panel">
       <header class="tp-head">
         <h4>Tag 管理 — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code></h4>
         <span class="tp-count">{{ tagList.length }} 个 tag</span>
@@ -558,9 +568,9 @@ onMounted(() => { reload(); checkUpdateBadge() })
       </div>
     </div>
 
-    <div v-if="lastTest || testError" class="test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
+    <div v-if="lastTest || testError" class="card test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
       <header class="tp-head">
-        <h4>最近测试结果</h4>
+        <h3>最近测试结果</h3>
         <span v-if="lastTest?.run" class="tp-status">{{ lastTest.run.status }}</span>
       </header>
       <p v-if="testError" class="error">测试失败: {{ testError }}</p>
@@ -578,172 +588,167 @@ onMounted(() => { reload(); checkUpdateBadge() })
       </details>
     </div>
 
-    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="error" class="error">⚠️ {{ error }}</p>
 
-    <table class="grid" v-if="items.length || !loading">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Version</th>
-          <th>Source</th>
-          <th>Project ID</th>
-          <th>Updated</th>
-          <th>更新</th>
-          <th style="width: 220px">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="!items.length">
-          <td colspan="7" class="empty">该 scope 下还没有 skill,点右上角"新建 Skill"开始</td>
-        </tr>
-        <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
-          <td><code>{{ p.Name }}</code></td>
-          <td>{{ p.Version }}</td>
-          <td>{{ p.Source }}</td>
-          <td>{{ p.ProjectID || '—' }}</td>
-          <td class="time">{{ p.UpdatedAt?.slice(0, 19) || '—' }}</td>
-          <td>
-            <span v-if="p.Source === 'market'" class="badge market">market</span>
-            <span v-else class="badge local">{{ p.Source }}</span>
-          </td>
-          <td>
-            <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? '应用中…' : '应用' }}</button>
-            <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? '测试中…' : '测试' }}</button>
-            <button class="link" @click="startEdit(p)">编辑</button>
-            <button class="link" @click="loadTags(p)">Tag</button>
-            <button class="link danger" @click="remove(p)">删除</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="card">
+      <h3>技能列表
+        <span class="card-sub">— 共 {{ total }} 条</span>
+        <span v-if="loading" class="spinner" style="margin-left: auto"></span>
+      </h3>
 
-    <footer class="pager" v-if="totalPages > 1">
-      <button :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-      <span>{{ page }} / {{ totalPages }} (共 {{ total }} 条)</span>
-      <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
-    </footer>
+      <table v-if="items.length" class="grid">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Version</th>
+            <th>Source</th>
+            <th>Project</th>
+            <th>Updated</th>
+            <th style="width: 260px">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
+            <td><code>{{ p.Name }}</code></td>
+            <td><code>{{ p.Version }}</code></td>
+            <td>
+              <span v-if="p.Source === 'market'" class="badge market">market</span>
+              <span v-else class="badge local">{{ p.Source }}</span>
+            </td>
+            <td>{{ p.ProjectID || '—' }}</td>
+            <td class="time">{{ p.UpdatedAt?.slice(0, 19) || '—' }}</td>
+            <td class="row-actions">
+              <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? '应用中…' : '应用' }}</button>
+              <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? '测试中…' : '测试' }}</button>
+              <button class="link" @click="startEdit(p)">编辑</button>
+              <button class="link" @click="loadTags(p)">Tag</button>
+              <button class="link danger" @click="remove(p)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!loading" class="empty-state">
+        <span class="empty-icon">📚</span>
+        <p style="margin: 8px 0 4px">该 scope 下还没有 skill</p>
+        <p class="muted" style="margin: 0">点右上角"+ 新建 Skill"开始,或去 Onboarding 从已装工具导入</p>
+      </div>
+
+      <footer v-if="totalPages > 1" class="pager">
+        <button :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+        <span>{{ page }} / {{ totalPages }} (共 {{ total }} 条)</span>
+        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+      </footer>
+    </div>
   </section><AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" /></div>
 </template>
 
 <style scoped>
-.test-panel { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
-.test-panel.status-passed { border-color: #bbf7d0; background: #f0fdf4; }
-.test-panel.status-failed { border-color: #fecaca; background: #fef2f2; }
-.test-panel.status-errored { border-color: #fde68a; background: #fffbeb; }
-.test-panel.status-skipped { border-color: #e5e7eb; background: #f9fafb; }
-.tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.tp-head h4 { margin: 0; font-size: 14px; }
-.tp-status { font-size: 12px; padding: 2px 6px; border-radius: 4px; background: #1f2937; color: #fff; text-transform: uppercase; }
-.tp-summary { color: #4b5563; font-size: 13px; margin: 4px 0 8px; }
-.tp-list { list-style: none; padding: 0; margin: 0; }
-.tp-list li { display: grid; grid-template-columns: 80px 90px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
-.tp-list .check-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #1f2937; }
-.tp-list .check-status { font-size: 12px; padding: 1px 6px; border-radius: 3px; text-align: center; }
-.tp-list .check-passed .check-status { background: #bbf7d0; color: #065f46; }
-.tp-list .check-failed .check-status { background: #fecaca; color: #991b1b; }
-.tp-list .check-errored .check-status { background: #fde68a; color: #92400e; }
-.tp-list .check-skipped .check-status { background: #e5e7eb; color: #4b5563; }
-.tp-list .check-msg { color: #4b5563; }
-.tp-detail { margin-top: 6px; }
-.tp-detail summary { cursor: pointer; font-size: 12px; color: #6b7280; }
-.tp-detail pre { background: #f3f4f6; padding: 6px 8px; border-radius: 4px; font-size: 11px; max-height: 200px; overflow: auto; }
-</style>
-<style scoped>
 .skills-layout { display: flex; height: 100%; }
-.skills-view { padding: 16px 20px; max-width: 1100px; margin: 0 auto; color: #1a1a1a; flex: 1; min-width: 0; }
+.skills-view { padding: 0; max-width: 1100px; margin: 0 auto; color: var(--text); flex: 1; min-width: 0; }
 .skills-view.with-ai { max-width: none; }
+.head h2 { margin: 0 0 4px; font-size: 18px; }
+.head p { margin: 0 0 16px; font-size: 13px; }
 .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.bar h2 { margin: 0; font-size: 18px; }
 .tabs { display: flex; gap: 0; }
 .tabs button { border-radius: 0; }
 .tabs button:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
 .tabs button:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-left: none; }
-.tabs button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .search { margin-left: auto; display: flex; gap: 6px; }
-.search input { width: 200px; }
-input, select, button, textarea {
-  font-size: 14px; padding: 5px 9px; border: 1px solid #d0d0d0; border-radius: 4px; background: #fff; color: #1a1a1a;
-}
-button { cursor: pointer; }
-button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-button.link { border: none; background: none; padding: 2px 4px; color: #2563eb; }
-button.link.danger { color: #b91c1c; }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-textarea { width: 100%; resize: vertical; font-family: inherit; }
-textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-.editor { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; margin-bottom: 12px; }
+.search input { width: 220px; }
+.bar .actions { display: flex; gap: 6px; }
+.editor { display: flex; flex-direction: column; gap: 10px; }
 .editor .row { display: grid; grid-template-columns: 1.4fr 0.8fr 0.8fr 0.8fr; gap: 10px 14px; }
-.editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4b5563; }
+.editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
 .editor label.full { width: 100%; }
-.editor label small { color: #9ca3af; }
-.actions { display: flex; gap: 8px; justify-content: flex-end; }
-.error { color: #b91c1c; margin: 6px 0; }
-.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
-.grid th, .grid td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #eef0f3; }
-.grid th { background: #f7f8fa; color: #4b5563; font-weight: 600; }
-.grid .empty { text-align: center; color: #9ca3af; padding: 18px; }
-.grid .time { color: #6b7280; font-size: 12px; }
-.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #4b5563; }
-.apply-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 8px 12px; background: #f5f7fa; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; }
-.apply-label { color: #4b5563; font-weight: 500; }
+.editor label small { color: var(--text-faint); }
+.editor .actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.test-panel.status-passed { border-color: #bbf7d0; background: #f0fdf4; }
+.test-panel.status-failed { border-color: #fecaca; background: #fef2f2; }
+.test-panel.status-errored { border-color: #fde68a; background: #fffbeb; }
+.test-panel.status-skipped { background: #f9fafb; }
+.tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tp-head h3 { margin: 0; font-size: 14px; }
+.tp-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2937; color: #fff; text-transform: uppercase; font-weight: 500; }
+.tp-summary { color: var(--text-dim); font-size: 13px; margin: 4px 0 8px; }
+.tp-list { list-style: none; padding: 0; margin: 0; }
+.tp-list li { display: grid; grid-template-columns: 100px 90px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.tp-list .check-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.tp-list .check-status { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-align: center; }
+.tp-list .check-passed .check-status { background: var(--success-dim); color: var(--success); }
+.tp-list .check-failed .check-status { background: var(--danger-dim); color: var(--danger); }
+.tp-list .check-errored .check-status { background: var(--warning-dim); color: var(--warning); }
+.tp-list .check-skipped .check-status { background: #f3f4f6; color: var(--text-dim); }
+.tp-list .check-msg { color: var(--text-dim); }
+.tp-detail { margin-top: 6px; }
+.tp-detail summary { cursor: pointer; font-size: 12px; color: var(--text-dim); }
+.tp-detail pre { background: #f3f4f6; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 11px; max-height: 200px; overflow: auto; }
+
+.apply-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 8px 14px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.apply-label { color: var(--text-dim); font-weight: 500; }
 .apply-bar select { padding: 3px 6px; }
-.update-badge { padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
-.update-badge.danger { background: #fee2e2; color: #991b1b; }
-.update-badge.ok { background: #d1fae5; color: #065f46; }
-.apply-msg { color: #047857; margin: 0; font-size: 12px; }
-.apply-bar p.error { margin: 0; font-size: 12px; }
-.badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; }
+.update-badge { padding: 3px 9px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.update-badge.danger { background: var(--danger-dim); color: var(--danger); }
+.update-badge.ok { background: var(--success-dim); color: var(--success); }
+.apply-msg { color: var(--success); margin: 0; font-size: 12px; width: 100%; }
+.apply-bar p.error { margin: 0; font-size: 12px; width: 100%; }
+
+.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.grid th, .grid td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
+.grid th { background: #f9fafb; color: var(--text-dim); font-weight: 600; }
+.grid .time { color: var(--text-dim); font-size: 12px; }
+.row-actions { white-space: nowrap; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
 .badge.market { background: #dbeafe; color: #1e40af; }
-.badge.local { background: #f3f4f6; color: #4b5563; }
-.link.primary-link { color: #047857; font-weight: 500; }
-.apply-history { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
-.ah-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.ah-head h4 { margin: 0; font-size: 14px; }
-.ah-count { font-size: 12px; color: #6b7280; }
+.badge.local { background: #f3f4f6; color: var(--text-dim); }
+
+.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--text-dim); justify-content: flex-end; }
+
+.apply-history .ah-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.apply-history .ah-head h3 { margin: 0; }
 .apply-history ul { list-style: none; padding: 0; margin: 0; }
-.apply-history li { display: grid; grid-template-columns: 60px 80px 100px 1fr auto; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
-.ah-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #4b5563; }
-.ah-tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #1f2937; }
-.ah-status { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-align: center; }
-.status-applied .ah-status { background: #bbf7d0; color: #065f46; }
-.status-rolled_back .ah-status { background: #e5e7eb; color: #4b5563; }
-.status-failed .ah-status { background: #fecaca; color: #991b1b; }
-.ah-time { color: #6b7280; font-size: 12px; }
-.tag-panel { margin: 8px 0 12px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
+.apply-history li { display: grid; grid-template-columns: 60px 80px 100px 1fr auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.ah-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-dim); }
+.ah-tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.ah-status { font-size: 11px; padding: 1px 8px; border-radius: 10px; text-align: center; font-weight: 500; }
+.status-applied .ah-status { background: var(--success-dim); color: var(--success); }
+.status-rolled_back .ah-status { background: #f3f4f6; color: var(--text-dim); }
+.status-failed .ah-status { background: var(--danger-dim); color: var(--danger); }
+.ah-time { color: var(--text-dim); font-size: 12px; }
+
 .tag-panel .tp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.tag-panel .tp-head h4 { margin: 0; font-size: 14px; }
-.tag-panel .tp-count { color: #6b7280; font-size: 12px; }
-.tag-msg { color: #047857; font-size: 12px; margin: 4px 0; }
+.tag-panel .tp-head h3 { margin: 0; font-size: 14px; }
+.tag-panel .tp-count { color: var(--text-dim); font-size: 12px; }
+.tag-msg { color: var(--success); font-size: 12px; margin: 4px 0; }
 .tag-create { display: flex; gap: 8px; margin-bottom: 8px; }
 .tag-input { flex: 1; }
 .tag-actions { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 13px; }
-.tag-actions .tag-label { color: #4b5563; }
-.tag-list { list-style: none; padding: 0; margin: 0; border-top: 1px dashed #e5e7eb; }
-.tag-list li { display: grid; grid-template-columns: 50px 140px 1fr 150px auto auto auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
-.tag-list li.implicit { background: #fef3c7; }
-.tag-list .t-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #4b5563; }
-.tag-list .t-name code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
-.tag-list .t-msg { color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-list .t-time { color: #6b7280; font-size: 11px; }
-.diff-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; }
+.tag-actions .tag-label { color: var(--text-dim); }
+.tag-list { list-style: none; padding: 0; margin: 0; border-top: 1px dashed var(--border); }
+.tag-list li { display: grid; grid-template-columns: 50px 160px 1fr 160px auto auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.tag-list li.implicit { background: var(--warning-dim); }
+.tag-list .t-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-dim); }
+.tag-list .t-msg { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-list .t-time { color: var(--text-dim); font-size: 11px; }
+.diff-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
 .dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .dp-head h4 { margin: 0; font-size: 13px; }
 .dp-stats { display: flex; gap: 8px; font-size: 12px; }
-.dp-stats .added { color: #065f46; background: #d1fae5; padding: 1px 6px; border-radius: 3px; }
-.dp-stats .removed { color: #991b1b; background: #fee2e2; padding: 1px 6px; border-radius: 3px; }
-.dp-stats .modified { color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 3px; }
-.dp-stats .unchanged { color: #4b5563; }
+.dp-stats .added { color: var(--success); background: var(--success-dim); padding: 1px 6px; border-radius: 3px; }
+.dp-stats .removed { color: var(--danger); background: var(--danger-dim); padding: 1px 6px; border-radius: 3px; }
+.dp-stats .modified { color: var(--warning); background: var(--warning-dim); padding: 1px 6px; border-radius: 3px; }
+.dp-stats .unchanged { color: var(--text-dim); }
 .diff-file { margin: 6px 0; border: 1px solid #f3f4f6; border-radius: 4px; overflow: hidden; }
-.diff-file.kind-added .df-head { background: #d1fae5; }
-.diff-file.kind-removed .df-head { background: #fee2e2; }
-.diff-file.kind-modified .df-head { background: #fef3c7; }
+.diff-file.kind-added .df-head { background: var(--success-dim); }
+.diff-file.kind-removed .df-head { background: var(--danger-dim); }
+.diff-file.kind-modified .df-head { background: var(--warning-dim); }
 .diff-file.kind-unchanged .df-head { background: #f3f4f6; }
 .df-head { padding: 4px 8px; display: flex; gap: 8px; align-items: center; }
-.df-kind { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #fff; color: #4b5563; }
-.df-path { font-size: 12px; color: #1f2937; }
+.df-kind { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #fff; color: var(--text-dim); }
 .diff-file pre { padding: 4px 8px; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; background: #fafafa; max-height: 300px; overflow: auto; white-space: pre; }
 .ln-added { display: block; background: #dcfce7; color: #14532d; }
 .ln-removed { display: block; background: #fee2e2; color: #7f1d1d; }
-.ln-context { display: block; color: #4b5563; }
-.ln-no { display: inline-block; min-width: 50px; color: #9ca3af; padding-right: 6px; user-select: none; }
+.ln-context { display: block; color: var(--text-dim); }
+.ln-no { display: inline-block; min-width: 50px; color: var(--text-faint); padding-right: 6px; user-select: none; }
 </style>

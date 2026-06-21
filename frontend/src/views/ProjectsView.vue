@@ -68,9 +68,13 @@ onMounted(reload)
 </script>
 
 <template>
-  <section class="projects-view">
-    <header class="bar">
-      <h2>Projects</h2>
+  <div class="projects-view">
+    <header class="head">
+      <h2>📁 Projects</h2>
+      <p class="muted">登记项目根目录,后续 skill 可绑定到 project scope 走项目级覆盖。</p>
+    </header>
+
+    <div class="toolbar">
       <div class="search">
         <input
           v-model="filter.keyword"
@@ -78,121 +82,103 @@ onMounted(reload)
           @keyup.enter="() => { filter.page = 1; reload() }"
         />
         <button @click="() => { filter.page = 1; reload() }">搜索</button>
-        <button class="primary" @click="showForm = !showForm">
-          {{ showForm ? '取消' : '新建项目' }}
-        </button>
       </div>
-    </header>
+      <button class="primary" @click="showForm = !showForm">
+        {{ showForm ? '取消' : '+ 新建项目' }}
+      </button>
+    </div>
 
-    <form v-if="showForm" class="form" @submit.prevent="submit">
-      <label>
-        <span>Name</span>
-        <input v-model="form.name" placeholder="显示名,如 My App" />
-      </label>
-      <label>
-        <span>Alias</span>
-        <input v-model="form.alias" placeholder="唯一别名,英文短码" />
-      </label>
-      <label>
-        <span>Root Path</span>
-        <input v-model="form.root_path" placeholder="项目根绝对路径" />
-      </label>
-      <label class="full">
-        <span>Description</span>
-        <input v-model="form.description" placeholder="可选,描述项目用途" />
-      </label>
+    <p v-if="error" class="error">⚠️ {{ error }}</p>
+
+    <form v-if="showForm" class="card form" @submit.prevent="submit">
+      <h3>新建项目</h3>
+      <div class="form-grid">
+        <label>
+          <span>Name</span>
+          <input v-model="form.name" placeholder="显示名,如 My App" />
+        </label>
+        <label>
+          <span>Alias</span>
+          <input v-model="form.alias" placeholder="唯一别名,英文短码" />
+        </label>
+        <label class="full">
+          <span>Root Path</span>
+          <input v-model="form.root_path" placeholder="项目根绝对路径" />
+        </label>
+        <label class="full">
+          <span>Description</span>
+          <input v-model="form.description" placeholder="可选,描述项目用途" />
+        </label>
+      </div>
       <div class="form-actions">
         <button type="submit" class="primary">创建</button>
       </div>
     </form>
 
-    <p v-if="error" class="error">{{ error }}</p>
+    <div class="card">
+      <h3>项目列表
+        <span class="card-sub">— 共 {{ total }} 条</span>
+        <span v-if="loading" class="spinner" style="margin-left: auto"></span>
+      </h3>
 
-    <table class="grid" v-if="items.length || !loading">
-      <thead>
-        <tr>
-          <th style="width: 60px">ID</th>
-          <th>Name</th>
-          <th>Alias</th>
-          <th>Root Path</th>
-          <th>Description</th>
-          <th style="width: 90px">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="!items.length">
-          <td colspan="6" class="empty">暂无项目,点右上角"新建项目"开始</td>
-        </tr>
-        <tr v-for="p in items" :key="p.ID">
-          <td>{{ p.ID }}</td>
-          <td>{{ p.Name }}</td>
-          <td><code>{{ p.Alias }}</code></td>
-          <td class="path">{{ p.RootPath }}</td>
-          <td>{{ p.Description }}</td>
-          <td>
-            <button class="link danger" @click="remove(p.ID)">删除</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+      <table v-if="items.length" class="grid">
+        <thead>
+          <tr>
+            <th style="width: 60px">ID</th>
+            <th>Name</th>
+            <th>Alias</th>
+            <th>Root Path</th>
+            <th>Description</th>
+            <th style="width: 90px">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in items" :key="p.ID">
+            <td>{{ p.ID }}</td>
+            <td><b>{{ p.Name }}</b></td>
+            <td><code>{{ p.Alias }}</code></td>
+            <td class="path">{{ p.RootPath }}</td>
+            <td class="desc-cell">{{ p.Description || '—' }}</td>
+            <td>
+              <button class="link danger" @click="remove(p.ID)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!loading" class="empty-state">
+        <span class="empty-icon">📂</span>
+        还没有登记项目。点右上角"+ 新建项目"开始
+      </div>
 
-    <footer class="pager" v-if="totalPages > 1">
-      <button :disabled="filter.page <= 1" @click="gotoPage(filter.page - 1)">上一页</button>
-      <span>{{ filter.page }} / {{ totalPages }} (共 {{ total }} 条)</span>
-      <button :disabled="filter.page >= totalPages" @click="gotoPage(filter.page + 1)">下一页</button>
-    </footer>
-  </section>
+      <footer v-if="totalPages > 1" class="pager">
+        <button :disabled="filter.page <= 1" @click="gotoPage(filter.page - 1)">上一页</button>
+        <span>{{ filter.page }} / {{ totalPages }} (共 {{ total }} 条)</span>
+        <button :disabled="filter.page >= totalPages" @click="gotoPage(filter.page + 1)">下一页</button>
+      </footer>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.projects-view {
-  padding: 16px 20px;
-  max-width: 1100px;
-  margin: 0 auto;
-  color: #1a1a1a;
-}
-.bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  gap: 12px;
-}
-.bar h2 { margin: 0; font-size: 18px; }
+.projects-view { max-width: 1100px; margin: 0 auto; color: var(--text); }
+.head h2 { margin: 0 0 4px; font-size: 18px; }
+.head p { margin: 0 0 16px; font-size: 13px; }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
 .search { display: flex; gap: 6px; }
-.search input { width: 200px; }
-input, button {
-  font-size: 14px;
-  padding: 5px 9px;
-  border: 1px solid #d0d0d0;
-  border-radius: 4px;
-  background: #fff;
-  color: #1a1a1a;
-}
-button { cursor: pointer; }
-button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-button.link { border: none; background: none; padding: 2px 4px; color: #2563eb; }
-button.link.danger { color: #b91c1c; }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-.form {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px 14px;
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fafafa;
-}
-.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4b5563; }
-.form label.full { grid-column: 1 / -1; }
-.form input { width: 100%; }
-.form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
-.error { color: #b91c1c; margin: 6px 0; }
+.search input { width: 220px; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.form-grid label.full { grid-column: 1 / -1; }
+.form-grid input { width: 100%; }
+.form-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+
 .grid { width: 100%; border-collapse: collapse; font-size: 13px; }
-.grid th, .grid td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #eef0f3; }
-.grid th { background: #f7f8fa; color: #4b5563; font-weight: 600; }
-.grid .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #374151; }
-.grid .empty { text-align: center; color: #9ca3af; padding: 18px; }
-.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #4b5563; }
+.grid th, .grid td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
+.grid th { background: #f9fafb; color: var(--text-dim); font-weight: 600; }
+.grid .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-dim); font-size: 12px; }
+.desc-cell { color: var(--text-dim); }
+
+.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--text-dim); justify-content: flex-end; }
 </style>

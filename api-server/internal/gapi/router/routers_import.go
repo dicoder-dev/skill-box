@@ -12,6 +12,8 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillapply"
 	_ "ginp-api/internal/gapi/controller/skillbox/ctag"
 	_ "ginp-api/internal/gapi/controller/skillbox/cmarket"
+	_ "ginp-api/internal/gapi/controller/skillbox/cskillpkg"
+	_ "ginp-api/internal/gapi/controller/skillbox/caudit"
 	//{{placeholder_router_import}}//
 	// 上面的占位符请不要动动，否则会导致生成工具无法自动替换
 	//Please do not move the placeholders above, otherwise it will cause the generation tool to fail to replace them automatically
