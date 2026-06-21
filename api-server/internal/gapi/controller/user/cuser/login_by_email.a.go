@@ -37,6 +37,8 @@ func LoginByEmail(c *ginp.ContextPlus, requestParams *RequestLoginByEmail) {
 	})
 }
 
+const ApiLoginByEmail = "/api/sys_user/login_by_email" //API Path
+
 type RequestLoginByEmail struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`

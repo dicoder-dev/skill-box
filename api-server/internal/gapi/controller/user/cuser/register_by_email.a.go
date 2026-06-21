@@ -24,6 +24,13 @@ func init() {
 	})
 }
 
+// 验证邮箱格式
+// func ValidateEmail(email string) bool {
+// 	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+// 	match, _ := regexp.MatchString(pattern, email)
+// 	return match
+// }
+
 func RegisterByEmail(c *ginp.ContextPlus, requestParams *RequestRegisterByEmail) {
 	//验证验证码
 	isPass := scommon.EmailInstance.VerifyCode(requestParams.Email, requestParams.EmailCode)

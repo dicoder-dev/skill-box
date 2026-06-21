@@ -7,11 +7,9 @@ import "ginp-api/internal/gapi/entity"
 // 列表 + 调 dbs.GetWriteDb().AutoMigrate(...)。
 var EntityAutoMigrateList = []any{
 	new(entity.User),
-	new(entity.DemoTable),
 }
 
 // EntityGenerationList 需要自动生成的实体(代码生成器使用,运行期不参与)。
 var EntityGenerationList = []any{
 	new(entity.User),
-	new(entity.DemoTable),
 }

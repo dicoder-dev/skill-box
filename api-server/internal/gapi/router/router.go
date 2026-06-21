@@ -10,10 +10,16 @@ func Register(r *gin.Engine) {
 
 	//1.------------中间件---------------
 	//跨域设置
-	r.Use(CORSMiddleware())
+	r.Use(ginp.CORSMiddleware())
 
-	//请求日志记录:控制台打印一行,异步落盘到 ./logs/YYYY-MM/MM-DD-*.txt 并刷新 stats_*.csv
+	//请求日志记录
 	r.Use(ginp.LoggingMiddleware())
+
+	//登录鉴权检验
+	// r.Use(ginp.RegisterHandler(AuthorizationCheck))
+
+	//权限验证
+	// r.Use(ginp.ConvHandler(permissionCheck))
 
 	//2.-----------------路由注册---------------
 	// InitRouters()          //路由定义

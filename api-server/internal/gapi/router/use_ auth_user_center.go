@@ -48,12 +48,6 @@ func InitJWK() error {
 // AuthUserCenterMiddleware 自建用户中心JWT 鉴权中间件
 func AuthUserCenterMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 全局开关:NeedAuth=false(桌面端 / 调试)直接放行,不查表、不解析 token
-		if !configs.System.NeedAuth {
-			c.Next()
-			return
-		}
-
 		// 获取当前请求路径
 		currentPath := c.Request.URL.Path
 
