@@ -38,12 +38,12 @@ func TestDSNGeneration(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// 模拟DSN生成逻辑
-				dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local",
+				dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", 
 					tc.user, tc.password, tc.ip, tc.port, tc.dbName)
 
 				// 验证DSN格式
-				if strings.Contains(dsn, tc.user+":"+tc.password) &&
-				   strings.Contains(dsn, "@tcp("+tc.ip+":"+tc.port+")") &&
+				if strings.Contains(dsn, tc.user+":"+tc.password) && 
+				   strings.Contains(dsn, "@tcp("+tc.ip+":"+tc.port+")") && 
 				   strings.Contains(dsn, "/"+tc.dbName) {
 					t.Logf("✅ %s: DSN生成正确", tc.name)
 					t.Logf("   生成的DSN: %s", dsn)
@@ -84,4 +84,4 @@ func TestParameterValidation(t *testing.T) {
 // isEmpty 辅助函数，用于测试参数验证
 func isEmpty(s string) bool {
 	return s == ""
-}
+} 

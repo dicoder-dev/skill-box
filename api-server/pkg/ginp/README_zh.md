@@ -9,7 +9,7 @@
 
 <a id="chinese"></a>
 ### 简介
-`ContextPlus` 是对 `gin.Context` 的扩展，提供了更便捷的响应方法。
+Gin Plus` 是对 `gin` 的扩展，提供了更便捷的响应方法。
 
 
 ### 安装

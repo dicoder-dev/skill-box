@@ -70,3 +70,23 @@
 [GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (4 handlers)
 [GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
 [GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /                         --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)

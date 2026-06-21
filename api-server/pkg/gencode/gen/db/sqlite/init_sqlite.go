@@ -1,3 +1,8 @@
+// Package dbinit
+// @Author: zhangdi
+// @File: fixed
+// @Version: 1.0.0
+// @Date: 2023/11/22 15:15
 package sqlite
 
 import (
@@ -57,7 +62,7 @@ func newDbInstance(dbPath string) (*gorm.DB, error) {
 	//SetMaxOpenConns:用于设置同时打开的最大连接数（包括空闲和正在使用的连接）。
 	//如果当前连接数已满，则进入等待状态，并在空闲连接没有足够可用时创建新连接。
 	//通过适当地调整这些参数，可以更好地平衡数据库连接的使用和性能。
-	//但应该注意的是，在这里设置的最大连接数不应该超过数据库的实际最大连接数限制
+	//但应该注意的是，在这里设置的最大连接数不应该超过数据库的实际最大连接数限制。
 	sqlDB.SetMaxOpenConns(20)
 
 	//迁移表结构

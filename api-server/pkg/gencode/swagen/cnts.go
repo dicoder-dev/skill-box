@@ -1,3 +1,4 @@
+
 package swagen
 
 const (

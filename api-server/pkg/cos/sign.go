@@ -9,6 +9,9 @@ import (
 	"github.com/tencentyun/cos-go-sdk-v5"
 )
 
+type ObjectPutOptions = cos.ObjectPutOptions
+type ObjectPutHeaderOptions = cos.ObjectPutHeaderOptions
+
 // Signer 用于生成基于长期密钥的 COS 签名
 // 适用于服务端直接操作COS的场景
 // 对于客户端直传场景，推荐使用更安全的临时密钥签名方案(sts_sign.go)
@@ -63,4 +66,10 @@ func (s *Signer) GenerateAuthorization(method, uri string, headers http.Header, 
 	authTime := cos.NewAuthTime(expire)
 	cos.AddAuthorizationHeader(secretID, secretKey, "", req, authTime)
 	return req.Header.Get("Authorization"), nil
+}
+
+// DeleteObject 删除COS对象
+func (s *Signer) DeleteObject(objectKey string) error {
+	_, err := s.client.Object.Delete(context.Background(), objectKey)
+	return err
 }

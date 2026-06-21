@@ -86,3 +86,4 @@ func GenerateFilePath(fileExt string, customFileName string, userId uint, isUser
 
 	return filePath
 }
+

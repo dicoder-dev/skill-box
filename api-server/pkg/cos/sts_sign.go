@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"ginp-api/pkg/utils"
+	"ginp-api/pkg/upload"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/tencentyun/cos-go-sdk-v5"
@@ -33,6 +32,8 @@ type STSConfig struct {
 	AppID          string // APPID
 	UserId         uint   // 用户ID
 	StudioId       uint   // 工作室ID
+	IsUserUpload   bool   // 是否为用户上传，false表示后台上传，true表示用户上传
+	AppKey         string // 应用Key，用于在路径中区分不同应用
 }
 
 // NewSTSSigner 创建一个新的 STSSigner 实例
@@ -96,47 +97,24 @@ func NewSTSSigner(config *STSConfig) (*STSSigner, error) {
 	}, nil
 }
 
-// getFileType 根据文件后缀判断文件类型
-func getFileType(ext string) string {
-	ext = strings.ToLower(ext)
-
-	switch ext {
-	case "jpg", "jpeg", "png", "gif", "bmp", "webp":
-		return "images"
-	case "mp4", "avi", "mov", "wmv", "flv", "mkv":
-		return "videos"
-	case "mp3", "wav", "flac", "aac":
-		return "audios"
-	case "pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx":
-		return "documents"
-	default:
-		return "others"
-	}
-}
-
 // GeneratePresignedURL 生成基于临时密钥的预签名 URL
 func (s *STSSigner) GeneratePresignedURL(fileExt string) (string, string, error) {
 	if s.config == nil {
 		return "", "", fmt.Errorf("STSSigner config is nil")
 	}
-	// 自定义文件名
-	fileName := s.config.CustomFileName
-	if s.config.CustomFileName == "" { //没有自定义文件名，则随机生成
-		formattedTime := time.Now().Format("20060102150405")
-		fileName = fmt.Sprintf("%s_%d_%s", formattedTime, time.Now().Unix(), utils.GenerateRandomString(8))
-	}
-	fileType := getFileType(fileExt)
 
-	// 如果工作室ID为0，则表示为用户上传的数据 uploads/user/0_1000/1/images/1.png
-	var fileKey string
-	if s.config.StudioId > 0 {
-		// 工作室上传的数据
-		groupPath := GetStudioDataPath(s.config.StudioId)
-		fileKey = fmt.Sprintf("%s/%s/%s.%s", groupPath, fileType, fileName, fileExt)
-	} else {
-		// 用户上传的数据
-		groupPath := GetUserDataPath(s.config.UserId)
-		fileKey = fmt.Sprintf("%s/%s/%s.%s", groupPath, fileType, fileName, fileExt)
+	// 使用通用路径生成函数，COS 不需要前缀
+	fileKey := upload.GenerateFilePath(
+		fileExt,
+		s.config.CustomFileName,
+		s.config.UserId,
+		s.config.IsUserUpload,
+		"", // COS 不需要前缀
+		s.config.AppKey,
+	)
+
+	if fileKey == "" {
+		return "", "", fmt.Errorf("file extension is empty")
 	}
 
 	presignedURL, err := s.client.Object.GetPresignedURL2(context.Background(), "PUT", fileKey, time.Duration(s.config.Duration)*time.Second, nil)

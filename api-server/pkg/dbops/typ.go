@@ -12,6 +12,12 @@ type RelationItem struct {
 	Wheres []*where.Condition
 }
 
+type JoinItem struct {
+    Table  string        // 表名或关联名 "user_roles"
+    On     string        // ON 条件  "users.id = user_roles.user_id"
+    Wheres []*where.Condition
+}
+
 type FindListConfig struct {
 	Conditions     []*where.Condition
 	Extra          *where.Extra
@@ -19,6 +25,7 @@ type FindListConfig struct {
 	GetSoftDelData bool
 	Db             *gorm.DB
 	// ReloationNum   int //关联表数量
+	JoinList         []JoinItem  // 2025-10-15新增：用于 Joins
 	RelationList []*RelationItem
 	Fields       []string
 	// ReloationAttrName1 string //关联表1没有则填空

@@ -28,12 +28,7 @@ var (
 )
 
 // LoggingMiddleware 请求日志中间件
-// 每个请求处理结束后:
-//  1. 控制台打印一行摘要(IP/方法/路径/状态码/耗时/响应 code-msg)
-//  2. goroutine 异步把请求详情落盘到 ./logs/YYYY-MM/MM-DD-request.txt(普通 200)、
-//     MM-DD-error_request.txt(非 200)或 MM-DD-canshu_request.txt(/api/parameter、/api/like)
-//  3. 同步更新 ./logs/YYYY-MM/stats_api_MM-DD.csv(接口调用排行)和
-//     stats_user_api_MM-DD.csv(用户调用排行)
+// 记录每个请求的方法、路径、状态码和耗时
 func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()

@@ -2,7 +2,8 @@ package ginp
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"reflect"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -51,55 +52,42 @@ func (c *ContextPlus) SuccessData(data any, messages ...string) {
 	})
 }
 
-func (c *ContextPlus) SuccessHtml(path string) {
-	c.HTML(codeHttpSuccess, path, gin.H{})
-}
-
-// R RespondJson 返回JSON,形式为JSON
-func (c *ContextPlus) R(code int, obj any) {
-	c.Log(obj)
-	c.JSON(code, obj)
-}
-
-func (c *ContextPlus) Log(data any) {
-	if showLog == false {
-		return
-	}
-
-	// 生成日志格式并记录
-	log.Printf("%s %s %s %d  user_id:%v request:%+v respond:%+v",
-		c.ClientIP(),
-		c.Request.Method,
-		c.Request.URL.Path,
-		c.Writer.Status(),
-		0,
-		c.Request.Form,
-		data,
-	)
-}
-
-// GetUserID 解析当前请求中由鉴权中间件写入的 jwt_user 上下文,返回 user id。
-// 鉴权中间件(use_ auth_user_center.go)将 lestrrat-go/jwx 的 jwt.Token 放入
-// gin.Context 的 "jwt_user" 键;这里兼容 jwt.Token 与旧版 map[string]any 两种形态。
-// 解析失败(未登录 / token 异常)返回 0,调用方应自行处理未登录分支。
 func (c *ContextPlus) GetUserID() uint {
 	claims := c.getJWTClaims()
 	if claims == nil {
 		return 0
 	}
-	return extractUserIDFromClaims(claims)
+	return c.extractUserIDFromClaims(claims)
 }
 
-// getJWTClaims 从 gin.Context 中取出 jwt_user 并尽可能反序列化为 map。
+// GetAppKey 获取应用Key，从请求头中读取，默认值为 "common"
+func (c *ContextPlus) GetAppKey() string {
+	appKey := c.GetHeader("app_key")
+	if appKey == "" {
+		return "common"
+	}
+	return appKey
+}
+
+// GetAppVersion 获取应用版本，从请求头中读取，默认值为 "1.0.0"
+func (c *ContextPlus) GetAppVersion() string {
+	appVersion := c.GetHeader("app_version")
+	if appVersion == "" {
+		return "1.0.0"
+	}
+	return appVersion
+}
+
+// getJWTClaims 获取 JWT claims（根据不同类型自动怀旧）
 func (c *ContextPlus) getJWTClaims() map[string]interface{} {
 	if tokenInterface, exists := c.Get("jwt_user"); exists {
-		// 优先按 jwx 的 jwt.Token 处理
+		// 优先核寸：新的 JWT token 对象
 		if token, ok := tokenInterface.(jwt.Token); ok {
 			if claims, err := token.AsMap(context.Background()); err == nil {
 				return claims
 			}
 		}
-		// 兼容旧版 map 形态
+		// 析受：旧版本 map 类型
 		if claims, ok := tokenInterface.(map[string]interface{}); ok {
 			return claims
 		}
@@ -107,8 +95,8 @@ func (c *ContextPlus) getJWTClaims() map[string]interface{} {
 	return nil
 }
 
-// extractUserIDFromClaims 从 JWT claims 中提取 user id,字段名约定为 "id"。
-func extractUserIDFromClaims(claims map[string]interface{}) uint {
+// extractUserIDFromClaims 从 claims 中提取用户 ID
+func (c *ContextPlus) extractUserIDFromClaims(claims map[string]interface{}) uint {
 	if uid, exists := claims["id"]; exists {
 		switch v := uid.(type) {
 		case float64:
@@ -128,4 +116,64 @@ func extractUserIDFromClaims(claims map[string]interface{}) uint {
 		}
 	}
 	return 0
+}
+
+func (c *ContextPlus) SuccessHtml(path string) {
+	c.HTML(codeHttpSuccess, path, gin.H{})
+}
+
+// R RespondJson 返回JSON,形式为JSON
+func (c *ContextPlus) R(code int, obj any) {
+	c.Log(obj)
+	c.JSON(code, obj)
+}
+
+func (c *ContextPlus) Log(data any) {
+	if showLog == false {
+		return
+	}
+
+	codeVal, msgVal := extractCodeAndMsg(data)
+	fmt.Printf("path:%s status:%d code:%v msg:%s\n",
+		c.Request.URL.Path,
+		c.Writer.Status(),
+		codeVal,
+		msgVal,
+	)
+}
+
+func (c *ContextPlus) GetApiList() []RouterItem {
+	return routers
+}
+
+// extractCodeAndMsg best-effort extraction of code/msg from response payload.
+func extractCodeAndMsg(data any) (any, string) {
+	switch v := data.(type) {
+	case map[string]any:
+		return v["code"], fmt.Sprint(v["msg"])
+	case gin.H:
+		return v["code"], fmt.Sprint(v["msg"])
+	}
+
+	val := reflect.ValueOf(data)
+	for val.Kind() == reflect.Pointer {
+		if val.IsNil() {
+			return nil, ""
+		}
+		val = val.Elem()
+	}
+	if val.Kind() == reflect.Struct {
+		codeField := val.FieldByName("Code")
+		msgField := val.FieldByName("Msg")
+		var code any
+		if codeField.IsValid() && codeField.CanInterface() {
+			code = codeField.Interface()
+		}
+		if msgField.IsValid() && msgField.CanInterface() {
+			return code, fmt.Sprint(msgField.Interface())
+		}
+		return code, ""
+	}
+
+	return nil, fmt.Sprint(data)
 }

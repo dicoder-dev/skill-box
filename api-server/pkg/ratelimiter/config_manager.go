@@ -21,7 +21,7 @@ var globalConfigManager = &ConfigManager{
 func RegisterRefreshCallback(callback ConfigRefreshCallback) {
 	globalConfigManager.mutex.Lock()
 	defer globalConfigManager.mutex.Unlock()
-
+	
 	globalConfigManager.callbacks = append(globalConfigManager.callbacks, callback)
 }
 
@@ -31,7 +31,7 @@ func NotifyConfigRefresh() {
 	callbacks := make([]ConfigRefreshCallback, len(globalConfigManager.callbacks))
 	copy(callbacks, globalConfigManager.callbacks)
 	globalConfigManager.mutex.RUnlock()
-
+	
 	// 执行所有回调
 	for _, callback := range callbacks {
 		if callback != nil {

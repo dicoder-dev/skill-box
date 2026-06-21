@@ -14,6 +14,19 @@ var showLog = true
 var successMsgDefault = "success"
 var failMsgDefault = "fail"
 
+// LogLevel 日志级别
+type LogLevel int
+
+const (
+	LogLevelOff LogLevel = iota
+	LogLevelError
+	LogLevelWarn
+	LogLevelInfo
+	LogLevelDebug
+)
+
+var currentLogLevel = LogLevelInfo
+
 // 初始化 code
 func init() {
 	SetFailCode(0)
@@ -34,6 +47,11 @@ func SetSuccessCode(code any) {
 }
 func SetShowLog(show bool) {
 	showLog = show
+}
+
+// SetLogLevel 设置日志级别
+func SetLogLevel(level LogLevel) {
+	currentLogLevel = level
 }
 
 func SetSuccessHttpCode(code int) {

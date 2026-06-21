@@ -60,7 +60,11 @@ func formatSuccessMsg(messages ...string) (msg string) {
 	return msg
 }
 func formatFailMsg(messages ...string) (msg string) {
-	msg = failMsgDefault
+	if messages == nil {
+		msg = failMsgDefault
+	} else {
+		msg = ""
+	}
 	if len(messages) > 0 {
 		for _, message := range messages {
 			msg += message

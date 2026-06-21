@@ -34,11 +34,11 @@ func InitDb(ip, port, userName, dbName, dbPwd string) {
 	)
 
 	// 生成DSN连接字符串
-	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local",
+	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", 
 		userName, dbPwd, ip, port, dbName)
-
+	
 	fmt.Printf("MySQL连接配置：主机=%v, 端口=%v, 数据库=%v\n", ip, port, dbName)
-
+	
 	var err error
 	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: newLogger, //日志参数
@@ -48,7 +48,7 @@ func InitDb(ip, port, userName, dbName, dbPwd string) {
 		fmt.Println("MySQL连接失败: " + err.Error())
 		panic(err)
 	}
-
+	
 	fmt.Println("MySQL数据库连接成功！")
 }
 

@@ -51,17 +51,26 @@ func ReadContent(filePath string) (string, error) {
 }
 
 // WriteContent writes data to a file.
+// 如果文件已存在，会强制覆盖写入
 func WriteContent(filePath string, data string) error {
 	CreateDir(filePath)
+	
+	// os.Create 会强制覆盖写入（如果文件存在会截断并覆盖）
 	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("创建文件失败 %s: %w", filePath, err)
 	}
 	defer file.Close()
 
 	_, err = file.WriteString(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("写入文件内容失败 %s: %w", filePath, err)
+	}
+
+	// 同步到磁盘，确保数据被写入
+	err = file.Sync()
+	if err != nil {
+		return fmt.Errorf("同步文件到磁盘失败 %s: %w", filePath, err)
 	}
 
 	return nil

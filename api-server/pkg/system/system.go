@@ -17,64 +17,64 @@ type SystemInfo struct {
 // 获取操作系统信息
 func GetOSInfo() []SystemInfo {
 	var info []SystemInfo
-
+	
 	// 操作系统名称
 	info = append(info, SystemInfo{
 		Key:   "操作系统",
 		Value: getOSName(),
 	})
-
+	
 	// 内核版本
 	info = append(info, SystemInfo{
 		Key:   "内核版本",
 		Value: getKernelVersion(),
 	})
-
+	
 	// 系统架构
 	info = append(info, SystemInfo{
 		Key:   "系统架构",
 		Value: runtime.GOARCH,
 	})
-
+	
 	return info
 }
 
 // 获取CPU信息
 func GetCPUInfo() []SystemInfo {
 	var info []SystemInfo
-
+	
 	// CPU型号
 	info = append(info, SystemInfo{
 		Key:   "CPU型号",
 		Value: getCPUModel(),
 	})
-
+	
 	// CPU核心数
 	info = append(info, SystemInfo{
 		Key:   "CPU核心数",
 		Value: fmt.Sprintf("%d核心", runtime.NumCPU()),
 	})
-
+	
 	// CPU使用率
 	info = append(info, SystemInfo{
 		Key:   "CPU使用率",
 		Value: getCPUUsage(),
 	})
-
+	
 	return info
 }
 
 // 获取内存信息
 func GetMemoryInfo() []SystemInfo {
 	var info []SystemInfo
-
+	
 	// 总内存
 	totalMem := getTotalMemory()
 	info = append(info, SystemInfo{
 		Key:   "总内存",
 		Value: formatBytes(totalMem),
 	})
-
+	
 	// 内存使用率
 	usedMem := getUsedMemory()
 	usagePercent := float64(usedMem) / float64(totalMem) * 100
@@ -82,85 +82,85 @@ func GetMemoryInfo() []SystemInfo {
 		Key:   "内存使用率",
 		Value: fmt.Sprintf("%.1f%%", usagePercent),
 	})
-
+	
 	// 可用内存
 	availableMem := totalMem - usedMem
 	info = append(info, SystemInfo{
 		Key:   "可用内存",
 		Value: formatBytes(availableMem),
 	})
-
+	
 	return info
 }
 
 // 获取磁盘信息
 func GetDiskInfo() []SystemInfo {
 	var info []SystemInfo
-
+	
 	// 磁盘使用率
 	usage := getDiskUsage()
 	info = append(info, SystemInfo{
 		Key:   "磁盘使用率",
 		Value: fmt.Sprintf("%.1f%%", usage),
 	})
-
+	
 	// 磁盘总容量
 	totalSpace := getTotalDiskSpace()
 	info = append(info, SystemInfo{
 		Key:   "磁盘总容量",
 		Value: formatBytes(totalSpace),
 	})
-
+	
 	// 磁盘可用空间
 	availableSpace := getAvailableDiskSpace()
 	info = append(info, SystemInfo{
 		Key:   "磁盘可用空间",
 		Value: formatBytes(availableSpace),
 	})
-
+	
 	return info
 }
 
 // 获取系统运行时间
 func GetSystemUptime() []SystemInfo {
 	var info []SystemInfo
-
+	
 	// 系统运行时间
 	uptime := getSystemUptime()
 	info = append(info, SystemInfo{
 		Key:   "系统运行时间",
 		Value: uptime,
 	})
-
+	
 	// 负载均衡
 	loadAvg := getLoadAverage()
 	info = append(info, SystemInfo{
 		Key:   "负载均衡",
 		Value: loadAvg,
 	})
-
+	
 	return info
 }
 
 // 获取所有系统信息
 func GetAllSystemInfo() []SystemInfo {
 	var allInfo []SystemInfo
-
+	
 	// 操作系统信息
 	allInfo = append(allInfo, GetOSInfo()...)
-
+	
 	// CPU信息
 	allInfo = append(allInfo, GetCPUInfo()...)
-
+	
 	// 内存信息
 	allInfo = append(allInfo, GetMemoryInfo()...)
-
+	
 	// 磁盘信息
 	allInfo = append(allInfo, GetDiskInfo()...)
-
+	
 	// 系统运行时间
 	allInfo = append(allInfo, GetSystemUptime()...)
-
+	
 	return allInfo
 }
 
@@ -247,7 +247,7 @@ func getUsedMemory() uint64 {
 		if data, err := os.ReadFile("/proc/meminfo"); err == nil {
 			lines := strings.Split(string(data), "\n")
 			var memTotal, memAvailable uint64
-
+			
 			for _, line := range lines {
 				parts := strings.Fields(line)
 				if len(parts) >= 2 {

@@ -134,6 +134,19 @@ func (c *Config) GetBool(key string, defaultValue ...bool) (bool, error) {
 	return c.v.GetBool(key), nil
 }
 
+// GetStringSlice 函数从配置中获取指定键的字符串切片值。
+// 如果键不存在，则返回defaultValue（如果提供了），否则返回错误。
+func (c *Config) GetStringSlice(key string, defaultValue ...[]string) ([]string, error) {
+	if !c.v.IsSet(key) {
+		if len(defaultValue) > 0 {
+			return defaultValue[0], nil
+		}
+		return []string{}, errors.New("未知的配置键")
+	}
+
+	return c.v.GetStringSlice(key), nil
+}
+
 // Set 函数在配置中设置指定键的值。
 // 它还将更改写入配置文件。
 func (c *Config) Set(key string, value interface{}) error {
@@ -148,11 +161,4 @@ func (c *Config) Set(key string, value interface{}) error {
 
 	}
 	return nil
-}
-
-// setWithoutWrite 设置值但不写入文件（用于初始化默认值）
-func (c *Config) setWithoutWrite(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.v.Set(key, value)
 }

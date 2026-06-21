@@ -19,6 +19,15 @@ const (
 	levelTask = "TASK"
 )
 
+// ANSI颜色代码常量
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorGreen  = "\033[32m"
+)
+
 type Logger struct {
 	logPath string // 日志文件目录
 }
@@ -75,9 +84,9 @@ func Warn(format string, args ...interface{}) {
 	defaultLogger.writeLog(levelWarn, format, args...)
 }
 
-// Debug 打印Debug级别日志,仅在debug模式下生效
+// Debug 打印Debug级别日志
 func Debug(format string, args ...interface{}) {
-	defaultLogger.writeLog(levelWarn, format, args...)
+	defaultLogger.writeLog(levelDebug, format, args...)
 }
 
 func Errorf(format string, args ...interface{}) {
@@ -93,15 +102,15 @@ func (l *Logger) writeLog(level, format string, args ...interface{}) {
 	// 获取当前时间并格式化输出时间
 	now := time.Now().Format("2006-01-02 15:04:05")
 
-	// 创建日志保存目录
-	dir := fmt.Sprintf("%s/%s/", l.logPath, now[:10])
+	// 创建日志保存目录（按月份组织：logs/YYYY-MM/）
+	dir := fmt.Sprintf("%s%s/", l.logPath, now[:7])
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		fmt.Println("创建日志目录失败", err)
 		return
 	}
 
-	// 构建日志文件路径
+	// 构建日志文件路径（按月份：logs/YYYY-MM/INFO.csv）
 	filePath := fmt.Sprintf("%s%s.csv", dir, level)
 
 	// 判断文件是否存在，不存在则新建并写入表头
@@ -141,7 +150,27 @@ func (l *Logger) writeLog(level, format string, args ...interface{}) {
 
 	writer.Flush()
 
-	fmt.Printf("[%s] [%s] %s\n", level, now, content)
+	// 根据日志级别设置颜色并打印到控制台
+	switch level {
+	case levelError:
+		// 错误日志显示红色
+		fmt.Printf("%s[%s] [%s] %s%s\n", colorRed, level, now, content, colorReset)
+	case levelWarn:
+		// 警告日志显示黄色
+		fmt.Printf("%s[%s] [%s] %s%s\n", colorYellow, level, now, content, colorReset)
+	case levelInfo:
+		// 信息日志显示绿色
+		fmt.Printf("%s[%s] [%s] %s%s\n", colorGreen, level, now, content, colorReset)
+	case levelTask:
+		// 任务日志显示蓝色
+		fmt.Printf("%s[%s] [%s] %s%s\n", colorBlue, level, now, content, colorReset)
+	case levelDebug:
+		// DEBUG日志显示灰色（不显眼）
+		fmt.Printf("\033[90m[%s] [%s] %s%s\n", level, now, content, colorReset)
+	default:
+		// 其他日志使用默认颜色
+		fmt.Printf("[%s] [%s] %s\n", level, now, content)
+	}
 }
 
 // 根据日志内容判断类型（可能需要根据实际业务场景修改）

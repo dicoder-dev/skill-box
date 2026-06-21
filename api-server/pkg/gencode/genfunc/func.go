@@ -94,7 +94,7 @@ func RemoveImportRouterPackage(lineName string, parentDir ...string) {
 
 // RegenerateRouterImports 完全重写router导入列表
 // importPaths: 导入路径列表，格式为 ["system/ccommon", "system/cuserprofile", "cuser"] 等
-// 前缀会自动添加为 ginp-api/internal/gapi/controller/
+// 前缀会自动添加为 ginp-api/internal/app/gapi/controller/
 func RegenerateRouterImports(importPaths []string) error {
 	// 读取当前文件内容
 	content, err := filehelper.ReadContent(PathRouterEntry())
@@ -120,7 +120,7 @@ func RegenerateRouterImports(importPaths []string) error {
 	// 构建新的导入列表
 	var importLines []string
 	for _, importPath := range importPaths {
-		// 添加导入语句，格式: _ "ginp-api/internal/gapi/controller/路径"
+		// 添加导入语句，格式: _ "ginp-api/internal/app/gapi/controller/路径"
 		importLine := "\t" + RouterReplaceStr + importPath + `"`
 		importLines = append(importLines, importLine)
 	}
@@ -142,7 +142,7 @@ func RegenerateRouterImports(importPaths []string) error {
 	routerEntryPath := PathRouterEntry()
 	fmt.Printf("准备写入文件: %s\n", routerEntryPath)
 	fmt.Printf("新内容长度: %d 字符\n", len(newContent))
-
+	
 	err = filehelper.WriteContent(routerEntryPath, newContent)
 	if err != nil {
 		return fmt.Errorf("写入router导入文件失败 [%s]: %v", routerEntryPath, err)

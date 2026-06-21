@@ -1,6 +1,7 @@
 package dbops
 
 import (
+	"fmt"
 	"ginp-api/pkg/where"
 
 	"gorm.io/gorm"
@@ -30,7 +31,7 @@ func FindOne(findConf *FindOneConfig) error {
 		for i := 0; i < len(findConf.RelationList); i++ {
 			item := findConf.RelationList[i]
 			if item.Wheres != nil {
-				whereValuesRelation, _ := where.ConvertToGormWhere2(item.Wheres)
+				whereValuesRelation, _ := where.ConvertToGormWhereToRelation(item.Wheres)
 				tx = tx.Preload(item.RelationName, whereValuesRelation...)
 			} else {
 				tx = tx.Preload(item.RelationName)
@@ -55,18 +56,39 @@ func FindList(findConf *FindListConfig) error {
 		db = db.Unscoped()
 	}
 
+	// 在 Preload 之前，先处理 Joins
+	if len(findConf.JoinList) > 0 {
+		fmt.Printf("开始处理JOIN查询，JOIN数量: %d\n", len(findConf.JoinList))
+		for i, join := range findConf.JoinList {
+			joinSQL := "JOIN " + join.Table + " ON " + join.On
+			fmt.Printf("JOIN %d: %s\n", i, joinSQL)
+			// 使用正确的JOIN语法
+			db = db.Joins(joinSQL)
+			// 如果有 WHERE 条件，也加上
+			if len(join.Wheres) > 0 {
+				whereStr, whereValues, err := where.ConvertToGormWhereWithTable(join.Wheres, join.Table)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("JOIN WHERE条件: %s, 参数: %v\n", whereStr, whereValues)
+				db = db.Where(whereStr, whereValues...)
+			}
+		}
+	}
 	//开始查询，根据需要关联查询的数量，返回不同的结果
 	if len(findConf.RelationList) > 0 {
 		for i := 0; i < len(findConf.RelationList); i++ {
 			item := findConf.RelationList[i]
 			if item.Wheres != nil {
-				whereValuesRelation, _ := where.ConvertToGormWhere2(item.Wheres)
+				whereValuesRelation, _ := where.ConvertToGormWhereToRelation(item.Wheres)
 				db = db.Preload(item.RelationName, whereValuesRelation...)
 			} else {
 				db = db.Preload(item.RelationName)
 			}
 		}
 	}
+
+	
 
 	//构造要查询的字段
 	if len(findConf.Fields) > 0 {

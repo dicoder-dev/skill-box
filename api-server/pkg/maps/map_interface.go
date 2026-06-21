@@ -1,134 +1,244 @@
 package maps
 
+// =============================================================================
+// 地图服务接口定义
+// 本文件定义了所有地图服务提供商需要实现的统一接口和数据结构
+// 支持的功能包括：地点搜索、线路规划、地理编码、逆地理编码、行政区划查询
+// =============================================================================
+
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 )
 
-// IMapService 地图服务接口
-type IMapService interface {
-	// RoutePlanning 线路规划
-	RoutePlanning(ctx context.Context, req *RoutePlanningRequest) (*RoutePlanningResponse, error)
+// =============================================================================
+// 基础Provider结构体
+// 所有地图服务提供商的基类，包含通用的配置和HTTP客户端
+// =============================================================================
 
-	// PlaceSearch 地点检索
-	PlaceSearch(ctx context.Context, req *PlaceSearchRequest) (*PlaceSearchResponse, error)
-
-	// AdministrativeRegionQuery 行政区域查询
-	AdministrativeRegionQuery(ctx context.Context, req *AdministrativeRegionRequest) (*AdministrativeRegionResponse, error)
-
-	// Geocoding 地理编码（地址转坐标）
-	Geocoding(ctx context.Context, req *GeocodingRequest) (*GeocodingResponse, error)
+// baseProvider 基础地图服务提供商结构体
+// 封装了所有提供商共有的配置和HTTP客户端功能
+type baseProvider struct {
+	name    ProviderName  // 提供商名称（如baidu、amap、google等）
+	config  ProviderConfig // 提供商配置（API密钥、密钥、基础URL等）
+	client  *http.Client  // HTTP客户端，用于发送请求
+	baseURL string      // API基础URL
 }
 
-// RoutePlanningRequest 线路规划请求
-type RoutePlanningRequest struct {
-	Origin      string `json:"origin"`       // 起点坐标，格式：经度,纬度
-	Destination string `json:"destination"`  // 终点坐标，格式：经度,纬度
-	//交通方式：car(汽车), bike(自行车), walk(步行)
-	Strategy    string `json:"strategy"`     // 路线策略：fastest(最快), shortest(最短), avoid_highways(避开高速)
-	Waypoints   string `json:"waypoints"`    // 途经点，多个点用|分隔，格式：经度,纬度|经度,纬度
+// newBaseProvider 创建基础Provider实例
+// 参数说明：
+//   - name: 提供商名称
+//   - cfg: 提供商配置信息
+//   - timeout: HTTP请求超时时间
+//   - defaultBaseURL: 默认的API基础URL（当配置中未指定时使用）
+func newBaseProvider(name ProviderName, cfg ProviderConfig, timeout time.Duration, defaultBaseURL string) baseProvider {
+	baseURL := strings.TrimRight(cfg.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = strings.TrimRight(defaultBaseURL, "/")
+	}
+	return baseProvider{
+		name:    name,
+		config:  cfg,
+		baseURL: baseURL,
+		client: &http.Client{
+			Timeout: timeout,
+		},
+	}
 }
 
-// RoutePlanningResponse 线路规划响应
-type RoutePlanningResponse struct {
-	Status     string      `json:"status"`      // 状态码
-	Message    string      `json:"message"`     // 状态信息
-	Distance   float64     `json:"distance"`    // 总距离(米)
-	Duration   int64       `json:"duration"`    // 总耗时(秒)
-	Routes     []Route     `json:"routes"`      // 路线信息
+// Name 获取提供商名称
+func (b *baseProvider) Name() ProviderName { return b.name }
+
+// IsAvailable 检查提供商是否可用（需要配置了有效的API密钥）
+func (b *baseProvider) IsAvailable() bool  { return strings.TrimSpace(b.config.Key) != "" }
+
+// =============================================================================
+// HTTP请求辅助方法
+// 提供GET/POST请求的JSON解析和字节数组获取功能
+// =============================================================================
+
+// getJSON 发送GET请求并将响应解析为JSON
+// 参数说明：
+//   - ctx: 上下文，用于控制请求取消
+//   - path: 请求路径
+//   - params: URL查询参数
+//   - out: 解析结果的目标结构体
+func (b *baseProvider) getJSON(ctx context.Context, path string, params url.Values, out interface{}) error {
+	body, err := b.getBytes(ctx, path, params)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("解析响应失败: %w, body=%s", err, string(body))
+	}
+	return nil
 }
 
-// Route 路线信息
-type Route struct {
-	Distance   float64     `json:"distance"`   // 距离(米)
-	Duration   int64       `json:"duration"`   // 耗时(秒)
-	Steps      []RouteStep `json:"steps"`      // 路线步骤
-	Polyline   string      `json:"polyline"`   // 路线坐标串
+// postJSON 发送POST请求并携带JSON载荷，然后将响应解析为JSON
+// 参数说明：
+//   - ctx: 上下文
+//   - path: 请求路径
+//   - params: URL查询参数
+//   - payload: 请求载荷（将被序列化为JSON）
+//   - out: 解析结果的目标结构体
+func (b *baseProvider) postJSON(ctx context.Context, path string, params url.Values, payload interface{}, out interface{}) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("序列化请求失败: %w", err)
+	}
+
+	respBody, err := b.doBytes(ctx, http.MethodPost, path, params, body)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("解析响应失败: %w, body=%s", err, string(respBody))
+	}
+	return nil
 }
 
-// RouteStep 路线步骤
-type RouteStep struct {
-	Instruction string  `json:"instruction"` // 导航指令
-	Distance    float64 `json:"distance"`    // 距离(米)
-	Duration    int64   `json:"duration"`    // 耗时(秒)
-	Polyline    string  `json:"polyline"`    // 坐标串
+// getBytes 发送GET请求并获取响应字节数组
+func (b *baseProvider) getBytes(ctx context.Context, path string, params url.Values) ([]byte, error) {
+	return b.doBytes(ctx, http.MethodGet, path, params, nil)
 }
 
-// PlaceSearchRequest 地点检索请求
-type PlaceSearchRequest struct {
-	Query     string  `json:"query"`      // 搜索关键词
-	Location  string  `json:"location"`   // 中心点坐标，格式：经度,纬度
-	Radius    int     `json:"radius"`     // 搜索半径(米)，默认5000
-	PageSize  int     `json:"page_size"`  // 每页数量，默认20
-	PageIndex int     `json:"page_index"` // 页码，从1开始
-	Types     string  `json:"types"`      // 地点类型，多个用|分隔
-	City      string  `json:"city"`       // 城市限制
+// doBytes 发送HTTP请求并获取响应字节数组
+// 参数说明：
+//   - ctx: 上下文
+//   - method: HTTP方法（GET/POST等）
+//   - path: 请求路径
+//   - params: URL查询参数
+//   - body: 请求体字节数组（nil表示无请求体）
+func (b *baseProvider) doBytes(ctx context.Context, method string, path string, params url.Values, body []byte) ([]byte, error) {
+	fullURL := b.baseURL + path
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+	}
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("请求失败: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+	return respBody, nil
 }
 
-// PlaceSearchResponse 地点检索响应
-type PlaceSearchResponse struct {
-	Status    string  `json:"status"`     // 状态码
-	Message   string  `json:"message"`    // 状态信息
-	Total     int     `json:"total"`      // 总数量
-	Places    []Place `json:"places"`     // 地点列表
+// =============================================================================
+// 工具函数
+// 提供坐标解析、默认值设置等辅助功能
+// =============================================================================
+
+// parseCoordinatePair 解析坐标字符串（格式：经度,纬度）
+// 参数说明：
+//   - value: 坐标字符串，格式如 "116.403988,39.914266"
+// 返回值：
+//   - lng: 经度
+//   - lat: 纬度
+//   - err: 解析错误
+func parseCoordinatePair(value string) (lng, lat float64, err error) {
+	parts := strings.Split(strings.TrimSpace(value), ",")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("坐标格式错误: %s", value)
+	}
+	lng, err = strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("解析经度失败: %w", err)
+	}
+	lat, err = strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("解析纬度失败: %w", err)
+	}
+	return lng, lat, nil
 }
 
-// Place 地点信息
-type Place struct {
-	ID          string  `json:"id"`           // 地点ID
-	Name        string  `json:"name"`         // 地点名称
-	Address     string  `json:"address"`      // 详细地址
-	Location    string  `json:"location"`     // 坐标，格式：经度,纬度
-	Distance    float64 `json:"distance"`     // 距离中心点距离(米)
-	Type        string  `json:"type"`         // 地点类型
-	Phone       string  `json:"phone"`        // 电话
-	Rating      float64 `json:"rating"`       // 评分
-	PhotoURL    string  `json:"photo_url"`    // 照片URL
-	BusinessHours string `json:"business_hours"` // 营业时间
+// mustMode 获取旅行模式，如果未指定则默认为驾车
+func mustMode(req *RoutePlanningRequest) TravelMode {
+	if req.Mode == "" {
+		return TravelModeDriving
+	}
+	return req.Mode
 }
 
-// AdministrativeRegionRequest 行政区域查询请求
-type AdministrativeRegionRequest struct {
-	Location string `json:"location"` // 坐标，格式：经度,纬度
-	Level    string `json:"level"`    // 查询级别：country(国家), province(省份), city(城市), district(区县)
+// defaultPageSize 获取默认的分页大小
+func defaultPageSize(size int) int {
+	if size <= 0 {
+		return 20
+	}
+	return size
 }
 
-// AdministrativeRegionResponse 行政区域查询响应
-type AdministrativeRegionResponse struct {
-	Status   string           `json:"status"`   // 状态码
-	Message  string           `json:"message"`  // 状态信息
-	Regions  []AdministrativeRegion `json:"regions"` // 行政区域信息
+// defaultPageIndex 获取默认的页码索引（从1开始）
+func defaultPageIndex(index int) int {
+	if index <= 0 {
+		return 1
+	}
+	return index
 }
 
-// AdministrativeRegion 行政区域信息
-type AdministrativeRegion struct {
-	Code     string `json:"code"`      // 行政区划代码
-	Name     string `json:"name"`      // 行政区划名称
-	Level    string `json:"level"`     // 级别：country, province, city, district
-	Parent   string `json:"parent"`    // 上级行政区划代码
-	Location string `json:"location"`  // 中心点坐标，格式：经度,纬度
-	Boundary string `json:"boundary"`  // 边界坐标串
+// defaultRadius 获取默认的搜索半径（单位：米）
+func defaultRadius(radius int) int {
+	if radius <= 0 {
+		return 5000
+	}
+	return radius
 }
 
-// GeocodingRequest 地理编码请求（地址转坐标）
-type GeocodingRequest struct {
-	Address string `json:"address"` // 地址关键词，如"北京天安门"
-	City    string `json:"city"`    // 城市限制，如"北京市"
+// newUnsupportedResponse 创建不支持操作的错误信息
+func newUnsupportedResponse(provider ProviderName, capability string) error {
+	return fmt.Errorf("%s 暂不支持 %s", provider, capability)
 }
 
-// GeocodingResponse 地理编码响应
-type GeocodingResponse struct {
-	Status    string            `json:"status"`     // 状态码
-	Message   string            `json:"message"`    // 状态信息
-	Locations []GeocodingResult `json:"locations"`  // 地理编码结果列表
+// parseFloat 解析浮点数字符串
+func parseFloat(value string) float64 {
+	num, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	return num
 }
 
-// GeocodingResult 地理编码结果
-type GeocodingResult struct {
-	Latitude  float64 `json:"latitude"`   // 纬度
-	Longitude float64 `json:"longitude"`  // 经度
-	Precise   bool    `json:"precise"`    // 位置的附加信息，是否精确匹配
-	Level     string  `json:"level"`      // 地址类型，如"道路"、"门牌号"、"POI"等
-	Province  string  `json:"province"`   // 省份
-	City      string  `json:"city"`       // 城市
-	District  string  `json:"district"`   // 区县
+// parseInt64 解析64位整数字符串
+func parseInt64(value string) int64 {
+	num, _ := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	return num
+}
+
+// anyToString ���任��类型转换为字符串
+func anyToString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []interface{}:
+		if len(v) == 0 {
+			return ""
+		}
+		return fmt.Sprint(v[0])
+	default:
+		return fmt.Sprint(v)
+	}
 }

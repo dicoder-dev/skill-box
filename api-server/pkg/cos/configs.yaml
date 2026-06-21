@@ -1,0 +1,134 @@
+ai:
+    api_key: ""
+    azure:
+        api_version: 2024-02-15-preview
+        base_url: ""
+        enabled: false
+        model_map: ""
+    base_url: ""
+    max_tokens: 4096
+    model: gpt-4o-mini
+    provider: openai
+    temperature: 0.7
+    timeout_seconds: 60
+    top_p: 1
+db:
+    mysql:
+        dbname: ""
+        ip: 127.0.0.1
+        port: "3306"
+        pwd: "123456"
+        user: root
+    pgsql:
+        dbname: ""
+        ip: 127.0.0.1
+        port: "5432"
+        pwd: "123456"
+        user: root
+    redis:
+        addr: 127.0.0.1:6379
+        db: 0
+        min_idle_conns: 5
+        password: ""
+        pool_size: 10
+    sqlite:
+        db_path: data.db
+email:
+    client:
+        account: dicoder@126.com
+        host: smtp.126.com
+        port: 465
+        pwd: "12345"
+lianghua:
+    api:
+        base_url: http://api.biyingapi.com
+        licence: ""
+map:
+    amap:
+        base_url: https://restapi.amap.com
+        key: ""
+    baidu:
+        ak: ""
+        base_url: https://api.map.baidu.com
+    google:
+        base_url: https://maps.googleapis.com
+        key: ""
+        language: zh-CN
+    routing:
+        administrative_provider: ""
+        default_provider: tianditu
+        domestic_country_codes:
+            - CN
+            - CHN
+            - CHINA
+            - 中国
+            - 中华人民共和国
+        domestic_provider: tianditu
+        driving_route_provider: ""
+        geocoding_provider: ""
+        international_provider: google
+        place_search_provider: ""
+        reverse_geocoding_provider: ""
+        transit_route_provider: ""
+    tianditu:
+        base_url: https://api.tianditu.gov.cn
+        key: ""
+    timeout_seconds: 10
+rate_limiter:
+    black_list: []
+    enabled: true
+    max_requests: 100
+    unblock_duration: 300
+    white_list:
+        - 127.0.0.1
+        - ::1
+    window_size: 60
+server:
+    port: "8082"
+shop:
+    base_fee: 0
+    free_shipping: 0
+    logistics:
+        sf:
+            check_word: ""
+            partner_id: ""
+            sender_tail_no: ""
+            service_code: EXP_RECE_SEARCH_ROUTES
+            service_url: https://sfapi-sbox.sf-express.com/std/service
+    pay:
+        apple:
+            shared_secret: ""
+        wx:
+            apiv3_key: ""
+            mch_id: ""
+            notify_url: ""
+            private_key_path: ""
+            serial_no: ""
+system:
+    app:
+        name: ginp-admin
+    db:
+        type: pgsql
+    env: dev
+    upload:
+        default_platform: local
+    usercenter:
+        secret_key: "123456"
+        url: http://localhost:8082
+tencent:
+    cos:
+        allow_prefix: ""
+        bucket_appid: ""
+        bucket_name: ""
+        duration: 0
+        region: ""
+        secret_id: ""
+        secret_key: ""
+    wx_mini:
+        app_id: ""
+        app_secret: ""
+    wx_official:
+        app_id: ""
+        app_secret: ""
+        encoding_aes_key: ""
+        token: ""

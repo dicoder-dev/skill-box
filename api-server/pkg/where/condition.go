@@ -80,13 +80,26 @@ func Opt(fieldName string, opt string, fieldValue interface{}) *Condition {
 //	return strings.TrimRight(groupStr, ","), strings.TrimRight(Having, "AND ")
 //}
 
-// ConvertToGormWhere 将切片FieldWhere转换为符合gorm库的Where条件语句
-func ConvertToGormWhere(fieldWheres []*Condition) (string, []interface{}, error) {
+
+type ConvertConfig struct {
+	FieldWheres []*Condition
+	Tablename   string
+}
+
+// getFieldName 根据表名构造字段名
+func getFieldName(fieldName, tableName string) string {
+	if tableName != "" {
+		return fmt.Sprintf("%s.%s", tableName, fieldName)
+	}
+	return fieldName
+}
+
+func ConvertToGormWhereBase(convertConfig ConvertConfig) (string, []interface{}, error) {
 	var whereStr string
 	var whereValues []interface{}
 	var lastConnect string
 
-	for _, fw := range fieldWheres {
+	for _, fw := range convertConfig.FieldWheres {
 		if fw.ErrMsg != "" {
 			return "", nil, errors.New("异常错误：" + fw.Field + fw.Opt + fw.ErrMsg)
 		}
@@ -99,27 +112,30 @@ func ConvertToGormWhere(fieldWheres []*Condition) (string, []interface{}, error)
 			lastConnect = AND
 		}
 
+		// 构造带表名的字段名
+		fieldName := getFieldName(fw.Field, convertConfig.Tablename)
+
 		switch fw.Opt {
 		case "=":
-			whereStr += fmt.Sprintf("(%s = ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s = ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case ">":
-			whereStr += fmt.Sprintf("(%s > ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s > ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case "<":
-			whereStr += fmt.Sprintf("(%s < ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s < ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case ">=":
-			whereStr += fmt.Sprintf("(%s >= ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s >= ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case "<=":
-			whereStr += fmt.Sprintf("(%s <= ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s <= ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case "LIKE":
-			whereStr += fmt.Sprintf("(%s LIKE ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s LIKE ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case "IN":
-			whereStr += fmt.Sprintf("(%s IN ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s IN ?)", fieldName)
 			whereValues = append(whereValues, fw.Value)
 		case "BETWEEN":
 			val := reflect.ValueOf(fw.Value)
@@ -130,7 +146,7 @@ func ConvertToGormWhere(fieldWheres []*Condition) (string, []interface{}, error)
 			if len(inValues) != 2 {
 				return "", nil, errors.New("BETWEEN操作需要传入一个长度为2的列表")
 			}
-			whereStr += fmt.Sprintf("(%s BETWEEN ? AND ?)", fw.Field)
+			whereStr += fmt.Sprintf("(%s BETWEEN ? AND ?)", fieldName)
 			whereValues = append(whereValues, inValues[0], inValues[1])
 		default:
 			return "", nil, errors.New("未知的操作符: " + fw.Opt)
@@ -140,8 +156,27 @@ func ConvertToGormWhere(fieldWheres []*Condition) (string, []interface{}, error)
 	return whereStr, whereValues, nil
 }
 
+// ConvertToGormWhere 将切片FieldWhere转换为符合gorm库的Where条件语句
+func ConvertToGormWhere(fieldWheres []*Condition) (string, []interface{}, error) {
+	convertConfig := ConvertConfig{
+		FieldWheres: fieldWheres,
+		Tablename:   "",
+	}
+	return ConvertToGormWhereBase(convertConfig)
+}
+
+func ConvertToGormWhereWithTable(fieldWheres []*Condition, tablename string) (string, []interface{}, error) {
+	convertConfig := ConvertConfig{
+		FieldWheres: fieldWheres,
+		Tablename:   tablename,
+	}
+	return ConvertToGormWhereBase(convertConfig)
+}
+
+
+
 // 供关联查询的时候使用
-func ConvertToGormWhere2(fieldWheres []*Condition) ([]interface{}, error) {
+func ConvertToGormWhereToRelation(fieldWheres []*Condition) ([]interface{}, error) {
 	set, values, err := ConvertToGormWhere(fieldWheres)
 	if err != nil {
 		return nil, err

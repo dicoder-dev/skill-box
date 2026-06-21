@@ -123,3 +123,4 @@ func GenerateAllowPrefix(userId uint, isUserUpload bool, appKey string) string {
 	// 后台上传：设置允许访问的系统路径前缀
 	return "uploads/system/"
 }
+
