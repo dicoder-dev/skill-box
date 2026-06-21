@@ -6,9 +6,9 @@ import "ginp-api/internal/gapi/entity"
 // 业务模块如果新增 entity,应在这里登记;或者在调用方业务侧维护自己的
 // 列表 + 调 dbs.GetWriteDb().AutoMigrate(...)。
 //
-// Skill Box 新增 11 张表(见 docs/project/需求规划.md 第 6 节):
+// Skill Box 新增 12 张表(见 docs/project/需求规划.md 第 6 节):
 // project / skill / skill_file / skill_tag / skill_file_snapshot /
-// skill_apply / audit_log / ai_provider / market_source /
+// skill_apply / audit_log / ai_provider / market_source / market_skill /
 // onboarding_state / setting
 var EntityAutoMigrateList = []any{
 	new(entity.User),
@@ -24,6 +24,7 @@ var EntityAutoMigrateList = []any{
 	new(entity.AuditLog),
 	new(entity.AIProvider),
 	new(entity.MarketSource),
+	new(entity.MarketSkill),
 	new(entity.OnboardingState),
 	new(entity.Setting),
 }

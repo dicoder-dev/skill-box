@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
+import MarketView from './views/MarketView.vue'
 
 const tab = ref('skills')
 </script>
@@ -11,9 +12,11 @@ const tab = ref('skills')
     <nav class="topnav">
       <button :class="{ active: tab === 'skills' }" @click="tab = 'skills'">Skills</button>
       <button :class="{ active: tab === 'projects' }" @click="tab = 'projects'">Projects</button>
+      <button :class="{ active: tab === 'market' }" @click="tab = 'market'">Market</button>
     </nav>
     <SkillsView v-if="tab === 'skills'" />
-    <ProjectsView v-else />
+    <ProjectsView v-else-if="tab === 'projects'" />
+    <MarketView v-else />
   </main>
 </template>
 

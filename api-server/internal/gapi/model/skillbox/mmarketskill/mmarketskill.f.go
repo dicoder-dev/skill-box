@@ -1,0 +1,18 @@
+package mmarketskill
+
+const FieldID = "id"
+const FieldSourceID = "source_id"
+const FieldSourceName = "source_name"
+const FieldRemoteID = "remote_id"
+const FieldName = "name"
+const FieldVersion = "version"
+const FieldDescription = "description"
+const FieldAuthor = "author"
+const FieldLicense = "license"
+const FieldTags = "tags"
+const FieldInstallRef = "install_ref"
+const FieldDetailURL = "detail_url"
+const FieldExtraJSON = "extra_json"
+const FieldFetchedAt = "fetched_at"
+const FieldCreatedAt = "created_at"
+const FieldUpdatedAt = "updated_at"
