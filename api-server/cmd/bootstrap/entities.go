@@ -19,6 +19,8 @@ var EntityAutoMigrateList = []any{
 	new(entity.SkillTag),
 	new(entity.SkillFileSnapshot),
 	new(entity.SkillApply),
+	new(entity.SkillTestRun),
+	new(entity.SkillTestResult),
 	new(entity.AuditLog),
 	new(entity.AIProvider),
 	new(entity.MarketSource),

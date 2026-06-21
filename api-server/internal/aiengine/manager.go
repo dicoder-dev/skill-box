@@ -98,6 +98,16 @@ func (m *Manager) Select(providers []*entity.AIProvider, name string) (*entity.A
 	return candidates[0], nil
 }
 
+// BuildFromConfig 接受 Config 构造 Provider(用于 service 层没有 entity 行的场景)。
+// 不解析 api key,由 caller 自行管理。
+func (m *Manager) BuildFromConfig(cfg Config) (Provider, error) {
+	f, ok := m.factories[strings.ToLower(cfg.Kind)]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownKind, cfg.Kind)
+	}
+	return f(cfg), nil
+}
+
 // Build 把选中的 row 转成 Provider + api key。
 func (m *Manager) Build(p *entity.AIProvider) (Provider, string, error) {
 	f, ok := m.factories[strings.ToLower(p.Kind)]
