@@ -1,7 +1,4 @@
-/** 
- * This file tells your IDE where the root of your JavaScript project is, and sets some
- * options that it can use to provide autocompletion and other features.  
- */
+
 {
   "compilerOptions": {
     "allowJs": true,

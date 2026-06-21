@@ -1,14 +1,20 @@
 version: '3'
 
+# 公共构建任务，由根目录 Taskfile.yml 引入，
+# 为各平台子模块（windows/darwin/linux/ios/android）提供复用的辅助步骤。
+
 tasks:
+  # 运行 `go mod tidy`，同步 Go 模块依赖。仅作为其他任务的内部依赖使用。
   go:mod:tidy:
-    summary: Runs `go mod tidy`
+    summary: 运行 `go mod tidy`
     internal: true
     cmds:
       - go mod tidy
 
+  # 安装前端项目依赖（npm install）。
+  # 仅在 package.json 或 package-lock.json 变化时执行，并校验 npm 是否已安装。
   install:frontend:deps:
-    summary: Install frontend dependencies
+    summary: 安装前端依赖
     dir: frontend
     sources:
       - package.json
@@ -17,13 +23,15 @@ tasks:
       - node_modules
     preconditions:
       - sh: npm version
-        msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
+        msg: "未检测到 npm，请先安装 Node.js：https://nodejs.org/en/download/"
     cmds:
       - npm install
 
+  # 构建前端项目（生产或开发模式由 DEV 变量控制）。
+  # 内部会先安装前端依赖并生成 Wails 绑定代码。
   build:frontend:
     label: build:frontend (DEV={{.DEV}})
-    summary: Build the frontend project
+    summary: 构建前端项目
     dir: frontend
     sources:
       - "**/*"
@@ -43,8 +51,10 @@ tasks:
       BUILD_COMMAND: '{{if eq .DEV "true"}}build:dev{{else}}build{{end}}'
 
 
+  # 下载 Puppertino CSS 并写入 frontend/public 目录，
+  # 用于保持移动端样式与桌面端一致；会自动向 index.html 注入样式与按钮 class。
   frontend:vendor:puppertino:
-    summary: Fetches Puppertino CSS into frontend/public for consistent mobile styling
+    summary: 拉取 Puppertino CSS 至 frontend/public，保证移动端样式一致
     sources:
       - frontend/public/puppertino/puppertino.css
     generates:
@@ -53,41 +63,43 @@ tasks:
       - |
         set -euo pipefail
         mkdir -p frontend/public/puppertino
-        # If bundled Puppertino exists, prefer it. Otherwise, try to fetch, but don't fail build on error.
+        # 若已存在打包好的 Puppertino 则直接复用；否则尝试从 GitHub 拉取，失败也不中断构建。
         if [ ! -f frontend/public/puppertino/puppertino.css ]; then
-          echo "No bundled Puppertino found. Attempting to fetch from GitHub..."
+          echo "未发现已打包的 Puppertino，尝试从 GitHub 下载..."
           if curl -fsSL https://raw.githubusercontent.com/codedgar/Puppertino/main/dist/css/full.css -o frontend/public/puppertino/puppertino.css; then
             curl -fsSL https://raw.githubusercontent.com/codedgar/Puppertino/main/LICENSE -o frontend/public/puppertino/LICENSE || true
-            echo "Puppertino CSS downloaded to frontend/public/puppertino/puppertino.css"
+            echo "Puppertino CSS 已下载到 frontend/public/puppertino/puppertino.css"
           else
-            echo "Warning: Could not fetch Puppertino CSS. Proceeding without download since template may bundle it."
+            echo "警告：无法下载 Puppertino CSS，模板可能已自带该样式，跳过下载。"
           fi
         else
-          echo "Using bundled Puppertino at frontend/public/puppertino/puppertino.css"
+          echo "使用已打包的 Puppertino：frontend/public/puppertino/puppertino.css"
         fi
-        # Ensure index.html includes Puppertino CSS and button classes
+        # 确保 index.html 中引入了 Puppertino 样式与按钮 class。
         INDEX_HTML=frontend/index.html
         if [ -f "$INDEX_HTML" ]; then
           if ! grep -q 'href="/puppertino/puppertino.css"' "$INDEX_HTML"; then
-            # Insert Puppertino link tag after style.css link
+            # 在 style.css 之后插入 Puppertino 链接。
             awk '
               /href="\/style.css"\/?/ && !x { print; print "    <link rel=\"stylesheet\" href=\"/puppertino/puppertino.css\"/>"; x=1; next }1
             ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
           fi
-          # Replace default .btn with Puppertino primary button classes if present
+          # 若存在默认的 .btn，则替换为 Puppertino 主按钮样式。
           sed -E -i'' 's/class=\"btn\"/class=\"p-btn p-prim-col\"/g' "$INDEX_HTML" || true
         fi
 
 
+  # 根据 Go 源码生成前端可调用的 Wails 绑定代码，
+  # 同时依赖 go mod tidy；切换 dev/production 模式时也会触发重新生成。
   generate:bindings:
     label: generate:bindings (BUILD_FLAGS={{.BUILD_FLAGS}})
-    summary: Generates bindings for the frontend
+    summary: 为前端生成 Wails 绑定代码
     deps:
       - task: go:mod:tidy
     sources:
       - "**/*.[jt]s"
       - exclude: frontend/**/*
-      - frontend/bindings/**/*  # Rerun when switching between dev/production mode causes changes in output
+      - frontend/bindings/**/*  # 在 dev/production 模式切换时输出会变化，需重新执行
       - "**/*.go"
       - go.mod
       - go.sum
@@ -96,8 +108,9 @@ tasks:
     cmds:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true
 
+  # 根据 build/appicon.png 生成各平台所需的图标资源。
   generate:icons:
-    summary: Generates Windows `.ico` and Mac `.icns` files from an image
+    summary: 由 appicon.png 生成 Windows `.ico` 与 macOS `.icns` 图标
     dir: build
     sources:
       - "appicon.png"
@@ -107,63 +120,70 @@ tasks:
     cmds:
       - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
 
+  # 启动 Vite 开发服务器（前端热更新），端口由 VITE_PORT 决定。
   dev:frontend:
-    summary: Runs the frontend in development mode
+    summary: 以前端开发模式运行项目
     dir: frontend
     deps:
       - task: install:frontend:deps
     cmds:
       - npm run dev -- --port {{.VITE_PORT}} --strictPort
 
+  # 根据当前 config.yml 同步更新 build/assets 目录中的构建资源。
   update:build-assets:
-    summary: Updates the build assets
+    summary: 更新构建资源
     dir: build
     cmds:
       - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
 
+  # 构建交叉编译所需的 Docker 镜像（约 800MB），
+  # 一次性准备，可在任意宿主机上完成跨平台构建。
   setup:docker:
-    summary: Builds Docker image for cross-compilation (~800MB download)
+    summary: 构建用于交叉编译的 Docker 镜像（约 800MB）
     desc: |
-      Builds the Docker image needed for cross-compiling to any platform.
-      Run this once to enable cross-platform builds from any OS.
+      构建用于交叉编译到任意平台的 Docker 镜像。
+      仅需执行一次，即可在任意操作系统上启用跨平台构建。
     cmds:
       - docker build -t wails-cross -f build/docker/Dockerfile.cross build/docker/
     preconditions:
       - sh: docker info > /dev/null 2>&1
-        msg: "Docker is required. Please install Docker first."
+        msg: "需要 Docker 环境，请先安装 Docker。"
 
+  # 列出当前已连接的 iOS 真机 UDID。
   ios:device:list:
-    summary: Lists connected iOS devices (UDIDs)
+    summary: 列出已连接的 iOS 真机（UDID）
     cmds:
       - xcrun xcdevice list
 
+  # 通过 xcodebuild/devicectl 构建、安装并启动应用到 iPhone 真机。
+  # 使用前需先在命令行注入 PROJECT、SCHEME、UDID、BUNDLE_ID 等变量。
   ios:run:device:
-    summary: Build, install, and launch on a physical iPhone using Apple tools (xcodebuild/devicectl)
+    summary: 基于 Apple 工具链（xcodebuild/devicectl）在 iPhone 真机上构建、安装并启动应用
     vars:
-      PROJECT: '{{.PROJECT}}'   # e.g., build/ios/xcode/<YourProject>.xcodeproj
-      SCHEME: '{{.SCHEME}}'     # e.g., ios.dev
+      PROJECT: '{{.PROJECT}}'   # 例如：build/ios/xcode/<YourProject>.xcodeproj
+      SCHEME: '{{.SCHEME}}'     # 例如：ios.dev
       CONFIG: '{{.CONFIG | default "Debug"}}'
       DERIVED: '{{.DERIVED | default "build/ios/DerivedData"}}'
-      UDID: '{{.UDID}}'         # from `task ios:device:list`
-      BUNDLE_ID: '{{.BUNDLE_ID}}' # e.g., com.yourco.wails.ios.dev
-      TEAM_ID: '{{.TEAM_ID}}'   # optional, if your project is not already set up for signing
+      UDID: '{{.UDID}}'         # 来自 `task ios:device:list`
+      BUNDLE_ID: '{{.BUNDLE_ID}}' # 例如：com.yourco.wails.ios.dev
+      TEAM_ID: '{{.TEAM_ID}}'   # 可选；若项目尚未配置签名则需要提供
     preconditions:
       - sh: xcrun -f xcodebuild
-        msg: "xcodebuild not found. Please install Xcode."
+        msg: "未找到 xcodebuild，请先安装 Xcode。"
       - sh: xcrun -f devicectl
-        msg: "devicectl not found. Please update to Xcode 15+ (which includes devicectl)."
+        msg: "未找到 devicectl，请升级到 Xcode 15+（内置 devicectl）。"
       - sh: test -n '{{.PROJECT}}'
-        msg: "Set PROJECT to your .xcodeproj path (e.g., PROJECT=build/ios/xcode/App.xcodeproj)."
+        msg: "请设置 PROJECT 为 .xcodeproj 路径（例如：PROJECT=build/ios/xcode/App.xcodeproj）。"
       - sh: test -n '{{.SCHEME}}'
-        msg: "Set SCHEME to your app scheme (e.g., SCHEME=ios.dev)."
+        msg: "请设置 SCHEME 为应用 scheme（例如：SCHEME=ios.dev）。"
       - sh: test -n '{{.UDID}}'
-        msg: "Set UDID to your device UDID (see: task ios:device:list)."
+        msg: "请设置 UDID 为目标设备 UDID（参考：task ios:device:list）。"
       - sh: test -n '{{.BUNDLE_ID}}'
-        msg: "Set BUNDLE_ID to your app's bundle identifier (e.g., com.yourco.wails.ios.dev)."
+        msg: "请设置 BUNDLE_ID 为应用包标识（例如：com.yourco.wails.ios.dev）。"
     cmds:
       - |
         set -euo pipefail
-        echo "Building for device: UDID={{.UDID}} SCHEME={{.SCHEME}} PROJECT={{.PROJECT}}"
+        echo "正在为真机构建：UDID={{.UDID}} SCHEME={{.SCHEME}} PROJECT={{.PROJECT}}"
         XCB_ARGS=(
           -project "{{.PROJECT}}"
           -scheme "{{.SCHEME}}"
@@ -173,21 +193,21 @@ tasks:
           -allowProvisioningUpdates
           -allowProvisioningDeviceRegistration
         )
-        # Optionally inject signing identifiers if provided
+        # 若传入了签名相关信息，则一并注入到 xcodebuild。
         if [ -n '{{.TEAM_ID}}' ]; then XCB_ARGS+=(DEVELOPMENT_TEAM={{.TEAM_ID}}); fi
         if [ -n '{{.BUNDLE_ID}}' ]; then XCB_ARGS+=(PRODUCT_BUNDLE_IDENTIFIER={{.BUNDLE_ID}}); fi
         xcodebuild "${XCB_ARGS[@]}" build | xcpretty || true
-        # If xcpretty isn't installed, run without it
+        # 未安装 xcpretty 时回退到原始输出。
         if [ "${PIPESTATUS[0]}" -ne 0 ]; then
           xcodebuild "${XCB_ARGS[@]}" build
         fi
-        # Find built .app
+        # 定位构建产物 .app。
         APP_PATH=$(find "{{.DERIVED}}/Build/Products" -type d -name "*.app" -maxdepth 3 | head -n 1)
         if [ -z "$APP_PATH" ]; then
-          echo "Could not locate built .app under {{.DERIVED}}/Build/Products" >&2
+          echo "在 {{.DERIVED}}/Build/Products 下未找到构建产物 .app" >&2
           exit 1
         fi
-        echo "Installing: $APP_PATH"
+        echo "正在安装：$APP_PATH"
         xcrun devicectl device install app --device "{{.UDID}}" "$APP_PATH"
-        echo "Launching: {{.BUNDLE_ID}}"
+        echo "正在启动：{{.BUNDLE_ID}}"
         xcrun devicectl device process launch --device "{{.UDID}}" --stderr console --stdout console "{{.BUNDLE_ID}}"

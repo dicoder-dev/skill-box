@@ -323,3 +323,119 @@
 [GIN] 2026/06/21 - 02:48:32 | 200 |      328.75µs |       127.0.0.1 | GET      "/api/health"
 [GIN] 2026/06/21 - 02:48:32 | 200 |     575.791µs |       127.0.0.1 | GET      "/api/health"
 [GIN] 2026/06/21 - 02:48:32 | 200 |     434.792µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:56:01 | 200 |    3.224958ms |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:56:01 | 200 |      927.25µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:56:01 | 200 |      21.667µs |       127.0.0.1 | GET      "/assets/index-BJDlgRBp.css"
+[GIN] 2026/06/21 - 13:56:01 | 200 |     1.18525ms |       127.0.0.1 | GET      "/assets/index-CtCxK1Os.js"
+2026/06/21 13:58:41 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 13:58:43 | 200 |      119.25µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:58:43 | 200 |      19.416µs |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 13:58:43 | 200 |    2.068792ms |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:58:43 | 200 |     328.458µs |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 13:58:43 | 200 |     549.208µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:58:43 | 200 |      83.708µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 13:58:43 | 200 |      10.958µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 13:58:43 | 200 |         188µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:58:43 | 200 |     277.166µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 13:58:57 | 200 |      21.041µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:58:57 | 200 |      31.416µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:58:57 | 200 |     125.209µs |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 13:58:57 | 200 |       8.209µs |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 13:58:57 | 200 |    2.097833ms |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:58:57 | 200 |       37.25µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 13:58:57 | 200 |      15.625µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 13:58:57 | 200 |     151.708µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:58:57 | 200 |     223.791µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 13:59:16 | 200 |    3.221291ms |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:17 | 200 |     581.459µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:17 | 200 |     625.792µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:17 | 200 |       589.5µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:19 | 200 |      24.958µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:59:19 | 200 |      29.125µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:59:19 | 200 |          99µs |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 13:59:19 | 200 |      12.625µs |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 13:59:19 | 200 |     195.375µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:19 | 200 |      117.25µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 13:59:19 | 200 |       8.666µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 13:59:19 | 200 |     153.417µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:19 | 200 |     111.667µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 13:59:21 | 200 |      16.875µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:59:21 | 200 |      26.791µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:59:21 | 200 |      71.625µs |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 13:59:21 | 200 |       7.208µs |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 13:59:21 | 200 |     217.833µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:21 | 200 |      76.209µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 13:59:21 | 200 |      11.416µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 13:59:21 | 200 |     146.417µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:21 | 200 |     107.084µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+[GIN] 2026/06/21 - 13:59:26 | 200 |      26.125µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 13:59:26 | 200 |      37.041µs |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 13:59:26 | 200 |     197.542µs |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 13:59:26 | 200 |      14.375µs |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 13:59:26 | 200 |     407.834µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:26 | 200 |      62.792µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 13:59:26 | 200 |      11.708µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 13:59:26 | 200 |     233.875µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 13:59:26 | 200 |     167.542µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
+2026/06/21 14:04:18 desktop: backend ready at http://127.0.0.1:8082
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] POST   /api/demo_table/demo_add_api --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/create    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/findById  --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/update    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/delete    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/demo_table/search    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/pkg/ginp.BindParamsHandler.func1 (4 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (4 handlers)
+[GIN] 2026/06/21 - 14:04:19 | 200 |        54.5µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 14:04:19 | 200 |      3.2475ms |       127.0.0.1 | GET      "/style.css"
+[GIN] 2026/06/21 - 14:04:19 | 200 |    2.303458ms |       127.0.0.1 | GET      "/assets/index-tUTifCPt.css"
+[GIN] 2026/06/21 - 14:04:19 | 200 |    2.566792ms |       127.0.0.1 | GET      "/assets/index-B-wHC8G2.js"
+[GIN] 2026/06/21 - 14:04:19 | 200 |     491.084µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 14:04:19 | 200 |     133.583µs |       127.0.0.1 | GET      "/wails.png"
+[GIN] 2026/06/21 - 14:04:19 | 200 |      29.875µs |       127.0.0.1 | GET      "/vue.svg"
+[GIN] 2026/06/21 - 14:04:19 | 200 |     441.917µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 14:04:19 | 200 |       267.5µs |       127.0.0.1 | GET      "/Inter-Medium.ttf"
