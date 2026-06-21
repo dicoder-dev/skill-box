@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
+import AIPanel from '@/components/AIPanel.vue'
 
 // 当前 scope 选择
 const scope = ref('global') // global | project
@@ -26,6 +27,23 @@ const draft = reactive({
 const editingKey = ref(null) // {scope, name, version, project_id}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
+
+// AI 侧栏
+const aiOpen = ref(false)
+function toggleAI() { aiOpen.value = !aiOpen.value }
+
+// 当前正在编辑的 SKILL.md 全文(供 AIPanel 的 contextText 用)
+const currentSkillMd = computed(() => {
+  if (!editing.value) return ''
+  // 用 buildSkillMd 拼一份(仅在需要时)
+  try { return buildSkillMd() } catch (_) { return '' }
+})
+
+function onAIApply(text) {
+  // 把 AI 改写后的 markdown 提取 body 回填
+  const m = text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
+  draft.body = m ? m[1].trim() : text.trim()
+}
 
 async function reload() {
   loading.value = true
@@ -190,7 +208,7 @@ onMounted(reload)
 </script>
 
 <template>
-  <section class="skills-view">
+  <div class="skills-layout"><section class="skills-view" :class="{ 'with-ai': aiOpen }">
     <header class="bar">
       <h2>Skills</h2>
       <div class="tabs">
@@ -204,6 +222,7 @@ onMounted(reload)
           @keyup.enter="() => { page = 1; reload() }"
         />
         <button @click="() => { page = 1; reload() }">搜索</button>
+        <button @click="toggleAI">{{ aiOpen ? '关闭 AI' : '打开 AI' }}</button>
         <button class="primary" @click="startNew">新建 Skill</button>
       </div>
     </header>
@@ -284,11 +303,13 @@ onMounted(reload)
       <span>{{ page }} / {{ totalPages }} (共 {{ total }} 条)</span>
       <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
     </footer>
-  </section>
+  </section><AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" /></div>
 </template>
 
 <style scoped>
-.skills-view { padding: 16px 20px; max-width: 1100px; margin: 0 auto; color: #1a1a1a; }
+.skills-layout { display: flex; height: 100%; }
+.skills-view { padding: 16px 20px; max-width: 1100px; margin: 0 auto; color: #1a1a1a; flex: 1; min-width: 0; }
+.skills-view.with-ai { max-width: none; }
 .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .bar h2 { margin: 0; font-size: 18px; }
 .tabs { display: flex; gap: 0; }
