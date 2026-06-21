@@ -1053,3 +1053,126 @@ reflect: Elem of invalid type cindex.RequestHealth
 [GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
 [GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
 [GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+
+
+[31m2026/06/21 17:51:56 [Recovery] 2026/06/21 - 17:51:56 panic recovered:
+GET /api/health HTTP/1.1
+Host: 127.0.0.1:8082
+Accept: */*
+User-Agent: curl/8.7.1
+
+
+reflect: Elem of invalid type cindex.RequestHealth
+/usr/local/go/src/reflect/type.go:765 (0x102f25f9f)
+	elem: panic("reflect: Elem of invalid type " + stringFor(t))
+/usr/local/go/src/reflect/type.go:769 (0x102f3ceff)
+	(*rtype).Elem: return toType(elem(t.common()))
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/bind_handler.go:62 (0x103565487)
+	init.0.BindParamsHandler.func1: paramInstance := reflect.New(reflect.TypeOf(paramType).Elem()).Interface()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x10353bbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:52 (0x103620a8b)
+	Register.LoggingMiddleware.func2: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x10353bbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:509 (0x10362093f)
+	Register.CORSMiddleware.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1035479f7)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/recovery.go:102 (0x1035479e0)
+	CustomRecoveryWithWriter.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x103546dd3)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/logger.go:249 (0x103546db8)
+	LoggerWithConfig.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x10354636f)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:644 (0x103545eac)
+	(*Engine).handleHTTPRequest: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:600 (0x103545b23)
+	(*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+/usr/local/go/src/net/http/server.go:3311 (0x1031026bf)
+	serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+/usr/local/go/src/net/http/server.go:2073 (0x1030f508b)
+	(*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+/usr/local/go/src/runtime/asm_arm64.s:1447 (0x102edf7b3)
+	goexit: MOVD	R0, R0	// NOP
+[0m
+[GIN] 2026/06/21 - 17:51:56 | 500 |     697.125µs |       127.0.0.1 | GET      "/api/health"
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+[GIN] 2026/06/21 - 17:53:15 | 200 |     579.417µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 17:53:15 | 200 |      78.375µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 17:53:15 | 200 |      53.958µs |       127.0.0.1 | GET      "/"
+
+
+[31m2026/06/21 17:53:15 [Recovery] 2026/06/21 - 17:53:15 panic recovered:
+POST /api/sys_user/search HTTP/1.1
+Host: 127.0.0.1:8082
+Accept: */*
+Content-Length: 2
+Content-Type: application/json
+User-Agent: curl/8.7.1
+
+
+数据库未初始化，请先调用 InitDb() 函数
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/internal/db/mysql/init_mysql.go:57 (0x103500d13)
+	GetReadDb: panic("数据库未初始化，请先调用 InitDb() 函数")
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/internal/gapi/service/user/suser/user.s.go:17 (0x103500a74)
+	Model: dbRead := mysql.GetReadDb()
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/internal/gapi/controller/user/cuser/sys_user_search.a.go:43 (0x103500b98)
+	SysUserSearch: list, total, err := suser.Model().FindList(requestParams.Wheres, requestParams.Extra)
+/usr/local/go/src/reflect/value.go:586 (0x102eafe67)
+	Value.call: call(frametype, fn, stackArgs, uint32(frametype.Size()), uint32(abid.retOffset), uint32(frameSize), &regArgs)
+/usr/local/go/src/reflect/value.go:369 (0x102eaf1d3)
+	Value.Call: return v.call("Call", in)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/bind_handler.go:103 (0x1035008a3)
+	init.6.BindParamsHandler.func1: results := handlerFunc.Call(params)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1034bbbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:52 (0x1035a0d0b)
+	Register.LoggingMiddleware.func2: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1034bbbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:509 (0x1035a0bbf)
+	Register.CORSMiddleware.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1034c79f7)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/recovery.go:102 (0x1034c79e0)
+	CustomRecoveryWithWriter.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1034c6dd3)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/logger.go:249 (0x1034c6db8)
+	LoggerWithConfig.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1034c636f)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:644 (0x1034c5eac)
+	(*Engine).handleHTTPRequest: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:600 (0x1034c5b23)
+	(*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+/usr/local/go/src/net/http/server.go:3311 (0x1030826bf)
+	serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+/usr/local/go/src/net/http/server.go:2073 (0x10307508b)
+	(*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+/usr/local/go/src/runtime/asm_arm64.s:1447 (0x102e5f7b3)
+	goexit: MOVD	R0, R0	// NOP
+[0m
+[GIN] 2026/06/21 - 17:53:15 | 500 |     850.917µs |       127.0.0.1 | POST     "/api/sys_user/search"

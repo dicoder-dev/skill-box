@@ -2,16 +2,20 @@ package genfunc
 
 import (
 	"fmt"
-	"ginp-api/internal/app/gapi/setting"
 	"ginp-api/pkg/gencode/gen"
 	"io/ioutil"
 	"reflect"
 )
 
-// 生成实体常量 在 app/gapi/start/setting.go
-// EntityGenerationList中添加需要生成的实体
-func GenFields() {
-	for _, entity_ := range setting.EntityGenerationList {
+// GenFields 生成实体字段常量文件
+// entities 传入需要生成字段常量的实体列表，每个元素应为指向结构体的指针（如 new(entity.User)）
+// 使用方法：调用方在自己的 setting 包中维护实体列表，然后传入本函数
+func GenFields(entities []any) {
+	if len(entities) == 0 {
+		fmt.Println("警告：实体列表为空，未生成任何字段常量")
+		return
+	}
+	for _, entity_ := range entities {
 		t := reflect.TypeOf(entity_).Elem()
 		// fileName := strings.ToLower(t.Name()) + ".go"
 		packageName := "m" + gen.NameToAllSmall(t.Name())

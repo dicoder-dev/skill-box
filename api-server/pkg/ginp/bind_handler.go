@@ -28,9 +28,6 @@ func BindHandler(handler func(c *ContextPlus)) func(c *gin.Context) {
 //3./category/index返回结果
 //{"code":0,"msg":"ok"}
 
-
-
-
 // BindParamsHandler 自动参数绑定处理器包装函数
 // 将原始的 handler 包装起来，自动执行参数绑定
 // 如果绑定失败，直接返回错误响应，不执行原始 handler
@@ -44,23 +41,42 @@ func BindHandler(handler func(c *ContextPlus)) func(c *gin.Context) {
 //   ginp.RouterAppend(ginp.RouterItem{
 //       Path:     "/api/user/create",
 //       Handler:  ginp.BindParamsHandler(Create, &entity.User{}),
-//       ParamTypes: []interface{}{&entity.User{}}, // 自动提取到SwaggerInfo.RequestParams
-//       // ...
+//       ParamTypes: []interface{}{&entity.User{}},
+//       ...
 //   })
+//
+// 同时兼容值类型（entity.User{}）和指针类型（&entity.User{}）,
+// 迁移过来的存量 controller 多用值类型,新代码鼓励用指针。
 func BindParamsHandler(handler interface{}, paramTypes ...interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := &ContextPlus{Context: c}
-		
-		// 绑定参数
+
 		// params 数组长度 = 1 (ctx) + len(paramTypes)
 		params := make([]reflect.Value, 1+len(paramTypes))
 		params[0] = reflect.ValueOf(ctx)
-		
+
 		// 绑定每个参数类型
 		for i, paramType := range paramTypes {
-			// 创建参数实例
-			paramInstance := reflect.New(reflect.TypeOf(paramType).Elem()).Interface()
-			
+			// 参数类型为 nil，跳过(占位)
+			if paramType == nil {
+				continue
+			}
+
+			// 创建可寻址的实例以满足 c.ShouldBindXxx 的指针要求。
+			// 支持两种调用风格:
+			//   BindParamsHandler(F, &entity.User{})  // 指针,推荐
+			//   BindParamsHandler(F, entity.User{})   // 值,兼容存量代码
+			paramTypeVal := reflect.TypeOf(paramType)
+			if paramTypeVal == nil {
+				continue
+			}
+			var paramInstance interface{}
+			if paramTypeVal.Kind() == reflect.Ptr {
+				paramInstance = reflect.New(paramTypeVal.Elem()).Interface()
+			} else {
+				paramInstance = reflect.New(paramTypeVal).Interface()
+			}
+
 			// 绑定参数
 			var err error
 			switch c.Request.Method {
@@ -71,21 +87,21 @@ func BindParamsHandler(handler interface{}, paramTypes ...interface{}) gin.Handl
 			default:
 				err = c.ShouldBindJSON(paramInstance)
 			}
-			
+
 			// 参数绑定失败，直接返回错误
 			if err != nil {
 				ctx.Fail("请求参数有误: " + err.Error())
 				return
 			}
-			
+
 			// 注意：params[0] 是 ctx，所以 paramTypes[i] 对应 params[i+1]
 			params[i+1] = reflect.ValueOf(paramInstance)
 		}
-		
+
 		// 调用原始 handler
 		handlerFunc := reflect.ValueOf(handler)
 		results := handlerFunc.Call(params)
-		
+
 		// 处理返回值
 		if len(results) > 0 {
 			if errVal := results[len(results)-1]; errVal.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
@@ -96,13 +112,13 @@ func BindParamsHandler(handler interface{}, paramTypes ...interface{}) gin.Handl
 				}
 			}
 		}
-		
+
 		// 检查响应是否已发送（handler 中可能已经调用了 ctx.Success/SuccessData/Fail 等）
 		// 如果已发送响应，不再自动调用 ctx.Success()
 		if c.Writer.Written() {
 			return
 		}
-		
+
 		// 默认返回成功
 		ctx.Success()
 	}
