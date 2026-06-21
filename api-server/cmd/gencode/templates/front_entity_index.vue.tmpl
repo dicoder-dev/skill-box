@@ -33,7 +33,7 @@
       @success="handleEditSuccess"
     />
   </div>
-</template>
+</template> 
 
 <script setup lang="ts" name="$ENTITY_NAME$Management">
 import { ref, onMounted } from 'vue';
@@ -72,7 +72,7 @@ onMounted(async () => {
 // 数据加载
 const searchDataList = async (formData?: Record<string, unknown>) => {
     const result = await $ENTITY_NAME$Service.search$ENTITY_NAME$List(
-        formData || {},
+        formData || {}, 
         dataListExtra.value
     );
     dataList.value = result.list;
@@ -105,7 +105,7 @@ const handleEditSuccess = async () => {
 const handleDelete = async (row: Record<string, unknown>) => {
     if (dataTableRef.value) {
         const success = await dataTableRef.value.deleteWithConfirm(
-            row as  Record<string, unknown>,
+            row as  Record<string, unknown>, 
             $ENTITY_NAME$Service.delete,
             'name',
             '删除成功',

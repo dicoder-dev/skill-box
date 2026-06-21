@@ -2,10 +2,10 @@ package m$PACKAGE_NAME$
 
 import (
 	"fmt"
-	"ginp-api/internal/gapi/entity"
+	"ginp-api/internal/app/gapi/entity"
 	"ginp-api/pkg/dbops"
 	"ginp-api/pkg/where"
-	"ginp-api/internal/gapi/service/system/sgen"
+	"ginp-api/internal/app/gapi/service/system/sgen"
 	"gorm.io/gorm"
 )
 
@@ -93,7 +93,7 @@ func (s *Model) FindList(wheres []*where.Condition, extra *where.Extra) ([]*enti
 // FindListWithRelations 查询列表数据（支持关联搜索）
 func (s *Model) FindListWithRelations(wheres []*where.Condition, extra *where.Extra, relations []*where.RelationSearch) ([]*entity.$ENTITY_NAME$, uint, error) {
 	var entityList []*entity.$ENTITY_NAME$
-
+	
 	// 构造JoinList
 	joinList := dbops.BuildJoinList(&dbops.BuildJoinListConfig{
 		MainEntity:     &entity.$ENTITY_NAME${},
@@ -101,7 +101,7 @@ func (s *Model) FindListWithRelations(wheres []*where.Condition, extra *where.Ex
 		MainTableName:  s.TableName,
 		MainPrimaryKey: s.PrimaryKey,
 	})
-
+	
 	//传入的entityList必须要加 &取地址符号，切片本身并不是指针，向函数传递一个切片时，实际上是复制了该切片的结构体
 	err := dbops.FindList(&dbops.FindListConfig{
 		Conditions:     wheres,

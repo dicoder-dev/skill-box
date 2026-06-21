@@ -7,15 +7,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.1.2"
+var version = "0.2.0"
 
 // rootCmd 表示在不调用任何子命令时的基本命令
 var rootCmd = &cobra.Command{
-	Use:   "gapi",
-	Short: "GAPI - ginpapi的代码生成工具",
-	Long: `GAPI 是一个用于生成 ginpapi 框架代码的命令行工具。
+	Use:   "gencode",
+	Short: "GINP 代码生成工具",
+	Long: `GINP 代码生成工具 - 基于 service 层的命令行工具
 
-它可以生成实体、字段常量和API控制器。`,
+支持的功能：
+  - entity: 实体管理（列表、生成、删除）
+  - api: API接口管理（添加、列表）
+  - swagger: 生成Swagger文档
+
+使用示例：
+  gencode entity list              # 列出所有实体
+  gencode entity gen SysUser       # 生成实体CRUD代码
+  gencode api add                  # 交互式添加API
+  gencode swagger                  # 生成Swagger文档`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// 如果没有提供子命令，显示帮助信息
 		cmd.Help()
