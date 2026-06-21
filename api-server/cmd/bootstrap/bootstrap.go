@@ -81,6 +81,15 @@ func Boot(opts BootOptions) (*Backend, error) {
 	if err := cfg.InitCfg(ConfigFile); err != nil {
 		return nil, err
 	}
+	// 关键:configs 各包的 init() 在程序启动时就跑了 ParseConfigStruct，把 struct 字段填上
+	// 了 tag default；那时候 viper 还没加载配置。InitCfg 会把 viper 实例换成新加载的，
+	// 但 struct 字段不会自动重读，所以这里必须显式再 parse 一遍把 viper 里的值刷进去。
+	// 不加这段，configs.Db.UseType 永远是 tag default "mysql"，所有路径都会 panic。
+	cfg.ParseConfigStruct(configs.Db)
+	cfg.ParseConfigStruct(configs.Server)
+	cfg.ParseConfigStruct(configs.System)
+	cfg.ParseConfigStruct(configs.Email)
+	cfg.ParseConfigStruct(configs.Tencent)
 	// 关键:dbs 包的 useDbType 需要在 cfg 加载完后同步过来。
 	dbs.SetDbType(configs.Db.UseType)
 

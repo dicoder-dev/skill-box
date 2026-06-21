@@ -184,10 +184,10 @@ func GetStringDefault(k string, dv string) string {
 func GetBool(k string) bool {
 	checkInstance()
 	val, _ := instance.GetString(k)
-	if val == "yes" || val == "ok" || val == "1" {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "true", "yes", "ok", "on", "1":
 		return true
-	}
-	if val == "no" || val == "ng" || val == "0" {
+	case "false", "no", "ng", "off", "0":
 		return false
 	}
 

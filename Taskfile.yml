@@ -12,6 +12,13 @@ vars:
   APP_NAME: "skill-box"
   BIN_DIR: "bin"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  # Web 单进程二进制输出路径（Windows 自动追加 .exe）。
+  WEB_BIN: '{{.BIN_DIR}}/web{{if eq .OS "windows"}}.exe{{end}}'
+  # Web 端默认使用的配置文件（可通过 WEB_CONFIG_FILE 覆盖）。
+  WEB_CONFIG_FILE: '{{.WEB_CONFIG_FILE | default "configs.yaml"}}'
+  # //go:embed 期望的目录（位于 api-server/cmd/web/frontend/dist），
+  # 由 web:sync:embed 任务从根 frontend/dist 同步过来。
+  WEB_EMBED_DIR: api-server/cmd/web/frontend
 
 tasks:
   build:
@@ -38,3 +45,111 @@ tasks:
     summary: Builds Docker image for cross-compilation (~800MB download)
     cmds:
       - task: common:setup:docker
+
+  # ---- 纯 Web 单进程（api-server/cmd/web）任务 ----
+  # 一次起前后端、构建单进程二进制、运行产物均在这里。不依赖 wails3 桌面能力。
+
+  # 同步 api-server 模块的 Go 依赖。
+  web:go:mod:tidy:
+    summary: 同步 api-server Go 模块依赖
+    dir: api-server
+    cmds:
+      - go mod tidy
+
+  # 仅构建前端 dist（不触发 Wails bindings 生成，纯 Web 不依赖 wails3 CLI）。
+  web:build:frontend:
+    summary: 构建前端 dist（不依赖 Wails CLI，纯 Web 用）
+    label: web:build:frontend (DEV={{.DEV}})
+    dir: frontend
+    sources:
+      - "**/*"
+    generates:
+      - dist/**/*
+    deps:
+      - task: common:install:frontend:deps
+    cmds:
+      - npm run {{.BUILD_COMMAND}} -q
+    env:
+      PRODUCTION: '{{if eq .DEV "true"}}false{{else}}true{{end}}'
+    vars:
+      BUILD_COMMAND: '{{if eq .DEV "true"}}build:dev{{else}}build{{end}}'
+
+  # 把根 frontend/dist 同步到 //go:embed 期望的目录。
+  web:sync:embed:
+    summary: 同步 frontend/dist 到 //go:embed 目录
+    sources:
+      - frontend/dist/**/*
+    generates:
+      - api-server/cmd/web/frontend/dist/**/*
+    cmds:
+      - mkdir -p {{.WEB_EMBED_DIR}}/dist
+      - rm -rf {{.WEB_EMBED_DIR}}/dist
+      - cp -R frontend/dist/. {{.WEB_EMBED_DIR}}/dist/
+
+  # 完整生产构建：前端 dist → 同步到 embed 目录 → go build。
+  # sources/generates 让 Task 能增量判断：源码没变就跳过整条 build 链。
+  web:build:
+    summary: 构建 Web 端单进程二进制（HTTP API + embed 前端 dist）
+    sources:
+      - api-server/**/*.go
+      - api-server/go.mod
+      - api-server/go.sum
+    generates:
+      - bin/web{{if eq .OS "windows"}}.exe{{end}}
+    deps:
+      - task: web:build:frontend
+      - task: web:sync:embed
+      - task: web:go:mod:tidy
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build {{.BUILD_FLAGS}} -o {{.WEB_BIN}} ./api-server/cmd/web
+    vars:
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
+
+  # 启动 Web 单进程二进制。未构建/源码已更新时，会自动先跑 web:build。
+  run:web:
+    summary: 启动 Web 单进程二进制（自动 build 如有需要）
+    deps:
+      - web:build
+    cmds:
+      - '{{.WEB_BIN}} -config {{.WEB_CONFIG_FILE}}'
+
+  # 后端开发模式：直接 go run，前端代码改动不影响后端。
+  # 监听端口由 configs.server.port 决定（默认 8082）。
+  web:dev:backend:
+    summary: 以 go run 方式启动 Web 后端
+    dir: api-server
+    cmds:
+      - go run ./cmd/web -config ../{{.WEB_CONFIG_FILE}}
+
+  # 前端开发模式：Vite dev server，端口由 VITE_PORT 决定。
+  web:dev:frontend:
+    summary: 启动 Vite 开发服务器（Web 端调试）
+    dir: frontend
+    deps:
+      - task: common:install:frontend:deps
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+
+  # 主入口：单终端并行启动后端 + 前端。Ctrl-C 一并停掉。
+  # - 后端走 `&` 后台跑；前端也走 `&` 后台；脚本 wait 前端，前端退出时 kill 后端
+  # - 不依赖 trap：宿主 shell（dash 系）连数字信号都报 invalid signal specification，干脆不用 trap
+  # - Ctrl-C 时整个进程组都收到 SIGINT，前后端一起退；wait 立即返回，杀掉后端收尾
+  # - 适用 macOS / Linux；Windows 不支持 `&` 后台语法，请改用分两个终端跑 web:dev:backend + web:dev:frontend
+  # - 用 `wails3 task` 而不是裸 `task` 是因为宿主 shell PATH 里不一定有 task CLI
+  web:
+    summary: 并行启动 Web 端前后端（开发模式，单终端即可）
+    cmds:
+      - |
+        wails3 task web:dev:backend & BACKEND_PID=$!
+        wails3 task web:dev:frontend & FRONTEND_PID=$!
+        wait $FRONTEND_PID
+        kill $BACKEND_PID 2>/dev/null || true
+        wait $BACKEND_PID 2>/dev/null || true
+
+  # 清理 Web 端构建产物（二进制 + embed 同步目录）。
+  web:clean:
+    summary: 清理 Web 端构建产物
+    cmds:
+      - rm -f {{.WEB_BIN}}
+      - rm -rf {{.WEB_EMBED_DIR}}

@@ -2,6 +2,7 @@ version: '3'
 
 # 公共构建任务，由根目录 Taskfile.yml 引入，
 # 为各平台子模块（windows/darwin/linux/ios/android）提供复用的辅助步骤。
+# 纯 Web 单进程相关任务（web:*）已迁移到根 Taskfile.yml，去掉 common: 前缀。
 
 tasks:
   # 运行 `go mod tidy`，同步 Go 模块依赖。仅作为其他任务的内部依赖使用。
@@ -211,3 +212,4 @@ tasks:
         xcrun devicectl device install app --device "{{.UDID}}" "$APP_PATH"
         echo "正在启动：{{.BUNDLE_ID}}"
         xcrun devicectl device process launch --device "{{.UDID}}" --stderr console --stdout console "{{.BUNDLE_ID}}"
+
