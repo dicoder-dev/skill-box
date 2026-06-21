@@ -1,31 +1,21 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import ProjectsView from './views/ProjectsView.vue'
 </script>
 
 <template>
-<div class="container">
-  <div>
-    <a data-wml-openURL="https://wails.io">
-      <img src="/wails.png" class="logo" alt="Wails logo"/>
-    </a>
-    <a data-wml-openURL="https://vuejs.org/">
-      <img src="/vue.svg" class="logo vue" alt="Vue logo"/>
-    </a>
-  </div>
-  <HelloWorld msg="Wails + Vue" />
-</div>
+  <main class="app">
+    <ProjectsView />
+  </main>
 </template>
 
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
+<style>
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1a1a1a;
+  background: #ffffff;
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #e80000aa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
+html, body, #app { margin: 0; padding: 0; min-height: 100%; background: #ffffff; }
+.app { min-height: 100vh; }
 </style>
