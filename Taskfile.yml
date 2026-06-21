@@ -137,12 +137,14 @@ tasks:
   # - Ctrl-C 时整个进程组都收到 SIGINT，前后端一起退；wait 立即返回，杀掉后端收尾
   # - 适用 macOS / Linux；Windows 不支持 `&` 后台语法，请改用分两个终端跑 web:dev:backend + web:dev:frontend
   # - 用 `wails3 task` 而不是裸 `task` 是因为宿主 shell PATH 里不一定有 task CLI
+  # - 后端日志用 awk 加 "[backend] " 前缀，方便和 Vite 输出区分；awk 里 fflush() 强制行刷新，
+  #   不加 fflush 的话 task 在子进程里会走块缓冲，终端看不到实时输出
   web:
     summary: 并行启动 Web 端前后端（开发模式，单终端即可）
     cmds:
       - |
-        wails3 task web:dev:backend & BACKEND_PID=$!
-        wails3 task web:dev:frontend & FRONTEND_PID=$!
+        wails3 task web:dev:backend 2>&1 | awk '{ printf "[backend] %s\n", $0; fflush() }' & BACKEND_PID=$!
+        wails3 task web:dev:frontend 2>&1 | awk '{ printf "[frontend] %s\n", $0; fflush() }' & FRONTEND_PID=$!
         wait $FRONTEND_PID
         kill $BACKEND_PID 2>/dev/null || true
         wait $BACKEND_PID 2>/dev/null || true
