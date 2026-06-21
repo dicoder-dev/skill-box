@@ -32,7 +32,7 @@ import (
 	"ginp-api/internal/db/dbs"
 	"ginp-api/pkg/cfg"
 	"ginp-api/pkg/logger"
-	"ginp-api/share/constant"
+	sharefunc "ginp-api/share/func"
 
 	"github.com/spf13/viper"
 )
@@ -240,9 +240,9 @@ func applyDataDir(originalConfigPath, overrideRunMode string) {
 	if runMode != "desktop" {
 		return
 	}
-	dataDir := constant.DataDir()
-	logsDir := constant.LogsDir()
-	cfgPath := constant.ConfigPath()
+	dataDir := sharefunc.DataDir()
+	logsDir := sharefunc.LogsDir()
+	cfgPath := sharefunc.ConfigPath()
 	if dataDir == "" {
 		log.Printf("bootstrap: cannot resolve user home, skip data dir setup")
 		return

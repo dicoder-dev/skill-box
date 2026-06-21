@@ -7,7 +7,7 @@ import (
 	"ginp-api/internal/db/mysql"
 	"ginp-api/internal/db/pgsql"
 	"ginp-api/internal/db/sqlite"
-	"ginp-api/share/constant"
+	sharefunc "ginp-api/share/func"
 )
 
 func InitDb(dbType string) {
@@ -47,7 +47,7 @@ func initPgsql() {
 func initSqlite() {
 	dbPath := configs.Db.Sqlite.DbPath
 	if !filepath.IsAbs(dbPath) && configs.System.RunMode == "desktop" {
-		if abs := constant.DbPath(); abs != "" {
+		if abs := sharefunc.DbPath(); abs != "" {
 			dbPath = abs
 		}
 	}
