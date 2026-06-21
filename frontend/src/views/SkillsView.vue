@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
+import { applySkill, undoApply, listApplies, checkUpdates } from '@/api/skillbox/skill_apply'
 import AIPanel from '@/components/AIPanel.vue'
 
 // 当前 scope 选择
@@ -26,6 +27,79 @@ const draft = reactive({
   body: '', // SKILL.md body
 })
 const editingKey = ref(null) // {scope, name, version, project_id}
+
+// Apply / 撤销 / 更新检测
+const TOOL_OPTIONS = ['codex', 'claude', 'opencode', 'cursor', 'trae']
+const applyTool = ref('codex') // 当前要 apply 的目标工具
+const applying = ref(false)
+const applyMessage = ref('')
+const applyError = ref('')
+const lastApplies = ref([]) // 最近一次 apply 的结果
+const undoing = ref(false)
+const updating = ref(false)
+const updateBadge = ref({ total: 0, updates: 0 }) // 来自 checkUpdates 的概览
+const applyHistory = ref([]) // apply/list 数据
+
+async function doApply(row) {
+  applying.value = true
+  applyError.value = ''
+  applyMessage.value = ''
+  try {
+    const out = await applySkill({
+      skill_id: row.ID,
+      scope: row.Scope,
+      project_id: row.ProjectID,
+      tools: [applyTool.value],
+    })
+    lastApplies.value = out?.applies || []
+    applyMessage.value = out?.all_ok
+      ? `已把 ${row.Name}@${row.Version} 落到 ${applyTool.value}`
+      : `部分失败: ${(out?.applies || []).filter(a => a?.status !== 'applied').map(a => a?.error || a?.status).join('; ')}`
+    await loadApplyHistory(row)
+    await checkUpdateBadge()
+  } catch (e) {
+    applyError.value = e?.message || String(e)
+  } finally {
+    applying.value = false
+  }
+}
+
+async function doUndo(applyID) {
+  if (!confirm(`撤销 apply #${applyID}?将恢复目标目录到 apply 之前的状态。`)) return
+  undoing.value = true
+  applyError.value = ''
+  try {
+    await undoApply({ apply_id: applyID })
+    applyMessage.value = `已撤销 apply #${applyID}`
+    await reload()
+    await checkUpdateBadge()
+  } catch (e) {
+    applyError.value = e?.message || String(e)
+  } finally {
+    undoing.value = false
+  }
+}
+
+async function loadApplyHistory(row) {
+  try {
+    const out = await listApplies({ skill_id: row.ID, page: 1, size: 5 })
+    applyHistory.value = out?.items || []
+  } catch (e) {
+    // 静默失败,不影响主流程
+  }
+}
+
+async function checkUpdateBadge() {
+  updating.value = true
+  try {
+    const out = await checkUpdates({})
+    updateBadge.value = { total: out?.total || 0, updates: out?.updates || 0 }
+  } catch (e) {
+    // 静默
+  } finally {
+    updating.value = false
+  }
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
 
@@ -230,7 +304,7 @@ function switchScope(s) {
   reload()
 }
 
-onMounted(reload)
+onMounted(() => { reload(); checkUpdateBadge() })
 </script>
 
 <template>
@@ -252,6 +326,24 @@ onMounted(reload)
         <button class="primary" @click="startNew">新建 Skill</button>
       </div>
     </header>
+
+    <div class="apply-bar">
+      <span class="apply-label">Apply 目标工具:</span>
+      <select v-model="applyTool">
+        <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
+      </select>
+      <button @click="checkUpdateBadge" :disabled="updating">
+        {{ updating ? '检测中…' : '检测更新' }}
+      </button>
+      <span v-if="updateBadge.updates > 0" class="update-badge danger">
+        {{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
+      </span>
+      <span v-else-if="updateBadge.total > 0" class="update-badge ok">
+        {{ updateBadge.total }} 个 skill 已是最新
+      </span>
+      <p v-if="applyMessage" class="apply-msg">{{ applyMessage }}</p>
+      <p v-if="applyError" class="error">{{ applyError }}</p>
+    </div>
 
     <form v-if="editing" class="editor" @submit.prevent="submit">
       <div class="row">
@@ -293,6 +385,22 @@ onMounted(reload)
       </div>
     </form>
 
+    <div v-if="applyHistory.length" class="apply-history">
+      <header class="ah-head">
+        <h4>最近 Apply 历史</h4>
+        <span class="ah-count">{{ applyHistory.length }} 条</span>
+      </header>
+      <ul>
+        <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`status-${h.Status}`">
+          <span class="ah-id">#{{ h.ID || h.id }}</span>
+          <span class="ah-tool">{{ h.Tool }}</span>
+          <span class="ah-status">{{ h.Status }}</span>
+          <span class="ah-time">{{ h.AppliedAt?.slice(0, 19) || '—' }}</span>
+          <button v-if="h.Status === 'applied'" class="link" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? '撤销中…' : '撤销' }}</button>
+        </li>
+      </ul>
+    </div>
+
     <div v-if="lastTest || testError" class="test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
       <header class="tp-head">
         <h4>最近测试结果</h4>
@@ -323,12 +431,13 @@ onMounted(reload)
           <th>Source</th>
           <th>Project ID</th>
           <th>Updated</th>
-          <th style="width: 140px">操作</th>
+          <th>更新</th>
+          <th style="width: 220px">操作</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="!items.length">
-          <td colspan="6" class="empty">该 scope 下还没有 skill,点右上角"新建 Skill"开始</td>
+          <td colspan="7" class="empty">该 scope 下还没有 skill,点右上角"新建 Skill"开始</td>
         </tr>
         <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
           <td><code>{{ p.Name }}</code></td>
@@ -337,8 +446,13 @@ onMounted(reload)
           <td>{{ p.ProjectID || '—' }}</td>
           <td class="time">{{ p.UpdatedAt?.slice(0, 19) || '—' }}</td>
           <td>
-            <button class="link" @click="startEdit(p)">编辑</button>
+            <span v-if="p.Source === 'market'" class="badge market">market</span>
+            <span v-else class="badge local">{{ p.Source }}</span>
+          </td>
+          <td>
+            <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? '应用中…' : '应用' }}</button>
             <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? '测试中…' : '测试' }}</button>
+            <button class="link" @click="startEdit(p)">编辑</button>
             <button class="link danger" @click="remove(p)">删除</button>
           </td>
         </tr>
@@ -412,4 +526,29 @@ textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .grid .empty { text-align: center; color: #9ca3af; padding: 18px; }
 .grid .time { color: #6b7280; font-size: 12px; }
 .pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #4b5563; }
+.apply-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 8px 12px; background: #f5f7fa; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; }
+.apply-label { color: #4b5563; font-weight: 500; }
+.apply-bar select { padding: 3px 6px; }
+.update-badge { padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.update-badge.danger { background: #fee2e2; color: #991b1b; }
+.update-badge.ok { background: #d1fae5; color: #065f46; }
+.apply-msg { color: #047857; margin: 0; font-size: 12px; }
+.apply-bar p.error { margin: 0; font-size: 12px; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; }
+.badge.market { background: #dbeafe; color: #1e40af; }
+.badge.local { background: #f3f4f6; color: #4b5563; }
+.link.primary-link { color: #047857; font-weight: 500; }
+.apply-history { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
+.ah-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ah-head h4 { margin: 0; font-size: 14px; }
+.ah-count { font-size: 12px; color: #6b7280; }
+.apply-history ul { list-style: none; padding: 0; margin: 0; }
+.apply-history li { display: grid; grid-template-columns: 60px 80px 100px 1fr auto; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
+.ah-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #4b5563; }
+.ah-tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #1f2937; }
+.ah-status { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-align: center; }
+.status-applied .ah-status { background: #bbf7d0; color: #065f46; }
+.status-rolled_back .ah-status { background: #e5e7eb; color: #4b5563; }
+.status-failed .ah-status { background: #fecaca; color: #991b1b; }
+.ah-time { color: #6b7280; font-size: 12px; }
 </style>
