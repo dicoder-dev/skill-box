@@ -30,6 +30,8 @@ import (
 var frontendFS embed.FS
 
 func main() {
+	// 桌面端优先用项目根的 configs.yaml(便于开发期覆盖配置);
+	// 真正的"数据目录"由 bootstrap.applyDataDir 在 RunMode=desktop 时接管。
 	configPath := flag.String("config", bootstrap.DefaultConfigFile, "配置文件路径(yaml)")
 	flag.Parse()
 
@@ -43,6 +45,7 @@ func main() {
 	//    Serve 是阻塞的,放 goroutine 里跑;Wails 主循环在另一个 goroutine。
 	backend, err := bootstrap.Boot(bootstrap.BootOptions{
 		ConfigFile: *configPath,
+		RunMode:   "desktop",
 		ServerOptions: func() bootstrap.ServerOptions {
 			return bootstrap.ServerOptions{
 				StaticFS:    distFS,

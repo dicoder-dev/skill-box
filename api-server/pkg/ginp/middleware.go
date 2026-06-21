@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"ginp-api/pkg/logger"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -137,6 +139,16 @@ type requestLogEntry struct {
 var requestLogMu sync.Mutex
 var dailyAPIStatsMu sync.Mutex
 
+// requestLogBaseDir 返回请求日志/统计文件的根目录。
+// 优先用 logger.SetLogPath 设过的绝对路径(桌面端 ~/.<AppName>/logs),否则兜底 ./logs。
+func requestLogBaseDir() string {
+	base := strings.TrimRight(logger.GetLogPath(), "/")
+	if base == "" {
+		base = "logs"
+	}
+	return base
+}
+
 // getRequestLogFilename returns one of the three daily request log files:
 // 1. /api/parameter and /api/like -> MM-DDcanshu_request.txt
 // 2. other 200 requests -> MM-DD-request.txt
@@ -169,7 +181,7 @@ func writeRequestLog(entry requestLogEntry) error {
 	entry.RespMsg = sanitizeForLog(entry.RespMsg)
 
 	// 按月份创建目录：logs/YYYY-MM/
-	logDir := filepath.Join("logs", time.Now().Format("2006-01"))
+	logDir := filepath.Join(requestLogBaseDir(), time.Now().Format("2006-01"))
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return err
 	}
@@ -224,7 +236,7 @@ func writeDailyAPIStats(entry requestLogEntry) error {
 	dailyAPIStatsMu.Lock()
 	defer dailyAPIStatsMu.Unlock()
 
-	logDir := filepath.Join("logs", entry.RequestTime.Format("2006-01"))
+	logDir := filepath.Join(requestLogBaseDir(), entry.RequestTime.Format("2006-01"))
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return err
 	}

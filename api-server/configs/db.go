@@ -7,7 +7,11 @@ var Db = new(DbConfig)
 
 // DbConfig 数据库配置
 type DbConfig struct {
-	UseType string `default:"mysql"` // 适用的数据库类型: mysql,pgsql,sqlite
+	// UseType 适用的数据库类型: mysql,pgsql,sqlite。
+	// 默认 sqlite — 在没有任何显式配置时(例如桌面端首次运行且项目根
+	// configs.yaml 缺失),结构体默认值会兜底为 sqlite,确保开箱即用。
+	// web/cli 场景通过 -config 指向 mysql/pgsql 配置即可覆盖。
+	UseType string `default:"sqlite"`
 	Mysql   MysqlConfig
 	Sqlite  SqliteConfig
 	Pgsql   PgsqlConfig

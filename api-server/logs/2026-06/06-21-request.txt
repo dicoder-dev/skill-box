@@ -1,6 +1,0 @@
-[2026-06-21 18:14:47][GET] /api/health 200
-IP:127.0.0.1  user_id:0  耗时:3.052292ms
-User-Agent:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.125.1 Chrome/148.0.7778.97 Electron/42.2.0 Safari/537.36  Referer:http://localhost:9245/  Authorization:false
-响应体:
- {"status":"ok","service":"ginp-api","ts":1782036887}
-

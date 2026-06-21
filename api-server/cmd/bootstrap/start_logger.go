@@ -4,7 +4,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
+
+	"ginp-api/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,8 +17,13 @@ import (
 // 文件用于事后排查,stdout 用于开发期在终端直接看请求日志。
 // 重复打开当日文件,采用追加模式。
 func StartGinLogger() {
-	// 创建日志文件目录
-	logDir := "logs/"
+	// 优先用 logger.SetLogPath 设过的路径(桌面端 ~/.<AppName>/logs/);否则兜底 ./logs/。
+	logDir := logger.GetLogPath()
+	if logDir == "" {
+		logDir = "logs/"
+	} else if !strings.HasSuffix(logDir, "/") {
+		logDir += "/"
+	}
 	err := os.MkdirAll(logDir, os.ModePerm)
 	if err != nil {
 		log.Fatalf("Failed to create log directory: %v", err)

@@ -18,15 +18,23 @@
 package bootstrap
 
 import (
+	"bytes"
 	"errors"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/pkg/cfg"
+	"ginp-api/pkg/logger"
+	"ginp-api/share/constant"
+
+	"github.com/spf13/viper"
 )
 
 // DefaultConfigFile 是 cli 入口未显式指定配置时的默认路径。
@@ -34,6 +42,26 @@ const DefaultConfigFile = "configs.yaml"
 
 // ConfigFile 全局配置路径,由 Run / Boot 在最早期注入。
 var ConfigFile = DefaultConfigFile
+
+// defaultDesktopConfigYAML 桌面端首次运行且没有任何"可用的"种子源时,写一份
+// 硬编码默认到 ~/.<AppName>/configs.yaml。用 sqlite 即可用,不依赖外部 DB。
+//
+// 这个常量是"开箱即用"的最后一道兜底——当用户删了项目根 configs.yaml 且
+// 桌面端数据目录里也没有 configs.yaml(或里面的内容是 cfg.InitCfg 刚
+// 创出来的空文件 + struct defaults),不能让 app 启动时 mysql/pgsql 缺参
+// panic。
+const defaultDesktopConfigYAML = `db:
+  sqlite:
+    db_path: data.db
+  use_type: sqlite
+server:
+  port: "8082"
+system:
+  app_name: dianji
+  need_auth: "false"
+  run_mode: desktop
+  user_center_url: http://localhost:8082
+`
 
 // ServerOptionsBuilder 由调用方传入,负责把外部资源(embed.FS 等)拼成 ServerOptions。
 // 设计为函数式是为了规避循环引用:本包被 cmd/web、cmd/gapi、skill-box/main 三处使用,
@@ -52,6 +80,11 @@ type BootOptions struct {
 	// DisableLogger / DisableTask 允许桌面端在测试或嵌入式场景跳过日志文件/定时任务。
 	DisableLogger bool
 	DisableTask   bool
+
+	// RunMode 由调用方显式声明运行形态("web" / "desktop"),用于决定是否走
+	// 用户家目录下的数据目录(~/<AppName>/)。非空时覆盖 configs.System.RunMode
+	// 并写回配置文件;为空时以配置文件为准(便于 dev / 测试场景通过 yaml 切换)。
+	RunMode string
 }
 
 // Backend 是 Boot 阶段返回的"已就绪但 server 还没起"句柄。
@@ -84,12 +117,19 @@ func Boot(opts BootOptions) (*Backend, error) {
 	// 关键:configs 各包的 init() 在程序启动时就跑了 ParseConfigStruct，把 struct 字段填上
 	// 了 tag default；那时候 viper 还没加载配置。InitCfg 会把 viper 实例换成新加载的，
 	// 但 struct 字段不会自动重读，所以这里必须显式再 parse 一遍把 viper 里的值刷进去。
-	// 不加这段，configs.Db.UseType 永远是 tag default "mysql"，所有路径都会 panic。
+	// 不加这段，configs.Db.UseType 永远是 tag default "sqlite"，所有路径都会 panic。
 	cfg.ParseConfigStruct(configs.Db)
 	cfg.ParseConfigStruct(configs.Server)
 	cfg.ParseConfigStruct(configs.System)
 	cfg.ParseConfigStruct(configs.Email)
 	cfg.ParseConfigStruct(configs.Tencent)
+
+	// 桌面端:把 configs/data.db/logs 锚到 ~/.<AppName>/,并把 cfg 重指到该目录下的 configs.yaml。
+	// - 首次运行:从原始配置(默认 ./configs.yaml,或 -config 传入)种子到数据目录;
+	//   若源没有"可用"配置(db.use_type 缺失或对应类型关键字段为空),写硬编码默认。
+	// - 调用方传了 RunMode 时,override 后写回数据目录(避免污染原配置文件)。
+	applyDataDir(ConfigFile, opts.RunMode)
+
 	// 关键:dbs 包的 useDbType 需要在 cfg 加载完后同步过来。
 	dbs.SetDbType(configs.Db.UseType)
 
@@ -178,4 +218,136 @@ func parsePortFromAddr(addr string) int {
 	}
 	p, _ := strconv.Atoi(port)
 	return p
+}
+
+// applyDataDir 桌面端装配数据目录:~/.<AppName>/,把所有程序文件锚到该目录。
+// Web 端(非 desktop)不做事,保留 ./logs、./data.db 行为。
+//
+// originalConfigPath:Boot 阶段 cfg.InitCfg 用过的路径(默认 ./configs.yaml,
+//
+//	或 -config 显式传入)。applyDataDir 用它做"首次种子"。
+//
+// overrideRunMode  :调用方显式声明的运行形态("desktop"),非空时 override 内存并回写数据目录。
+func applyDataDir(originalConfigPath, overrideRunMode string) {
+	runMode := configs.System.RunMode
+	if overrideRunMode != "" {
+		runMode = overrideRunMode
+		if configs.System == nil {
+			configs.System = &configs.SystemConfig{}
+		}
+		configs.System.RunMode = runMode
+	}
+	if runMode != "desktop" {
+		return
+	}
+	dataDir := constant.DataDir()
+	logsDir := constant.LogsDir()
+	cfgPath := constant.ConfigPath()
+	if dataDir == "" {
+		log.Printf("bootstrap: cannot resolve user home, skip data dir setup")
+		return
+	}
+	for _, p := range []string{dataDir, logsDir} {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			log.Printf("bootstrap: mkdir %s failed: %v", p, err)
+			return
+		}
+	}
+
+	// 确保数据目录里有"可用的" configs.yaml。
+	// - 文件不存在 → 从 originalConfigPath / ./configs.yaml / ../configs.yaml 找一份有效的种子;
+	//   全失败就写硬编码默认。
+	// - 文件存在但 isConfigEffective()==false(cfg.InitCfg 刚创出来的空文件 / struct
+	//   defaults 写出的 use_type: mysql 但 mysql.db=="" 等)→ 也走种子逻辑覆盖掉。
+	// - 文件存在且有效 → 跳过,尊重用户已编辑的版本。
+	if abs, _ := filepath.Abs(cfgPath); abs != originalConfigPath {
+		needWrite := false
+		if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+			needWrite = true
+		} else if data, err := os.ReadFile(cfgPath); err != nil || !isConfigEffective(data) {
+			needWrite = true
+		}
+		if needWrite {
+			seeded := false
+			for _, src := range []string{originalConfigPath, "configs.yaml", "../configs.yaml"} {
+				if data, err := os.ReadFile(src); err == nil && isConfigEffective(data) {
+					if werr := os.WriteFile(cfgPath, data, 0o644); werr == nil {
+						log.Printf("bootstrap: seeded %s from %s", cfgPath, src)
+						seeded = true
+					} else {
+						log.Printf("bootstrap: write %s failed: %v", cfgPath, werr)
+					}
+					break
+				}
+			}
+			if !seeded {
+				if werr := os.WriteFile(cfgPath, []byte(defaultDesktopConfigYAML), 0o644); werr == nil {
+					log.Printf("bootstrap: no effective seed source, wrote default desktop config to %s", cfgPath)
+				} else {
+					log.Printf("bootstrap: write default config to %s failed: %v", cfgPath, werr)
+				}
+			}
+		}
+	}
+
+	// 把 cfg 重指到数据目录下的 configs.yaml,并刷新各 struct(可能 seed 过也可能是新文件)。
+	ConfigFile = cfgPath
+	if err := cfg.InitCfg(cfgPath); err != nil {
+		log.Printf("bootstrap: reload cfg from %s failed: %v", cfgPath, err)
+	}
+	cfg.ParseConfigStruct(configs.Db)
+	cfg.ParseConfigStruct(configs.Server)
+	cfg.ParseConfigStruct(configs.System)
+	cfg.ParseConfigStruct(configs.Email)
+	cfg.ParseConfigStruct(configs.Tencent)
+
+	// 若调用方 override 了 RunMode,在新 viper 上再写一次(写的是数据目录的文件)。
+	if overrideRunMode != "" {
+		if err := cfg.Set("system.run_mode", overrideRunMode); err != nil {
+			log.Printf("bootstrap: persist system.run_mode=%q failed: %v", overrideRunMode, err)
+		}
+		cfg.ParseConfigStruct(configs.System)
+	}
+
+	// 锚定日志目录;StartGinLogger / middleware 会自动跟随。
+	if logsDir != "" {
+		logger.SetLogPath(logsDir)
+	}
+}
+
+// isConfigEffective 判断一段 yaml 字节流是否包含"可用的" db 配置。
+//
+// "可用" = use_type 是 mysql/sqlite/pgsql 之一,且该类型下的关键字段都已设置。
+// 用来过滤 cfg.InitCfg 把空文件当成配置(viper 退回 struct defaults)的情况。
+//
+// 返回 false 时,applyDataDir 会用一份"更合适"的种子覆盖目标文件,而不是
+// 把空文件 / mysql-without-db 这种必崩配置传播到数据目录。
+func isConfigEffective(data []byte) bool {
+	s := strings.TrimSpace(string(data))
+	if s == "" {
+		return false
+	}
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(bytes.NewReader(data)); err != nil {
+		return false
+	}
+	switch v.GetString("db.use_type") {
+	case "mysql":
+		return v.GetString("db.mysql.ip") != "" &&
+			v.GetString("db.mysql.port") != "" &&
+			v.GetString("db.mysql.user") != "" &&
+			v.GetString("db.mysql.db") != "" &&
+			v.GetString("db.mysql.pwd") != ""
+	case "sqlite":
+		return v.GetString("db.sqlite.db_path") != ""
+	case "pgsql", "postgresql":
+		return v.GetString("db.pgsql.ip") != "" &&
+			v.GetString("db.pgsql.port") != "" &&
+			v.GetString("db.pgsql.user") != "" &&
+			v.GetString("db.pgsql.db") != "" &&
+			v.GetString("db.pgsql.pwd") != ""
+	default:
+		return false
+	}
 }

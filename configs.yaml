@@ -1,14 +1,12 @@
 db:
     mysql:
         db: ""
-        dbname: ""
         ip: 127.0.0.1
         port: "3306"
         pwd: "123456"
         user: root
     pgsql:
         db: ""
-        dbname: ""
         ip: 127.0.0.1
         port: "5432"
         pwd: "123456"
@@ -20,26 +18,21 @@ email:
     client:
         account: dicoder@126.com
         host: smtp.126.com
-        port: 465
+        port: "465"
         pwd: "12345"
 server:
     port: "8082"
 system:
-    app:
-        name: dianji
     app_name: dianji
-    need_auth: true
+    need_auth: "true"
     run_mode: web
     user_center_url: http://localhost:8082
-    usercenter:
-        url: http://localhost:8082
 tencent:
     cos:
         allow_prefix: ""
         bucket_app_id: ""
-        bucket_appid: ""
         bucket_name: ""
-        duration: 0
+        duration: "0"
         region: ""
         secret_id: ""
         secret_key: ""

@@ -1,10 +1,13 @@
 package dbs
 
 import (
+	"path/filepath"
+
 	"ginp-api/configs"
 	"ginp-api/internal/db/mysql"
 	"ginp-api/internal/db/pgsql"
 	"ginp-api/internal/db/sqlite"
+	"ginp-api/share/constant"
 )
 
 func InitDb(dbType string) {
@@ -42,5 +45,11 @@ func initPgsql() {
 }
 
 func initSqlite() {
-	sqlite.InitdDb(configs.Db.Sqlite.DbPath)
+	dbPath := configs.Db.Sqlite.DbPath
+	if !filepath.IsAbs(dbPath) && configs.System.RunMode == "desktop" {
+		if abs := constant.DbPath(); abs != "" {
+			dbPath = abs
+		}
+	}
+	sqlite.InitdDb(dbPath)
 }

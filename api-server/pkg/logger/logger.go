@@ -42,6 +42,15 @@ func init() {
 }
 
 // SetLogPath 设置日志文件目录
+// GetLogPath 返回当前日志根目录(末尾带 "/")。
+// SetLogPath 之后才返回非空;否则为 "./logs/" 默认值。
+func GetLogPath() string {
+	if defaultLogger == nil {
+		return ""
+	}
+	return defaultLogger.logPath
+}
+
 func SetLogPath(logPath string) {
 	//判断文件夹logPath是否存在，不存在则创建
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
