@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -21,7 +21,7 @@ type RequestCreateProject struct {
 
 // CreateProject POST /api/skillbox/projects/create
 func CreateProject(c *ginp.ContextPlus, req *RequestCreateProject) {
-	svc := project.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	in := &entity.Project{
 		Name:        req.Name,
 		Alias:       req.Alias,
@@ -31,12 +31,12 @@ func CreateProject(c *ginp.ContextPlus, req *RequestCreateProject) {
 	out, err := svc.Create(in)
 	if err != nil {
 		switch {
-		case errors.Is(err, project.ErrEmptyName),
-			errors.Is(err, project.ErrEmptyAlias),
-			errors.Is(err, project.ErrEmptyRoot):
+		case errors.Is(err, sproject.ErrEmptyName),
+			errors.Is(err, sproject.ErrEmptyAlias),
+			errors.Is(err, sproject.ErrEmptyRoot):
 			c.JSON(400, gin.H{"error": err.Error()})
-		case errors.Is(err, project.ErrAliasExists),
-			errors.Is(err, project.ErrRootExists):
+		case errors.Is(err, sproject.ErrAliasExists),
+			errors.Is(err, sproject.ErrRootExists):
 			c.JSON(409, gin.H{"error": err.Error()})
 		default:
 			logger.Error("project create: %v", err)

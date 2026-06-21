@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -17,9 +17,9 @@ type RequestDeleteProject struct {
 
 // DeleteProject POST /api/skillbox/projects/delete
 func DeleteProject(c *ginp.ContextPlus, req *RequestDeleteProject) {
-	svc := project.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	if err := svc.Delete(req.ID); err != nil {
-		if errors.Is(err, project.ErrNotFound) {
+		if errors.Is(err, sproject.ErrNotFound) {
 			c.JSON(404, gin.H{"error": "not found"})
 			return
 		}

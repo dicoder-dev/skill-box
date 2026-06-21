@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -17,10 +17,10 @@ type RequestGetProject struct {
 
 // GetProject GET /api/skillbox/projects/:id
 func GetProject(c *ginp.ContextPlus, req *RequestGetProject) {
-	svc := project.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	out, err := svc.GetByID(req.ID)
 	if err != nil {
-		if errors.Is(err, project.ErrNotFound) {
+		if errors.Is(err, sproject.ErrNotFound) {
 			c.JSON(404, gin.H{"error": "not found"})
 			return
 		}

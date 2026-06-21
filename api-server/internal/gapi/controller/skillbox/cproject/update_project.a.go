@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -22,7 +22,7 @@ type RequestUpdateProject struct {
 
 // UpdateProject POST /api/skillbox/projects/update
 func UpdateProject(c *ginp.ContextPlus, req *RequestUpdateProject) {
-	svc := project.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	in := &entity.Project{
 		Name:        req.Name,
 		Alias:       req.Alias,
@@ -32,10 +32,10 @@ func UpdateProject(c *ginp.ContextPlus, req *RequestUpdateProject) {
 	out, err := svc.Update(req.ID, in)
 	if err != nil {
 		switch {
-		case errors.Is(err, project.ErrNotFound):
+		case errors.Is(err, sproject.ErrNotFound):
 			c.JSON(404, gin.H{"error": "not found"})
-		case errors.Is(err, project.ErrAliasExists),
-			errors.Is(err, project.ErrRootExists):
+		case errors.Is(err, sproject.ErrAliasExists),
+			errors.Is(err, sproject.ErrRootExists):
 			c.JSON(409, gin.H{"error": err.Error()})
 		default:
 			logger.Error("project update: %v", err)

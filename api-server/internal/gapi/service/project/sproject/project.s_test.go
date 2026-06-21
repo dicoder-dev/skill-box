@@ -1,4 +1,4 @@
-package project_test
+package sproject_test
 
 import (
 	"errors"
@@ -7,16 +7,16 @@ import (
 	"testing"
 
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// newTestService 构造一个用 sqlite 内存 DB 的 project.Service。
+// newTestService 构造一个用 sqlite 内存 DB 的 sproject.Service。
 // 每次调用都是新库,适合单元测试隔离。
-func newTestService(t *testing.T) *project.Service {
+func newTestService(t *testing.T) *sproject.Service {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
@@ -27,7 +27,7 @@ func newTestService(t *testing.T) *project.Service {
 	if err := db.AutoMigrate(&entity.Project{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return project.New(db, db)
+	return sproject.New(db, db)
 }
 
 func TestCreate_Ok(t *testing.T) {
@@ -63,9 +63,9 @@ func TestCreate_EmptyFields(t *testing.T) {
 		in   *entity.Project
 		want error
 	}{
-		{"empty name", &entity.Project{Alias: "a", RootPath: "/x"}, project.ErrEmptyName},
-		{"empty alias", &entity.Project{Name: "n", RootPath: "/x"}, project.ErrEmptyAlias},
-		{"empty root", &entity.Project{Name: "n", Alias: "a"}, project.ErrEmptyRoot},
+		{"empty name", &entity.Project{Alias: "a", RootPath: "/x"}, sproject.ErrEmptyName},
+		{"empty alias", &entity.Project{Name: "n", RootPath: "/x"}, sproject.ErrEmptyAlias},
+		{"empty root", &entity.Project{Name: "n", Alias: "a"}, sproject.ErrEmptyRoot},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestCreate_AliasUnique(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := svc.Create(&entity.Project{Name: "b", Alias: "x", RootPath: "/p2"})
-	if !errors.Is(err, project.ErrAliasExists) {
+	if !errors.Is(err, sproject.ErrAliasExists) {
 		t.Errorf("got %v, want ErrAliasExists", err)
 	}
 }
@@ -94,7 +94,7 @@ func TestCreate_RootUnique(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := svc.Create(&entity.Project{Name: "b", Alias: "y", RootPath: "/p"})
-	if !errors.Is(err, project.ErrRootExists) {
+	if !errors.Is(err, sproject.ErrRootExists) {
 		t.Errorf("got %v, want ErrRootExists", err)
 	}
 }
@@ -114,7 +114,7 @@ func TestUpdate_Ok(t *testing.T) {
 func TestUpdate_NotFound(t *testing.T) {
 	svc := newTestService(t)
 	_, err := svc.Update(999, &entity.Project{Name: "n"})
-	if !errors.Is(err, project.ErrNotFound) {
+	if !errors.Is(err, sproject.ErrNotFound) {
 		t.Errorf("got %v, want ErrNotFound", err)
 	}
 }
@@ -124,7 +124,7 @@ func TestUpdate_AliasConflict(t *testing.T) {
 	p1, _ := svc.Create(&entity.Project{Name: "n1", Alias: "a", RootPath: "/r1"})
 	svc.Create(&entity.Project{Name: "n2", Alias: "b", RootPath: "/r2"})
 	_, err := svc.Update(p1.ID, &entity.Project{Alias: "b"})
-	if !errors.Is(err, project.ErrAliasExists) {
+	if !errors.Is(err, sproject.ErrAliasExists) {
 		t.Errorf("got %v, want ErrAliasExists", err)
 	}
 }
@@ -144,7 +144,7 @@ func TestGetByID(t *testing.T) {
 func TestGetByID_NotFound(t *testing.T) {
 	svc := newTestService(t)
 	_, err := svc.GetByID(999)
-	if !errors.Is(err, project.ErrNotFound) {
+	if !errors.Is(err, sproject.ErrNotFound) {
 		t.Errorf("got %v, want ErrNotFound", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestList_PaginationAndKeyword(t *testing.T) {
 		}
 	}
 	// 关键字
-	got, err := svc.List(project.ListQuery{Keyword: "proj-c"})
+	got, err := svc.List(sproject.ListQuery{Keyword: "proj-c"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestList_PaginationAndKeyword(t *testing.T) {
 		t.Errorf("keyword total=%d", got.Total)
 	}
 	// 分页
-	got, err = svc.List(project.ListQuery{Page: 1, Size: 2})
+	got, err = svc.List(sproject.ListQuery{Page: 1, Size: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,14 +187,14 @@ func TestDelete(t *testing.T) {
 	if err := svc.Delete(p.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.GetByID(p.ID); !errors.Is(err, project.ErrNotFound) {
+	if _, err := svc.GetByID(p.ID); !errors.Is(err, sproject.ErrNotFound) {
 		t.Errorf("after delete: got %v, want ErrNotFound", err)
 	}
 }
 
 func TestDelete_NotFound(t *testing.T) {
 	svc := newTestService(t)
-	if err := svc.Delete(999); !errors.Is(err, project.ErrNotFound) {
+	if err := svc.Delete(999); !errors.Is(err, sproject.ErrNotFound) {
 		t.Errorf("got %v, want ErrNotFound", err)
 	}
 }

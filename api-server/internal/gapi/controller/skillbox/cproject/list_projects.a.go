@@ -2,7 +2,7 @@ package cproject
 
 import (
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/project"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 
@@ -18,12 +18,12 @@ type RequestListProjects struct {
 }
 
 // RespondListProjects 列表响应,直接复用 service.ListResult。
-type RespondListProjects = project.ListResult
+type RespondListProjects = sproject.ListResult
 
 // ListProjects GET /api/skillbox/projects?page=1&size=20&keyword=foo
 func ListProjects(c *ginp.ContextPlus, req *RequestListProjects) {
-	svc := project.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	out, err := svc.List(project.ListQuery{
+	svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	out, err := svc.List(sproject.ListQuery{
 		Keyword: req.Keyword,
 		Page:    req.Page,
 		Size:    req.Size,

@@ -1,11 +1,11 @@
-// Package project 提供 Project 域的业务层封装。
+// Package sproject 提供 Project 域的业务层封装。
 //
 // 设计要点(见 docs/project/需求规划.md 第 6.1 节):
 //   - Project 是 skill 的容器之一(全局域不归 Project 管)
 //   - 字段约束:alias 唯一、root_path 唯一、name 非空
 //   - 物理根存在性:不强校验(允许"声明项目但暂未 git clone"的占位语义),
 //     由 Apply / Scan 阶段按需报错
-package project
+package sproject
 
 import (
 	"errors"
