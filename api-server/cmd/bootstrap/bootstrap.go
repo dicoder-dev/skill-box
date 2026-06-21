@@ -43,26 +43,6 @@ const DefaultConfigFile = "configs.yaml"
 // ConfigFile 全局配置路径,由 Run / Boot 在最早期注入。
 var ConfigFile = DefaultConfigFile
 
-// defaultDesktopConfigYAML 桌面端首次运行且没有任何"可用的"种子源时,写一份
-// 硬编码默认到 ~/.<AppName>/configs.yaml。用 sqlite 即可用,不依赖外部 DB。
-//
-// 这个常量是"开箱即用"的最后一道兜底——当用户删了项目根 configs.yaml 且
-// 桌面端数据目录里也没有 configs.yaml(或里面的内容是 cfg.InitCfg 刚
-// 创出来的空文件 + struct defaults),不能让 app 启动时 mysql/pgsql 缺参
-// panic。
-const defaultDesktopConfigYAML = `db:
-  sqlite:
-    db_path: data.db
-  use_type: sqlite
-server:
-  port: "8082"
-system:
-  app_name: dianji
-  need_auth: "false"
-  run_mode: desktop
-  user_center_url: http://localhost:8082
-`
-
 // ServerOptionsBuilder 由调用方传入,负责把外部资源(embed.FS 等)拼成 ServerOptions。
 // 设计为函数式是为了规避循环引用:本包被 cmd/web、cmd/gapi、skill-box/main 三处使用,
 // 让调用方在自己的 main 闭包里构造 ServerOptions,避免 bootstrap 反向依赖这些包。
@@ -281,11 +261,10 @@ func applyDataDir(originalConfigPath, overrideRunMode string) {
 				}
 			}
 			if !seeded {
-				if werr := os.WriteFile(cfgPath, []byte(defaultDesktopConfigYAML), 0o644); werr == nil {
-					log.Printf("bootstrap: no effective seed source, wrote default desktop config to %s", cfgPath)
-				} else {
-					log.Printf("bootstrap: write default config to %s failed: %v", cfgPath, werr)
-				}
+				// 不再硬编码默认 YAML:cfg.InitCfg 会创建空文件,随后
+				// cfg.ParseConfigStruct 把 struct tag 上的 default 灌进 viper 并
+				// 通过 cfg.Set -> viper.WriteConfig 写回磁盘,所有默认值自动落盘。
+				log.Printf("bootstrap: no effective seed source; %s will be filled by struct tag defaults", cfgPath)
 			}
 		}
 	}
