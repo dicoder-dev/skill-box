@@ -4,3 +4,8 @@ frontend/dist
 frontend/node_modules
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# Skill Box:cfg 库在 ParseConfigStruct 时会自动落盘 default 值到当前目录的 configs.yaml
+# 任何子目录下生成的 configs.yaml 都不入库(由 bootstrap.Run 实际配置驱动)
+**/configs.yaml
+api-server/data.db
