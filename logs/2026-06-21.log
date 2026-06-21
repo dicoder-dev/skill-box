@@ -903,3 +903,153 @@
 [GIN] 2026/06/21 - 16:36:52 | 200 |       37.25µs |       127.0.0.1 | GET      "/"
 [GIN] 2026/06/21 - 16:36:52 | 200 |     814.209µs |       127.0.0.1 | GET      "/assets/index-DWLFks0B.js"
 [GIN] 2026/06/21 - 16:36:52 | 200 |      15.208µs |       127.0.0.1 | GET      "/"
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+2026/06/21 17:48:53 listen tcp 0.0.0.0:8082: bind: operation not permitted
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+2026/06/21 17:49:06 listen tcp 0.0.0.0:8082: bind: operation not permitted
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
+
+
+[31m2026/06/21 17:50:45 [Recovery] 2026/06/21 - 17:50:45 panic recovered:
+GET /api/health HTTP/1.1
+Host: 127.0.0.1:8082
+Accept: */*
+User-Agent: curl/8.7.1
+
+
+reflect: Elem of invalid type cindex.RequestHealth
+/usr/local/go/src/reflect/type.go:765 (0x104c85f9f)
+	elem: panic("reflect: Elem of invalid type " + stringFor(t))
+/usr/local/go/src/reflect/type.go:769 (0x104c9ceff)
+	(*rtype).Elem: return toType(elem(t.common()))
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/bind_handler.go:62 (0x1052c5487)
+	init.0.BindParamsHandler.func1: paramInstance := reflect.New(reflect.TypeOf(paramType).Elem()).Interface()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x10529bbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:52 (0x105380a8b)
+	Register.LoggingMiddleware.func2: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x10529bbc7)
+	(*Context).Next: c.handlers[c.index](c)
+/Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/middleware.go:509 (0x10538093f)
+	Register.CORSMiddleware.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1052a79f7)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/recovery.go:102 (0x1052a79e0)
+	CustomRecoveryWithWriter.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1052a6dd3)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/logger.go:249 (0x1052a6db8)
+	LoggerWithConfig.func1: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/context.go:185 (0x1052a636f)
+	(*Context).Next: c.handlers[c.index](c)
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:644 (0x1052a5eac)
+	(*Engine).handleHTTPRequest: c.Next()
+/Users/brody/go/pkg/mod/github.com/gin-gonic/gin@v1.10.1/gin.go:600 (0x1052a5b23)
+	(*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+/usr/local/go/src/net/http/server.go:3311 (0x104e626bf)
+	serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+/usr/local/go/src/net/http/server.go:2073 (0x104e5508b)
+	(*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+/usr/local/go/src/runtime/asm_arm64.s:1447 (0x104c3f7b3)
+	goexit: MOVD	R0, R0	// NOP
+[0m
+[GIN] 2026/06/21 - 17:50:45 | 500 |     881.292µs |       127.0.0.1 | GET      "/api/health"
+[GIN] 2026/06/21 - 17:50:45 | 200 |     115.792µs |       127.0.0.1 | GET      "/"
+[GIN] 2026/06/21 - 17:50:45 | 200 |       45.75µs |       127.0.0.1 | GET      "/"
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /assets/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func1 (3 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> ginp-api/cmd/bootstrap.mountFileServer.func2 (3 handlers)
+[GIN-debug] GET    /api/health               --> ginp-api/internal/gapi/controller/system/cindex.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.0.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/login_by_username --> ginp-api/internal/gapi/controller/user/cuser.init.1.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/register_by_email --> ginp-api/internal/gapi/controller/user/cuser.init.2.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/create      --> ginp-api/internal/gapi/controller/user/cuser.init.3.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/delete      --> ginp-api/internal/gapi/controller/user/cuser.init.4.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/findById    --> ginp-api/internal/gapi/controller/user/cuser.init.5.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/search      --> ginp-api/internal/gapi/controller/user/cuser.init.6.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/sys_user/update      --> ginp-api/internal/gapi/controller/user/cuser.init.7.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] POST   /api/user/update_user_info --> ginp-api/internal/gapi/controller/user/cuser.init.8.BindParamsHandler.func1 (5 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> ginp-api/cmd/bootstrap.mountFrontRoot.func1 (5 handlers)
