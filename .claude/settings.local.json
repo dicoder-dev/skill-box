@@ -45,7 +45,17 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(md5:*)",
       "Bash(grep -o \"\\\\[req\\\\]→\\\\|\\\\[req\\\\]←\\\\|\\\\[req\\\\]✗\\\\|store/app\\\\|__APP_STORE__\\\\|__skillBoxDebug\" dist/assets/index-*.js)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(echo \"===gencode EXIT=$?===\")",
+      "Bash(go vet:*)",
+      "Bash(echo \"===vet EXIT=$?===\")",
+      "Bash(cp /Volumes/MyDrive/Home/dicoder/projects/ginp-api/pkg/gencode/swagen/core.go /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/gencode/swagen/core.go)",
+      "Bash(cp /Volumes/MyDrive/Home/dicoder/projects/ginp-api/pkg/ginp/router_test.go /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/ginp/router_test.go)",
+      "Bash(echo \"===gapi EXIT=$?===\")",
+      "Bash(echo \"===web EXIT=$?===\")",
+      "Bash(echo \"===bootstrap EXIT=$?===\")",
+      "Bash(go test:*)",
+      "Bash(echo \"===test EXIT=$?===\")"
     ]
   }
 }

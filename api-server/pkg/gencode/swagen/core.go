@@ -10,17 +10,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-// SwaGen Swagger 生成器
 type SwaGen struct {
 	SwaggerInfo SwaggerInfo `json:"swagger_info"`
 	viper       *viper.Viper
 }
 
-// NewSwaGen 创建 Swagger 生成器
 func NewSwaGen(swaggerInfo SwaggerInfo) *SwaGen {
 	v := viper.New()
 
 	v.Set("swagger", "2.0")
+	//v.Set(infoHost, swaggerInfo.Host)
 	v.Set(infoDescription, swaggerInfo.Description)
 	v.Set(infoTitle, swaggerInfo.Title)
 	v.Set(infoVersion, swaggerInfo.Version)
@@ -31,7 +30,6 @@ func NewSwaGen(swaggerInfo SwaggerInfo) *SwaGen {
 	}
 }
 
-// AddApis 添加 API 路由到 Swagger
 func (s *SwaGen) AddApis(routers []ginp.RouterItem) {
 	for i := 0; i < len(routers); i++ {
 		r := routers[i]
@@ -51,10 +49,10 @@ func (s *SwaGen) AddApis(routers []ginp.RouterItem) {
 		s.viper.Set(preKey+apiPathResponsesNotPermissionDescription, "无操作权限！")                                                   //状态码403的描述
 		s.viper.Set(preKey+apiPathTags, getTags(r))                                                                              //获取分组
 
-		//请求参数 - 使用 RequestDto 替代 RequestParams（适配 ginp-api）
-		if r.Swagger != nil && r.Swagger.RequestDto != nil {
-			s.createDefinitions(r.Swagger.RequestDto) //创建一个schema
-			entityName := reflect.TypeOf(r.Swagger.RequestDto).Name()
+		//请求参数
+		if r.Swagger != nil && r.Swagger.RequestParams != nil {
+			s.createDefinitions(r.Swagger.RequestParams) //创建一个schema
+			entityName := reflect.TypeOf(r.Swagger.RequestParams).Name()
 			params := []ParamInfo{
 				{
 					In:     "body",
@@ -75,7 +73,6 @@ func (s *SwaGen) createDefinitions(obj any) {
 	s.viper.Set(fmt.Sprintf("definitions.%s", NameToLine(entityName)), schema)
 }
 
-// Save 保存 Swagger 配置到 YAML 文件
 func (s *SwaGen) Save(saveDir string) error {
 	//生成默认respond结构体
 	s.createDefinitions(RespondData{
