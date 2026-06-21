@@ -10,6 +10,7 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/caiprovider"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskilltest"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillapply"
+	_ "ginp-api/internal/gapi/controller/skillbox/ctag"
 	_ "ginp-api/internal/gapi/controller/skillbox/cmarket"
 	//{{placeholder_router_import}}//
 	// 上面的占位符请不要动动，否则会导致生成工具无法自动替换

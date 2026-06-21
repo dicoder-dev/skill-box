@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { applySkill, undoApply, listApplies, checkUpdates } from '@/api/skillbox/skill_apply'
+import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
 
 // 当前 scope 选择
@@ -39,6 +40,99 @@ const undoing = ref(false)
 const updating = ref(false)
 const updateBadge = ref({ total: 0, updates: 0 }) // 来自 checkUpdates 的概览
 const applyHistory = ref([]) // apply/list 数据
+
+// Tag / Diff / Rollback
+const tagList = ref([])
+const tagLoading = ref(false)
+const tagError = ref('')
+const tagMessage = ref('')
+const newTagName = ref('')
+const newTagMessage = ref('')
+const diffResult = ref(null) // { files: [], added, removed, modified, unchanged }
+const diffLeftTagID = ref(0)
+const diffRightTagID = ref(0)
+const rolling = ref(false)
+const selectedSkill = ref(null) // 当前查看 tag 的 skill
+
+async function loadTags(row) {
+  selectedSkill.value = row
+  tagLoading.value = true
+  tagError.value = ''
+  try {
+    const out = await listTags({ skill_id: row.ID })
+    tagList.value = out?.items || []
+  } catch (e) {
+    tagError.value = e?.message || String(e)
+  } finally {
+    tagLoading.value = false
+  }
+}
+
+async function doCreateTag() {
+  if (!selectedSkill.value) { tagError.value = '先选一个 skill'; return }
+  if (!newTagName.value.trim()) { tagError.value = 'tag 名不能为空'; return }
+  tagLoading.value = true
+  tagError.value = ''
+  try {
+    await createTag({
+      skill_id: selectedSkill.value.ID,
+      tag: newTagName.value.trim(),
+      message: newTagMessage.value,
+    })
+    newTagName.value = ''
+    newTagMessage.value = ''
+    tagMessage.value = `已打 tag`
+    await loadTags(selectedSkill.value)
+  } catch (e) {
+    tagError.value = e?.message || String(e)
+  } finally {
+    tagLoading.value = false
+  }
+}
+
+async function doDeleteTag(tagID) {
+  if (!confirm(`删除 tag #${tagID}?file_snapshots 也会一起删。`)) return
+  try {
+    await deleteTag({ tag_id: tagID })
+    tagMessage.value = `已删除 tag #${tagID}`
+    await loadTags(selectedSkill.value)
+  } catch (e) {
+    tagError.value = e?.message || String(e)
+  }
+}
+
+async function doDiff(leftID, rightID) {
+  if (!selectedSkill.value) { tagError.value = '先选一个 skill'; return }
+  try {
+    const out = await diffTag({
+      skill_id: selectedSkill.value.ID,
+      left_tag_id: leftID || 0,
+      right_tag_id: rightID || 0,
+    })
+    diffResult.value = out
+    diffLeftTagID.value = leftID
+    diffRightTagID.value = rightID
+  } catch (e) {
+    tagError.value = e?.message || String(e)
+  }
+}
+
+async function doRollback(tagID) {
+  if (!confirm(`回滚到 tag #${tagID}?会自动打一个 _pre_rollback 隐式 tag,当前状态不会丢失。`)) return
+  rolling.value = true
+  tagError.value = ''
+  try {
+    const out = await rollbackTag({ tag_id: tagID })
+    tagMessage.value = `已回滚(自动打 ${out.pre_rollback_tag},恢复 ${out.files_restored} 个文件)`
+    diffResult.value = null
+    await reload()
+    if (selectedSkill.value) await loadTags(selectedSkill.value)
+  } catch (e) {
+    tagError.value = e?.message || String(e)
+  } finally {
+    rolling.value = false
+  }
+}
 
 async function doApply(row) {
   applying.value = true
@@ -401,6 +495,69 @@ onMounted(() => { reload(); checkUpdateBadge() })
       </ul>
     </div>
 
+    <div v-if="selectedSkill" class="tag-panel">
+      <header class="tp-head">
+        <h4>Tag 管理 — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code></h4>
+        <span class="tp-count">{{ tagList.length }} 个 tag</span>
+        <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">关闭</button>
+      </header>
+      <p v-if="tagMessage" class="tag-msg">{{ tagMessage }}</p>
+      <p v-if="tagError" class="error">{{ tagError }}</p>
+
+      <div class="tag-create">
+        <input v-model="newTagName" placeholder="tag 名,如 v1.0.0" class="tag-input" />
+        <input v-model="newTagMessage" placeholder="描述(可选)" class="tag-input" />
+        <button class="primary" :disabled="tagLoading" @click="doCreateTag">{{ tagLoading ? '处理中…' : '打 Tag' }}</button>
+      </div>
+
+      <div v-if="tagList.length" class="tag-actions">
+        <span class="tag-label">Diff:</span>
+        <select v-model="diffLeftTagID">
+          <option :value="0">current</option>
+          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? ' [implicit]' : '' }}</option>
+        </select>
+        <span>→</span>
+        <select v-model="diffRightTagID">
+          <option :value="0">current</option>
+          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? ' [implicit]' : '' }}</option>
+        </select>
+        <button @click="doDiff(diffLeftTagID, diffRightTagID)">看 Diff</button>
+        <button @click="doDiff(0, 0)">清空</button>
+      </div>
+
+      <ul v-if="tagList.length" class="tag-list">
+        <li v-for="t in tagList" :key="t.ID || t.id" :class="{ implicit: t.IsImplicit }">
+          <span class="t-id">#{{ t.ID || t.id }}</span>
+          <span class="t-name"><code>{{ t.Tag }}</code></span>
+          <span class="t-msg">{{ t.Message || '—' }}</span>
+          <span class="t-time">{{ (t.CreatedAt || '').slice(0, 19) }}</span>
+          <button class="link" @click="doDiff(t.ID || t.id, 0)">vs current</button>
+          <button class="link" :disabled="rolling" @click="doRollback(t.ID || t.id)">{{ rolling ? '回滚中…' : '回滚到此' }}</button>
+          <button class="link danger" @click="doDeleteTag(t.ID || t.id)">删</button>
+        </li>
+      </ul>
+
+      <div v-if="diffResult" class="diff-panel">
+        <header class="dp-head">
+          <h4>Diff 结果</h4>
+          <span class="dp-stats">
+            <span class="added">+{{ diffResult.added }}</span>
+            <span class="removed">-{{ diffResult.removed }}</span>
+            <span class="modified">~{{ diffResult.modified }}</span>
+            <span class="unchanged">{{ diffResult.unchanged }} 不变</span>
+          </span>
+        </header>
+        <div v-for="f in diffResult.files" :key="f.path" class="diff-file" :class="`kind-${f.kind}`">
+          <div class="df-head">
+            <span class="df-kind">{{ f.kind }}</span>
+            <code class="df-path">{{ f.path }}</code>
+          </div>
+          <pre v-if="f.lines?.length"><span v-for="(l, i) in f.lines" :key="i" :class="`ln-${l.kind}`"><span class="ln-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
+</span></pre>
+        </div>
+      </div>
+    </div>
+
     <div v-if="lastTest || testError" class="test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
       <header class="tp-head">
         <h4>最近测试结果</h4>
@@ -453,6 +610,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
             <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? '应用中…' : '应用' }}</button>
             <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? '测试中…' : '测试' }}</button>
             <button class="link" @click="startEdit(p)">编辑</button>
+            <button class="link" @click="loadTags(p)">Tag</button>
             <button class="link danger" @click="remove(p)">删除</button>
           </td>
         </tr>
@@ -551,4 +709,41 @@ textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .status-rolled_back .ah-status { background: #e5e7eb; color: #4b5563; }
 .status-failed .ah-status { background: #fecaca; color: #991b1b; }
 .ah-time { color: #6b7280; font-size: 12px; }
+.tag-panel { margin: 8px 0 12px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
+.tag-panel .tp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tag-panel .tp-head h4 { margin: 0; font-size: 14px; }
+.tag-panel .tp-count { color: #6b7280; font-size: 12px; }
+.tag-msg { color: #047857; font-size: 12px; margin: 4px 0; }
+.tag-create { display: flex; gap: 8px; margin-bottom: 8px; }
+.tag-input { flex: 1; }
+.tag-actions { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 13px; }
+.tag-actions .tag-label { color: #4b5563; }
+.tag-list { list-style: none; padding: 0; margin: 0; border-top: 1px dashed #e5e7eb; }
+.tag-list li { display: grid; grid-template-columns: 50px 140px 1fr 150px auto auto auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
+.tag-list li.implicit { background: #fef3c7; }
+.tag-list .t-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #4b5563; }
+.tag-list .t-name code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
+.tag-list .t-msg { color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-list .t-time { color: #6b7280; font-size: 11px; }
+.diff-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; }
+.dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.dp-head h4 { margin: 0; font-size: 13px; }
+.dp-stats { display: flex; gap: 8px; font-size: 12px; }
+.dp-stats .added { color: #065f46; background: #d1fae5; padding: 1px 6px; border-radius: 3px; }
+.dp-stats .removed { color: #991b1b; background: #fee2e2; padding: 1px 6px; border-radius: 3px; }
+.dp-stats .modified { color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 3px; }
+.dp-stats .unchanged { color: #4b5563; }
+.diff-file { margin: 6px 0; border: 1px solid #f3f4f6; border-radius: 4px; overflow: hidden; }
+.diff-file.kind-added .df-head { background: #d1fae5; }
+.diff-file.kind-removed .df-head { background: #fee2e2; }
+.diff-file.kind-modified .df-head { background: #fef3c7; }
+.diff-file.kind-unchanged .df-head { background: #f3f4f6; }
+.df-head { padding: 4px 8px; display: flex; gap: 8px; align-items: center; }
+.df-kind { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #fff; color: #4b5563; }
+.df-path { font-size: 12px; color: #1f2937; }
+.diff-file pre { padding: 4px 8px; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; background: #fafafa; max-height: 300px; overflow: auto; white-space: pre; }
+.ln-added { display: block; background: #dcfce7; color: #14532d; }
+.ln-removed { display: block; background: #fee2e2; color: #7f1d1d; }
+.ln-context { display: block; color: #4b5563; }
+.ln-no { display: inline-block; min-width: 50px; color: #9ca3af; padding-right: 6px; user-select: none; }
 </style>
