@@ -143,7 +143,7 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	openSettings := func() {
 		windowMgr.ShowPrimary()
 		if w := windowMgr.Primary(); w != nil {
-			w.Navigate(backend.URL() + "/settings/desktop")
+			w.SetURL(backend.URL() + "/settings/desktop")
 		}
 	}
 	app.Menu.SetApplicationMenu(NewAppMenu(app, showPrimary, quitApp))
