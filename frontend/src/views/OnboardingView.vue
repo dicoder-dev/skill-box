@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
 
 // 阶段: status(初始状态) → scan(扫描结果) → import(导入结果)
