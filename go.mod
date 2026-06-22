@@ -11,6 +11,7 @@ replace ginp-api => ./api-server
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
+	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect

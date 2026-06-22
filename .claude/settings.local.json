@@ -96,7 +96,26 @@
       "Bash(chmod +x /Volumes/MyDrive/Home/dicoder/projects/skill-box/scripts/e2e_pkg_roundtrip.sh)",
       "Bash(bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/scripts/e2e_pkg_roundtrip.sh)",
       "Bash(pkill -f /tmp/sb_e2e_web)",
-      "Bash(nc -z 127.0.0.1 8084)"
+      "Bash(nc -z 127.0.0.1 8084)",
+      "Bash(sqlite3:*)",
+      "Bash(wc:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.wails.io)",
+      "WebFetch(domain:wails.io)",
+      "WebFetch(domain:v3alpha.wails.io)",
+      "WebFetch(domain:v3.wails.io)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find:*)",
+      "Bash(./bin/skill-box -config configs.yaml)",
+      "Bash(open -n -W bin/skill-box.dev.app --args -config configs.yaml)",
+      "Bash(pkill -f skill-box)",
+      "Bash(open -n bin/skill-box.dev.app --args -config configs.yaml)",
+      "WebFetch(domain:127.0.0.1)",
+      "Read(//Users/brody/Library/Logs/**)",
+      "Read(//private/var/log/**)",
+      "Bash(task desktop:build)",
+      "Bash(GOOS=darwin CGO_ENABLED=1 CGO_CFLAGS=\"-mmacosx-version-min=10.15\" go build -tags production -trimpath -buildvcs=false -ldflags=\"-w -s\" -o bin/skill-box .)"
     ]
   },
   "hooks": {

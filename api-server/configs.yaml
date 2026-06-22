@@ -24,6 +24,12 @@ email:
         pwd: "12345"
 server:
     port: "8082"
+skillbox:
+    auto_backup: "true"
+    default_scope: global
+    preset_skills_dir: ""
+    store_root: ""
+    tool_paths: ""
 system:
     app:
         name: dianji
