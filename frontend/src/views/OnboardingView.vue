@@ -141,8 +141,12 @@ onMounted(loadStatus)
       </li>
     </ol>
 
-    <p v-if="error" class="error">⚠️ {{ error }}</p>
-    <p v-if="success" class="success">✅ {{ success }}</p>
+    <p v-if="error" class="error inline-flex items-center gap-1.5">
+      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
+    </p>
+    <p v-if="success" class="success inline-flex items-center gap-1.5">
+      <Icon icon="mdi:check-circle-outline" width="14" height="14" />{{ success }}
+    </p>
 
     <!-- 阶段 1:状态 -->
     <section v-if="phase === 'status'" class="card">
