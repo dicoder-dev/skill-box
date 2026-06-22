@@ -160,7 +160,7 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 				AppliedAt:   res.FinishedAt,
 			}
 			created, _ := s.applyModel().Create(row)
-			if created != nil && res.Status == skillapp.StatusSuccess {
+			if created != nil && res.Status == skillapp.StatusApplied {
 				s.audit("apply", in.SkillID, map[string]any{
 					"tool":         tool,
 					"scope":        scope,
