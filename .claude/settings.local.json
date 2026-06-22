@@ -77,7 +77,13 @@
       "Bash(chmod +x /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
       "Bash(cp /tmp/auto-commit.bak /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
       "Bash(rm -f /tmp/claude-hook-sentinel.txt)",
-      "Bash(bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)"
+      "Bash(bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
+      "Bash(npx vite:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(node -e ':*)",
+      "Bash(npx esbuild:*)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)"
     ]
   },
   "hooks": {
