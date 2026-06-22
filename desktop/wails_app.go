@@ -78,7 +78,6 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 
 	// 桌面端偏好 settings(由 bootstrap.Backend.NewSettings 工厂方法构造)
 	prefsStore := settingsAdapter{backend: backend}
-	prefsSvc := services.NewPrefsService(prefsStore)
 
 	app := application.New(application.Options{
 		Name:        cfg.Name,
