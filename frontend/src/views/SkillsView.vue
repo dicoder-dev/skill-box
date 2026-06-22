@@ -356,7 +356,7 @@ async function submit() {
 }
 
 async function triggerTest(row) {
-  if (!confirm(`对 skill "${row.Name}@${row.Version}" 跑一次测试?(static + script + ai)`)) return
+  if (!confirm(t('skills.test.confirmRun', { name: row.Name, version: row.Version }))) return
   testing.value = true
   testError.value = ''
   try {
@@ -376,7 +376,7 @@ async function triggerTest(row) {
 }
 
 async function remove(row) {
-  if (!confirm(`确定删除 skill "${row.Name}@${row.Version}" ?`)) return
+  if (!confirm(t('skills.list.confirmDelete', { name: row.Name, version: row.Version }))) return
   try {
     await deleteSkill({
       scope: row.Scope,
