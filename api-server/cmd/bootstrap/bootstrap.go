@@ -150,6 +150,7 @@ func Boot(opts BootOptions) (*Backend, error) {
 	return &Backend{
 		srvOpts: srvOpts,
 		port:    parsePortFromAddr(srvOpts.Addr),
+		dbs:     &dbsHolder{write: dbs.GetWriteDb(), read: dbs.GetReadDb()},
 	}, nil
 }
 
