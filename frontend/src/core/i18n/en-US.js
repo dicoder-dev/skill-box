@@ -22,6 +22,7 @@ export default {
     backendOk: 'Backend connected',
     backendDown: 'Backend down',
     refreshStats: 'Refresh stats',
+    toolsLabel: 'Tools',
   },
 
   common: {
