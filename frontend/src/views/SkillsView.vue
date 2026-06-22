@@ -609,8 +609,8 @@ onMounted(() => { reload(); checkUpdateBadge() })
     </p>
 
     <div class="card">
-      <h3>技能列表
-        <span class="card-sub">— 共 {{ total }} 条</span>
+      <h3>{{ t('skills.list.title') }}
+        <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
         <span v-if="loading" class="spinner ml-auto"></span>
       </h3>
 
@@ -618,12 +618,12 @@ onMounted(() => { reload(); checkUpdateBadge() })
       <table v-if="items.length" class="grid">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Version</th>
-            <th>Source</th>
-            <th>Project</th>
-            <th>Updated</th>
-            <th style="width: 260px">操作</th>
+            <th>{{ t('skills.list.colName') }}</th>
+            <th>{{ t('skills.list.colVersion') }}</th>
+            <th>{{ t('skills.list.colSource') }}</th>
+            <th>{{ t('skills.list.colProject') }}</th>
+            <th>{{ t('skills.list.colUpdated') }}</th>
+            <th style="width: 260px">{{ t('skills.list.colActions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -634,14 +634,14 @@ onMounted(() => { reload(); checkUpdateBadge() })
               <span v-if="p.Source === 'market'" class="badge market">market</span>
               <span v-else class="badge local">{{ p.Source }}</span>
             </td>
-            <td>{{ p.ProjectID || '—' }}</td>
-            <td class="time">{{ p.UpdatedAt?.slice(0, 19) || '—' }}</td>
+            <td>{{ p.ProjectID || t('common.dash') }}</td>
+            <td class="time">{{ p.UpdatedAt?.slice(0, 19) || t('common.dash') }}</td>
             <td class="row-actions">
-              <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? '应用中…' : '应用' }}</button>
-              <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? '测试中…' : '测试' }}</button>
-              <button class="link" @click="startEdit(p)">编辑</button>
-              <button class="link" @click="loadTags(p)">Tag</button>
-              <button class="link danger" @click="remove(p)">删除</button>
+              <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? t('skills.list.applying') : t('skills.list.btnApply') }}</button>
+              <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? t('skills.list.testing') : t('skills.list.btnTest') }}</button>
+              <button class="link" @click="startEdit(p)">{{ t('common.edit') }}</button>
+              <button class="link" @click="loadTags(p)">{{ t('skills.list.btnTag') }}</button>
+              <button class="link danger" @click="remove(p)">{{ t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
@@ -650,16 +650,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <span class="empty-icon">
           <Icon icon="mdi:book-open-variant" width="36" height="36" />
         </span>
-        <p style="margin: 8px 0 4px">该 scope 下还没有 skill</p>
-        <p class="muted" style="margin: 0">点右上角"+ 新建 Skill"开始,或去 Onboarding 从已装工具导入</p>
+        <p style="margin: 8px 0 4px">{{ t('skills.list.emptyTitle') }}</p>
+        <p class="muted" style="margin: 0">{{ t('skills.list.emptyHint') }}</p>
       </div>
 
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-        <span>{{ page }} / {{ totalPages }} (共 {{ total }} 条)</span>
-        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+        <button :disabled="page <= 1" @click="gotoPage(page - 1)">{{ t('common.prev') }}</button>
+        <span>{{ page }} / {{ totalPages }} ({{ t('common.totalCount', { count: total }) }})</span>
+        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">{{ t('common.next') }}</button>
       </footer>
     </div>
   </section><AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" /></div>
