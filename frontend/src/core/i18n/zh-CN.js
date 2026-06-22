@@ -69,6 +69,7 @@ export default {
       allUpToDate: '{total} 个 skill 已是最新',
       appliedOk: '已把 {name}@{version} 落到 {tool}',
       appliedPartial: '部分失败: {detail}',
+      errDefault: '应用失败',
     },
 
     editor: {
