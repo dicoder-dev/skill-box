@@ -210,7 +210,7 @@ onUnmounted(() => {
             v-if="isMobile"
             class="p-1.5 -ml-1.5 rounded text-sb-dim hover:bg-gray-100"
             @click="sidebarOpen = true"
-            aria-label="打开侧栏"
+            :aria-label="t('app.openSidebar')"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <line x1="3" y1="6" x2="21" y2="6"/>
@@ -218,19 +218,19 @@ onUnmounted(() => {
               <line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
           </button>
-          <span class="bg-gradient-to-br from-sb-primary to-purple-600 text-white px-2 py-0.5 rounded-full text-[11px] font-medium">Skill Box</span>
+          <span class="bg-gradient-to-br from-sb-primary to-purple-600 text-white px-2 py-0.5 rounded-full text-[11px] font-medium">{{ t('app.brand') }}</span>
           <span class="text-sb-faint">/</span>
           <span class="text-sb-text font-medium truncate">{{ navItems.find((x) => x.key === tab)?.label }}</span>
         </div>
         <div class="flex gap-2 flex-wrap justify-end">
           <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-gray-100 rounded-full text-[12px] text-sb-dim">
-            <span class="w-1.5 h-1.5 rounded-full bg-sb-primary"></span>Skills <b class="text-sb-text font-semibold ml-0.5">{{ stats.skills }}</b>
+            <span class="w-1.5 h-1.5 rounded-full bg-sb-primary"></span>{{ t('app.nav.skills.label') }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.skills }}</b>
           </span>
           <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-gray-100 rounded-full text-[12px] text-sb-dim">
-            <span class="w-1.5 h-1.5 rounded-full bg-purple-600"></span>Projects <b class="text-sb-text font-semibold ml-0.5">{{ stats.projects }}</b>
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-600"></span>{{ t('app.nav.projects.label') }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.projects }}</b>
           </span>
           <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-gray-100 rounded-full text-[12px] text-sb-dim">
-            <span class="w-1.5 h-1.5 rounded-full bg-sb-success"></span>Tools <b class="text-sb-text font-semibold ml-0.5">{{ stats.toolsReady }} / {{ stats.toolsTotal }}</b>
+            <span class="w-1.5 h-1.5 rounded-full bg-sb-success"></span>{{ t('app.nav.skills.label') === 'Skills' ? 'Tools' : 'Tools' }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.toolsReady }} / {{ stats.toolsTotal }}</b>
           </span>
         </div>
       </header>
