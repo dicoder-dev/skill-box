@@ -540,19 +540,19 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <span class="tag-label">{{ t('skills.tag.diff') }}:</span>
         <select v-model="diffLeftTagID">
           <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
+          <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">{{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
         </select>
         <span>→</span>
         <select v-model="diffRightTagID">
           <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
+          <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">{{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
         </select>
         <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
         <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
       </div>
 
       <ul v-if="tagList.length" class="tag-list">
-        <li v-for="t in tagList" :key="t.ID || t.id" :class="{ implicit: t.IsImplicit }">
+        <li v-for="tg in tagList" :key="tg.ID || tg.id" :class="{ implicit: tg.IsImplicit }">
           <span class="t-id">#{{ t.ID || t.id }}</span>
           <span class="t-name"><code>{{ t.Tag }}</code></span>
           <span class="t-msg">{{ t.Message || t('common.dash') }}</span>
