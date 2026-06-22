@@ -285,3 +285,67 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 		t.Errorf("expected update available; got %+v", items[0])
 	}
 }
+
+// TestApply_WritesAuditLog 验证成功 apply 后 audit_log 进了 1 条 action=apply。
+func TestApply_WritesAuditLog(t *testing.T) {
+	svc, ssvc, _, _ := newTestSvc(t)
+	row, err := ssvc.Create(&sskill.WriteInput{
+		Scope:    skilladapter.ScopeGlobal,
+		Source:   "local",
+		Manifest: skilladapter.Manifest{Name: "audit-target", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"}},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := svc.Apply(&sskillapp.ApplyInput{
+		SkillID: row.ID,
+		Tools:   []string{"fake"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.AllOK {
+		t.Fatalf("expected AllOK; got %+v", out)
+	}
+	// 直接查 audit_log 表
+	var n int64
+	if err := ssvc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "apply", row.ID).Count(&n).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("audit_log apply count = %d, want 1", n)
+	}
+}
+
+// TestUndo_WritesAuditLog 验证成功 undo 后 audit_log 进了 1 条 action=undo。
+func TestUndo_WritesAuditLog(t *testing.T) {
+	svc, ssvc, _, _ := newTestSvc(t)
+	row, err := ssvc.Create(&sskill.WriteInput{
+		Scope:    skilladapter.ScopeGlobal,
+		Source:   "local",
+		Manifest: skilladapter.Manifest{Name: "undo-audit", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"}},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := svc.Apply(&sskillapp.ApplyInput{
+		SkillID: row.ID,
+		Tools:   []string{"fake"},
+	})
+	if err != nil || !out.AllOK || len(out.Applies) == 0 {
+		t.Fatalf("apply prep failed: %v %+v", err, out)
+	}
+	applyID := out.Applies[0].ApplyID
+	if _, err := svc.Undo(applyID); err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	if err := ssvc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "undo", row.ID).Count(&n).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("audit_log undo count = %d, want 1", n)
+	}
+}
