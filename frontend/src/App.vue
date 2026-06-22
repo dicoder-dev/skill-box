@@ -242,7 +242,8 @@ onUnmounted(() => {
         <SkillsView v-else-if="tab === 'skills'" />
         <MarketView v-else-if="tab === 'market'" />
         <OnboardingView v-else-if="tab === 'onboarding'" />
-        <AuditView v-else />
+        <AuditView v-else-if="tab === 'audit'" />
+        <SettingsView v-else-if="tab === 'settings'" />
       </div>
     </main>
   </div>
