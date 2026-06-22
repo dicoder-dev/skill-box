@@ -507,16 +507,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
     <div v-if="applyHistory.length" class="card apply-history">
       <header class="ah-head">
-        <h3>最近 Apply 历史</h3>
-        <span class="card-sub">{{ applyHistory.length }} 条</span>
+        <h3>{{ t('skills.applyHistory.title') }}</h3>
+        <span class="card-sub">{{ t('skills.applyHistory.count', { count: applyHistory.length }) }}</span>
       </header>
       <ul>
         <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`status-${h.Status}`">
           <span class="ah-id">#{{ h.ID || h.id }}</span>
           <span class="ah-tool">{{ h.Tool }}</span>
           <span class="ah-status">{{ h.Status }}</span>
-          <span class="ah-time">{{ h.AppliedAt?.slice(0, 19) || '—' }}</span>
-          <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? '撤销中…' : '撤销' }}</button>
+          <span class="ah-time">{{ h.AppliedAt?.slice(0, 19) || t('common.dash') }}</span>
+          <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? t('skills.applyHistory.undoing') : t('skills.applyHistory.undone') }}</button>
         </li>
       </ul>
     </div>
