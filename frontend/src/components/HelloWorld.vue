@@ -18,7 +18,6 @@ const {
   appName,
   baseURL,
   isWeb,
-  isDesktopMode,
   authEnabled,
   deployLabel,
 } = storeToRefs(store)
