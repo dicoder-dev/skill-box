@@ -586,10 +586,10 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
     <div v-if="lastTest || testError" class="card test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
       <header class="tp-head">
-        <h3>最近测试结果</h3>
+        <h3>{{ t('skills.test.title') }}</h3>
         <span v-if="lastTest?.run" class="tp-status">{{ lastTest.run.status }}</span>
       </header>
-      <p v-if="testError" class="error">测试失败: {{ testError }}</p>
+      <p v-if="testError" class="error">{{ t('skills.test.errPrefix') }} {{ testError }}</p>
       <p v-else-if="lastTest?.run?.summary" class="tp-summary">{{ lastTest.run.summary }}</p>
       <ul v-if="lastTest?.results?.length" class="tp-list">
         <li v-for="r in lastTest.results" :key="r.ID || r.id" :class="`check-${r.Status}`">
@@ -599,7 +599,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
         </li>
       </ul>
       <details v-for="r in lastTest?.results || []" :key="`d-${r.ID || r.id}`" class="tp-detail">
-        <summary>{{ r.Check }} 详情</summary>
+        <summary>{{ r.Check }} detail</summary>
         <pre>{{ r.Detail }}</pre>
       </details>
     </div>
