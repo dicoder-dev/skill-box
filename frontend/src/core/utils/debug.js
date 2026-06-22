@@ -7,9 +7,9 @@
 //
 // 使用:
 //   import { dlog } from '@/core/utils/debug'
-//   dlog('→ GET /api/health')
-//   dlog('← 200', { data })
-//   dlog('✗ failed', err)
+//   dlog('-> GET /api/health')
+//   dlog('<- 200', { data })
+//   dlog('x failed', err)
 //
 // 关闭:
 //   import { disableDebug } from '@/core/utils/debug'
