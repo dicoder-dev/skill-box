@@ -72,6 +72,24 @@ type BootOptions struct {
 type Backend struct {
 	srvOpts ServerOptions // Boot 时已装配好,Serve 直接用
 	port    int           // 从 srvOpts.Addr 解析得到
+	dbs     *dbsHolder    // DB 句柄,供桌面端 settings 等服务按需构造
+}
+
+// dbsHolder 持有 write/read 两个 *gorm.DB,供桌面端 settings 等服务按需构造。
+// 不导出指针,只通过 NewSettings 工厂方法构造,避免外部误持 db 句柄。
+type dbsHolder struct {
+	write *gorm.DB
+	read  *gorm.DB
+}
+
+// NewSettings 构造一个新的 settings.Service,供桌面端 PrefsService 等场景使用。
+// 每次调用都 new 一个 Service 实例,db 句柄是共享的;Service 本身无状态,
+// 多实例并发安全(settings 用的是 entity.Setting 表 + 简单 CRUD)。
+func (b *Backend) NewSettings() *settings.Service {
+	if b == nil || b.dbs == nil {
+		return nil
+	}
+	return settings.New(b.dbs.write, b.dbs.read)
 }
 
 // Run 阻塞入口:完成 cfg/DB/Task 初始化,然后跑 server 直到关闭。
