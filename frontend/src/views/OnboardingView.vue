@@ -1,10 +1,13 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { Icon } from '@iconify/vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
 
 // 阶段: status(初始状态) → scan(扫描结果) → import(导入结果)
 const phase = ref('status')
+
+// 全局事件总线(由 App.vue provide),完成页"去 Skills 页查看"走这里跨组件跳转。
+const appBus = inject('appBus', null)
 
 const loading = ref(false)
 const error = ref('')
