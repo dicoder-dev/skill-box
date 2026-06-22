@@ -115,6 +115,16 @@ function reset() {
   selected.value = new Set()
 }
 
+// 完成页跳转:走全局事件总线 → App.vue 接 switch-tab → 切到 Skills 并刷新统计。
+function goSkills() {
+  if (appBus) {
+    appBus.emit('switch-tab', 'skills')
+  } else {
+    // 兜底:直接发 CustomEvent,App.vue 不在 / 事件总线未注入时仍可工作。
+    window.dispatchEvent(new CustomEvent('skillbox:switch-tab', { detail: 'skills' }))
+  }
+}
+
 onMounted(loadStatus)
 </script>
 
