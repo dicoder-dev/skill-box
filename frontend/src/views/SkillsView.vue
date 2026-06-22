@@ -1,11 +1,14 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { applySkill, undoApply, listApplies, checkUpdates } from '@/api/skillbox/skill_apply'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
+
+const { t } = useI18n()
 
 // 当前 scope 选择
 const scope = ref('global') // global | project
