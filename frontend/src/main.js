@@ -18,6 +18,10 @@ async function bootstrap() {
   const pinia = createPinia()
   const app = createApp(App)
   app.use(pinia)
+  // i18n 必须在 use(pinia) 之后,因为 App.vue 会通过 useI18n() 访问。
+  // 注意:i18n 的 locale 已经在 createI18n 时基于 localStorage/navigator 解析;
+  // 若想由后端 / runtime 强制覆盖,可在 setRuntime 之后调 setLocale(runtime.lang)。
+  app.use(i18n)
 
   const store = useAppStore()
 
