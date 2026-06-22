@@ -57,9 +57,9 @@ function pickPreset(p) {
   activePreset.value = p
   if (p.id === 'find_duplicates') {
     // 查重:多 skill 对比;给个轻提示
-    pushMsg('assistant', '请在输入框里把要对比的若干 skill 全文贴进来(每个用 \n\n---\n\n 分隔),我会给出重叠度评分。')
+    pushMsg('assistant', t('skills.ai.pickedDedupe'))
   } else {
-    pushMsg('assistant', `已选择 preset:「${p.title}」。${p.description}\n把上下文(可空)和额外要求贴到下方,点发送即可。`)
+    pushMsg('assistant', t('skills.ai.pickedPreset', { title: p.title, description: p.description }))
   }
 }
 
