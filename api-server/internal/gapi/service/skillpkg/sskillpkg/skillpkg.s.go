@@ -7,12 +7,16 @@
 package sskillpkg
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	"ginp-api/internal/gapi/service/audit/saudit"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillpkg"
+
+	"gorm.io/gorm"
 )
 
 // 业务错误。
