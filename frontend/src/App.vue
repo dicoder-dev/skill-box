@@ -187,7 +187,7 @@ onUnmounted(() => {
         <div :class="['flex items-center gap-1.5 flex-1 min-w-0', backendOK ? 'text-emerald-400' : 'text-red-400']">
           <span :class="['w-2 h-2 rounded-full shrink-0', backendOK ? 'bg-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.2)]' : 'bg-red-400 shadow-[0_0_0_2px_rgba(248,113,113,0.2)]']"></span>
           <span class="text-[11px] truncate">
-            {{ backendOK ? '后端已连接' : '后端断开' }}
+            {{ backendOK ? t('app.backendOk') : t('app.backendDown') }}
             <span v-if="lastHealth" class="text-sb-sidebar-muted">· {{ lastHealth }}</span>
           </span>
         </div>
