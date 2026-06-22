@@ -310,7 +310,7 @@ func TestApply_WritesAuditLog(t *testing.T) {
 	}
 	// 直接查 audit_log 表
 	var n int64
-	if err := ssvc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "apply", row.ID).Count(&n).Error; err != nil {
+	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "apply", row.ID).Count(&n).Error; err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
@@ -342,7 +342,7 @@ func TestUndo_WritesAuditLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int64
-	if err := ssvc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "undo", row.ID).Count(&n).Error; err != nil {
+	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "undo", row.ID).Count(&n).Error; err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
