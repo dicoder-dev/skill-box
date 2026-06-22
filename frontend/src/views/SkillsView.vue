@@ -553,13 +553,13 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
       <ul v-if="tagList.length" class="tag-list">
         <li v-for="tg in tagList" :key="tg.ID || tg.id" :class="{ implicit: tg.IsImplicit }">
-          <span class="t-id">#{{ t.ID || t.id }}</span>
-          <span class="t-name"><code>{{ t.Tag }}</code></span>
-          <span class="t-msg">{{ t.Message || t('common.dash') }}</span>
-          <span class="t-time">{{ (t.CreatedAt || '').slice(0, 19) }}</span>
-          <button class="link" @click="doDiff(t.ID || t.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
-          <button class="link" :disabled="rolling" @click="doRollback(t.ID || t.id)">{{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}</button>
-          <button class="link danger" @click="doDeleteTag(t.ID || t.id)">{{ t('common.delete') }}</button>
+          <span class="t-id">#{{ tg.ID || tg.id }}</span>
+          <span class="t-name"><code>{{ tg.Tag }}</code></span>
+          <span class="t-msg">{{ tg.Message || t('common.dash') }}</span>
+          <span class="t-time">{{ (tg.CreatedAt || '').slice(0, 19) }}</span>
+          <button class="link" @click="doDiff(tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
+          <button class="link" :disabled="rolling" @click="doRollback(tg.ID || tg.id)">{{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}</button>
+          <button class="link danger" @click="doDeleteTag(tg.ID || tg.id)">{{ t('common.delete') }}</button>
         </li>
       </ul>
 
