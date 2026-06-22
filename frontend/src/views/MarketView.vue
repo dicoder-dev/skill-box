@@ -507,9 +507,9 @@ onMounted(async () => {
 
 .tag {
   display: inline-block;
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%);
-  color: #7c3aed;
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1) 0%, rgba(13, 148, 136, 0.05) 100%);
+  color: #0d9488;
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 11px;
