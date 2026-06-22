@@ -79,16 +79,16 @@ async function doRequest(method, path, bodyOrParams, options = {}) {
     // 底层请求
     const resp = await clientRequest(cfg)
     const latency = Date.now() - t0
-    dlog(`← ${method} ${realPath} ${resp.status} (${latency}ms)`, resp.data)
+    dlog(`<- ${method} ${realPath} ${resp.status} (${latency}ms)`, resp.data)
 
     // response 拦截器链(raw 模式跳过业务码剥离)
     if (cfg.raw) return resp
     const data = await interceptors.response.run(resp)
-    dlog(`✓ ${method} ${realPath} resolved`, data)
+    dlog(`[ok] ${method} ${realPath} resolved`, data)
     return data
   } catch (err) {
     const latency = Date.now() - t0
-    derr(`✗ ${method} ${realPath} (${latency}ms)`, err && err.message, err)
+    derr(`[err] ${method} ${realPath} (${latency}ms)`, err && err.message, err)
     throw err
   }
 }
