@@ -83,7 +83,20 @@
       "Bash(node -e ':*)",
       "Bash(npx esbuild:*)",
       "Bash(echo \"exit=$?\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/service/skillapp/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/service/skillaudit/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/service/skillpkg/... ./internal/gapi/controller/skillbox/cskillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/gapi/service/skillaudit/... ./internal/gapi/service/skillpkg/... ./internal/gapi/service/audit/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/gapi/service/skillaudit/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/gapi/service/skillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build -o /tmp/sb_e2e_web ./api-server/cmd/web)",
+      "Bash(rm -f /tmp/sb_e2e.db)",
+      "Bash(rm -rf /tmp/sb_e2e_store)",
+      "Bash(chmod +x /Volumes/MyDrive/Home/dicoder/projects/skill-box/scripts/e2e_pkg_roundtrip.sh)",
+      "Bash(bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/scripts/e2e_pkg_roundtrip.sh)",
+      "Bash(pkill -f /tmp/sb_e2e_web)",
+      "Bash(nc -z 127.0.0.1 8084)"
     ]
   },
   "hooks": {
