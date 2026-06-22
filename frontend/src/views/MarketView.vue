@@ -159,7 +159,9 @@ onMounted(async () => {
           :class="{ active: s.id === activeSourceId }"
           @click="onSelectSource(s.id)"
         >
-          <span class="src-icon">📡</span>
+          <span class="src-icon">
+            <Icon icon="mdi:radio-tower" width="14" height="14" />
+          </span>
           {{ s.name }}
           <span class="src-type">{{ s.type }}</span>
         </button>
