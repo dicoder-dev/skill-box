@@ -71,7 +71,10 @@ onMounted(reload)
 <template>
   <div class="projects-view">
     <header class="head">
-      <h2>📁 Projects</h2>
+      <h2 class="flex items-center gap-2">
+        <Icon icon="mdi:folder-multiple-outline" width="20" height="20" class="text-sb-primary" />
+        Projects
+      </h2>
       <p class="muted">登记项目根目录,后续 skill 可绑定到 project scope 走项目级覆盖。</p>
     </header>
 
