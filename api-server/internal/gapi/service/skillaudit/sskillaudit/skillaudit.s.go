@@ -199,7 +199,8 @@ func (s *Service) DeleteTag(tagID uint) error {
 		return ErrTagNotFound
 	}
 	// 先确认行存在
-	if _, err := s.tagModel().FindOneById(tagID); err != nil {
+	tagRow, err := s.tagModel().FindOneById(tagID)
+	if err != nil {
 		return fmt.Errorf("%w: id=%d", ErrTagNotFound, tagID)
 	}
 	// 先删 file_snapshots
@@ -217,6 +218,11 @@ func (s *Service) DeleteTag(tagID uint) error {
 	if err := s.tagModel().DeleteById(tagID); err != nil {
 		return fmt.Errorf("skillaudit: delete tag: %w", err)
 	}
+	s.audit("tag_delete", tagRow.SkillID, map[string]any{
+		"tag_id":     tagID,
+		"tag":        tagRow.Tag,
+		"is_implicit": tagRow.IsImplicit,
+	})
 	return nil
 }
 
