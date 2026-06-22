@@ -307,4 +307,39 @@ export default {
     seeMore: 'View',
     empty: 'No matching log records',
   },
+
+  settings: {
+    title: 'Settings',
+    subtitle: 'Desktop preferences (notifications / global shortcuts / startup). On Web, this section is a read-only placeholder.',
+    webOnlyHint: 'Desktop preferences are only visible in the desktop app. Use the system tray to open Settings.',
+
+    desktop: {
+      title: 'Desktop preferences',
+      subtitle: 'Requires a desktop app restart to take effect',
+      startMinimized: 'Start minimized to tray',
+      startMinimizedHint: 'When enabled, the app starts hidden in the system tray without showing the main window',
+      notifyEnabled: 'Enable system notifications',
+      notifyEnabledHint: 'When off, "Test notification" button and tray test notifications are not delivered to the notification center',
+      shortcutEnabled: 'Enable global shortcut',
+      shortcutEnabledHint: 'When off, the registered combo does not respond (falls back to menu accelerator only)',
+      globalHotkey: 'Global hotkey combo',
+      globalHotkeyHint: 'V1 only supports "Cmd+Shift+S" on macOS; other combos are rejected by the backend',
+      globalHotkeyPh: 'e.g. Cmd+Shift+S',
+    },
+
+    testNotify: 'Test notification',
+    testNotifyHint: 'Send a test banner to the system notification center to verify authorization / display',
+    btnTestNotify: 'Test notification',
+
+    testTitle: 'Skill Box',
+    testBody: 'This is a test notification — sent from the desktop settings page',
+
+    saved: 'Saved',
+    errSave: 'Save failed: {msg}',
+    errNotify: 'Notification failed: {msg}',
+    notifyDisabled: 'Notifications are disabled, cannot send',
+    notifySent: 'Notification sent',
+
+    prefsUnavailable: 'Preferences service unavailable (backend may not be running or prefs store not initialized)',
+  },
 }
