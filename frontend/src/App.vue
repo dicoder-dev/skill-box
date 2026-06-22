@@ -283,6 +283,20 @@ onUnmounted(() => {
           <Icon icon="mdi:refresh" width="16" height="16" />
         </button>
       </div>
+
+      <!-- 拖拽手柄 -->
+      <div
+        v-if="!isMobile"
+        class="resize-handle"
+        :class="{ active: isResizing }"
+        @mousedown="startResize"
+        :title="`侧边栏宽度: ${sidebarWidth}px（拖拽调节）`"
+      >
+        <div class="resize-grip">
+          <span></span>
+          <span></span>
+        </div>
+      </div>
     </aside>
 
     <!-- 主内容区 -->
