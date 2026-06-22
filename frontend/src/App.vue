@@ -149,10 +149,12 @@ function switchTab(k) {
           </span>
         </div>
         <button
-          class="w-7 h-7 rounded border border-sb-sidebar-border bg-transparent text-gray-300 hover:bg-sb-sidebar-hover hover:border-gray-500 flex items-center justify-center text-sm"
+          class="w-7 h-7 rounded border border-sb-sidebar-border bg-transparent text-gray-300 hover:bg-sb-sidebar-hover hover:border-gray-500 flex items-center justify-center"
           @click="refreshStats"
           title="刷新统计"
-        >↻</button>
+        >
+          <Icon icon="mdi:refresh" width="14" height="14" />
+        </button>
       </div>
     </aside>
 
