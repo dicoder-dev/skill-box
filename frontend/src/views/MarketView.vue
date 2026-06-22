@@ -127,31 +127,31 @@ onMounted(async () => {
     <header class="head">
       <h2 class="flex items-center gap-2">
         <Icon icon="mdi:cart-outline" width="20" height="20" class="text-sb-primary" />
-        三方市场
+        {{ t('market.title') }}
       </h2>
-      <p class="muted">从 skillhub.cn / skills.sh 等三方源拉取 skill,直接装到 Skill Box 本地 store。</p>
+      <p class="muted">{{ t('market.subtitle') }}</p>
     </header>
 
     <div class="card">
       <div class="toolbar">
         <div class="row">
-          <span class="label">作用域:</span>
+          <span class="label">{{ t('market.scopeLabel') }}</span>
           <select v-model="installScope">
-            <option value="global">全局 (global)</option>
-            <option value="project" disabled>项目 (暂未启用)</option>
+            <option value="global">{{ t('market.scopeGlobal') }}</option>
+            <option value="project" disabled>{{ t('market.scopeProject') }}</option>
           </select>
           <input
             v-model="keyword"
             type="text"
-            placeholder="按 name 搜索…"
+            :placeholder="t('market.searchPlaceholder')"
             @keyup.enter="onSearch"
           />
-          <button @click="onSearch">搜索</button>
+          <button @click="onSearch">{{ t('common.search') }}</button>
         </div>
         <button class="primary flex items-center gap-1.5" :disabled="refreshing || !activeSourceId" @click="onRefresh">
           <span v-if="refreshing" class="spinner"></span>
           <Icon v-else icon="mdi:refresh" width="14" height="14" />
-          {{ refreshing ? '刷新中…' : '刷新源' }}
+          {{ refreshing ? t('market.refreshing') : t('market.btnRefresh') }}
         </button>
       </div>
 
@@ -168,14 +168,14 @@ onMounted(async () => {
           {{ s.name }}
           <span class="src-type">{{ s.type }}</span>
         </button>
-        <span v-if="!sources.length && !loading" class="src-empty">没有可用的源</span>
+        <span v-if="!sources.length && !loading" class="src-empty">{{ t('market.noSources') }}</span>
       </nav>
 
       <div v-if="error" class="err inline-flex items-center gap-1.5">
         <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
       </div>
       <div v-if="lastRefresh" class="ok inline-flex items-center gap-1.5 flex-wrap">
-        <Icon icon="mdi:check-circle-outline" width="14" height="14" />上次刷新:pulled {{ lastRefresh.pulled_count }} · 新增 {{ lastRefresh.inserted }} · 更新 {{ lastRefresh.updated }}
+        <Icon icon="mdi:check-circle-outline" width="14" height="14" />{{ t('market.lastRefresh', { pulled: lastRefresh.pulled_count, inserted: lastRefresh.inserted, updated: lastRefresh.updated }) }}
         <span class="muted">({{ lastRefresh.finished_at }})</span>
       </div>
       <div v-if="installOk" class="ok inline-flex items-center gap-1.5">
@@ -188,11 +188,11 @@ onMounted(async () => {
       <table v-if="items.length > 0" class="grid">
         <thead>
           <tr>
-            <th>name</th>
-            <th>version</th>
-            <th>author</th>
-            <th>description</th>
-            <th>tags</th>
+            <th>{{ t('market.colName') }}</th>
+            <th>{{ t('market.colVersion') }}</th>
+            <th>{{ t('market.colAuthor') }}</th>
+            <th>{{ t('market.colDescription') }}</th>
+            <th>{{ t('market.colTags') }}</th>
             <th style="width: 90px"></th>
           </tr>
         </thead>
@@ -202,9 +202,9 @@ onMounted(async () => {
               <span class="name">{{ it.name }}</span>
               <span class="rid">{{ it.remote_id }}</span>
             </td>
-            <td><code>{{ it.version || '—' }}</code></td>
-            <td>{{ it.author || '—' }}</td>
-            <td class="desc">{{ it.description || '—' }}</td>
+            <td><code>{{ it.version || t('common.dash') }}</code></td>
+            <td>{{ it.author || t('common.dash') }}</td>
+            <td class="desc">{{ it.description || t('common.dash') }}</td>
             <td>
               <span v-for="t in (it.tags || '').split(',').filter(Boolean)" :key="t" class="tag">
                 {{ t }}
@@ -212,7 +212,7 @@ onMounted(async () => {
             </td>
             <td>
               <button class="link primary-link" :disabled="installing" @click="onInstall(it)">
-                {{ installing ? '装中…' : '安装' }}
+                {{ installing ? t('market.installing') : t('market.btnInstall') }}
               </button>
             </td>
           </tr>
@@ -222,17 +222,17 @@ onMounted(async () => {
         <span class="empty-icon">
           <Icon icon="mdi:radio-tower" width="36" height="36" />
         </span>
-        当前源还没拉过。点 "刷新源" 把三方目录拉到本地。
+        {{ t('market.emptyFirstTime') }}
       </div>
       <div v-else class="empty-state">
         <span class="spinner"></span>
-        <p style="margin: 8px 0 0">加载中…</p>
+        <p style="margin: 8px 0 0">{{ t('market.loading') }}</p>
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="page--; fetchSkills()">上一页</button>
-        <span>第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
-        <button :disabled="page >= totalPages" @click="page++; fetchSkills()">下一页</button>
+        <button :disabled="page <= 1" @click="page--; fetchSkills()">{{ t('common.prev') }}</button>
+        <span>{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
+        <button :disabled="page >= totalPages" @click="page++; fetchSkills()">{{ t('common.next') }}</button>
       </footer>
     </div>
   </div>
