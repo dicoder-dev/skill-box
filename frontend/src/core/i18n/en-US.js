@@ -18,6 +18,7 @@ export default {
       market: { label: 'Market', desc: '3rd-party skill marketplace' },
       onboarding: { label: 'Onboarding', desc: 'First-time scan / import' },
       audit: { label: 'Audit', desc: 'Operation logs / audit' },
+      settings: { label: 'Settings', desc: 'Prefs / notifications / shortcuts' },
     },
     backendOk: 'Backend connected',
     backendDown: 'Backend down',
