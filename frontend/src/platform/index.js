@@ -8,6 +8,24 @@
 
 const isDesktop = typeof window !== 'undefined' && !!window?.go?.app?.AppService
 
+// 桌面端 Wails event 总线适配器(window.runtime.EventsOn)。
+// 浏览器端 no-op 返回一个 dispose 函数。
+function createEventSubscriber() {
+  if (typeof window === 'undefined' || !window?.runtime?.EventsOn) {
+    return { subscribe: () => () => {} }
+  }
+  return {
+    subscribe(name, cb) {
+      window.runtime.EventsOn(name, cb)
+      return () => {
+        try { window.runtime.EventsOff(name) } catch (_) { /* ignore */ }
+      }
+    },
+  }
+}
+
+const events = createEventSubscriber()
+
 function createWebPlatform() {
   return {
     isDesktop: false,
@@ -31,6 +49,22 @@ function createWebPlatform() {
         // Web 端打开外链直接用 window.open
         window.open(url, '_blank', 'noopener')
       },
+    },
+    notify: {
+      async hasPermission() { return false },
+      async requestPermission() { return false },
+      async show() { return false },
+      onResult() { return () => {} },
+    },
+    shortcut: {
+      async register() { return false },
+      async unregister() { return false },
+      async list() { return [] },
+    },
+    prefs: {
+      async get() { return ['', false, null] },
+      async set() { return false },
+      async getAll() { return {} },
     },
   }
 }
@@ -74,6 +108,48 @@ function createDesktopPlatform() {
       },
       async openExternal(url) {
         return window.go.platform.PlatformService.OpenExternal(url)
+      },
+    },
+    notify: {
+      async hasPermission() {
+        return window.go.notify.NotifyService.HasPermission()
+      },
+      async requestPermission() {
+        return window.go.notify.NotifyService.RequestAuthorization()
+      },
+      async show(id, title, body) {
+        // Wails v3 alpha.60 NotifyService.Show(id, title, body)
+        return window.go.notify.NotifyService.Show(id || '', title || '', body || '')
+      },
+      onResult(cb) {
+        // 后端 emit("notify:clicked", id, actionID) → 推 actionID 给前端
+        return events.subscribe('notify:clicked', (actionID, notifID) => {
+          try { cb(actionID, notifID) } catch (e) { console.error('[notify:clicked]', e) }
+        })
+      },
+    },
+    shortcut: {
+      async register(combo) {
+        return window.go.shortcut.ShortcutService.Register(combo)
+      },
+      async unregister(combo) {
+        return window.go.shortcut.ShortcutService.Unregister(combo)
+      },
+      async list() {
+        return window.go.shortcut.ShortcutService.List()
+      },
+    },
+    prefs: {
+      async get(key) {
+        // Go 返回 []any = [value, exists, err];前端拿到是普通对象,转成三元组
+        const r = window.go.prefs.PrefsService.Get(key)
+        return [r?.[0] ?? '', !!r?.[1], r?.[2] || null]
+      },
+      async set(key, value) {
+        return window.go.prefs.PrefsService.Set(key, String(value))
+      },
+      async getAll() {
+        return window.go.prefs.PrefsService.GetAll() || {}
       },
     },
   }
