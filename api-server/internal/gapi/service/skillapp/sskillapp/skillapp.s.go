@@ -269,6 +269,12 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 		return nil, fmt.Errorf("skillapp: cannot undo a failed apply (id=%d)", applyID)
 	}
 	if err := skillapp.UndoWithSnapshot(row.TargetPath, row.PreSnapshot); err != nil {
+		s.audit("undo_failed", row.SkillID, map[string]any{
+			"apply_id":    applyID,
+			"tool":        row.Tool,
+			"target_path": row.TargetPath,
+			"error":       err.Error(),
+		})
 		return nil, fmt.Errorf("skillapp: undo file: %w", err)
 	}
 	now := time.Now()
@@ -277,6 +283,11 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	if err := s.applyModel().Update(where.New(mskillapply.FieldID, "=", row.ID).Conditions(), row); err != nil {
 		return nil, fmt.Errorf("skillapp: update apply row: %w", err)
 	}
+	s.audit("undo", row.SkillID, map[string]any{
+		"apply_id":    applyID,
+		"tool":        row.Tool,
+		"target_path": row.TargetPath,
+	})
 	return &UndoResult{ApplyID: applyID, NewStatus: row.Status, RolledBackAt: now}, nil
 }
 
