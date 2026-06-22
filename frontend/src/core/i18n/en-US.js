@@ -66,6 +66,7 @@ export default {
       allUpToDate: '{total} skills up to date',
       appliedOk: 'Applied {name}@{version} to {tool}',
       appliedPartial: 'Partial failure: {detail}',
+      errDefault: 'Apply failed',
     },
 
     editor: {
