@@ -1,12 +1,11 @@
-system:
-  run_mode: dev
-server:
-  api_host: 127.0.0.1
-  api_port: 8084
-  web_host: 127.0.0.1
-  web_port: 8084
 db:
-  driver: sqlite
-  dsn: /tmp/sb_e2e.db
+  use_type: sqlite
+  sqlite:
+    db_path: /tmp/sb_e2e.db
+server:
+  port: "8084"
+system:
+  run_mode: web
+  app_name: skillbox-e2e
 skillbox:
   store_root: /tmp/sb_e2e_store
