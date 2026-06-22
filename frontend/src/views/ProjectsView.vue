@@ -38,7 +38,7 @@ async function reload() {
 async function submit() {
   error.value = ''
   if (!form.name.trim() || !form.alias.trim() || !form.root_path.trim()) {
-    error.value = 'name / alias / root_path 都不能为空'
+    error.value = t('projects.errRequired')
     return
   }
   try {
@@ -53,7 +53,7 @@ async function submit() {
 }
 
 async function remove(id) {
-  if (!confirm(`确定删除项目 #${id} ?`)) return
+  if (!confirm(t('projects.confirmDelete', { id }))) return
   try {
     await deleteProject(id)
     await reload()
