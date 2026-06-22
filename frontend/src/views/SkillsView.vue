@@ -601,7 +601,9 @@ onMounted(() => { reload(); checkUpdateBadge() })
       </details>
     </div>
 
-    <p v-if="error" class="error">⚠️ {{ error }}</p>
+    <p v-if="error" class="error inline-flex items-center gap-1.5">
+      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
+    </p>
 
     <div class="card">
       <h3>技能列表
