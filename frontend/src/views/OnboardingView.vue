@@ -154,7 +154,9 @@ onMounted(loadStatus)
         <span class="card-sub">— 共 {{ adapters.length }} 个</span>
       </h3>
       <div v-if="!adapters.length" class="empty-state">
-        <span class="empty-icon">📭</span>
+        <span class="empty-icon">
+          <Icon icon="mdi:inbox-outline" width="36" height="36" />
+        </span>
         还没注册 adapter
       </div>
       <table v-else class="grid">
