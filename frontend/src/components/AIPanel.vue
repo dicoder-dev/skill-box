@@ -8,7 +8,10 @@
 // 暴露事件:
 //   - apply(text) 助手产出"最终"内容时触发(让父组件把改写后的内容回填到表单)
 import { ref, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listPresets, chatStream } from '@/api/skillbox/ai.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
   // 当前编辑器里选中的 skill 全文(可空)。preset 在渲染 prompt 时会塞到 vars.skill_md。
