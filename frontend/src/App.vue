@@ -127,7 +127,9 @@ function switchTab(k) {
           ]"
           @click="switchTab(n.key)"
         >
-          <span class="text-lg shrink-0 leading-none">{{ n.icon }}</span>
+          <span class="text-lg shrink-0 leading-none flex items-center justify-center">
+            <Icon :icon="n.icon" width="18" height="18" />
+          </span>
           <span class="min-w-0 flex-1">
             <span class="block text-[13px] font-medium leading-tight">{{ n.label }}</span>
             <span :class="['block text-[11px] leading-tight mt-0.5 truncate', tab === n.key ? 'text-indigo-200' : 'text-sb-sidebar-muted']">
