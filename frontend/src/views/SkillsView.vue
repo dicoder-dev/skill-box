@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { applySkill, undoApply, listApplies, checkUpdates } from '@/api/skillbox/skill_apply'
