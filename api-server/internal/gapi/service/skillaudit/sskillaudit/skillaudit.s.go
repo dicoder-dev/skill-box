@@ -346,6 +346,12 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		Message: fmt.Sprintf("auto pre-rollback to tag %s", tag.Tag),
 	})
 	if err != nil {
+		s.audit("rollback_failed", tag.SkillID, map[string]any{
+			"tag_id": in.TagID,
+			"tag":    tag.Tag,
+			"stage":  "pre_tag",
+			"error":  err.Error(),
+		})
 		return nil, fmt.Errorf("skillaudit: create pre-rollback tag: %w", err)
 	}
 	// 标记 is_implicit
@@ -354,6 +360,12 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		&entity.SkillTag{IsImplicit: true, Message: fmt.Sprintf("auto pre-rollback to tag %s", tag.Tag)},
 		mskilltag.FieldIsImplicit, mskilltag.FieldMessage,
 	); err != nil {
+		s.audit("rollback_failed", tag.SkillID, map[string]any{
+			"tag_id": in.TagID,
+			"tag":    tag.Tag,
+			"stage":  "mark_implicit",
+			"error":  err.Error(),
+		})
 		return nil, fmt.Errorf("skillaudit: mark implicit: %w", err)
 	}
 	// 2) 读目标 tag 的文件
@@ -364,6 +376,12 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 	// 3) 重建 manifest(用当前 skill 的 source/source_ref/version,files 从 target tag 取)
 	cur, err := s.store.Load(row.Scope, row.Name, row.Version, row.ProjectID)
 	if err != nil {
+		s.audit("rollback_failed", tag.SkillID, map[string]any{
+			"tag_id": in.TagID,
+			"tag":    tag.Tag,
+			"stage":  "load_current",
+			"error":  err.Error(),
+		})
 		return nil, fmt.Errorf("skillaudit: load current: %w", err)
 	}
 	// 用 target 的 file 列表 + 当前 manifest 的元数据 构造 WriteInput
@@ -381,8 +399,21 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		Source:    row.Source,
 		SourceRef: row.SourceRef,
 	}); err != nil {
+		s.audit("rollback_failed", tag.SkillID, map[string]any{
+			"tag_id": in.TagID,
+			"tag":    tag.Tag,
+			"stage":  "replace_files",
+			"error":  err.Error(),
+		})
 		return nil, fmt.Errorf("skillaudit: replace files: %w", err)
 	}
+	s.audit("rollback", tag.SkillID, map[string]any{
+		"tag_id":              in.TagID,
+		"tag":                 tag.Tag,
+		"pre_rollback_tag":    preName,
+		"pre_rollback_tag_id": preOut.TagID,
+		"files_restored":      len(target),
+	})
 	return &RollbackOutput{
 		PreRollbackTagID: preOut.TagID,
 		PreRollbackTag:   preName,
