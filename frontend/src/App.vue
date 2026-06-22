@@ -39,7 +39,12 @@ provide('appBus', eventBus)
 // 暗黑模式控制
 const isDark = ref(false)
 
-// 初始化时从 localStorage 读取主题偏好
+// 侧边栏宽度（可拖拽调节，持久化）
+const sidebarWidth = ref(260)
+const MIN_SIDEBAR_WIDTH = 200
+const MAX_SIDEBAR_WIDTH = 420
+
+// 初始化时从 localStorage 读取主题偏好和侧边栏宽度
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme')
   if (savedTheme === 'dark') {
