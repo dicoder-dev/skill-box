@@ -418,27 +418,27 @@ onMounted(() => { reload(); checkUpdateBadge() })
     <div class="bar">
       <div class="tabs flex">
         <button :class="['px-4 py-1.5 border border-sb-border text-[13px] transition-colors flex items-center gap-1.5', scope === 'global' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('global')">
-          <Icon icon="mdi:earth" width="14" height="14" />全局
+          <Icon icon="mdi:earth" width="14" height="14" />{{ t('skills.scopeGlobal') }}
         </button>
         <button :class="['px-4 py-1.5 border border-sb-border border-l-0 text-[13px] transition-colors rounded-r flex items-center gap-1.5', scope === 'project' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('project')">
-          <Icon icon="mdi:folder-outline" width="14" height="14" />项目
+          <Icon icon="mdi:folder-outline" width="14" height="14" />{{ t('skills.scopeProject') }}
         </button>
       </div>
       <div class="search flex gap-1.5 md:ml-auto">
         <input
           v-model="keyword"
-          placeholder="按 name 过滤"
+          :placeholder="t('skills.searchPlaceholder')"
           class="w-32 md:w-56"
           @keyup.enter="() => { page = 1; reload() }"
         />
-        <button @click="() => { page = 1; reload() }">搜索</button>
+        <button @click="() => { page = 1; reload() }">{{ t('common.search') }}</button>
       </div>
       <div class="actions flex gap-1.5">
         <button @click="toggleAI" class="flex items-center gap-1.5">
           <Icon icon="mdi:robot-outline" width="14" height="14" />
-          {{ aiOpen ? '关闭 AI' : '打开 AI' }}
+          {{ aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen') }}
         </button>
-        <button class="primary" @click="startNew">+ 新建 Skill</button>
+        <button class="primary" @click="startNew">{{ t('skills.btnNew') }}</button>
       </div>
     </div>
 
