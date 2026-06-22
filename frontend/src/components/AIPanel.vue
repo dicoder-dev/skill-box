@@ -77,12 +77,12 @@ function buildVars() {
 async function send() {
   if (busy.value) return
   if (!activePreset.value) {
-    pushMsg('assistant', '请先在上方选一个 preset。')
+    pushMsg('assistant', t('skills.ai.pickFirst'))
     return
   }
   const userText = (activePreset.value.id === 'find_duplicates')
     ? (input.value || '')
-    : (input.value || '(无额外输入,只基于上下文)')
+    : (input.value || t('skills.ai.noExtraInput'))
   pushMsg('user', userText)
   const userInputSnapshot = input.value
   input.value = ''
@@ -101,7 +101,7 @@ async function send() {
       nextTick(scrollToBottom)
     } else if (ev.kind === 'error') {
       finished = true
-      messages.value[placeholderIdx].text = buf + `\n\n[error] ${ev.err || 'unknown'}`
+      messages.value[placeholderIdx].text = buf + `\n\n` + t('skills.ai.errorTag', { msg: ev.err || 'unknown' })
       messages.value[placeholderIdx].pending = false
       busy.value = false
       emit('error', ev.err)
@@ -121,7 +121,7 @@ async function send() {
   const onError = (err) => {
     if (finished) return
     finished = true
-    messages.value[placeholderIdx].text = (buf || '') + `\n\n[error] ${err?.message || err}`
+    messages.value[placeholderIdx].text = (buf || '') + `\n\n` + t('skills.ai.errorTag', { msg: err?.message || err })
     messages.value[placeholderIdx].pending = false
     busy.value = false
     emit('error', err?.message || err)
