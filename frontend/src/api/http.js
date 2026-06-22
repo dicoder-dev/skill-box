@@ -59,10 +59,10 @@ export async function resolveBaseURL() {
   //   http/https → 同源 Web,baseURL 留空
   //   file:     → 不可能(Wails 走 http),兜底空
   const proto = window.location.protocol
+  // 桌面/Web 判据:由启动命令注入到 __APP_RUNTIME__.runMode,不再探测 window.go。
+  const runMode = getRuntime().runMode
   if (proto === 'http:' || proto === 'https:') {
-    // 探测是否实际为"桌面模式":有 Wails 绑定就是桌面
-    const isDesktop = !!(window?.go?.app?.AppService)
-    if (isDesktop) {
+    if (runMode === 'desktop') {
       resolvedBaseURL = await detectDesktopBaseURL()
     } else {
       resolvedBaseURL = '' // Web 端相对路径
