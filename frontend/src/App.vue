@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
