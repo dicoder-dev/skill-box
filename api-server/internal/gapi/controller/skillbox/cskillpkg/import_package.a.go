@@ -75,7 +75,7 @@ func ImportPackage(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	svc := sskillpkg.New(func() (*sskill.Service, error) {
+	svc := sskillpkg.New(dbs.GetWriteDb(), dbs.GetReadDb(), func() (*sskill.Service, error) {
 		return sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store), nil
 	})
 
