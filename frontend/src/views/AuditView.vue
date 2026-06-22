@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import { listAuditLogs, getAuditStats } from '@/api/skillbox/audit'
 
 // 后端就绪检测
