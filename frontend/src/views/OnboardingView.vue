@@ -202,7 +202,9 @@ onMounted(loadStatus)
       </h3>
 
       <div v-if="!scanReport?.found?.length" class="empty-state">
-        <span class="empty-icon">🔍</span>
+        <span class="empty-icon">
+          <Icon icon="mdi:magnify" width="36" height="36" />
+        </span>
         这次扫描没找到任何 skill。可以重扫或先装一些。
       </div>
 
