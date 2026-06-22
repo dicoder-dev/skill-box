@@ -33,6 +33,7 @@ async function bootstrap() {
   const base = await resolveBaseURL()
   store.setBaseURL(base)
 
+
   // 3) 调试模式:Vite dev 自动开,生产可由 ?debug=req 触发
   const wantDebug = import.meta.env.DEV ||
     (typeof location !== 'undefined' &&
