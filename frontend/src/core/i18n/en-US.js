@@ -110,6 +110,8 @@ export default {
       emptyName: 'tag name is required',
       confirmDelete: 'Delete tag #{id}? file_snapshots will also be deleted.',
       confirmRollback: 'Rollback to tag #{id}? an implicit _pre_rollback tag will be created; current state is preserved.',
+      confirmUndo: 'Undo apply #{id}? The target directory will be restored to its pre-apply state.',
+      undoMsg: 'Undone apply #{id}',
       rollbackTo: 'Rollback here',
       rollingBack: 'Rolling back…',
       diff: 'Diff',
