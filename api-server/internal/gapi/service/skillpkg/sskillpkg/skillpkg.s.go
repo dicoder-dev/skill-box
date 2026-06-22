@@ -26,11 +26,33 @@ var (
 
 // Service 业务服务。
 type Service struct {
+	dbWrite         *gorm.DB
+	dbRead          *gorm.DB
 	skillSvcFactory func() (*sskill.Service, error)
 }
 
-func New(skillSvcFactory func() (*sskill.Service, error)) *Service {
-	return &Service{skillSvcFactory: skillSvcFactory}
+func New(dbWrite, dbRead *gorm.DB, skillSvcFactory func() (*sskill.Service, error)) *Service {
+	return &Service{dbWrite: dbWrite, dbRead: dbRead, skillSvcFactory: skillSvcFactory}
+}
+
+// audit 内部 helper:把 import / export 关键事件落 audit_log。actor 暂用 "system"。
+func (s *Service) audit(action string, targetID uint, payload any) {
+	if s.dbWrite == nil {
+		return
+	}
+	payloadStr := ""
+	if payload != nil {
+		if b, err := json.Marshal(payload); err == nil {
+			payloadStr = string(b)
+		}
+	}
+	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
+		Actor:      "system",
+		Action:     action,
+		TargetType: "package",
+		TargetID:   targetID,
+		Payload:    payloadStr,
+	})
 }
 
 // sskillAdapter 把 sskill.Service 适配成 skillpkg.CanonicalProvider / SkillInstaller。
