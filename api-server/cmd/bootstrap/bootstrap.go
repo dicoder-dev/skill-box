@@ -117,6 +117,9 @@ func Boot(opts BootOptions) (*Backend, error) {
 		StartGinLogger()
 	}
 	StartDB()
+	// SeedBundledSkills 必须在 StartTask / Serve 之前:被 seed 的 skill 是
+	// 用户在 UI 上能看到 / 能 Apply 的内容,启动期一次性灌入。
+	SeedBundledSkills()
 	if !opts.DisableTask {
 		StartTask()
 	}
