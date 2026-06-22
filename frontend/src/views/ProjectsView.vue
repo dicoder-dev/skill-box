@@ -76,22 +76,22 @@ onMounted(reload)
     <header class="head">
       <h2 class="flex items-center gap-2">
         <Icon icon="mdi:folder-multiple-outline" width="20" height="20" class="text-sb-primary" />
-        Projects
+        {{ t('projects.title') }}
       </h2>
-      <p class="muted">登记项目根目录,后续 skill 可绑定到 project scope 走项目级覆盖。</p>
+      <p class="muted">{{ t('projects.subtitle') }}</p>
     </header>
 
     <div class="toolbar">
       <div class="search">
         <input
           v-model="filter.keyword"
-          placeholder="按 name 过滤"
+          :placeholder="t('projects.searchPlaceholder')"
           @keyup.enter="() => { filter.page = 1; reload() }"
         />
-        <button @click="() => { filter.page = 1; reload() }">搜索</button>
+        <button @click="() => { filter.page = 1; reload() }">{{ t('common.search') }}</button>
       </div>
       <button class="primary" @click="showForm = !showForm">
-        {{ showForm ? '取消' : '+ 新建项目' }}
+        {{ showForm ? t('projects.btnCancel') : t('projects.btnNew') }}
       </button>
     </div>
 
@@ -100,45 +100,45 @@ onMounted(reload)
     </p>
 
     <form v-if="showForm" class="card form" @submit.prevent="submit">
-      <h3>新建项目</h3>
+      <h3>{{ t('projects.formTitle') }}</h3>
       <div class="form-grid">
         <label>
-          <span>Name</span>
-          <input v-model="form.name" placeholder="显示名,如 My App" />
+          <span>{{ t('projects.name') }}</span>
+          <input v-model="form.name" :placeholder="t('projects.nameHint')" />
         </label>
         <label>
-          <span>Alias</span>
-          <input v-model="form.alias" placeholder="唯一别名,英文短码" />
+          <span>{{ t('projects.alias') }}</span>
+          <input v-model="form.alias" :placeholder="t('projects.aliasHint')" />
         </label>
         <label class="full">
-          <span>Root Path</span>
-          <input v-model="form.root_path" placeholder="项目根绝对路径" />
+          <span>{{ t('projects.rootPath') }}</span>
+          <input v-model="form.root_path" :placeholder="t('projects.rootPathHint')" />
         </label>
         <label class="full">
-          <span>Description</span>
-          <input v-model="form.description" placeholder="可选,描述项目用途" />
+          <span>{{ t('projects.description') }}</span>
+          <input v-model="form.description" :placeholder="t('projects.descriptionHint')" />
         </label>
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">创建</button>
+        <button type="submit" class="primary">{{ t('common.create') }}</button>
       </div>
     </form>
 
     <div class="card">
-      <h3>项目列表
-        <span class="card-sub">— 共 {{ total }} 条</span>
+      <h3>{{ t('projects.listTitle') }}
+        <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
         <span v-if="loading" class="spinner" style="margin-left: auto"></span>
       </h3>
 
       <table v-if="items.length" class="grid">
         <thead>
           <tr>
-            <th style="width: 60px">ID</th>
-            <th>Name</th>
-            <th>Alias</th>
-            <th>Root Path</th>
-            <th>Description</th>
-            <th style="width: 90px">操作</th>
+            <th style="width: 60px">{{ t('projects.colId') }}</th>
+            <th>{{ t('projects.colName') }}</th>
+            <th>{{ t('projects.colAlias') }}</th>
+            <th>{{ t('projects.colRootPath') }}</th>
+            <th>{{ t('projects.colDescription') }}</th>
+            <th style="width: 90px">{{ t('projects.colActions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -147,9 +147,9 @@ onMounted(reload)
             <td><b>{{ p.Name }}</b></td>
             <td><code>{{ p.Alias }}</code></td>
             <td class="path">{{ p.RootPath }}</td>
-            <td class="desc-cell">{{ p.Description || '—' }}</td>
+            <td class="desc-cell">{{ p.Description || t('common.dash') }}</td>
             <td>
-              <button class="link danger" @click="remove(p.ID)">删除</button>
+              <button class="link danger" @click="remove(p.ID)">{{ t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
@@ -158,13 +158,13 @@ onMounted(reload)
         <span class="empty-icon">
           <Icon icon="mdi:folder-open-outline" width="36" height="36" />
         </span>
-        还没有登记项目。点右上角"+ 新建项目"开始
+        {{ t('projects.empty') }}
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="filter.page <= 1" @click="gotoPage(filter.page - 1)">上一页</button>
-        <span>{{ filter.page }} / {{ totalPages }} (共 {{ total }} 条)</span>
-        <button :disabled="filter.page >= totalPages" @click="gotoPage(filter.page + 1)">下一页</button>
+        <button :disabled="filter.page <= 1" @click="gotoPage(filter.page - 1)">{{ t('common.prev') }}</button>
+        <span>{{ filter.page }} / {{ totalPages }} ({{ t('common.totalCount', { count: total }) }})</span>
+        <button :disabled="filter.page >= totalPages" @click="gotoPage(filter.page + 1)">{{ t('common.next') }}</button>
       </footer>
     </div>
   </div>
