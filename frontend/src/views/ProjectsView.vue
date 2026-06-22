@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { Icon } from '@iconify/vue'
 import { listProjects, createProject, deleteProject } from '@/api/skillbox/projects'
 
 const items = ref([])
