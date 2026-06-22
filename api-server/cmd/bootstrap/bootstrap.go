@@ -30,6 +30,7 @@ import (
 
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
+	"ginp-api/internal/settings"
 	"ginp-api/pkg/cfg"
 	"ginp-api/pkg/logger"
 	sharefunc "ginp-api/share/func"
