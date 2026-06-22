@@ -73,8 +73,8 @@ async function loadTags(row) {
 }
 
 async function doCreateTag() {
-  if (!selectedSkill.value) { tagError.value = '先选一个 skill'; return }
-  if (!newTagName.value.trim()) { tagError.value = 'tag 名不能为空'; return }
+  if (!selectedSkill.value) { tagError.value = t('skills.tag.selectFirst'); return }
+  if (!newTagName.value.trim()) { tagError.value = t('skills.tag.emptyName'); return }
   tagLoading.value = true
   tagError.value = ''
   try {
@@ -85,7 +85,7 @@ async function doCreateTag() {
     })
     newTagName.value = ''
     newTagMessage.value = ''
-    tagMessage.value = `已打 tag`
+    tagMessage.value = t('skills.tag.msgCreated')
     await loadTags(selectedSkill.value)
   } catch (e) {
     tagError.value = e?.message || String(e)
@@ -95,10 +95,10 @@ async function doCreateTag() {
 }
 
 async function doDeleteTag(tagID) {
-  if (!confirm(`删除 tag #${tagID}?file_snapshots 也会一起删。`)) return
+  if (!confirm(t('skills.tag.confirmDelete', { id: tagID }))) return
   try {
     await deleteTag({ tag_id: tagID })
-    tagMessage.value = `已删除 tag #${tagID}`
+    tagMessage.value = t('skills.tag.msgDeleted', { id: tagID })
     await loadTags(selectedSkill.value)
   } catch (e) {
     tagError.value = e?.message || String(e)
@@ -106,7 +106,7 @@ async function doDeleteTag(tagID) {
 }
 
 async function doDiff(leftID, rightID) {
-  if (!selectedSkill.value) { tagError.value = '先选一个 skill'; return }
+  if (!selectedSkill.value) { tagError.value = t('skills.tag.selectFirst'); return }
   try {
     const out = await diffTag({
       skill_id: selectedSkill.value.ID,
@@ -122,12 +122,12 @@ async function doDiff(leftID, rightID) {
 }
 
 async function doRollback(tagID) {
-  if (!confirm(`回滚到 tag #${tagID}?会自动打一个 _pre_rollback 隐式 tag,当前状态不会丢失。`)) return
+  if (!confirm(t('skills.tag.confirmRollback', { id: tagID }))) return
   rolling.value = true
   tagError.value = ''
   try {
     const out = await rollbackTag({ tag_id: tagID })
-    tagMessage.value = `已回滚(自动打 ${out.pre_rollback_tag},恢复 ${out.files_restored} 个文件)`
+    tagMessage.value = t('skills.tag.msgRolledBack', { pre: out.pre_rollback_tag, files: out.files_restored })
     diffResult.value = null
     await reload()
     if (selectedSkill.value) await loadTags(selectedSkill.value)
@@ -151,8 +151,8 @@ async function doApply(row) {
     })
     lastApplies.value = out?.applies || []
     applyMessage.value = out?.all_ok
-      ? `已把 ${row.Name}@${row.Version} 落到 ${applyTool.value}`
-      : `部分失败: ${(out?.applies || []).filter(a => a?.status !== 'applied').map(a => a?.error || a?.status).join('; ')}`
+      ? t('skills.applyBar.appliedOk', { name: row.Name, version: row.Version, tool: applyTool.value })
+      : t('skills.applyBar.appliedPartial', { detail: (out?.applies || []).filter(a => a?.status !== 'applied').map(a => a?.error || a?.status).join('; ') })
     await loadApplyHistory(row)
     await checkUpdateBadge()
   } catch (e) {
@@ -163,12 +163,12 @@ async function doApply(row) {
 }
 
 async function doUndo(applyID) {
-  if (!confirm(`撤销 apply #${applyID}?将恢复目标目录到 apply 之前的状态。`)) return
+  if (!confirm(t('skills.tag.confirmUndo', { id: applyID }))) return
   undoing.value = true
   applyError.value = ''
   try {
     await undoApply({ apply_id: applyID })
-    applyMessage.value = `已撤销 apply #${applyID}`
+    applyMessage.value = t('skills.tag.undoMsg', { id: applyID })
     await reload()
     await checkUpdateBadge()
   } catch (e) {
