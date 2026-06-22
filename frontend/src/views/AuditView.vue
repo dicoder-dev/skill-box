@@ -84,7 +84,10 @@ onMounted(async () => {
 <template>
   <div class="audit">
     <header class="head">
-      <h2>📜 审计日志</h2>
+      <h2 class="flex items-center gap-2">
+        <Icon icon="mdi:script-text-outline" width="20" height="20" class="text-sb-primary" />
+        审计日志
+      </h2>
       <p class="muted">记录所有关键操作的 actor / action / target / payload。第 10 步后端就绪后,这里会自动出现真实数据。</p>
     </header>
 
