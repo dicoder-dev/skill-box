@@ -27,11 +27,11 @@
   --text-dim: #64748b;
   --text-faint: #94a3b8;
 
-  /* 主色调 */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-dim: #dbeafe;
-  --primary-active: #1e40af;
+  /* 主色调 - 青绿 */
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
+  --primary-dim: #ccfbf1;
+  --primary-active: #115e59;
 
   /* 状态色 */
   --success: #059669;
