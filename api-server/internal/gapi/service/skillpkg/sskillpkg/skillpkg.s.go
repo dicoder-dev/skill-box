@@ -134,5 +134,37 @@ func (s *Service) Import(zipBytes []byte, req skillpkg.ImportRequest) (*skillpkg
 		return nil, fmt.Errorf("skillpkg: skillSvcFactory: %w", err)
 	}
 	inst := skillpkg.NewImporter(&sskillAdapter{svc: svc})
-	return inst.Install(zipBytes, req)
+	out, err := inst.Install(zipBytes, req)
+	if err != nil {
+		s.audit("import_failed", 0, map[string]any{
+			"target_scope": req.TargetScope,
+			"project_id":   req.ProjectID,
+			"skills":       req.Skills,
+			"error":        err.Error(),
+		})
+		return out, err
+	}
+	s.audit("import", 0, map[string]any{
+		"target_scope":  req.TargetScope,
+		"project_id":    req.ProjectID,
+		"skills":        req.Skills,
+		"ok":            out.OK,
+		"failed":        out.Failed,
+		"installed_ids": installedIDs(out),
+	})
+	return out, nil
+}
+
+// installedIDs 从 ImportResult.Items 抽已装成功的 skill_id(失败无 id,跳过)。
+func installedIDs(out *skillpkg.ImportResult) []uint {
+	if out == nil {
+		return nil
+	}
+	ids := make([]uint, 0, len(out.Items))
+	for _, it := range out.Items {
+		if it.SkillID > 0 {
+			ids = append(ids, it.SkillID)
+		}
+	}
+	return ids
 }
