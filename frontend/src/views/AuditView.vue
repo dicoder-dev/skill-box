@@ -1,7 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listAuditLogs, getAuditStats } from '@/api/skillbox/audit'
+
+const { t } = useI18n()
 
 // 后端就绪检测
 const backendReady = ref(false)
