@@ -443,20 +443,20 @@ onMounted(() => { reload(); checkUpdateBadge() })
     </div>
 
     <div class="apply-bar flex flex-wrap items-center gap-2.5 mb-3.5 px-3.5 py-2 bg-white border border-sb-border rounded text-[13px]">
-      <span class="text-sb-dim font-medium">Apply 目标工具:</span>
+      <span class="text-sb-dim font-medium">{{ t('skills.applyBar.target') }}</span>
       <select v-model="applyTool" class="!py-1">
         <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
       </select>
       <button class="sm flex items-center gap-1.5" @click="checkUpdateBadge" :disabled="updating">
         <span v-if="updating" class="spinner"></span>
         <Icon v-else icon="mdi:refresh" width="14" height="14" />
-        {{ updating ? '检测中…' : '检测更新' }}
+        {{ updating ? t('skills.applyBar.checking') : t('skills.applyBar.checkUpdates') }}
       </button>
       <span v-if="updateBadge.updates > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-danger-dim text-sb-danger inline-flex items-center gap-1">
-        <Icon icon="mdi:alert-circle-outline" width="12" height="12" />{{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
+        <Icon icon="mdi:alert-circle-outline" width="12" height="12" />{{ t('skills.applyBar.updatesAvailable', { updates: updateBadge.updates, total: updateBadge.total }) }}
       </span>
       <span v-else-if="updateBadge.total > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-success-dim text-sb-success inline-flex items-center gap-1">
-        <Icon icon="mdi:check-circle-outline" width="12" height="12" />{{ updateBadge.total }} 个 skill 已是最新
+        <Icon icon="mdi:check-circle-outline" width="12" height="12" />{{ t('skills.applyBar.allUpToDate', { total: updateBadge.total }) }}
       </span>
       <p v-if="applyMessage" class="text-sb-success m-0 text-[12px] basis-full">{{ applyMessage }}</p>
       <p v-if="applyError" class="text-sb-danger m-0 text-[12px] basis-full">{{ applyError }}</p>
