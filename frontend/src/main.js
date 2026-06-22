@@ -24,25 +24,24 @@ async function bootstrap() {
 
   const store = useAppStore()
 
-  // 1) 运行时配置(同步读 __APP_RUNTIME__)
-  store.setRuntime(getRuntime())
-  // 2) 平台能力(同步检测)
-  store.setPlatform(platform)
-  // 3) 解析 baseURL
+  // 1) 运行时配置(同步读 __APP_RUNTIME__)。
+  //    runMode 决定后续一切"是否桌面端"判断,见 store/app.js。
+  const runtime = getRuntime()
+  store.setRuntime(runtime)
+  // 2) 解析 baseURL(依据 runMode,不再探测 window.go)
   const base = await resolveBaseURL()
   store.setBaseURL(base)
 
-  // 4) 调试模式:Vite dev 自动开,生产可由 ?debug=req 触发
+  // 3) 调试模式:Vite dev 自动开,生产可由 ?debug=req 触发
   const wantDebug = import.meta.env.DEV ||
     (typeof location !== 'undefined' &&
       /(^|[?&])(debug|debug=req|debug=1)\b/.test(location.search))
   if (wantDebug) enableDebug()
   // 暴露到全局,方便调试
-  window.__APP_CONFIG__ = { baseURL: base, isDesktop: platform.isDesktop }
+  window.__APP_CONFIG__ = { baseURL: base, runMode: runtime.runMode, isDesktop: runtime.runMode === 'desktop' }
   window.__APP_STORE__ = store
   dlog('bootstrap ready', {
-    runtime: getRuntime(),
-    isDesktop: platform.isDesktop,
+    runtime,
     baseURL: base,
     debug: isDebug(),
   })
