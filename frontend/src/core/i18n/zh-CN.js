@@ -25,6 +25,7 @@ export default {
     backendOk: '后端已连接',
     backendDown: '后端断开',
     refreshStats: '刷新统计',
+    toolsLabel: '工具',
   },
 
   common: {
