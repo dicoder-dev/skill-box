@@ -11,7 +11,7 @@ import AIPanel from '@/components/AIPanel.vue'
 const { t } = useI18n()
 
 // 当前 scope 选择
-const scope = ref('global') // global | project
+const scope = ref('global')
 const keyword = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -28,22 +28,22 @@ const draft = reactive({
   name: '',
   version: '0.1.0',
   description: '',
-  triggersText: '', // 用换行 / 逗号分隔,提交时转数组
-  body: '', // SKILL.md body
+  triggersText: '',
+  body: '',
 })
-const editingKey = ref(null) // {scope, name, version, project_id}
+const editingKey = ref(null)
 
 // Apply / 撤销 / 更新检测
 const TOOL_OPTIONS = ['codex', 'claude', 'opencode', 'cursor', 'trae']
-const applyTool = ref('codex') // 当前要 apply 的目标工具
+const applyTool = ref('codex')
 const applying = ref(false)
 const applyMessage = ref('')
 const applyError = ref('')
-const lastApplies = ref([]) // 最近一次 apply 的结果
+const lastApplies = ref([])
 const undoing = ref(false)
 const updating = ref(false)
-const updateBadge = ref({ total: 0, updates: 0 }) // 来自 checkUpdates 的概览
-const applyHistory = ref([]) // apply/list 数据
+const updateBadge = ref({ total: 0, updates: 0 })
+const applyHistory = ref([])
 
 // Tag / Diff / Rollback
 const tagList = ref([])
@@ -52,11 +52,11 @@ const tagError = ref('')
 const tagMessage = ref('')
 const newTagName = ref('')
 const newTagMessage = ref('')
-const diffResult = ref(null) // { files: [], added, removed, modified, unchanged }
+const diffResult = ref(null)
 const diffLeftTagID = ref(0)
 const diffRightTagID = ref(0)
 const rolling = ref(false)
-const selectedSkill = ref(null) // 当前查看 tag 的 skill
+const selectedSkill = ref(null)
 
 async function loadTags(row) {
   selectedSkill.value = row
@@ -182,9 +182,7 @@ async function loadApplyHistory(row) {
   try {
     const out = await listApplies({ skill_id: row.ID, page: 1, size: 5 })
     applyHistory.value = out?.items || []
-  } catch (e) {
-    // 静默失败,不影响主流程
-  }
+  } catch (e) {}
 }
 
 async function checkUpdateBadge() {
@@ -192,9 +190,7 @@ async function checkUpdateBadge() {
   try {
     const out = await checkUpdates({})
     updateBadge.value = { total: out?.total || 0, updates: out?.updates || 0 }
-  } catch (e) {
-    // 静默
-  } finally {
+  } catch (e) {} finally {
     updating.value = false
   }
 }
@@ -204,21 +200,19 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
 // Skill 测试
 const testing = ref(false)
 const testError = ref('')
-const lastTest = ref(null) // { run, results }
+const lastTest = ref(null)
 
 // AI 侧栏
 const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
 
-// 当前正在编辑的 SKILL.md 全文(供 AIPanel 的 contextText 用)
+// 当前正在编辑的 SKILL.md 全文
 const currentSkillMd = computed(() => {
   if (!editing.value) return ''
-  // 用 buildSkillMd 拼一份(仅在需要时)
   try { return buildSkillMd() } catch (_) { return '' }
 })
 
 function onAIApply(text) {
-  // 把 AI 改写后的 markdown 提取 body 回填
   const m = text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
   draft.body = m ? m[1].trim() : text.trim()
 }
@@ -286,14 +280,11 @@ async function startEdit(row) {
 }
 
 function extractBody(skillmd) {
-  // 去掉 frontmatter,只留 body
   const m = skillmd.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
   return m ? m[1].trim() : skillmd
 }
 
 function buildSkillMd() {
-  // 简单拼:frontmatter 用 manifest 渲染,body 留用户原文
-  // 注:Step 4 暂不接 RenderSkillMD,只在本视图里手动拼。
   const triggers = draft.triggersText
     .split(/[\n,]/)
     .map((s) => s.trim())
@@ -406,372 +397,1307 @@ onMounted(() => { reload(); checkUpdateBadge() })
 </script>
 
 <template>
-  <div class="skills-layout"><section class="skills-view" :class="{ 'with-ai': aiOpen }">
-    <header class="head">
-      <h2 class="flex items-center gap-2">
-        <Icon icon="mdi:book-open-variant" width="20" height="20" class="text-sb-primary" />
-        {{ t('skills.title') }}
-      </h2>
-      <p class="muted">{{ t('skills.subtitle') }}</p>
-    </header>
-
-    <div class="bar">
-      <div class="tabs flex">
-        <button :class="['px-4 py-1.5 border border-sb-border text-[13px] transition-colors flex items-center gap-1.5', scope === 'global' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('global')">
-          <Icon icon="mdi:earth" width="14" height="14" />{{ t('skills.scopeGlobal') }}
-        </button>
-        <button :class="['px-4 py-1.5 border border-sb-border border-l-0 text-[13px] transition-colors rounded-r flex items-center gap-1.5', scope === 'project' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('project')">
-          <Icon icon="mdi:folder-outline" width="14" height="14" />{{ t('skills.scopeProject') }}
-        </button>
-      </div>
-      <div class="search flex gap-1.5 md:ml-auto">
-        <input
-          v-model="keyword"
-          :placeholder="t('skills.searchPlaceholder')"
-          class="w-32 md:w-56"
-          @keyup.enter="() => { page = 1; reload() }"
-        />
-        <button @click="() => { page = 1; reload() }">{{ t('common.search') }}</button>
-      </div>
-      <div class="actions flex gap-1.5">
-        <button @click="toggleAI" class="flex items-center gap-1.5">
-          <Icon icon="mdi:robot-outline" width="14" height="14" />
-          {{ aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen') }}
-        </button>
-        <button class="primary" @click="startNew">{{ t('skills.btnNew') }}</button>
-      </div>
-    </div>
-
-    <div class="apply-bar flex flex-wrap items-center gap-2.5 mb-3.5 px-3.5 py-2 bg-white border border-sb-border rounded text-[13px]">
-      <span class="text-sb-dim font-medium">{{ t('skills.applyBar.target') }}</span>
-      <select v-model="applyTool" class="!py-1">
-        <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
-      </select>
-      <button class="sm flex items-center gap-1.5" @click="checkUpdateBadge" :disabled="updating">
-        <span v-if="updating" class="spinner"></span>
-        <Icon v-else icon="mdi:refresh" width="14" height="14" />
-        {{ updating ? t('skills.applyBar.checking') : t('skills.applyBar.checkUpdates') }}
-      </button>
-      <span v-if="updateBadge.updates > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-danger-dim text-sb-danger inline-flex items-center gap-1">
-        <Icon icon="mdi:alert-circle-outline" width="12" height="12" />{{ t('skills.applyBar.updatesAvailable', { updates: updateBadge.updates, total: updateBadge.total }) }}
-      </span>
-      <span v-else-if="updateBadge.total > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-success-dim text-sb-success inline-flex items-center gap-1">
-        <Icon icon="mdi:check-circle-outline" width="12" height="12" />{{ t('skills.applyBar.allUpToDate', { total: updateBadge.total }) }}
-      </span>
-      <p v-if="applyMessage" class="text-sb-success m-0 text-[12px] basis-full">{{ applyMessage }}</p>
-      <p v-if="applyError" class="text-sb-danger m-0 text-[12px] basis-full">{{ applyError }}</p>
-    </div>
-
-    <form v-if="editing" class="card editor" @submit.prevent="submit">
-      <h3>{{ editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew') }}
-        <span v-if="editingKey" class="card-sub"><code>{{ editingKey.name }}@{{ editingKey.version }}</code></span>
-      </h3>
-      <div class="row">
-        <label>
-          <span>{{ t('skills.editor.name') }}</span>
-          <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
-        </label>
-        <label>
-          <span>{{ t('skills.editor.version') }}</span>
-          <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
-        </label>
-        <label>
-          <span>{{ t('skills.editor.scope') }}</span>
-          <select v-model="draft.scope" :disabled="!!editingKey">
-            <option value="global">global</option>
-            <option value="project">project</option>
-          </select>
-        </label>
-        <label v-if="draft.scope === 'project'">
-          <span>{{ t('skills.editor.projectId') }}</span>
-          <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
-        </label>
-      </div>
-      <label class="full">
-        <span>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></span>
-        <textarea v-model="draft.description" rows="2" />
-      </label>
-      <label class="full">
-        <span>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></span>
-        <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review" />
-      </label>
-      <label class="full">
-        <span>{{ t('skills.editor.body') }}</span>
-        <textarea v-model="draft.body" rows="14" class="code" />
-      </label>
-      <div class="actions">
-        <button type="button" class="ghost" @click="editing = false">{{ t('common.cancel') }}</button>
-        <button type="submit" class="primary">{{ editingKey ? t('common.save') : t('common.create') }}</button>
-      </div>
-    </form>
-
-    <div v-if="applyHistory.length" class="card apply-history">
-      <header class="ah-head">
-        <h3>{{ t('skills.applyHistory.title') }}</h3>
-        <span class="card-sub">{{ t('skills.applyHistory.count', { count: applyHistory.length }) }}</span>
-      </header>
-      <ul>
-        <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`status-${h.Status}`">
-          <span class="ah-id">#{{ h.ID || h.id }}</span>
-          <span class="ah-tool">{{ h.Tool }}</span>
-          <span class="ah-status">{{ h.Status }}</span>
-          <span class="ah-time">{{ h.AppliedAt?.slice(0, 19) || t('common.dash') }}</span>
-          <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">{{ undoing ? t('skills.applyHistory.undoing') : t('skills.applyHistory.undone') }}</button>
-        </li>
-      </ul>
-    </div>
-
-    <div v-if="selectedSkill" class="card tag-panel">
-      <header class="tp-head">
-        <h4>{{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code></h4>
-        <span class="tp-count">{{ t('skills.tag.count', { count: tagList.length }) }}</span>
-        <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">{{ t('common.close') }}</button>
-      </header>
-      <p v-if="tagMessage" class="tag-msg">{{ tagMessage }}</p>
-      <p v-if="tagError" class="error">{{ tagError }}</p>
-
-      <div class="tag-create">
-        <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
-        <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
-        <button class="primary" :disabled="tagLoading" @click="doCreateTag">{{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}</button>
-      </div>
-
-      <div v-if="tagList.length" class="tag-actions">
-        <span class="tag-label">{{ t('skills.tag.diff') }}:</span>
-        <select v-model="diffLeftTagID">
-          <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">{{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
-        </select>
-        <span>→</span>
-        <select v-model="diffRightTagID">
-          <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">{{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
-        </select>
-        <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
-        <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
-      </div>
-
-      <ul v-if="tagList.length" class="tag-list">
-        <li v-for="tg in tagList" :key="tg.ID || tg.id" :class="{ implicit: tg.IsImplicit }">
-          <span class="t-id">#{{ tg.ID || tg.id }}</span>
-          <span class="t-name"><code>{{ tg.Tag }}</code></span>
-          <span class="t-msg">{{ tg.Message || t('common.dash') }}</span>
-          <span class="t-time">{{ (tg.CreatedAt || '').slice(0, 19) }}</span>
-          <button class="link" @click="doDiff(tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
-          <button class="link" :disabled="rolling" @click="doRollback(tg.ID || tg.id)">{{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}</button>
-          <button class="link danger" @click="doDeleteTag(tg.ID || tg.id)">{{ t('common.delete') }}</button>
-        </li>
-      </ul>
-
-      <div v-if="diffResult" class="diff-panel">
-        <header class="dp-head">
-          <h4>{{ t('skills.tag.resultTitle') }}</h4>
-          <span class="dp-stats">
-            <span class="added">{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
-            <span class="removed">{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
-            <span class="modified">{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
-            <span class="unchanged">{{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
-          </span>
-        </header>
-        <div v-for="f in diffResult.files" :key="f.path" class="diff-file" :class="`kind-${f.kind}`">
-          <div class="df-head">
-            <span class="df-kind">{{ f.kind }}</span>
-            <code class="df-path">{{ f.path }}</code>
+  <div class="skills-layout">
+    <section class="skills-view" :class="{ 'with-ai': aiOpen }">
+      <!-- 页面头部 -->
+      <header class="view-header">
+        <div class="view-title">
+          <div class="view-icon">
+            <Icon icon="mdi:book-open-variant" width="24" height="24" />
           </div>
-          <pre v-if="f.lines?.length"><span v-for="(l, i) in f.lines" :key="i" :class="`ln-${l.kind}`"><span class="ln-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
-</span></pre>
+          <div>
+            <h1>{{ t('skills.title') }}</h1>
+            <p>{{ t('skills.subtitle') }}</p>
+          </div>
+        </div>
+      </header>
+
+      <!-- 工具栏 -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div class="scope-tabs">
+            <button
+              :class="['scope-tab', scope === 'global' ? 'scope-tab-active' : '']"
+              @click="switchScope('global')"
+            >
+              <Icon icon="mdi:earth" width="16" height="16" />
+              {{ t('skills.scopeGlobal') }}
+            </button>
+            <button
+              :class="['scope-tab', scope === 'project' ? 'scope-tab-active' : '']"
+              @click="switchScope('project')"
+            >
+              <Icon icon="mdi:folder-outline" width="16" height="16" />
+              {{ t('skills.scopeProject') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <div class="search-box">
+            <Icon icon="mdi:magnify" width="16" height="16" class="search-icon" />
+            <input
+              v-model="keyword"
+              :placeholder="t('skills.searchPlaceholder')"
+              class="search-input"
+              @keyup.enter="() => { page = 1; reload() }"
+            />
+          </div>
+          <button class="ai-btn" @click="toggleAI">
+            <Icon icon="mdi:robot-outline" width="16" height="16" />
+            {{ aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen') }}
+          </button>
+          <button class="primary" @click="startNew">
+            <Icon icon="mdi:plus" width="16" height="16" />
+            {{ t('skills.btnNew') }}
+          </button>
         </div>
       </div>
-    </div>
 
-    <div v-if="lastTest || testError" class="card test-panel" :class="`status-${(lastTest?.run?.status || 'errored')}`">
-      <header class="tp-head">
-        <h3>{{ t('skills.test.title') }}</h3>
-        <span v-if="lastTest?.run" class="tp-status">{{ lastTest.run.status }}</span>
-      </header>
-      <p v-if="testError" class="error">{{ t('skills.test.errPrefix') }} {{ testError }}</p>
-      <p v-else-if="lastTest?.run?.summary" class="tp-summary">{{ lastTest.run.summary }}</p>
-      <ul v-if="lastTest?.results?.length" class="tp-list">
-        <li v-for="r in lastTest.results" :key="r.ID || r.id" :class="`check-${r.Status}`">
-          <span class="check-name">{{ r.Check }}</span>
-          <span class="check-status">{{ r.Status }}</span>
-          <span class="check-msg">{{ r.Message }}</span>
-        </li>
-      </ul>
-      <details v-for="r in lastTest?.results || []" :key="`d-${r.ID || r.id}`" class="tp-detail">
-        <summary>{{ r.Check }} detail</summary>
-        <pre>{{ r.Detail }}</pre>
-      </details>
-    </div>
-
-    <p v-if="error" class="error inline-flex items-center gap-1.5">
-      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
-    </p>
-
-    <div class="card">
-      <h3>{{ t('skills.list.title') }}
-        <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
-        <span v-if="loading" class="spinner ml-auto"></span>
-      </h3>
-
-      <div class="overflow-x-auto -mx-4 px-4">
-      <table v-if="items.length" class="grid">
-        <thead>
-          <tr>
-            <th>{{ t('skills.list.colName') }}</th>
-            <th>{{ t('skills.list.colVersion') }}</th>
-            <th>{{ t('skills.list.colSource') }}</th>
-            <th>{{ t('skills.list.colProject') }}</th>
-            <th>{{ t('skills.list.colUpdated') }}</th>
-            <th style="width: 260px">{{ t('skills.list.colActions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
-            <td><code>{{ p.Name }}</code></td>
-            <td><code>{{ p.Version }}</code></td>
-            <td>
-              <span v-if="p.Source === 'market'" class="badge market">market</span>
-              <span v-else class="badge local">{{ p.Source }}</span>
-            </td>
-            <td>{{ p.ProjectID || t('common.dash') }}</td>
-            <td class="time">{{ p.UpdatedAt?.slice(0, 19) || t('common.dash') }}</td>
-            <td class="row-actions">
-              <button class="link primary-link" :disabled="applying" @click="doApply(p)">{{ applying ? t('skills.list.applying') : t('skills.list.btnApply') }}</button>
-              <button class="link" :disabled="testing" @click="triggerTest(p)">{{ testing ? t('skills.list.testing') : t('skills.list.btnTest') }}</button>
-              <button class="link" @click="startEdit(p)">{{ t('common.edit') }}</button>
-              <button class="link" @click="loadTags(p)">{{ t('skills.list.btnTag') }}</button>
-              <button class="link danger" @click="remove(p)">{{ t('common.delete') }}</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else-if="!loading" class="empty-state">
-        <span class="empty-icon">
-          <Icon icon="mdi:book-open-variant" width="36" height="36" />
-        </span>
-        <p style="margin: 8px 0 4px">{{ t('skills.list.emptyTitle') }}</p>
-        <p class="muted" style="margin: 0">{{ t('skills.list.emptyHint') }}</p>
+      <!-- Apply 工具栏 -->
+      <div class="apply-toolbar">
+        <div class="apply-left">
+          <span class="apply-label">{{ t('skills.applyBar.target') }}</span>
+          <select v-model="applyTool" class="apply-select">
+            <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
+          </select>
+        </div>
+        <div class="apply-right">
+          <button class="check-updates-btn" @click="checkUpdateBadge" :disabled="updating">
+            <span v-if="updating" class="spinner"></span>
+            <Icon v-else icon="mdi:refresh" width="14" height="14" />
+            {{ updating ? t('skills.applyBar.checking') : t('skills.applyBar.checkUpdates') }}
+          </button>
+          <span v-if="updateBadge.updates > 0" class="update-badge update-badge-danger">
+            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            {{ t('skills.applyBar.updatesAvailable', { updates: updateBadge.updates, total: updateBadge.total }) }}
+          </span>
+          <span v-else-if="updateBadge.total > 0" class="update-badge update-badge-success">
+            <Icon icon="mdi:check-circle-outline" width="12" height="12" />
+            {{ t('skills.applyBar.allUpToDate', { total: updateBadge.total }) }}
+          </span>
+        </div>
       </div>
 
+      <p v-if="applyMessage" class="message message-success">{{ applyMessage }}</p>
+      <p v-if="applyError" class="message message-error">{{ applyError }}</p>
+
+      <!-- 编辑器 -->
+      <form v-if="editing" class="editor-card" @submit.prevent="submit">
+        <header class="editor-header">
+          <h3>
+            <Icon :icon="editingKey ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
+            {{ editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew') }}
+          </h3>
+          <span v-if="editingKey" class="editor-hint">
+            <code>{{ editingKey.name }}@{{ editingKey.version }}</code>
+          </span>
+        </header>
+
+        <div class="editor-grid">
+          <div class="editor-field">
+            <label>{{ t('skills.editor.name') }}</label>
+            <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
+          </div>
+          <div class="editor-field">
+            <label>{{ t('skills.editor.version') }}</label>
+            <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
+          </div>
+          <div class="editor-field">
+            <label>{{ t('skills.editor.scope') }}</label>
+            <select v-model="draft.scope" :disabled="!!editingKey">
+              <option value="global">global</option>
+              <option value="project">project</option>
+            </select>
+          </div>
+          <div class="editor-field" v-if="draft.scope === 'project'">
+            <label>{{ t('skills.editor.projectId') }}</label>
+            <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
+          </div>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
+          <textarea v-model="draft.description" rows="2"></textarea>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
+          <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review"></textarea>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.body') }}</label>
+          <textarea v-model="draft.body" rows="14" class="code"></textarea>
+        </div>
+
+        <div class="editor-actions">
+          <button type="button" class="ghost" @click="editing = false">
+            <Icon icon="mdi:close" width="14" height="14" />
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" class="primary">
+            <Icon :icon="editingKey ? 'mdi:content-save' : 'mdi:plus'" width="14" height="14" />
+            {{ editingKey ? t('common.save') : t('common.create') }}
+          </button>
+        </div>
+      </form>
+
+      <!-- Apply 历史 -->
+      <div v-if="applyHistory.length" class="card">
+        <header class="card-header">
+          <h3>{{ t('skills.applyHistory.title') }}</h3>
+          <span class="card-sub">{{ t('skills.applyHistory.count', { count: applyHistory.length }) }}</span>
+        </header>
+        <ul class="apply-list">
+          <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`apply-status-${h.Status}`">
+            <span class="apply-id">#{{ h.ID || h.id }}</span>
+            <span class="apply-tool-name">{{ h.Tool }}</span>
+            <span class="apply-status-badge" :class="`badge-${h.Status}`">{{ h.Status }}</span>
+            <span class="apply-time">{{ h.AppliedAt?.slice(0, 19) || t('common.dash') }}</span>
+            <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">
+              {{ undoing ? t('skills.applyHistory.undoing') : t('skills.applyHistory.undone') }}
+            </button>
+          </li>
+        </ul>
       </div>
 
-      <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="gotoPage(page - 1)">{{ t('common.prev') }}</button>
-        <span>{{ page }} / {{ totalPages }} ({{ t('common.totalCount', { count: total }) }})</span>
-        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">{{ t('common.next') }}</button>
-      </footer>
-    </div>
-  </section><AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" /></div>
+      <!-- Tag 面板 -->
+      <div v-if="selectedSkill" class="card">
+        <header class="card-header">
+          <h4>
+            <Icon icon="mdi:tag-outline" width="16" height="16" />
+            {{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code>
+          </h4>
+          <span class="tag-count">{{ t('skills.tag.count', { count: tagList.length }) }}</span>
+          <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">
+            <Icon icon="mdi:close" width="14" height="14" />
+            {{ t('common.close') }}
+          </button>
+        </header>
+
+        <p v-if="tagMessage" class="message message-success">{{ tagMessage }}</p>
+        <p v-if="tagError" class="message message-error">{{ tagError }}</p>
+
+        <div class="tag-create">
+          <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
+          <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
+          <button class="primary" :disabled="tagLoading" @click="doCreateTag">
+            {{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}
+          </button>
+        </div>
+
+        <div v-if="tagList.length" class="tag-actions">
+          <span class="diff-label">{{ t('skills.tag.diff') }}:</span>
+          <select v-model="diffLeftTagID">
+            <option :value="0">{{ t('skills.tag.current') }}</option>
+            <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">
+              {{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}
+            </option>
+          </select>
+          <Icon icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
+          <select v-model="diffRightTagID">
+            <option :value="0">{{ t('skills.tag.current') }}</option>
+            <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">
+              {{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}
+            </option>
+          </select>
+          <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
+          <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
+        </div>
+
+        <ul v-if="tagList.length" class="tag-list">
+          <li v-for="tg in tagList" :key="tg.ID || tg.id" :class="{ 'tag-implicit': tg.IsImplicit }">
+            <span class="tag-id">#{{ tg.ID || tg.id }}</span>
+            <span class="tag-name"><code>{{ tg.Tag }}</code></span>
+            <span class="tag-msg">{{ tg.Message || t('common.dash') }}</span>
+            <span class="tag-time">{{ (tg.CreatedAt || '').slice(0, 19) }}</span>
+            <button class="link" @click="doDiff(tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
+            <button class="link" :disabled="rolling" @click="doRollback(tg.ID || tg.id)">
+              {{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}
+            </button>
+            <button class="link danger" @click="doDeleteTag(tg.ID || tg.id)">{{ t('common.delete') }}</button>
+          </li>
+        </ul>
+
+        <!-- Diff 结果 -->
+        <div v-if="diffResult" class="diff-panel">
+          <header class="diff-header">
+            <h4>{{ t('skills.tag.resultTitle') }}</h4>
+            <div class="diff-stats">
+              <span class="stat stat-added">+{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
+              <span class="stat stat-removed">-{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
+              <span class="stat stat-modified">~{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
+              <span class="stat stat-unchanged">={{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
+            </div>
+          </header>
+          <div v-for="f in diffResult.files" :key="f.path" :class="['diff-file', `diff-kind-${f.kind}`]">
+            <div class="diff-file-header">
+              <span class="diff-file-kind">{{ f.kind }}</span>
+              <code class="diff-file-path">{{ f.path }}</code>
+            </div>
+            <pre v-if="f.lines?.length" class="diff-content"><span v-for="(l, i) in f.lines" :key="i" :class="`diff-line diff-line-${l.kind}`"><span class="diff-line-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
+</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 测试面板 -->
+      <div v-if="lastTest || testError" class="card" :class="`test-panel-status-${(lastTest?.run?.status || 'errored')}`">
+        <header class="card-header">
+          <h3>
+            <Icon icon="mdi:test-tube" width="16" height="16" />
+            {{ t('skills.test.title') }}
+          </h3>
+          <span v-if="lastTest?.run" class="test-status-badge">{{ lastTest.run.status }}</span>
+        </header>
+        <p v-if="testError" class="message message-error">{{ t('skills.test.errPrefix') }} {{ testError }}</p>
+        <p v-else-if="lastTest?.run?.summary" class="test-summary">{{ lastTest.run.summary }}</p>
+        <ul v-if="lastTest?.results?.length" class="test-list">
+          <li v-for="r in lastTest.results" :key="r.ID || r.id" :class="`test-check test-check-${r.Status}`">
+            <span class="test-check-name">{{ r.Check }}</span>
+            <span class="test-check-status" :class="`status-${r.Status}`">{{ r.Status }}</span>
+            <span class="test-check-msg">{{ r.Message }}</span>
+          </li>
+        </ul>
+        <details v-for="r in lastTest?.results || []" :key="`d-${r.ID || r.id}`" class="test-detail">
+          <summary>{{ r.Check }} detail</summary>
+          <pre>{{ r.Detail }}</pre>
+        </details>
+      </div>
+
+      <!-- 错误提示 -->
+      <p v-if="error" class="message message-error">
+        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+        {{ error }}
+      </p>
+
+      <!-- 列表卡片 -->
+      <div class="card">
+        <header class="card-header">
+          <h3>
+            <Icon icon="mdi:format-list-bulleted" width="16" height="16" />
+            {{ t('skills.list.title') }}
+            <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
+          </h3>
+          <span v-if="loading" class="spinner"></span>
+        </header>
+
+        <div class="table-container">
+          <table v-if="items.length" class="grid">
+            <thead>
+              <tr>
+                <th>{{ t('skills.list.colName') }}</th>
+                <th>{{ t('skills.list.colVersion') }}</th>
+                <th>{{ t('skills.list.colSource') }}</th>
+                <th>{{ t('skills.list.colProject') }}</th>
+                <th>{{ t('skills.list.colUpdated') }}</th>
+                <th style="width: 280px">{{ t('skills.list.colActions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
+                <td><code class="skill-name">{{ p.Name }}</code></td>
+                <td><code class="skill-version">{{ p.Version }}</code></td>
+                <td>
+                  <span v-if="p.Source === 'market'" class="badge badge-blue">{{ p.Source }}</span>
+                  <span v-else class="badge badge-gray">{{ p.Source }}</span>
+                </td>
+                <td class="td-dim">{{ p.ProjectID || t('common.dash') }}</td>
+                <td class="td-time">{{ p.UpdatedAt?.slice(0, 19) || t('common.dash') }}</td>
+                <td class="row-actions">
+                  <button class="action-btn action-btn-apply" :disabled="applying" @click="doApply(p)">
+                    <Icon icon="mdi:download" width="12" height="12" />
+                    {{ applying ? t('skills.list.applying') : t('skills.list.btnApply') }}
+                  </button>
+                  <button class="action-btn" :disabled="testing" @click="triggerTest(p)">
+                    <Icon icon="mdi:test-tube" width="12" height="12" />
+                    {{ testing ? t('skills.list.testing') : t('skills.list.btnTest') }}
+                  </button>
+                  <button class="action-btn" @click="startEdit(p)">
+                    <Icon icon="mdi:pencil" width="12" height="12" />
+                    {{ t('common.edit') }}
+                  </button>
+                  <button class="action-btn" @click="loadTags(p)">
+                    <Icon icon="mdi:tag-outline" width="12" height="12" />
+                    {{ t('skills.list.btnTag') }}
+                  </button>
+                  <button class="action-btn action-btn-danger" @click="remove(p)">
+                    <Icon icon="mdi:delete" width="12" height="12" />
+                    {{ t('common.delete') }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else-if="!loading" class="empty-state">
+            <Icon icon="mdi:book-open-variant" width="48" height="48" />
+            <p class="empty-title">{{ t('skills.list.emptyTitle') }}</p>
+            <p class="empty-hint">{{ t('skills.list.emptyHint') }}</p>
+          </div>
+        </div>
+
+        <footer v-if="totalPages > 1" class="pager">
+          <button :disabled="page <= 1" @click="gotoPage(page - 1)">
+            <Icon icon="mdi:chevron-left" width="14" height="14" />
+            {{ t('common.prev') }}
+          </button>
+          <span class="pager-info">{{ page }} / {{ totalPages }} ({{ t('common.totalCount', { count: total }) }})</span>
+          <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">
+            {{ t('common.next') }}
+            <Icon icon="mdi:chevron-right" width="14" height="14" />
+          </button>
+        </footer>
+      </div>
+    </section>
+
+    <!-- AI 面板 -->
+    <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
+  </div>
 </template>
 
 <style scoped>
-.skills-layout { display: flex; height: 100%; }
-.skills-view { padding: 0; max-width: 1100px; margin: 0 auto; color: var(--text); flex: 1; min-width: 0; }
-.skills-view.with-ai { max-width: none; }
-.head h2 { margin: 0 0 4px; font-size: 18px; }
-.head p { margin: 0 0 16px; font-size: 13px; }
-.bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.tabs { display: flex; gap: 0; }
-.tabs button { border-radius: 0; }
-.tabs button:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-.tabs button:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-left: none; }
-.tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-.search { margin-left: auto; display: flex; gap: 6px; }
-.search input { width: 220px; }
-.bar .actions { display: flex; gap: 6px; }
-.editor { display: flex; flex-direction: column; gap: 10px; }
-.editor .row { display: grid; grid-template-columns: 1.4fr 0.8fr 0.8fr 0.8fr; gap: 10px 14px; }
-.editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
-.editor label.full { width: 100%; }
-.editor label small { color: var(--text-faint); }
-.editor .actions { display: flex; gap: 8px; justify-content: flex-end; }
+.skills-layout {
+  display: flex;
+  gap: 20px;
+  height: 100%;
+}
 
-.test-panel.status-passed { border-color: #bbf7d0; background: #f0fdf4; }
-.test-panel.status-failed { border-color: #fecaca; background: #fef2f2; }
-.test-panel.status-errored { border-color: #fde68a; background: #fffbeb; }
-.test-panel.status-skipped { background: #f9fafb; }
-.tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.tp-head h3 { margin: 0; font-size: 14px; }
-.tp-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2937; color: #fff; text-transform: uppercase; font-weight: 500; }
-.tp-summary { color: var(--text-dim); font-size: 13px; margin: 4px 0 8px; }
-.tp-list { list-style: none; padding: 0; margin: 0; }
-.tp-list li { display: grid; grid-template-columns: 100px 90px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
-.tp-list .check-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
-.tp-list .check-status { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-align: center; }
-.tp-list .check-passed .check-status { background: var(--success-dim); color: var(--success); }
-.tp-list .check-failed .check-status { background: var(--danger-dim); color: var(--danger); }
-.tp-list .check-errored .check-status { background: var(--warning-dim); color: var(--warning); }
-.tp-list .check-skipped .check-status { background: #f3f4f6; color: var(--text-dim); }
-.tp-list .check-msg { color: var(--text-dim); }
-.tp-detail { margin-top: 6px; }
-.tp-detail summary { cursor: pointer; font-size: 12px; color: var(--text-dim); }
-.tp-detail pre { background: #f3f4f6; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 11px; max-height: 200px; overflow: auto; }
+.skills-view {
+  padding: 0;
+  max-width: 1100px;
+  margin: 0 auto;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  transition: color 0.3s ease;
+}
 
-.apply-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 8px 14px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
-.apply-label { color: var(--text-dim); font-weight: 500; }
-.apply-bar select { padding: 3px 6px; }
-.update-badge { padding: 3px 9px; border-radius: 10px; font-size: 12px; font-weight: 500; }
-.update-badge.danger { background: var(--danger-dim); color: var(--danger); }
-.update-badge.ok { background: var(--success-dim); color: var(--success); }
-.apply-msg { color: var(--success); margin: 0; font-size: 12px; width: 100%; }
-.apply-bar p.error { margin: 0; font-size: 12px; width: 100%; }
+.skills-view.with-ai {
+  max-width: none;
+}
 
-.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
-.grid th, .grid td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
-.grid th { background: #f9fafb; color: var(--text-dim); font-weight: 600; }
-.grid .time { color: var(--text-dim); font-size: 12px; }
-.row-actions { white-space: nowrap; }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
-.badge.market { background: #dbeafe; color: #1e40af; }
-.badge.local { background: #f3f4f6; color: var(--text-dim); }
+/* 页面头部 */
+.view-header {
+  margin-bottom: 24px;
+}
 
-.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--text-dim); justify-content: flex-end; }
+.view-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
 
-.apply-history .ah-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.apply-history .ah-head h3 { margin: 0; }
-.apply-history ul { list-style: none; padding: 0; margin: 0; }
-.apply-history li { display: grid; grid-template-columns: 60px 80px 100px 1fr auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
-.ah-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-dim); }
-.ah-tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
-.ah-status { font-size: 11px; padding: 1px 8px; border-radius: 10px; text-align: center; font-weight: 500; }
-.status-applied .ah-status { background: var(--success-dim); color: var(--success); }
-.status-rolled_back .ah-status { background: #f3f4f6; color: var(--text-dim); }
-.status-failed .ah-status { background: var(--danger-dim); color: var(--danger); }
-.ah-time { color: var(--text-dim); font-size: 12px; }
+.view-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  color: white;
+  flex-shrink: 0;
+}
 
-.tag-panel .tp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.tag-panel .tp-head h3 { margin: 0; font-size: 14px; }
-.tag-panel .tp-count { color: var(--text-dim); font-size: 12px; }
-.tag-msg { color: var(--success); font-size: 12px; margin: 4px 0; }
-.tag-create { display: flex; gap: 8px; margin-bottom: 8px; }
-.tag-input { flex: 1; }
-.tag-actions { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 13px; }
-.tag-actions .tag-label { color: var(--text-dim); }
-.tag-list { list-style: none; padding: 0; margin: 0; border-top: 1px dashed var(--border); }
-.tag-list li { display: grid; grid-template-columns: 50px 160px 1fr 160px auto auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
-.tag-list li.implicit { background: var(--warning-dim); }
-.tag-list .t-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-dim); }
-.tag-list .t-msg { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-list .t-time { color: var(--text-dim); font-size: 11px; }
-.diff-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
-.dp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.dp-head h4 { margin: 0; font-size: 13px; }
-.dp-stats { display: flex; gap: 8px; font-size: 12px; }
-.dp-stats .added { color: var(--success); background: var(--success-dim); padding: 1px 6px; border-radius: 3px; }
-.dp-stats .removed { color: var(--danger); background: var(--danger-dim); padding: 1px 6px; border-radius: 3px; }
-.dp-stats .modified { color: var(--warning); background: var(--warning-dim); padding: 1px 6px; border-radius: 3px; }
-.dp-stats .unchanged { color: var(--text-dim); }
-.diff-file { margin: 6px 0; border: 1px solid #f3f4f6; border-radius: 4px; overflow: hidden; }
-.diff-file.kind-added .df-head { background: var(--success-dim); }
-.diff-file.kind-removed .df-head { background: var(--danger-dim); }
-.diff-file.kind-modified .df-head { background: var(--warning-dim); }
-.diff-file.kind-unchanged .df-head { background: #f3f4f6; }
-.df-head { padding: 4px 8px; display: flex; gap: 8px; align-items: center; }
-.df-kind { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #fff; color: var(--text-dim); }
-.diff-file pre { padding: 4px 8px; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; background: #fafafa; max-height: 300px; overflow: auto; white-space: pre; }
-.ln-added { display: block; background: #dcfce7; color: #14532d; }
-.ln-removed { display: block; background: #fee2e2; color: #7f1d1d; }
-.ln-context { display: block; color: var(--text-dim); }
-.ln-no { display: inline-block; min-width: 50px; color: var(--text-faint); padding-right: 6px; user-select: none; }
+.view-title h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+  transition: color 0.3s ease;
+}
+
+.view-title p {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+  transition: color 0.3s ease;
+}
+
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scope-tabs {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  gap: 4px;
+}
+
+.scope-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scope-tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.scope-tab-active {
+  background: var(--primary);
+  color: white;
+}
+
+.scope-tab-active:hover {
+  background: var(--primary-hover);
+  color: white;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.search-input {
+  padding-left: 36px;
+  width: 240px;
+  height: 38px;
+}
+
+.ai-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  color: #7c3aed;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.ai-btn:hover {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+/* Apply 工具栏 */
+.apply-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.apply-left, .apply-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.apply-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.apply-select {
+  padding: 6px 12px;
+  min-width: 100px;
+}
+
+.check-updates-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.update-badge-danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.update-badge-success {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+/* 消息提示 */
+.message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.message-success {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.message-error {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+/* 卡片样式 */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.card-header h3, .card-header h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: normal;
+}
+
+/* 编辑器 */
+.editor-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.editor-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.editor-field-full {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.editor-field-full label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.editor-field-full small {
+  color: var(--text-faint);
+}
+
+.editor-field-full textarea {
+  min-height: 100px;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* 表格 */
+.table-container {
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.grid th, .grid td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.3s ease;
+}
+
+.grid th {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.grid tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.grid tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.skill-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.skill-version {
+  color: var(--primary);
+}
+
+.td-dim {
+  color: var(--text-dim);
+}
+
+.td-time {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* 徽章 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.badge-blue {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.badge-gray {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+
+/* 操作按钮 */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+.action-btn-apply {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #059669;
+}
+
+.action-btn-apply:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #047857;
+}
+
+.action-btn-danger:hover:not(:disabled) {
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* 分页器 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pager button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+}
+
+.pager-info {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* Apply 历史 */
+.apply-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.apply-list li {
+  display: grid;
+  grid-template-columns: 60px 80px 100px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.apply-list li:last-child {
+  border-bottom: none;
+}
+
+.apply-id {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint);
+}
+
+.apply-tool-name {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+
+.apply-status-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.badge-applied {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.badge-rolled_back {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+
+.badge-failed {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.apply-time {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* Tag 面板 */
+.tag-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tag-create {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tag-input {
+  flex: 1;
+}
+
+.tag-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.diff-label {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.diff-arrow {
+  color: var(--text-faint);
+}
+
+.tag-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px dashed var(--border);
+}
+
+.tag-list li {
+  display: grid;
+  grid-template-columns: 50px 160px 1fr 160px auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+
+.tag-list li.tag-implicit {
+  background: var(--warning-dim);
+  margin: 0 -20px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+}
+
+.tag-id {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint);
+}
+
+.tag-name code {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.tag-msg {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-time {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* Diff 面板 */
+.diff-panel {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.diff-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.diff-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.stat {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.stat-added {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.stat-removed {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.stat-modified {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.stat-unchanged {
+  background: var(--bg-card);
+  color: var(--text-dim);
+}
+
+.diff-file {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diff-kind-added .diff-file-header {
+  background: var(--success-dim);
+}
+
+.diff-kind-removed .diff-file-header {
+  background: var(--danger-dim);
+}
+
+.diff-kind-modified .diff-file-header {
+  background: var(--warning-dim);
+}
+
+.diff-kind-unchanged .diff-file-header {
+  background: var(--bg-card);
+}
+
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.diff-file-kind {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.diff-file-path {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.diff-content {
+  padding: 8px 12px;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg-card);
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre;
+}
+
+.diff-line {
+  display: block;
+}
+
+.diff-line-added {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.diff-line-removed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.diff-line-context {
+  color: var(--text-dim);
+}
+
+.diff-line-no {
+  display: inline-block;
+  min-width: 40px;
+  padding-right: 10px;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+/* 测试面板 */
+.test-panel-status-passed {
+  border-color: var(--success-dim);
+  background: linear-gradient(to bottom, var(--success-dim), var(--bg-card));
+}
+
+.test-panel-status-failed {
+  border-color: var(--danger-dim);
+  background: linear-gradient(to bottom, var(--danger-dim), var(--bg-card));
+}
+
+.test-panel-status-errored {
+  border-color: var(--warning-dim);
+  background: linear-gradient(to bottom, var(--warning-dim), var(--bg-card));
+}
+
+.test-panel-status-skipped {
+  background: var(--bg-hover);
+}
+
+.test-status-badge {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--primary);
+  color: white;
+}
+
+.test-summary {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.test-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.test-list li {
+  display: grid;
+  grid-template-columns: 120px 80px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+  align-items: center;
+}
+
+.test-check-name {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+
+.test-check-status {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.status-passed {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.status-failed {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.status-errored {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.status-skipped {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+
+.test-check-msg {
+  color: var(--text-dim);
+}
+
+.test-detail {
+  margin-top: 8px;
+}
+
+.test-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+
+.test-detail pre {
+  background: var(--bg-hover);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  margin: 8px 0 0;
+}
+
+/* 空状态 */
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.empty-state .empty-icon {
+  opacity: 0.5;
+  margin-bottom: 12px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-left, .toolbar-right {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .apply-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .table-container {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+
+  .grid th, .grid td {
+    padding: 10px 8px;
+  }
+
+  .row-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
 </style>
