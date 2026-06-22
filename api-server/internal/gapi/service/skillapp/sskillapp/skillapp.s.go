@@ -76,6 +76,27 @@ func (s *Service) applier() *skillapp.Applier {
 	return skillapp.NewApplier(s.adapterRegistry)
 }
 
+// audit 内部 helper:把关键事件落 audit_log。
+// actor 暂用 "system"(P1 接入登录后改成当前用户);payload 走 JSON 字符串。
+func (s *Service) audit(action string, targetID uint, payload any) {
+	if s.dbWrite == nil {
+		return
+	}
+	payloadStr := ""
+	if payload != nil {
+		if b, err := json.Marshal(payload); err == nil {
+			payloadStr = string(b)
+		}
+	}
+	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
+		Actor:      "system",
+		Action:     action,
+		TargetType: "skill",
+		TargetID:   targetID,
+		Payload:    payloadStr,
+	})
+}
+
 // ApplyInput 单 skill apply 入参。
 type ApplyInput struct {
 	SkillID   uint     `json:"skill_id"`
