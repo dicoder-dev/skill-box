@@ -97,7 +97,23 @@ func (s *Service) BuildExport(req skillpkg.ExportRequest) ([]byte, []string, err
 		return nil, nil, fmt.Errorf("skillpkg: skillSvcFactory: %w", err)
 	}
 	provider := &sskillAdapter{svc: svc}
-	return skillpkg.BuildBytes(req, provider)
+	bytes, failures, err := skillpkg.BuildBytes(req, provider)
+	if err != nil {
+		s.audit("export_failed", 0, map[string]any{
+			"skills":     req.Skills,
+			"source_app": req.SourceApp,
+			"error":      err.Error(),
+		})
+		return bytes, failures, err
+	}
+	s.audit("export", 0, map[string]any{
+		"skills":        req.Skills,
+		"source_app":    req.SourceApp,
+		"source_desc":   req.SourceDesc,
+		"bytes":         len(bytes),
+		"failure_count": len(failures),
+	})
+	return bytes, failures, nil
 }
 
 // ParseManifest 业务层入口:解析 zip 字节流拿 manifest(用于前端预览包内容)。
