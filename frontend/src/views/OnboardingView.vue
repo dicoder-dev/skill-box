@@ -118,7 +118,10 @@ onMounted(loadStatus)
 <template>
   <div class="onb">
     <header class="head">
-      <h2>🧭 首次 Onboarding</h2>
+      <h2 class="flex items-center gap-2">
+        <Icon icon="mdi:compass-outline" width="20" height="20" class="text-sb-primary" />
+        首次 Onboarding
+      </h2>
       <p class="muted">扫描本机 5 个 AI 编程工具的 skill 目录,把发现的 skill 勾选导入到 Skill Box 自己的 store(global scope)。</p>
     </header>
 
