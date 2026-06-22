@@ -227,6 +227,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		}
 		created, _ := s.applyModel().Create(row)
 		if created != nil {
+			bir.Result.ApplyID = created.ID
 			if bir.Result.Status == skillapp.StatusApplied {
 				s.audit("apply", bir.SkillID, map[string]any{
 					"tool":         bir.Tool,
