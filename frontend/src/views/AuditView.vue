@@ -6,19 +6,16 @@ import { listAuditLogs, getAuditStats } from '@/api/skillbox/audit'
 
 const { t } = useI18n()
 
-// 后端就绪检测
 const backendReady = ref(false)
 const loading = ref(false)
 const error = ref('')
 
-// 数据
 const logs = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = 20
 const stats = ref({ total: 0, by_action: {}, by_actor: {} })
 
-// 过滤
 const filterAction = ref('')
 const filterActor = ref('')
 const filterTargetType = ref('')
@@ -86,34 +83,39 @@ onMounted(async () => {
 
 <template>
   <div class="audit">
-    <header class="head">
-      <h2 class="flex items-center gap-2">
-        <Icon icon="mdi:script-text-outline" width="20" height="20" class="text-sb-primary" />
-        {{ t('audit.title') }}
-      </h2>
-      <p class="muted">{{ t('audit.subtitle') }}</p>
+    <!-- 页面头部 -->
+    <header class="view-header">
+      <div class="view-title">
+        <div class="view-icon view-icon-amber">
+          <Icon icon="mdi:script-text-outline" width="24" height="24" />
+        </div>
+        <div>
+          <h1>{{ t('audit.title') }}</h1>
+          <p>{{ t('audit.subtitle') }}</p>
+        </div>
+      </div>
     </header>
 
     <!-- 概览卡片 -->
     <div class="stats-row">
-      <div class="stat-card">
+      <div class="stat-card stat-main">
         <div class="stat-label">{{ t('audit.statTotal') }}</div>
         <div class="stat-value">{{ stats.total || 0 }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ t('audit.statByAction') }}</div>
-        <div class="action-chips">
+        <div class="chips-container">
           <span v-for="(c, a) in (stats.by_action || {})" :key="a" class="chip">
-            <code>{{ a }}</code> × <b>{{ c }}</b>
+            <code>{{ a }}</code> <strong>×{{ c }}</strong>
           </span>
           <span v-if="!Object.keys(stats.by_action || {}).length" class="muted">{{ t('common.dash') }}</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ t('audit.statByActor') }}</div>
-        <div class="action-chips">
+        <div class="chips-container">
           <span v-for="(c, a) in (stats.by_actor || {})" :key="a" class="chip">
-            <code>{{ a }}</code> × <b>{{ c }}</b>
+            <code>{{ a }}</code> <strong>×{{ c }}</strong>
           </span>
           <span v-if="!Object.keys(stats.by_actor || {}).length" class="muted">{{ t('common.dash') }}</span>
         </div>
@@ -123,117 +125,472 @@ onMounted(async () => {
     <!-- 后端未就绪占位 -->
     <div v-if="!backendReady" class="card placeholder">
       <div class="empty-state">
-        <span class="empty-icon">
-          <Icon icon="mdi:construction" width="36" height="36" />
-        </span>
-        <h3 style="margin: 8px 0 4px">{{ t('audit.placeholderTitle') }}</h3>
-        <p class="muted">{{ t('audit.placeholderHint1') }}</p>
-        <p class="muted">{{ t('audit.placeholderHint2') }}</p>
+        <Icon icon="mdi:construction" width="48" height="48" />
+        <h3 class="empty-title">{{ t('audit.placeholderTitle') }}</h3>
+        <p class="empty-desc">{{ t('audit.placeholderHint1') }}</p>
+        <p class="empty-desc">{{ t('audit.placeholderHint2') }}</p>
       </div>
     </div>
 
     <!-- 列表 -->
     <div v-else class="card">
-      <h3>{{ t('audit.listTitle') }}
-        <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
-      </h3>
+      <header class="card-header">
+        <h3>
+          <Icon icon="mdi:format-list-bulleted" width="16" height="16" />
+          {{ t('audit.listTitle') }}
+          <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
+        </h3>
+      </header>
 
+      <!-- 过滤器 -->
       <div class="filters">
-        <label>
-          <span>{{ t('audit.filterAction') }}</span>
+        <div class="filter-group">
+          <label class="filter-label">{{ t('audit.filterAction') }}</label>
           <select v-model="filterAction" @change="reload">
             <option v-for="a in ACTION_OPTIONS" :key="a" :value="a">{{ a || t('common.all') }}</option>
           </select>
-        </label>
-        <label>
-          <span>{{ t('audit.filterActor') }}</span>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">{{ t('audit.filterActor') }}</label>
           <input v-model="filterActor" :placeholder="t('audit.actorPlaceholder')" @keyup.enter="reload" />
-        </label>
-        <label>
-          <span>{{ t('audit.filterTargetType') }}</span>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">{{ t('audit.filterTargetType') }}</label>
           <input v-model="filterTargetType" :placeholder="t('audit.targetTypePlaceholder')" @keyup.enter="reload" />
-        </label>
-        <button class="primary" @click="reload">{{ t('common.applyFilter') }}</button>
+        </div>
+        <button class="primary filter-btn" @click="reload">
+          <Icon icon="mdi:magnify" width="14" height="14" />
+          {{ t('common.applyFilter') }}
+        </button>
       </div>
 
-      <table v-if="logs.length" class="grid">
-        <thead>
-          <tr>
-            <th>{{ t('audit.colId') }}</th>
-            <th>{{ t('audit.colTime') }}</th>
-            <th>{{ t('audit.colActor') }}</th>
-            <th>{{ t('audit.colAction') }}</th>
-            <th>{{ t('audit.colTarget') }}</th>
-            <th>{{ t('audit.colPayload') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="log in logs" :key="log.ID || log.id">
-            <td>{{ log.ID || log.id }}</td>
-            <td class="time">{{ (log.CreatedAt || log.created_at || '').slice(0, 19) }}</td>
-            <td><code>{{ log.Actor || log.actor }}</code></td>
-            <td>
-              <span :class="['tag', actionColor(log.Action || log.action)]">
-                {{ log.Action || log.action }}
-              </span>
-            </td>
-            <td>
-              <code class="target">{{ (log.TargetType || log.target_type) }}#{{ log.TargetID || log.target_id }}</code>
-            </td>
-            <td class="payload">
-              <details>
-                <summary>{{ t('audit.seeMore') }}</summary>
-                <pre>{{ log.Payload || log.payload || t('common.dash') }}</pre>
-              </details>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else-if="!loading" class="empty-state">
-        <span class="empty-icon">
-          <Icon icon="mdi:inbox-outline" width="36" height="36" />
-        </span>
-        {{ t('audit.empty') }}
+      <div class="table-container">
+        <table v-if="logs.length" class="grid">
+          <thead>
+            <tr>
+              <th style="width: 70px">{{ t('audit.colId') }}</th>
+              <th style="width: 160px">{{ t('audit.colTime') }}</th>
+              <th style="width: 120px">{{ t('audit.colActor') }}</th>
+              <th style="width: 140px">{{ t('audit.colAction') }}</th>
+              <th style="width: 180px">{{ t('audit.colTarget') }}</th>
+              <th>{{ t('audit.colPayload') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="log in logs" :key="log.ID || log.id">
+              <td class="td-id">{{ log.ID || log.id }}</td>
+              <td class="td-time">{{ (log.CreatedAt || log.created_at || '').slice(0, 19) }}</td>
+              <td><code>{{ log.Actor || log.actor }}</code></td>
+              <td>
+                <span :class="['action-badge', `action-${actionColor(log.Action || log.action)}`]">
+                  {{ log.Action || log.action }}
+                </span>
+              </td>
+              <td>
+                <code class="target-code">{{ (log.TargetType || log.target_type) }}#{{ log.TargetID || log.target_id }}</code>
+              </td>
+              <td class="td-payload">
+                <details class="payload-details">
+                  <summary>{{ t('audit.seeMore') }}</summary>
+                  <pre class="payload-content">{{ log.Payload || log.payload || t('common.dash') }}</pre>
+                </details>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-else-if="!loading" class="empty-state">
+          <Icon icon="mdi:inbox-outline" width="48" height="48" />
+          <p class="empty-title">{{ t('audit.empty') }}</p>
+        </div>
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="gotoPage(page - 1)">{{ t('common.prev') }}</button>
-        <span>{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
-        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">{{ t('common.next') }}</button>
+        <button :disabled="page <= 1" @click="gotoPage(page - 1)">
+          <Icon icon="mdi:chevron-left" width="14" height="14" />
+          {{ t('common.prev') }}
+        </button>
+        <span class="pager-info">{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
+        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">
+          {{ t('common.next') }}
+          <Icon icon="mdi:chevron-right" width="14" height="14" />
+        </button>
       </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
-.audit { max-width: 1100px; margin: 0 auto; }
-.head h2 { margin: 0 0 4px; font-size: 18px; }
-.head p { margin: 0 0 16px; font-size: 13px; }
+.audit {
+  max-width: 1100px;
+  margin: 0 auto;
+  color: var(--text);
+  transition: color 0.3s ease;
+}
 
-.stats-row { display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 10px; margin-bottom: 14px; }
-.stat-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
-.stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-value { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 4px; }
-.action-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
-.chip { font-size: 11px; padding: 2px 7px; background: #f3f4f6; border-radius: 10px; }
+/* 页面头部 */
+.view-header {
+  margin-bottom: 24px;
+}
 
-.placeholder .empty-state { padding: 36px 20px; }
+.view-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
 
-.filters { display: flex; gap: 8px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
-.filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-dim); }
+.view-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  color: white;
+  flex-shrink: 0;
+}
 
-.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
-.grid th, .grid td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #f3f4f6; }
-.grid th { background: #f9fafb; color: var(--text-dim); font-weight: 600; }
-.time { color: var(--text-dim); font-size: 12px; }
-.target { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; }
-.payload pre { background: #f9fafb; padding: 8px 10px; border-radius: var(--radius-sm); font-size: 11px; max-height: 200px; overflow: auto; margin: 4px 0 0; }
-.payload summary { cursor: pointer; color: var(--primary); font-size: 12px; }
+.view-icon-amber {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
 
-.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: #f3f4f6; color: var(--text-dim); }
-.tag.ok { background: var(--success-dim); color: var(--success); }
-.tag.err { background: var(--danger-dim); color: var(--danger); }
-.tag.warn { background: var(--warning-dim); color: var(--warning); }
+.view-title h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+  transition: color 0.3s ease;
+}
 
-.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--text-dim); justify-content: flex-end; }
+.view-title p {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+  transition: color 0.3s ease;
+}
+
+/* 统计卡片 */
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr 2fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.stat-main {
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  border: none;
+  color: white;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.stat-main .stat-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.stat-main .stat-value {
+  color: white;
+}
+
+.chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: all 0.3s ease;
+}
+
+.chip code {
+  background: transparent;
+  color: var(--primary);
+  padding: 0;
+}
+
+/* 卡片 */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.card-header {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: normal;
+}
+
+/* 过滤器 */
+.filters {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.filter-group select,
+.filter-group input {
+  padding: 8px 12px;
+  min-width: 120px;
+}
+
+.filter-btn {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 表格 */
+.table-container {
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.grid th, .grid td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.3s ease;
+}
+
+.grid th {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.grid tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.grid tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.td-id {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint);
+}
+
+.td-time {
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.target-code {
+  font-size: 12px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 操作徽章 */
+.action-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.action-ok {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.action-err {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.action-warn {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+/* Payload 详情 */
+.td-payload {
+  max-width: 200px;
+}
+
+.payload-details summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 12px;
+  user-select: none;
+}
+
+.payload-content {
+  background: var(--bg-hover);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 分页器 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pager button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+}
+
+.pager-info {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* 空状态 */
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 12px 0 0;
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 4px 0 0;
+}
+
+/* 占位符 */
+.placeholder .empty-state {
+  padding: 48px 24px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-group {
+    min-width: auto;
+  }
+
+  .filter-group select,
+  .filter-group input {
+    width: 100%;
+  }
+
+  .table-container {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+}
 </style>
