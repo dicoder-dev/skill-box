@@ -1,8 +1,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { platform } from '@/platform'
+import { useAppStore } from '@/core/store/app.js'
 
 const { t } = useI18n()
 
@@ -14,7 +16,9 @@ const desktopPrefs = reactive({
   shortcut_enabled: 'true',
   global_hotkey: 'Cmd+Shift+S',
 })
-const isDesktop = ref(platform.isDesktop)
+// 桌面/Web 判据:由启动命令决定的 runMode(来自 store,与 __APP_RUNTIME__ 一致)
+const store = useAppStore()
+const { isDesktop } = storeToRefs(store)
 const prefsSupported = ref(isDesktop.value) // web 端 prefs.getAll() 返回 {},不阻塞 UI
 const saveHint = ref('')
 const notifyTest = ref('')
