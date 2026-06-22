@@ -168,13 +168,19 @@ onMounted(async () => {
         <span v-if="!sources.length && !loading" class="src-empty">没有可用的源</span>
       </nav>
 
-      <div v-if="error" class="err">⚠️ {{ error }}</div>
-      <div v-if="lastRefresh" class="ok">
-        ✅ 上次刷新:pulled {{ lastRefresh.pulled_count }} · 新增 {{ lastRefresh.inserted }} · 更新 {{ lastRefresh.updated }}
+      <div v-if="error" class="err inline-flex items-center gap-1.5">
+        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
+      </div>
+      <div v-if="lastRefresh" class="ok inline-flex items-center gap-1.5 flex-wrap">
+        <Icon icon="mdi:check-circle-outline" width="14" height="14" />上次刷新:pulled {{ lastRefresh.pulled_count }} · 新增 {{ lastRefresh.inserted }} · 更新 {{ lastRefresh.updated }}
         <span class="muted">({{ lastRefresh.finished_at }})</span>
       </div>
-      <div v-if="installOk" class="ok">✅ {{ installOk }}</div>
-      <div v-if="installError" class="err">⚠️ {{ installError }}</div>
+      <div v-if="installOk" class="ok inline-flex items-center gap-1.5">
+        <Icon icon="mdi:check-circle-outline" width="14" height="14" />{{ installOk }}
+      </div>
+      <div v-if="installError" class="err inline-flex items-center gap-1.5">
+        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ installError }}
+      </div>
 
       <table v-if="items.length > 0" class="grid">
         <thead>
