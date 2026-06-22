@@ -89,33 +89,33 @@ onMounted(async () => {
     <header class="head">
       <h2 class="flex items-center gap-2">
         <Icon icon="mdi:script-text-outline" width="20" height="20" class="text-sb-primary" />
-        审计日志
+        {{ t('audit.title') }}
       </h2>
-      <p class="muted">记录所有关键操作的 actor / action / target / payload。第 10 步后端就绪后,这里会自动出现真实数据。</p>
+      <p class="muted">{{ t('audit.subtitle') }}</p>
     </header>
 
     <!-- 概览卡片 -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label">总记录数</div>
+        <div class="stat-label">{{ t('audit.statTotal') }}</div>
         <div class="stat-value">{{ stats.total || 0 }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">按 action 分类</div>
+        <div class="stat-label">{{ t('audit.statByAction') }}</div>
         <div class="action-chips">
           <span v-for="(c, a) in (stats.by_action || {})" :key="a" class="chip">
             <code>{{ a }}</code> × <b>{{ c }}</b>
           </span>
-          <span v-if="!Object.keys(stats.by_action || {}).length" class="muted">—</span>
+          <span v-if="!Object.keys(stats.by_action || {}).length" class="muted">{{ t('common.dash') }}</span>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">按 actor 分类</div>
+        <div class="stat-label">{{ t('audit.statByActor') }}</div>
         <div class="action-chips">
           <span v-for="(c, a) in (stats.by_actor || {})" :key="a" class="chip">
             <code>{{ a }}</code> × <b>{{ c }}</b>
           </span>
-          <span v-if="!Object.keys(stats.by_actor || {}).length" class="muted">—</span>
+          <span v-if="!Object.keys(stats.by_actor || {}).length" class="muted">{{ t('common.dash') }}</span>
         </div>
       </div>
     </div>
@@ -126,45 +126,45 @@ onMounted(async () => {
         <span class="empty-icon">
           <Icon icon="mdi:construction" width="36" height="36" />
         </span>
-        <h3 style="margin: 8px 0 4px">第 10 步后端尚未就绪</h3>
-        <p class="muted">该页面会在 <code>internal/skillpkg/</code> 导出导入包 + <code>caudit</code> 审计日志控制器完成后自动启用。</p>
-        <p class="muted">预计接口:<code>GET /api/skillbox/audit/logs</code> · <code>GET /api/skillbox/audit/stats</code></p>
+        <h3 style="margin: 8px 0 4px">{{ t('audit.placeholderTitle') }}</h3>
+        <p class="muted">{{ t('audit.placeholderHint1') }}</p>
+        <p class="muted">{{ t('audit.placeholderHint2') }}</p>
       </div>
     </div>
 
     <!-- 列表 -->
     <div v-else class="card">
-      <h3>日志列表
-        <span class="card-sub">— 共 {{ total }} 条</span>
+      <h3>{{ t('audit.listTitle') }}
+        <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
       </h3>
 
       <div class="filters">
         <label>
-          <span>Action</span>
+          <span>{{ t('audit.filterAction') }}</span>
           <select v-model="filterAction" @change="reload">
-            <option v-for="a in ACTION_OPTIONS" :key="a" :value="a">{{ a || '全部' }}</option>
+            <option v-for="a in ACTION_OPTIONS" :key="a" :value="a">{{ a || t('common.all') }}</option>
           </select>
         </label>
         <label>
-          <span>Actor</span>
-          <input v-model="filterActor" placeholder="用户名" @keyup.enter="reload" />
+          <span>{{ t('audit.filterActor') }}</span>
+          <input v-model="filterActor" :placeholder="t('audit.actorPlaceholder')" @keyup.enter="reload" />
         </label>
         <label>
-          <span>Target Type</span>
-          <input v-model="filterTargetType" placeholder="skill / project / ..." @keyup.enter="reload" />
+          <span>{{ t('audit.filterTargetType') }}</span>
+          <input v-model="filterTargetType" :placeholder="t('audit.targetTypePlaceholder')" @keyup.enter="reload" />
         </label>
-        <button class="primary" @click="reload">应用过滤</button>
+        <button class="primary" @click="reload">{{ t('common.applyFilter') }}</button>
       </div>
 
       <table v-if="logs.length" class="grid">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Time</th>
-            <th>Actor</th>
-            <th>Action</th>
-            <th>Target</th>
-            <th>Payload</th>
+            <th>{{ t('audit.colId') }}</th>
+            <th>{{ t('audit.colTime') }}</th>
+            <th>{{ t('audit.colActor') }}</th>
+            <th>{{ t('audit.colAction') }}</th>
+            <th>{{ t('audit.colTarget') }}</th>
+            <th>{{ t('audit.colPayload') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -182,8 +182,8 @@ onMounted(async () => {
             </td>
             <td class="payload">
               <details>
-                <summary>查看</summary>
-                <pre>{{ log.Payload || log.payload || '—' }}</pre>
+                <summary>{{ t('audit.seeMore') }}</summary>
+                <pre>{{ log.Payload || log.payload || t('common.dash') }}</pre>
               </details>
             </td>
           </tr>
@@ -193,13 +193,13 @@ onMounted(async () => {
         <span class="empty-icon">
           <Icon icon="mdi:inbox-outline" width="36" height="36" />
         </span>
-        没有匹配的日志记录
+        {{ t('audit.empty') }}
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-        <span>第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
-        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+        <button :disabled="page <= 1" @click="gotoPage(page - 1)">{{ t('common.prev') }}</button>
+        <span>{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
+        <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">{{ t('common.next') }}</button>
       </footer>
     </div>
   </div>
