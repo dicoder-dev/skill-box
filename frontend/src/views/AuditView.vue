@@ -120,7 +120,9 @@ onMounted(async () => {
     <!-- 后端未就绪占位 -->
     <div v-if="!backendReady" class="card placeholder">
       <div class="empty-state">
-        <span class="empty-icon">🚧</span>
+        <span class="empty-icon">
+          <Icon icon="mdi:construction" width="36" height="36" />
+        </span>
         <h3 style="margin: 8px 0 4px">第 10 步后端尚未就绪</h3>
         <p class="muted">该页面会在 <code>internal/skillpkg/</code> 导出导入包 + <code>caudit</code> 审计日志控制器完成后自动启用。</p>
         <p class="muted">预计接口:<code>GET /api/skillbox/audit/logs</code> · <code>GET /api/skillbox/audit/stats</code></p>
