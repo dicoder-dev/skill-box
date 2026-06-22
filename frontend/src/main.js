@@ -10,7 +10,8 @@ import { useAppStore } from './core/store/app.js'
 import i18n from './core/i18n/index.js'
 
 // 双部署入口:
-// 1) 注册 pinia 并一次性写 store(runtime + platform + baseURL)
+// 1) 注册 pinia 并一次性写 store(runtime + baseURL)
+//    runMode 由后端在 index.html 注入到 window.__APP_RUNTIME__,是平台形态的唯一权威。
 // 2) 探测一次健康检查,确认后端真的在跑(桌面端尤其重要:Webview 加载时后端可能还在初始化)
 // 3) 再 mount Vue,确保首次业务请求能找到后端
 async function bootstrap() {
