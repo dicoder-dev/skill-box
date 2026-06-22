@@ -7,20 +7,50 @@
 //   window.go.app.AppService           ← AppService(app_svc.go,已有)
 //   window.go.desktop.WindowService    ← WindowService(window_svc.go,已有)
 //   window.go.platform.PlatformService ← PlatformService(platform_svc.go,已有)
+//
+// 业务调用请走 HTTP,不暴露在这里。
 package services
 
-import (
-	"ginp-api/cmd/bootstrap"
-)
-
-// Backend 描述桌面端后端的能力(端口查询)。
-// 这里用接口定义,避免 services 反向依赖 desktop 或 bootstrap 包的具体实现。
-type Backend interface {
-	Port() int
-	URL() string
-	// NewSettings 桌面端按需构造 *settings.Service,供 PrefsService 用。
-	NewSettings() interface{ Get(string) (string, bool, error); Set(string, string) error; GetAll() (map[string]string, error) }
+// Notifier 抽象 desktop.Notifier 的最小能力,避免 services 反向依赖 desktop。
+type Notifier interface {
+	HasPermission() bool
+	RequestAuthorization() (bool, error)
+	Notify(id, title, body string) error
 }
 
-// _ 触发 import bootstrap 包;Backend 实际使用时由调用方注入 *bootstrap.Backend。
-var _ = bootstrap.DefaultConfigFile
+// NotifyService 暴露给前端的通知服务。
+// 仅做"通知层"的事,业务逻辑不允许塞到这里。
+type NotifyService struct {
+	n Notifier
+}
+
+// NewNotifyService 构造 NotifyService。
+func NewNotifyService(n Notifier) *NotifyService {
+	return &NotifyService{n: n}
+}
+
+// Show 发送一条系统通知。
+// id 留空时由 Notifier 内部生成;title 必填;body 可选。
+func (s *NotifyService) Show(id, title, body string) error {
+	if s.n == nil {
+		return nil
+	}
+	return s.n.Notify(id, title, body)
+}
+
+// HasPermission 查询当前通知授权状态。
+func (s *NotifyService) HasPermission() bool {
+	if s.n == nil {
+		return false
+	}
+	return s.n.HasPermission()
+}
+
+// RequestAuthorization 触发系统弹授权窗(macOS 首次启动会弹系统对话框)。
+// 返回 true = 用户允许,false = 拒绝或失败。
+func (s *NotifyService) RequestAuthorization() (bool, error) {
+	if s.n == nil {
+		return false, nil
+	}
+	return s.n.RequestAuthorization()
+}
