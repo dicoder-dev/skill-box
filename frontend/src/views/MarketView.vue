@@ -145,9 +145,10 @@ onMounted(async () => {
           />
           <button @click="onSearch">搜索</button>
         </div>
-        <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefresh">
+        <button class="primary flex items-center gap-1.5" :disabled="refreshing || !activeSourceId" @click="onRefresh">
           <span v-if="refreshing" class="spinner"></span>
-          {{ refreshing ? '刷新中…' : '↻ 刷新源' }}
+          <Icon v-else icon="mdi:refresh" width="14" height="14" />
+          {{ refreshing ? '刷新中…' : '刷新源' }}
         </button>
       </div>
 
