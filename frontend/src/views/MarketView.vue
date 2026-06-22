@@ -206,8 +206,8 @@ onMounted(async () => {
             <td>{{ it.author || t('common.dash') }}</td>
             <td class="desc">{{ it.description || t('common.dash') }}</td>
             <td>
-              <span v-for="t in (it.tags || '').split(',').filter(Boolean)" :key="t" class="tag">
-                {{ t }}
+              <span v-for="tg in (it.tags || '').split(',').filter(Boolean)" :key="tg" class="tag">
+                {{ tg }}
               </span>
             </td>
             <td>
