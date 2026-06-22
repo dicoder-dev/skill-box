@@ -143,14 +143,14 @@ onUnmounted(() => {
           <Icon icon="mdi:package-variant-closed" width="22" height="22" />
         </div>
         <div class="min-w-0 flex-1">
-          <div class="text-white font-semibold text-[15px] leading-tight">Skill Box</div>
-          <div class="text-sb-sidebar-muted text-[11px] truncate">AI 工具 skill 统一管理</div>
+          <div class="text-white font-semibold text-[15px] leading-tight">{{ t('app.brand') }}</div>
+          <div class="text-sb-sidebar-muted text-[11px] truncate">{{ t('app.tagline') }}</div>
         </div>
         <button
           v-if="isMobile"
           class="text-sb-sidebar-muted hover:text-white text-lg p-1 flex items-center justify-center"
           @click="sidebarOpen = false"
-          aria-label="关闭侧栏"
+          :aria-label="t('app.closeSidebar')"
         >
           <Icon icon="mdi:close" width="18" height="18" />
         </button>
