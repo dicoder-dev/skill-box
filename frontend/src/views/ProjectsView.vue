@@ -1,7 +1,10 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listProjects, createProject, deleteProject } from '@/api/skillbox/projects'
+
+const { t } = useI18n()
 
 const items = ref([])
 const total = ref(0)
