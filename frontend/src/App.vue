@@ -82,14 +82,14 @@ async function refreshStats() {
 
 onMounted(refreshStats)
 
-// 侧栏配置
-const navItems = [
-  { key: 'skills',      label: 'Skills',      desc: '浏览 / 编辑 / 测试',  icon: 'mdi:book-open-variant' },
-  { key: 'projects',    label: 'Projects',    desc: '项目根 / scope 绑定',  icon: 'mdi:folder-multiple-outline' },
-  { key: 'market',      label: 'Market',      desc: '三方 skill 市场',      icon: 'mdi:cart-outline' },
-  { key: 'onboarding',  label: 'Onboarding',  desc: '首次扫描 / 导入',      icon: 'mdi:compass-outline' },
-  { key: 'audit',       label: 'Audit',       desc: '操作日志 / 审计',      icon: 'mdi:script-text-outline' },
-]
+// 侧栏配置(label/desc 由 i18n 在模板里现取,这里只放图标与 key)
+const navItems = computed(() => [
+  { key: 'skills',      label: t('app.nav.skills.label'),      desc: t('app.nav.skills.desc'),      icon: 'mdi:book-open-variant' },
+  { key: 'projects',    label: t('app.nav.projects.label'),    desc: t('app.nav.projects.desc'),    icon: 'mdi:folder-multiple-outline' },
+  { key: 'market',      label: t('app.nav.market.label'),      desc: t('app.nav.market.desc'),      icon: 'mdi:cart-outline' },
+  { key: 'onboarding',  label: t('app.nav.onboarding.label'),  desc: t('app.nav.onboarding.desc'),  icon: 'mdi:compass-outline' },
+  { key: 'audit',       label: t('app.nav.audit.label'),       desc: t('app.nav.audit.desc'),       icon: 'mdi:script-text-outline' },
+])
 
 function switchTab(k) {
   tab.value = k
