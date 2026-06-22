@@ -21,6 +21,7 @@ export default {
       market: { label: 'Market', desc: '三方 skill 市场' },
       onboarding: { label: 'Onboarding', desc: '首次扫描 / 导入' },
       audit: { label: 'Audit', desc: '操作日志 / 审计' },
+      settings: { label: '设置', desc: '偏好 / 通知 / 快捷键' },
     },
     backendOk: '后端已连接',
     backendDown: '后端断开',
