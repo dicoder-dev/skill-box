@@ -10,21 +10,11 @@
 //   - Linux: xgb + XGrabKey(需 X server)/ portal GlobalShortcuts(Wayland)
 package desktop
 
-import (
-	"fmt"
-	"sync"
-)
+import "fmt"
 
-// GlobalHotKeyManager 全局快捷键管理占位。
-type GlobalHotKeyManager struct {
-	mu       sync.Mutex
-	handlers map[string]func()
-}
-
-// NewGlobalHotKeyManager 构造占位实例。
-func NewGlobalHotKeyManager() *GlobalHotKeyManager {
-	return &GlobalHotKeyManager{
-		handlers: make(map[string]func()),
+func init() {
+	NewGlobalHotKeyManager = func() *GlobalHotKeyManager {
+		return &GlobalHotKeyManager{}
 	}
 }
 
