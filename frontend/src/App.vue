@@ -105,10 +105,12 @@ function switchTab(k) {
         </div>
         <button
           v-if="isMobile"
-          class="text-sb-sidebar-muted hover:text-white text-lg p-1"
+          class="text-sb-sidebar-muted hover:text-white text-lg p-1 flex items-center justify-center"
           @click="sidebarOpen = false"
           aria-label="关闭侧栏"
-        >✕</button>
+        >
+          <Icon icon="mdi:close" width="18" height="18" />
+        </button>
       </div>
 
       <!-- Nav -->
