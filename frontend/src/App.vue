@@ -60,11 +60,11 @@ onMounted(refreshStats)
 
 // 侧栏配置
 const navItems = [
-  { key: 'skills',      label: 'Skills',      desc: '浏览 / 编辑 / 测试',  icon: '📚' },
-  { key: 'projects',    label: 'Projects',    desc: '项目根 / scope 绑定',  icon: '📁' },
-  { key: 'market',      label: 'Market',      desc: '三方 skill 市场',      icon: '🛒' },
-  { key: 'onboarding',  label: 'Onboarding',  desc: '首次扫描 / 导入',      icon: '🧭' },
-  { key: 'audit',       label: 'Audit',       desc: '操作日志 / 审计',      icon: '📜' },
+  { key: 'skills',      label: 'Skills',      desc: '浏览 / 编辑 / 测试',  icon: 'mdi:book-open-variant' },
+  { key: 'projects',    label: 'Projects',    desc: '项目根 / scope 绑定',  icon: 'mdi:folder-multiple-outline' },
+  { key: 'market',      label: 'Market',      desc: '三方 skill 市场',      icon: 'mdi:cart-outline' },
+  { key: 'onboarding',  label: 'Onboarding',  desc: '首次扫描 / 导入',      icon: 'mdi:compass-outline' },
+  { key: 'audit',       label: 'Audit',       desc: '操作日志 / 审计',      icon: 'mdi:script-text-outline' },
 ]
 
 function switchTab(k) {
