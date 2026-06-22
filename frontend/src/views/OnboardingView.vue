@@ -136,24 +136,24 @@ onMounted(loadStatus)
     <header class="head">
       <h2 class="flex items-center gap-2">
         <Icon icon="mdi:compass-outline" width="20" height="20" class="text-sb-primary" />
-        首次 Onboarding
+        {{ t('onboarding.title') }}
       </h2>
-      <p class="muted">扫描本机 5 个 AI 编程工具的 skill 目录,把发现的 skill 勾选导入到 Skill Box 自己的 store(global scope)。</p>
+      <p class="muted">{{ t('onboarding.subtitle') }}</p>
     </header>
 
     <!-- 阶段指示器 -->
     <ol class="steps">
       <li :class="{ active: phase === 'status', done: ['scan', 'import'].includes(phase) }">
         <span class="step-no">1</span>
-        <span class="step-text">查看状态</span>
+        <span class="step-text">{{ t('onboarding.steps.status') }}</span>
       </li>
       <li :class="{ active: phase === 'scan', done: phase === 'import' }">
         <span class="step-no">2</span>
-        <span class="step-text">扫描 + 勾选</span>
+        <span class="step-text">{{ t('onboarding.steps.scan') }}</span>
       </li>
       <li :class="{ active: phase === 'import' }">
         <span class="step-no">3</span>
-        <span class="step-text">完成</span>
+        <span class="step-text">{{ t('onboarding.steps.done') }}</span>
       </li>
     </ol>
 
@@ -166,23 +166,23 @@ onMounted(loadStatus)
 
     <!-- 阶段 1:状态 -->
     <section v-if="phase === 'status'" class="card">
-      <h3>工具 adapter 状态
-        <span class="card-sub">— 共 {{ adapters.length }} 个</span>
+      <h3>{{ t('onboarding.phase1.title') }}
+        <span class="card-sub">— {{ t('onboarding.phase1.total', { n: adapters.length }) }}</span>
       </h3>
       <div v-if="!adapters.length" class="empty-state">
         <span class="empty-icon">
           <Icon icon="mdi:inbox-outline" width="36" height="36" />
         </span>
-        还没注册 adapter
+        {{ t('onboarding.phase1.empty') }}
       </div>
       <table v-else class="grid">
         <thead>
           <tr>
             <th style="width: 50px"></th>
-            <th>Tool</th>
-            <th>ID</th>
-            <th>Global Path</th>
-            <th>状态</th>
+            <th>{{ t('onboarding.phase1.colTool') }}</th>
+            <th>{{ t('onboarding.phase1.colId') }}</th>
+            <th>{{ t('onboarding.phase1.colGlobalPath') }}</th>
+            <th>{{ t('onboarding.phase1.colStatus') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -190,10 +190,10 @@ onMounted(loadStatus)
             <td class="icon-cell">{{ a.icon }}</td>
             <td><b>{{ a.display_name }}</b></td>
             <td><code>{{ a.tool_id }}</code></td>
-            <td class="path">{{ a.global_path || '—' }}</td>
+            <td class="path">{{ a.global_path || t('common.dash') }}</td>
             <td>
-              <span v-if="a.global_ok" class="tag ok">已检测到</span>
-              <span v-else class="tag missing">未找到</span>
+              <span v-if="a.global_ok" class="tag ok">{{ t('onboarding.phase1.detected') }}</span>
+              <span v-else class="tag missing">{{ t('onboarding.phase1.missing') }}</span>
             </td>
           </tr>
         </tbody>
@@ -201,41 +201,41 @@ onMounted(loadStatus)
 
       <div class="actions">
         <span class="muted">
-          上次扫描:{{ lastScan ? new Date(lastScan).toLocaleString() : '从未' }}
-          <span v-if="hasReport">· 共发现 {{ totalFound }} 个 skill</span>
+          {{ t('onboarding.phase1.lastScan') }}{{ lastScan ? new Date(lastScan).toLocaleString() : t('onboarding.phase1.neverScanned') }}
+          <span v-if="hasReport">{{ t('onboarding.phase1.foundSuffix', { n: totalFound }) }}</span>
         </span>
         <button class="primary" :disabled="loading" @click="doScan">
           <span v-if="loading" class="spinner"></span>
-          {{ loading ? '扫描中…' : '开始扫描' }}
+          {{ loading ? t('onboarding.phase1.scanning') : t('onboarding.phase1.btnScan') }}
         </button>
       </div>
     </section>
 
     <!-- 阶段 2:扫描 + 勾选 -->
     <section v-else-if="phase === 'scan'" class="card">
-      <h3>扫描结果
-        <span class="card-sub">— 发现 {{ scanReport?.found?.length || 0 }} 个 skill</span>
+      <h3>{{ t('onboarding.phase2.title') }}
+        <span class="card-sub">— {{ t('onboarding.phase2.foundSuffix', { n: scanReport?.found?.length || 0 }) }}</span>
       </h3>
 
       <div v-if="!scanReport?.found?.length" class="empty-state">
         <span class="empty-icon">
           <Icon icon="mdi:magnify" width="36" height="36" />
         </span>
-        这次扫描没找到任何 skill。可以重扫或先装一些。
+        {{ t('onboarding.phase2.empty') }}
       </div>
 
       <div v-else>
         <div class="bulk-actions">
-          <button class="sm" @click="selectAll">全选</button>
-          <button class="sm ghost" @click="selectNone">全不选</button>
-          <span class="muted">已选 {{ selected.size }} / {{ scanReport.found.length }}</span>
+          <button class="sm" @click="selectAll">{{ t('onboarding.phase2.selectAll') }}</button>
+          <button class="sm ghost" @click="selectNone">{{ t('onboarding.phase2.selectNone') }}</button>
+          <span class="muted">{{ t('onboarding.phase2.selected', { sel: selected.size, total: scanReport.found.length }) }}</span>
         </div>
 
         <div v-for="(g, tid) in foundByTool" :key="tid" class="group">
           <header class="group-head">
             <span class="g-name">{{ g.name }}</span>
             <code class="g-id">{{ tid }}</code>
-            <span class="muted">{{ g.items.length }} 个</span>
+            <span class="muted">{{ g.items.length }}</span>
           </header>
           <ul class="found-list">
             <li v-for="f in g.items" :key="keyOf(f)" :class="{ sel: selected.has(keyOf(f)) }">
@@ -254,10 +254,10 @@ onMounted(loadStatus)
         </div>
 
         <div class="actions">
-          <button class="ghost" @click="reset">返回上一步</button>
+          <button class="ghost" @click="reset">{{ t('onboarding.phase2.btnBack') }}</button>
           <button class="primary" :disabled="loading || selected.size === 0" @click="doImport">
             <span v-if="loading" class="spinner"></span>
-            {{ loading ? '导入中…' : `导入 ${selected.size} 个到 store` }}
+            {{ loading ? t('onboarding.phase2.importing') : t('onboarding.phase2.btnImport', { n: selected.size }) }}
           </button>
         </div>
       </div>
@@ -265,31 +265,31 @@ onMounted(loadStatus)
 
     <!-- 阶段 3:完成 -->
     <section v-else-if="phase === 'import'" class="card">
-      <h3>导入完成</h3>
+      <h3>{{ t('onboarding.phase3.title') }}</h3>
       <div v-if="importResult" class="result-stats">
         <div class="stat ok">
           <span class="stat-num">{{ importResult.ok }}</span>
-          <span class="stat-lbl">成功</span>
+          <span class="stat-lbl">{{ t('onboarding.phase3.statOk') }}</span>
         </div>
         <div class="stat err">
           <span class="stat-num">{{ importResult.failed }}</span>
-          <span class="stat-lbl">失败</span>
+          <span class="stat-lbl">{{ t('onboarding.phase3.statErr') }}</span>
         </div>
         <div class="stat">
           <span class="stat-num">{{ importResult.total }}</span>
-          <span class="stat-lbl">总计</span>
+          <span class="stat-lbl">{{ t('onboarding.phase3.statTotal') }}</span>
         </div>
       </div>
       <ul v-if="importResult?.results?.length" class="result-list">
         <li v-for="(r, i) in importResult.results" :key="i" :class="r.ok ? 'ok' : 'err'">
-          <span class="r-tool">{{ r.tool_id || r.tool || '—' }}</span>
+          <span class="r-tool">{{ r.tool_id || r.tool || t('common.dash') }}</span>
           <span class="r-name"><code>{{ r.name || r.canonical?.manifest?.name }}</code></span>
           <span class="r-msg">{{ r.error || r.message || (r.ok ? 'OK' : 'failed') }}</span>
         </li>
       </ul>
       <div class="actions">
-        <button class="ghost" @click="reset">再扫一次</button>
-        <button class="primary" @click="goSkills">去 Skills 页查看</button>
+        <button class="ghost" @click="reset">{{ t('onboarding.phase3.btnAgain') }}</button>
+        <button class="primary" @click="goSkills">{{ t('onboarding.phase3.btnGoSkills') }}</button>
       </div>
     </section>
   </div>
