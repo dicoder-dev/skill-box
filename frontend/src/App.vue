@@ -90,6 +90,7 @@ const navItems = computed(() => [
   { key: 'market',      label: t('app.nav.market.label'),      desc: t('app.nav.market.desc'),      icon: 'mdi:cart-outline' },
   { key: 'onboarding',  label: t('app.nav.onboarding.label'),  desc: t('app.nav.onboarding.desc'),  icon: 'mdi:compass-outline' },
   { key: 'audit',       label: t('app.nav.audit.label'),       desc: t('app.nav.audit.desc'),       icon: 'mdi:script-text-outline' },
+  { key: 'settings',    label: t('app.nav.settings.label'),    desc: t('app.nav.settings.desc'),    icon: 'mdi:cog-outline' },
 ])
 
 function switchTab(k) {
