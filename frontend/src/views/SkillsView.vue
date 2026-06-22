@@ -523,54 +523,54 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
     <div v-if="selectedSkill" class="card tag-panel">
       <header class="tp-head">
-        <h4>Tag 管理 — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code></h4>
-        <span class="tp-count">{{ tagList.length }} 个 tag</span>
-        <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">关闭</button>
+        <h4>{{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code></h4>
+        <span class="tp-count">{{ t('skills.tag.count', { count: tagList.length }) }}</span>
+        <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">{{ t('common.close') }}</button>
       </header>
       <p v-if="tagMessage" class="tag-msg">{{ tagMessage }}</p>
       <p v-if="tagError" class="error">{{ tagError }}</p>
 
       <div class="tag-create">
-        <input v-model="newTagName" placeholder="tag 名,如 v1.0.0" class="tag-input" />
-        <input v-model="newTagMessage" placeholder="描述(可选)" class="tag-input" />
-        <button class="primary" :disabled="tagLoading" @click="doCreateTag">{{ tagLoading ? '处理中…' : '打 Tag' }}</button>
+        <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
+        <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
+        <button class="primary" :disabled="tagLoading" @click="doCreateTag">{{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}</button>
       </div>
 
       <div v-if="tagList.length" class="tag-actions">
-        <span class="tag-label">Diff:</span>
+        <span class="tag-label">{{ t('skills.tag.diff') }}:</span>
         <select v-model="diffLeftTagID">
-          <option :value="0">current</option>
-          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? ' [implicit]' : '' }}</option>
+          <option :value="0">{{ t('skills.tag.current') }}</option>
+          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
         </select>
         <span>→</span>
         <select v-model="diffRightTagID">
-          <option :value="0">current</option>
-          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? ' [implicit]' : '' }}</option>
+          <option :value="0">{{ t('skills.tag.current') }}</option>
+          <option v-for="t in tagList" :key="t.ID || t.id" :value="t.ID || t.id">{{ t.Tag }} ({{ (t.CreatedAt || '').slice(0, 16) }}){{ t.IsImplicit ? t('skills.tag.implicit') : '' }}</option>
         </select>
-        <button @click="doDiff(diffLeftTagID, diffRightTagID)">看 Diff</button>
-        <button @click="doDiff(0, 0)">清空</button>
+        <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
+        <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
       </div>
 
       <ul v-if="tagList.length" class="tag-list">
         <li v-for="t in tagList" :key="t.ID || t.id" :class="{ implicit: t.IsImplicit }">
           <span class="t-id">#{{ t.ID || t.id }}</span>
           <span class="t-name"><code>{{ t.Tag }}</code></span>
-          <span class="t-msg">{{ t.Message || '—' }}</span>
+          <span class="t-msg">{{ t.Message || t('common.dash') }}</span>
           <span class="t-time">{{ (t.CreatedAt || '').slice(0, 19) }}</span>
-          <button class="link" @click="doDiff(t.ID || t.id, 0)">vs current</button>
-          <button class="link" :disabled="rolling" @click="doRollback(t.ID || t.id)">{{ rolling ? '回滚中…' : '回滚到此' }}</button>
-          <button class="link danger" @click="doDeleteTag(t.ID || t.id)">删</button>
+          <button class="link" @click="doDiff(t.ID || t.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
+          <button class="link" :disabled="rolling" @click="doRollback(t.ID || t.id)">{{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}</button>
+          <button class="link danger" @click="doDeleteTag(t.ID || t.id)">{{ t('common.delete') }}</button>
         </li>
       </ul>
 
       <div v-if="diffResult" class="diff-panel">
         <header class="dp-head">
-          <h4>Diff 结果</h4>
+          <h4>{{ t('skills.tag.resultTitle') }}</h4>
           <span class="dp-stats">
-            <span class="added">+{{ diffResult.added }}</span>
-            <span class="removed">-{{ diffResult.removed }}</span>
-            <span class="modified">~{{ diffResult.modified }}</span>
-            <span class="unchanged">{{ diffResult.unchanged }} 不变</span>
+            <span class="added">{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
+            <span class="removed">{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
+            <span class="modified">{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
+            <span class="unchanged">{{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
           </span>
         </header>
         <div v-for="f in diffResult.files" :key="f.path" class="diff-file" :class="`kind-${f.kind}`">
