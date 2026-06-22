@@ -113,6 +113,8 @@ export default {
       emptyName: 'tag 名不能为空',
       confirmDelete: '删除 tag #{id}?file_snapshots 也会一起删。',
       confirmRollback: '回滚到 tag #{id}?会自动打一个 _pre_rollback 隐式 tag,当前状态不会丢失。',
+      confirmUndo: '撤销 apply #{id}?将恢复目标目录到 apply 之前的状态。',
+      undoMsg: '已撤销 apply #{id}',
       rollbackTo: '回滚到此',
       rollingBack: '回滚中…',
       diff: 'Diff',
