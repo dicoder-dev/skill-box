@@ -463,45 +463,45 @@ onMounted(() => { reload(); checkUpdateBadge() })
     </div>
 
     <form v-if="editing" class="card editor" @submit.prevent="submit">
-      <h3>{{ editingKey ? '编辑 Skill' : '新建 Skill' }}
+      <h3>{{ editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew') }}
         <span v-if="editingKey" class="card-sub"><code>{{ editingKey.name }}@{{ editingKey.version }}</code></span>
       </h3>
       <div class="row">
         <label>
-          <span>Name</span>
-          <input v-model="draft.name" placeholder="英文短名,如 review-pr" :disabled="!!editingKey" />
+          <span>{{ t('skills.editor.name') }}</span>
+          <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
         </label>
         <label>
-          <span>Version</span>
-          <input v-model="draft.version" placeholder="0.1.0" :disabled="!!editingKey" />
+          <span>{{ t('skills.editor.version') }}</span>
+          <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
         </label>
         <label>
-          <span>Scope</span>
+          <span>{{ t('skills.editor.scope') }}</span>
           <select v-model="draft.scope" :disabled="!!editingKey">
             <option value="global">global</option>
             <option value="project">project</option>
           </select>
         </label>
         <label v-if="draft.scope === 'project'">
-          <span>Project ID</span>
+          <span>{{ t('skills.editor.projectId') }}</span>
           <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
         </label>
       </div>
       <label class="full">
-        <span>Description <small>(≥ 10 字符)</small></span>
+        <span>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></span>
         <textarea v-model="draft.description" rows="2" />
       </label>
       <label class="full">
-        <span>Triggers <small>(每行一个,或逗号分隔)</small></span>
+        <span>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></span>
         <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review" />
       </label>
       <label class="full">
-        <span>Body (Markdown,frontmatter 会自动拼)</span>
+        <span>{{ t('skills.editor.body') }}</span>
         <textarea v-model="draft.body" rows="14" class="code" />
       </label>
       <div class="actions">
-        <button type="button" class="ghost" @click="editing = false">取消</button>
-        <button type="submit" class="primary">{{ editingKey ? '保存' : '创建' }}</button>
+        <button type="button" class="ghost" @click="editing = false">{{ t('common.cancel') }}</button>
+        <button type="submit" class="primary">{{ editingKey ? t('common.save') : t('common.create') }}</button>
       </div>
     </form>
 
