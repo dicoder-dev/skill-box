@@ -152,7 +152,9 @@ onMounted(reload)
         </tbody>
       </table>
       <div v-else-if="!loading" class="empty-state">
-        <span class="empty-icon">📂</span>
+        <span class="empty-icon">
+          <Icon icon="mdi:folder-open-outline" width="36" height="36" />
+        </span>
         还没有登记项目。点右上角"+ 新建项目"开始
       </div>
 
