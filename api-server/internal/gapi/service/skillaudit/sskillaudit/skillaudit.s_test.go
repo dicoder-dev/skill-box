@@ -243,3 +243,82 @@ func TestRollback_NotFound(t *testing.T) {
 		t.Errorf("err = %v, want ErrTagNotFound", err)
 	}
 }
+
+// TestCreateTag_WritesAuditLog 验证打 tag 成功后 audit_log 进了 action=tag_create。
+func TestCreateTag_WritesAuditLog(t *testing.T) {
+	svc, ssvc := newTestSvc(t)
+	row, err := ssvc.Create(&sskill.WriteInput{
+		Scope: skilladapter.ScopeGlobal,
+		Manifest: skilladapter.Manifest{
+			Name: "audit-tag", Version: "0.1.0", Description: "this is a test skill for tag", Triggers: []string{"t"},
+		},
+		Files: []skilladapter.File{{Path: "SKILL.md", Content: "# x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateTag(&sskillaudit.CreateTagInput{
+		SkillID: row.ID, Tag: "v1.0", Message: "first",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).
+		Where("action = ? AND target_id = ?", "tag_create", row.ID).Count(&n).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("audit_log tag_create count = %d, want 1", n)
+	}
+}
+
+// TestRollback_WritesAuditLog 验证回滚成功后 audit_log 进了 action=rollback + pre-rollback 隐式 tag 的 tag_create。
+func TestRollback_WritesAuditLog(t *testing.T) {
+	svc, ssvc := newTestSvc(t)
+	row, err := ssvc.Create(&sskill.WriteInput{
+		Scope: skilladapter.ScopeGlobal,
+		Manifest: skilladapter.Manifest{
+			Name: "audit-rb", Version: "0.1.0", Description: "this is a test skill for rollback", Triggers: []string{"r"},
+		},
+		Files: []skilladapter.File{{Path: "SKILL.md", Content: "old"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tagOut, err := svc.CreateTag(&sskillaudit.CreateTagInput{
+		SkillID: row.ID, Tag: "v1", Message: "first",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 改当前内容
+	if _, err := ssvc.Update(skilladapter.ScopeGlobal, "audit-rb", "0.1.0", 0, &sskill.WriteInput{
+		Scope: skilladapter.ScopeGlobal,
+		Manifest: skilladapter.Manifest{
+			Name: "audit-rb", Version: "0.1.0", Description: "this is a test skill for rollback", Triggers: []string{"r"},
+		},
+		Files: []skilladapter.File{{Path: "SKILL.md", Content: "new"}},
+		Source: "local",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Rollback(&sskillaudit.RollbackInput{TagID: tagOut.TagID}); err != nil {
+		t.Fatal(err)
+	}
+	// 期望:rollback 1 + 隐式 tag_create 1(来自 Rollback 内部 CreateTag)
+	var rb, tc int64
+	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).
+		Where("action = ? AND target_id = ?", "rollback", row.ID).Count(&rb).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).
+		Where("action = ? AND target_id = ?", "tag_create", row.ID).Count(&tc).Error; err != nil {
+		t.Fatal(err)
+	}
+	if rb != 1 {
+		t.Fatalf("audit_log rollback count = %d, want 1", rb)
+	}
+	if tc < 2 {
+		t.Fatalf("audit_log tag_create count = %d, want >= 2 (user + pre-rollback)", tc)
+	}
+}
