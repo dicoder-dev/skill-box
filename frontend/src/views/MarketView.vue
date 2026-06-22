@@ -216,8 +216,10 @@ onMounted(async () => {
         </tbody>
       </table>
       <div v-else-if="!loading" class="empty-state">
-        <span class="empty-icon">📡</span>
-        当前源还没拉过。点 "↻ 刷新源" 把三方目录拉到本地。
+        <span class="empty-icon">
+          <Icon icon="mdi:radio-tower" width="36" height="36" />
+        </span>
+        当前源还没拉过。点 "刷新源" 把三方目录拉到本地。
       </div>
       <div v-else class="empty-state">
         <span class="spinner"></span>
