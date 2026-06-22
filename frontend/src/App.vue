@@ -61,6 +61,15 @@ onMounted(() => {
       document.documentElement.classList.add('dark')
     }
   }
+
+  // 恢复侧边栏宽度
+  const savedWidth = localStorage.getItem('sidebarWidth')
+  if (savedWidth) {
+    const w = parseInt(savedWidth, 10)
+    if (w >= MIN_SIDEBAR_WIDTH && w <= MAX_SIDEBAR_WIDTH) {
+      sidebarWidth.value = w
+    }
+  }
 })
 
 // 切换主题
@@ -89,6 +98,40 @@ onMounted(() => {
   window.addEventListener('resize', checkViewport)
 })
 onUnmounted(() => window.removeEventListener('resize', checkViewport))
+
+// 侧边栏拖拽调节宽度
+const isResizing = ref(false)
+
+function startResize(e) {
+  if (isMobile.value) return
+  isResizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
+function onResizeMove(e) {
+  if (!isResizing.value) return
+  const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, e.clientX))
+  sidebarWidth.value = newWidth
+}
+
+function stopResize() {
+  if (!isResizing.value) return
+  isResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  localStorage.setItem('sidebarWidth', String(sidebarWidth.value))
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+})
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 
 // 顶部统计
 const stats = ref({
