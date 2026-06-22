@@ -405,14 +405,21 @@ onMounted(() => { reload(); checkUpdateBadge() })
 <template>
   <div class="skills-layout"><section class="skills-view" :class="{ 'with-ai': aiOpen }">
     <header class="head">
-      <h2>📚 Skills</h2>
+      <h2 class="flex items-center gap-2">
+        <Icon icon="mdi:book-open-variant" width="20" height="20" class="text-sb-primary" />
+        Skills
+      </h2>
       <p class="muted">浏览 / 编辑 / 测试 / 落工具 / 打 tag / 回滚。AI 侧栏一键改写 frontmatter 与 body。</p>
     </header>
 
     <div class="bar">
       <div class="tabs flex">
-        <button :class="['px-4 py-1.5 border border-sb-border text-[13px] transition-colors', scope === 'global' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('global')">🌐 全局</button>
-        <button :class="['px-4 py-1.5 border border-sb-border border-l-0 text-[13px] transition-colors rounded-r', scope === 'project' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('project')">📁 项目</button>
+        <button :class="['px-4 py-1.5 border border-sb-border text-[13px] transition-colors flex items-center gap-1.5', scope === 'global' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('global')">
+          <Icon icon="mdi:earth" width="14" height="14" />全局
+        </button>
+        <button :class="['px-4 py-1.5 border border-sb-border border-l-0 text-[13px] transition-colors rounded-r flex items-center gap-1.5', scope === 'project' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('project')">
+          <Icon icon="mdi:folder-outline" width="14" height="14" />项目
+        </button>
       </div>
       <div class="search flex gap-1.5 md:ml-auto">
         <input
@@ -424,7 +431,10 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <button @click="() => { page = 1; reload() }">搜索</button>
       </div>
       <div class="actions flex gap-1.5">
-        <button @click="toggleAI">{{ aiOpen ? '🤖 关闭 AI' : '🤖 打开 AI' }}</button>
+        <button @click="toggleAI" class="flex items-center gap-1.5">
+          <Icon icon="mdi:robot-outline" width="14" height="14" />
+          {{ aiOpen ? '关闭 AI' : '打开 AI' }}
+        </button>
         <button class="primary" @click="startNew">+ 新建 Skill</button>
       </div>
     </div>
@@ -434,15 +444,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
       <select v-model="applyTool" class="!py-1">
         <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
       </select>
-      <button class="sm" @click="checkUpdateBadge" :disabled="updating">
+      <button class="sm flex items-center gap-1.5" @click="checkUpdateBadge" :disabled="updating">
         <span v-if="updating" class="spinner"></span>
-        {{ updating ? '检测中…' : '🔄 检测更新' }}
+        <Icon v-else icon="mdi:refresh" width="14" height="14" />
+        {{ updating ? '检测中…' : '检测更新' }}
       </button>
-      <span v-if="updateBadge.updates > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-danger-dim text-sb-danger">
-        ⚠️ {{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
+      <span v-if="updateBadge.updates > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-danger-dim text-sb-danger inline-flex items-center gap-1">
+        <Icon icon="mdi:alert-circle-outline" width="12" height="12" />{{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
       </span>
-      <span v-else-if="updateBadge.total > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-success-dim text-sb-success">
-        ✅ {{ updateBadge.total }} 个 skill 已是最新
+      <span v-else-if="updateBadge.total > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-success-dim text-sb-success inline-flex items-center gap-1">
+        <Icon icon="mdi:check-circle-outline" width="12" height="12" />{{ updateBadge.total }} 个 skill 已是最新
       </span>
       <p v-if="applyMessage" class="text-sb-success m-0 text-[12px] basis-full">{{ applyMessage }}</p>
       <p v-if="applyError" class="text-sb-danger m-0 text-[12px] basis-full">{{ applyError }}</p>
