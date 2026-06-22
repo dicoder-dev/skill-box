@@ -96,8 +96,8 @@ function switchTab(k) {
     >
       <!-- Brand -->
       <div class="flex items-center gap-3 px-4 py-5 border-b border-sb-sidebar-border">
-        <div class="w-9 h-9 rounded-lg flex items-center justify-center text-xl bg-gradient-to-br from-sb-primary to-purple-600">
-          📦
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center text-xl bg-gradient-to-br from-sb-primary to-purple-600 text-white">
+          <Icon icon="mdi:package-variant-closed" width="22" height="22" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-white font-semibold text-[15px] leading-tight">Skill Box</div>
