@@ -92,7 +92,9 @@ onMounted(reload)
       </button>
     </div>
 
-    <p v-if="error" class="error">⚠️ {{ error }}</p>
+    <p v-if="error" class="error inline-flex items-center gap-1.5">
+      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />{{ error }}
+    </p>
 
     <form v-if="showForm" class="card form" @submit.prevent="submit">
       <h3>新建项目</h3>
