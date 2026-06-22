@@ -61,6 +61,26 @@ func (s *Service) snapModel() *mskillfilesnapshot.Model {
 	return mskillfilesnapshot.NewModel(s.dbWrite, s.dbRead)
 }
 
+// audit 内部 helper:把关键事件落 audit_log。actor 暂用 "system"。
+func (s *Service) audit(action string, targetID uint, payload any) {
+	if s.dbWrite == nil {
+		return
+	}
+	payloadStr := ""
+	if payload != nil {
+		if b, err := json.Marshal(payload); err == nil {
+			payloadStr = string(b)
+		}
+	}
+	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
+		Actor:      "system",
+		Action:     action,
+		TargetType: "tag",
+		TargetID:   targetID,
+		Payload:    payloadStr,
+	})
+}
+
 // CreateTagInput 打 tag 入参。
 type CreateTagInput struct {
 	SkillID uint   `json:"skill_id"`
