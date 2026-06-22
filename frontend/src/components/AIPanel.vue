@@ -234,7 +234,7 @@ function copy(text) {
 }
 
 .ai-icon {
-  color: #7c3aed;
+  color: #d97706;
 }
 
 .presets {
