@@ -38,13 +38,14 @@ func NewApplierWithClock(registry *skilladapter.Registry, now func() time.Time) 
 
 // ApplyResult 单 tool 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
 type ApplyResult struct {
-	Tool        string      `json:"tool"`
-	TargetPath  string      `json:"target_path"`
-	Status      string      `json:"status"` // applied / failed
-	PreSnapshot *PreSnapshot `json:"-"`     // 不进 JSON,只走 service 内部
-	Error       string      `json:"error,omitempty"`
-	StartedAt   time.Time   `json:"started_at"`
-	FinishedAt  time.Time   `json:"finished_at"`
+	Tool        string       `json:"tool"`
+	TargetPath  string       `json:"target_path"`
+	Status      string       `json:"status"` // applied / failed
+	ApplyID     uint         `json:"apply_id,omitempty"` // service 写完 DB 后回填
+	PreSnapshot *PreSnapshot `json:"-"`      // 不进 JSON,只走 service 内部
+	Error       string       `json:"error,omitempty"`
+	StartedAt   time.Time    `json:"started_at"`
+	FinishedAt  time.Time    `json:"finished_at"`
 }
 
 // ApplyOne 把 canonical 落到 in.Tools[0](单 tool);批量由 caller 循环调。
