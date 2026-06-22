@@ -56,7 +56,7 @@ async function doScan() {
     selected.value = new Set((res.found || []).map((f) => keyOf(f)))
     phase.value = 'scan'
   } catch (e) {
-    error.value = `扫描失败: ${e?.message || e}`
+    error.value = t('onboarding.errScan', { msg: e?.message || e })
   } finally {
     loading.value = false
   }
