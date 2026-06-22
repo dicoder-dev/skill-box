@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, provide } from 'vue'
 import { Icon } from '@iconify/vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
@@ -11,6 +11,27 @@ import { listProjects } from '@/api/skillbox/projects'
 import { getOnboardingStatus } from '@/api/skillbox/onboarding'
 
 const tab = ref('skills')
+
+// 轻量事件总线:Onboarding 完成页"去 Skills 页查看"等跨组件跳转走这里。
+// 走 provide/inject 避免引第三方库,API 形似 mitt:`bus.on(name, fn)` / `bus.off` / `bus.emit`。
+const eventBus = (() => {
+  const listeners = new Map()
+  return {
+    on(name, fn) {
+      if (!listeners.has(name)) listeners.set(name, new Set())
+      listeners.get(name).add(fn)
+    },
+    off(name, fn) {
+      listeners.get(name)?.delete(fn)
+    },
+    emit(name, payload) {
+      listeners.get(name)?.forEach((fn) => {
+        try { fn(payload) } catch (e) { console.error(`[eventBus] ${name} listener error:`, e) }
+      })
+    },
+  }
+})()
+provide('appBus', eventBus)
 
 // 响应式:md 以下(768px)侧栏变抽屉
 const sidebarOpen = ref(true)
