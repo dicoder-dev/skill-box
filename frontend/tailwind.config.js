@@ -12,13 +12,13 @@ export default {
           // 侧边栏 - 浅色模式
           sidebar: '#f8fafc',
           'sidebar-hover': '#f1f5f9',
-          'sidebar-active': '#2563eb',
+          'sidebar-active': '#0d9488',
           'sidebar-border': '#e2e8f0',
           'sidebar-muted': '#64748b',
           // 侧边栏 - 暗黑模式
           'sidebar-dark': '#0f172a',
           'sidebar-hover-dark': '#1e293b',
-          'sidebar-active-dark': '#3b82f6',
+          'sidebar-active-dark': '#14b8a6',
           'sidebar-border-dark': '#334155',
           'sidebar-muted-dark': '#94a3b8',
           // 主区 - 浅色模式
@@ -38,11 +38,11 @@ export default {
           'dim-dark': '#94a3b8',
           'faint-dark': '#64748b',
           // 主色
-          primary: '#2563eb',
-          'primary-dark': '#3b82f6',
-          'primary-dim': '#dbeafe',
-          'primary-dim-dark': '#1e3a5f',
-          'primary-hover': '#1d4ed8',
+          primary: '#0d9488',
+          'primary-dark': '#14b8a6',
+          'primary-dim': '#ccfbf1',
+          'primary-dim-dark': '#134e4a',
+          'primary-hover': '#0f766e',
           // 状态色
           success: '#059669',
           'success-dim': '#d1fae5',
