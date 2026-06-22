@@ -140,6 +140,11 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 		IsImplicit: false,
 	}
 	if _, err := s.tagModel().Create(tagRow); err != nil {
+		s.audit("tag_create_failed", in.SkillID, map[string]any{
+			"tag":     in.Tag,
+			"message": in.Message,
+			"error":   err.Error(),
+		})
 		return nil, fmt.Errorf("skillaudit: create tag: %w", err)
 	}
 	// 写文件快照
@@ -150,9 +155,20 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 			Content:     f.Content,
 			ContentHash: f.ContentHash,
 		}); err != nil {
+			s.audit("tag_create_failed", in.SkillID, map[string]any{
+				"tag":     in.Tag,
+				"message": in.Message,
+				"error":   err.Error(),
+			})
 			return nil, fmt.Errorf("skillaudit: create file snapshot: %w", err)
 		}
 	}
+	s.audit("tag_create", in.SkillID, map[string]any{
+		"tag_id":  tagRow.ID,
+		"tag":     in.Tag,
+		"message": in.Message,
+		"files":   len(built.Files),
+	})
 	return &CreateTagOutput{
 		TagID:     tagRow.ID,
 		Tag:       in.Tag,
