@@ -410,9 +410,9 @@ onMounted(() => { reload(); checkUpdateBadge() })
     <header class="head">
       <h2 class="flex items-center gap-2">
         <Icon icon="mdi:book-open-variant" width="20" height="20" class="text-sb-primary" />
-        Skills
+        {{ t('skills.title') }}
       </h2>
-      <p class="muted">浏览 / 编辑 / 测试 / 落工具 / 打 tag / 回滚。AI 侧栏一键改写 frontmatter 与 body。</p>
+      <p class="muted">{{ t('skills.subtitle') }}</p>
     </header>
 
     <div class="bar">
