@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, provide } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
@@ -9,6 +10,8 @@ import AuditView from './views/AuditView.vue'
 import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { getOnboardingStatus } from '@/api/skillbox/onboarding'
+
+const { t } = useI18n()
 
 const tab = ref('skills')
 
