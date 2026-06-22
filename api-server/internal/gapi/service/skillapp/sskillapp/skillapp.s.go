@@ -222,7 +222,25 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 			PreSnapshot: bir.Result.PreSnapshot.Marshal(),
 			AppliedAt:   bir.Result.FinishedAt,
 		}
-		_, _ = s.applyModel().Create(row)
+		created, _ := s.applyModel().Create(row)
+		if created != nil {
+			if bir.Result.Status == skillapp.StatusApplied {
+				s.audit("apply", bir.SkillID, map[string]any{
+					"tool":         bir.Tool,
+					"scope":        bir.Scope,
+					"target_path":  bir.Result.TargetPath,
+					"apply_id":     created.ID,
+					"batch":        true,
+				})
+			} else if bir.Result.Status == skillapp.StatusFailed {
+				s.audit("apply_failed", bir.SkillID, map[string]any{
+					"tool":        bir.Tool,
+					"scope":       bir.Scope,
+					"target_path": bir.Result.TargetPath,
+					"batch":       true,
+				})
+			}
+		}
 		bir.Result.PreSnapshot = nil
 	}
 	return out, nil
