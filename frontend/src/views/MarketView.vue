@@ -294,13 +294,13 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
   color: white;
   flex-shrink: 0;
 }
 
 .view-icon-orange {
-  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
 }
 
 .view-title h1 {
