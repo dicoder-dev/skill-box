@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import {
   listSources,
@@ -7,6 +8,8 @@ import {
   refreshSource,
   installMarketSkill,
 } from '@/api/skillbox/market.js'
+
+const { t } = useI18n()
 
 // 状态
 const loading = ref(false)
