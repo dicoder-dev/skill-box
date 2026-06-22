@@ -3,12 +3,19 @@
 // Web 端:baseURL 为空字符串,走相对路径(同源)。
 // 桌面端:baseURL 为 http://127.0.0.1:<port>。
 //
+// 桌面/Web 判定依据:window.__APP_RUNTIME__.runMode(由后端按启动命令注入)。
+//   - wails3 dev / 桌面二进制 → runMode="desktop"
+//   - go run ./cmd/web / Web 单进程二进制 → runMode="web"
+// 不再用 window.go 是否存在作为判据,因为后端注入的 runMode 才是权威。
+//
 // 端口解析策略:
 //   1) 优先用 Wails 绑定 window.go.app.AppService.GetServerPort() 拿端口
 //   2) 拿不到时,fetch 当前 origin /api/health 探测,成功则信任当前 origin
 //   3) 兜底直接走当前 origin(window.location.origin)——开发时由 vite 代理后端
 //
 // 业务代码应 import { http } from '@/api/http' 调接口,不要直接用 fetch 或 axios。
+
+import { getRuntime } from '@/core/utils/runtime.js'
 
 let resolvedBaseURL = null
 
