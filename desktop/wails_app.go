@@ -3,6 +3,7 @@ package desktop
 import (
 	"context"
 	"io/fs"
+	"log"
 	"time"
 
 	"ginp-api/cmd/bootstrap"
@@ -32,14 +33,18 @@ type AppConfig struct {
 // 通过 bootstrap.Boot 启动并 Serve 阻塞。后端生命周期跟 App 解耦 ——
 // App 只在退出时通知 Wails,后端 server 由 main 的 Serve 阻塞在另一个 goroutine。
 type App struct {
-	app     *application.App
-	backend *bootstrap.Backend
+	app       *application.App
+	backend   *bootstrap.Backend
+	notifier  *Notifier
+	shortcut  *ShortcutManager
 }
 
 // NewApp 构造并完整组装桌面端 Wails 应用:
-//   - 注册 Wails Bind 服务(AppService / WindowService / PlatformService)
+//   - 注册 Wails Bind 服务(AppService / WindowService / PlatformService /
+//     NotifyService / ShortcutService / PrefsService)
 //   - 创建主窗口,加载 backend.URL
 //   - 装载应用菜单和系统托盘
+//   - OnShutdown 时解绑全局快捷键
 //
 // 注意:此函数不会阻塞。Run() 才会阻塞直到应用退出。
 // 调用方应保证 backend 已经在 NewApp 之前通过 bootstrap.Boot 启动。
@@ -65,11 +70,15 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	if cfg.BackgroundColour == [3]uint8{} {
 		cfg.BackgroundColour = [3]uint8{27, 38, 54}
 	}
-	_ = cfg.BackgroundColour // 上面比较后再赋,这里仅消除 unused 警告
+	_ = cfg.BackgroundColour
 
 	windowMgr := NewWindowManager()
 	appSvc := services.NewAppService(backend)
 	windowSvc := services.NewWindowService(windowMgr) // windowMgr 满足 services.WindowManager 接口
+
+	// 桌面端偏好 settings(由 bootstrap.Backend.NewSettings 工厂方法构造)
+	prefsStore := settingsAdapter{backend: backend}
+	prefsSvc := services.NewPrefsService(prefsStore)
 
 	app := application.New(application.Options{
 		Name:        cfg.Name,
@@ -78,11 +87,31 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 			application.NewService(appSvc),
 			application.NewService(windowSvc),
 			application.NewService(services.NewPlatformService(nil)),
+			application.NewService(services.NewPrefsService(prefsStore)),
 		},
+		// 关窗≠退出:macOS 关掉所有窗口后进程继续在托盘跑;
+		// Windows 走 DisableQuitOnLastWindowClosed 同样语义。
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
+		},
+		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
+		OnShutdown: func() {
+			// 进程退出时解绑全局快捷键(Carbon 端绑的事件回调会自然失效,
+			// 这里主要打日志便于排查)。
+			log.Printf("desktop: shutdown")
 		},
 	})
+
+	// 通知 + 快捷键:在 NewApp 阶段就构造好,Startup 钩子里调系统 API。
+	notifier := NewNotifier(app)
+	shortcut := NewShortcutManager()
+	notifySvc := services.NewNotifyService(notifier)
+	shortcutSvc := services.NewShortcutService(shortcut)
+	// 把 NotifyService / ShortcutService 也挂进 Services(独立 New,instance 不同)
+	app.RegisterService(application.NewService(notifySvc))
+	app.RegisterService(application.NewService(shortcutSvc))
 
 	// 主窗口:加载后端 URL(注意 Webview 走 HTTP,不走 Wails AssetServer)
 	primary := app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -104,8 +133,6 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	windowMgr.RegisterPrimary(primary)
 
 	// 菜单 + 托盘
-	// quitApp 直接退出 Wails,后端 server 在 main 协程的 Serve 中由 OS 强制关闭。
-	// 这是 Wails 桌面端最常见的退出方式 —— OS 杀进程比 graceful Shutdown 简单且足够。
 	showPrimary := func() { windowMgr.ShowPrimary() }
 	quitApp := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -113,10 +140,26 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 		_ = ctx
 		app.Quit()
 	}
+	// 偏好设置:跳到前端 /settings/desktop 路由(SettingsView 末尾的桌面端 section)
+	openSettings := func() {
+		windowMgr.ShowPrimary()
+		if w := windowMgr.Primary(); w != nil {
+			w.Navigate(backend.URL() + "/settings/desktop")
+		}
+	}
 	app.Menu.SetApplicationMenu(NewAppMenu(app, showPrimary, quitApp))
-	_ = NewTrayManager(app, showPrimary, quitApp)
+	_ = NewTrayManager(app, TrayCallbacks{
+		OnShow:         showPrimary,
+		OnQuit:         quitApp,
+		OnOpenSettings: openSettings,
+	}, notifier)
 
-	return &App{app: app, backend: backend}
+	return &App{
+		app:      app,
+		backend:  backend,
+		notifier: notifier,
+		shortcut: shortcut,
+	}
 }
 
 // Run 阻塞运行 Wails 应用,直到 app.Quit / 关闭窗口被触发。
@@ -125,7 +168,126 @@ func (a *App) Run() error {
 	if a == nil || a.app == nil {
 		return nil
 	}
+	// Startup 钩子里:通知授权 + 启用全局快捷键 + 应用 start_minimized。
+	// wails v3 alpha.60 没有 OnStartup 字段,改成在 Run() 之前开 goroutine
+	// 异步跑(等 Wails 主循环 ready 后再调系统 API;最差情况是头几次点通知没反应)。
+	a.startupAsync()
 	return a.app.Run()
+}
+
+// startupAsync 在 Run() 阻塞前异步跑启动期副作用。
+// 用 goroutine + 小 sleep 错开 Wails 主循环初始化,避免和 macOS app delegate 抢线程。
+func (a *App) startupAsync() {
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		// 1) 读偏好
+		var (
+			notifyEnabled  = true
+			shortcutEnabled = true
+			startMinimized = false
+		)
+		if a.backend != nil {
+			prefs := a.backend.NewSettings()
+			if prefs != nil {
+				if v, ok, _ := prefs.Get(PrefKeyNotifyEnabled); ok && v == "false" {
+					notifyEnabled = false
+				}
+				if v, ok, _ := prefs.Get(PrefKeyShortcutEnabled); ok && v == "false" {
+					shortcutEnabled = false
+				}
+				if v, ok, _ := prefs.Get(PrefKeyStartMinimized); ok && v == "true" {
+					startMinimized = true
+				}
+			}
+		}
+		a.notifier.SetEnabled(notifyEnabled)
+		a.shortcut.SetEnabled(shortcutEnabled)
+
+		// 2) 通知授权
+		if notifyEnabled && !a.notifier.HasPermission() {
+			if ok, err := a.notifier.RequestAuthorization(); err != nil {
+				log.Printf("desktop: notifier RequestAuth error: %v", err)
+			} else if ok {
+				log.Printf("desktop: notification authorized")
+			} else {
+				log.Printf("desktop: notification denied by user")
+			}
+		}
+
+		// 3) 注册全局快捷键
+		if shortcutEnabled {
+			combo := PrefKeyGlobalHotKey
+			if a.backend != nil {
+				prefs := a.backend.NewSettings()
+				if prefs != nil {
+					if v, ok, _ := prefs.Get(PrefKeyGlobalHotKey); ok && v != "" {
+						combo = v
+					}
+				}
+			}
+			if err := a.shortcut.Register(combo, func() {
+				if w := a.app.Window.Current(); w != nil {
+					w.Show()
+					w.Focus()
+				}
+			}); err != nil {
+				log.Printf("desktop: shortcut register failed: %v (降级到菜单 accelerator)", err)
+			} else {
+				log.Printf("desktop: global shortcut registered: %s", combo)
+			}
+		}
+
+		// 4) 启动最小化:隐藏主窗口,只露托盘
+		if startMinimized {
+			if w := a.app.Window.Current(); w != nil {
+				w.Hide()
+			}
+		}
+	}()
+}
+
+// settingsAdapter 把 *bootstrap.Backend 的 settings 工厂方法适配成
+// services.PrefsStore 接口,避免 services 直接依赖 settings 包。
+type settingsAdapter struct {
+	backend *bootstrap.Backend
+}
+
+func (s settingsAdapter) Get(key string) (string, bool, error) {
+	if s.backend == nil {
+		return "", false, nil
+	}
+	st := s.backend.NewSettings()
+	if st == nil {
+		return "", false, nil
+	}
+	return st.Get(key)
+}
+
+func (s settingsAdapter) Set(key, value string) error {
+	if s.backend == nil {
+		return nil
+	}
+	st := s.backend.NewSettings()
+	if st == nil {
+		return nil
+	}
+	return st.Set(key, value)
+}
+
+func (s settingsAdapter) GetAll() (map[string]string, error) {
+	if s.backend == nil {
+		return map[string]string{}, nil
+	}
+	st := s.backend.NewSettings()
+	if st == nil {
+		return map[string]string{}, nil
+	}
+	snap, err := st.GetAll()
+	if err != nil {
+		return nil, err
+	}
+	return snap.Items, nil
 }
 
 // AppFSEmbed 把 embed.FS 适配成 server.New 需要的 io/fs.FS。
