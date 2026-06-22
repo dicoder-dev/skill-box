@@ -36,6 +36,7 @@ import (
 	sharefunc "ginp-api/share/func"
 
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 // DefaultConfigFile 是 cli 入口未显式指定配置时的默认路径。
