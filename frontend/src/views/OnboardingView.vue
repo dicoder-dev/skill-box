@@ -276,7 +276,7 @@ onMounted(loadStatus)
       </ul>
       <div class="actions">
         <button class="ghost" @click="reset">再扫一次</button>
-        <button class="primary" @click="$emit && $emit('jump', 'skills')">去 Skills 页查看</button>
+        <button class="primary" @click="goSkills">去 Skills 页查看</button>
       </div>
     </section>
   </div>
