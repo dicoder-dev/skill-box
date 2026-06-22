@@ -8,6 +8,7 @@ import { getRuntime, dumpRuntime } from './core/utils/runtime.js'
 import { enableDebug, dlog, isDebug } from './core/utils/debug.js'
 import { platform } from './platform/index.js'
 import { useAppStore } from './core/store/app.js'
+import i18n from './core/i18n/index.js'
 
 // 双部署入口:
 // 1) 注册 pinia 并一次性写 store(runtime + platform + baseURL)
