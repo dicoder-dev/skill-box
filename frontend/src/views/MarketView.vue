@@ -122,7 +122,10 @@ onMounted(async () => {
 <template>
   <div class="market">
     <header class="head">
-      <h2>🛒 三方市场</h2>
+      <h2 class="flex items-center gap-2">
+        <Icon icon="mdi:cart-outline" width="20" height="20" class="text-sb-primary" />
+        三方市场
+      </h2>
       <p class="muted">从 skillhub.cn / skills.sh 等三方源拉取 skill,直接装到 Skill Box 本地 store。</p>
     </header>
 
