@@ -212,13 +212,14 @@ onUnmounted(() => {
     <aside
       :class="[
         'sidebar flex flex-col z-40',
-        'transition-all duration-300 ease-out',
+        'transition-transform duration-300 ease-out',
         isMobile
           ? (sidebarOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full')
           : 'sticky top-0 h-screen',
       ]"
+      :style="!isMobile ? { width: sidebarWidth + 'px' } : {}"
     >
-      <!-- 品牌区域 -->
+      <!-- 品牌区域 - 留出 macOS 交通灯按钮的空间 -->
       <div class="sidebar-brand">
         <div class="brand-icon">
           <Icon icon="mdi:package-variant-closed" width="24" height="24" />
