@@ -74,7 +74,7 @@ func init() {
 
 // goHotKeyFired 派发 hotkey 事件。export 给 C(从 C 侧 hotKeyHandler 调用)。
 //
-//go:export goHotKeyFired
+//export goHotKeyFired
 func goHotKeyFired(id uint32) {
 	if id != 1 {
 		return
