@@ -310,4 +310,39 @@ export default {
     seeMore: '查看',
     empty: '没有匹配的日志记录',
   },
+
+  settings: {
+    title: '设置',
+    subtitle: '桌面端偏好(通知 / 全局快捷键 / 启动行为)。Web 端这部分是只读占位。',
+    webOnlyHint: '桌面端偏好仅在桌面应用里可见。请用桌面端 / 系统托盘来打开设置。',
+
+    desktop: {
+      title: '桌面端偏好',
+      subtitle: '需要重启桌面应用生效',
+      startMinimized: '启动时最小化到托盘',
+      startMinimizedHint: '勾选后,桌面应用启动时不再弹出主窗口,只在托盘留图标',
+      notifyEnabled: '启用系统通知',
+      notifyEnabledHint: '关闭后,"测试通知"按钮和托盘测试通知都不会发到通知中心',
+      shortcutEnabled: '启用全局快捷键',
+      shortcutEnabledHint: '关闭后,即使配了 combo 也不响应(降级到只走菜单 accelerator)',
+      globalHotkey: '全局快捷键 combo',
+      globalHotkeyHint: 'V1 仅支持 "Cmd+Shift+S"(macOS);其它 combo 在后端会拒绝注册',
+      globalHotkeyPh: '如 Cmd+Shift+S',
+    },
+
+    testNotify: '测试通知',
+    testNotifyHint: '向系统通知中心发一条测试横幅,验证授权 / 显示',
+    btnTestNotify: '测试通知',
+
+    testTitle: 'Skill Box',
+    testBody: '这是一条测试通知 — 来自桌面端设置页',
+
+    saved: '已保存',
+    errSave: '保存失败: {msg}',
+    errNotify: '通知失败: {msg}',
+    notifyDisabled: '通知未启用,无法发送',
+    notifySent: '通知已发送',
+
+    prefsUnavailable: '偏好服务不可用(可能后端未启动或 prefs 存储未就绪)',
+  },
 }
