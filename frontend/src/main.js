@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import './style.css'
 import { resolveBaseURL } from './api/http.js'
 import { http } from './core/utils/requests'
 import { getRuntime, dumpRuntime } from './core/utils/runtime.js'

@@ -409,41 +409,42 @@ onMounted(() => { reload(); checkUpdateBadge() })
     </header>
 
     <div class="bar">
-      <div class="tabs">
-        <button :class="{ active: scope === 'global' }" @click="switchScope('global')">🌐 全局</button>
-        <button :class="{ active: scope === 'project' }" @click="switchScope('project')">📁 项目</button>
+      <div class="tabs flex">
+        <button :class="['px-4 py-1.5 border border-sb-border text-[13px] transition-colors', scope === 'global' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('global')">🌐 全局</button>
+        <button :class="['px-4 py-1.5 border border-sb-border border-l-0 text-[13px] transition-colors rounded-r', scope === 'project' ? 'bg-sb-primary text-white border-sb-primary' : 'bg-white text-sb-dim hover:bg-gray-50']" @click="switchScope('project')">📁 项目</button>
       </div>
-      <div class="search">
+      <div class="search flex gap-1.5 md:ml-auto">
         <input
           v-model="keyword"
           placeholder="按 name 过滤"
+          class="w-32 md:w-56"
           @keyup.enter="() => { page = 1; reload() }"
         />
         <button @click="() => { page = 1; reload() }">搜索</button>
       </div>
-      <div class="actions">
+      <div class="actions flex gap-1.5">
         <button @click="toggleAI">{{ aiOpen ? '🤖 关闭 AI' : '🤖 打开 AI' }}</button>
         <button class="primary" @click="startNew">+ 新建 Skill</button>
       </div>
     </div>
 
-    <div class="apply-bar">
-      <span class="apply-label">Apply 目标工具:</span>
-      <select v-model="applyTool">
+    <div class="apply-bar flex flex-wrap items-center gap-2.5 mb-3.5 px-3.5 py-2 bg-white border border-sb-border rounded text-[13px]">
+      <span class="text-sb-dim font-medium">Apply 目标工具:</span>
+      <select v-model="applyTool" class="!py-1">
         <option v-for="t in TOOL_OPTIONS" :key="t" :value="t">{{ t }}</option>
       </select>
       <button class="sm" @click="checkUpdateBadge" :disabled="updating">
         <span v-if="updating" class="spinner"></span>
         {{ updating ? '检测中…' : '🔄 检测更新' }}
       </button>
-      <span v-if="updateBadge.updates > 0" class="update-badge danger">
+      <span v-if="updateBadge.updates > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-danger-dim text-sb-danger">
         ⚠️ {{ updateBadge.updates }} / {{ updateBadge.total }} 可更新
       </span>
-      <span v-else-if="updateBadge.total > 0" class="update-badge ok">
+      <span v-else-if="updateBadge.total > 0" class="px-2 py-0.5 rounded-full text-[12px] font-medium bg-sb-success-dim text-sb-success">
         ✅ {{ updateBadge.total }} 个 skill 已是最新
       </span>
-      <p v-if="applyMessage" class="apply-msg">{{ applyMessage }}</p>
-      <p v-if="applyError" class="error">{{ applyError }}</p>
+      <p v-if="applyMessage" class="text-sb-success m-0 text-[12px] basis-full">{{ applyMessage }}</p>
+      <p v-if="applyError" class="text-sb-danger m-0 text-[12px] basis-full">{{ applyError }}</p>
     </div>
 
     <form v-if="editing" class="card editor" @submit.prevent="submit">
@@ -593,9 +594,10 @@ onMounted(() => { reload(); checkUpdateBadge() })
     <div class="card">
       <h3>技能列表
         <span class="card-sub">— 共 {{ total }} 条</span>
-        <span v-if="loading" class="spinner" style="margin-left: auto"></span>
+        <span v-if="loading" class="spinner ml-auto"></span>
       </h3>
 
+      <div class="overflow-x-auto -mx-4 px-4">
       <table v-if="items.length" class="grid">
         <thead>
           <tr>
@@ -631,6 +633,8 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <span class="empty-icon">📚</span>
         <p style="margin: 8px 0 4px">该 scope 下还没有 skill</p>
         <p class="muted" style="margin: 0">点右上角"+ 新建 Skill"开始,或去 Onboarding 从已装工具导入</p>
+      </div>
+
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
