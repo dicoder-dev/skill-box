@@ -677,12 +677,12 @@ onUnmounted(() => {
 }
 
 .stat-badge-purple {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%);
-  border-color: rgba(124, 58, 237, 0.2);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border-color: rgba(245, 158, 11, 0.2);
 }
 
 .stat-badge-purple strong {
-  color: #7c3aed;
+  color: #d97706;
 }
 
 .stat-badge-green {
