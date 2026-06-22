@@ -102,10 +102,10 @@ async function doImport() {
     const res = await runOnboardingImport(items)
     importResult.value = res
     phase.value = 'import'
-    success.value = `导入完成: ${res.ok} 成功 / ${res.failed} 失败`
+    success.value = t('onboarding.okImport', { ok: res.ok, failed: res.failed })
     await loadStatus()
   } catch (e) {
-    error.value = `导入失败: ${e?.message || e}`
+    error.value = t('onboarding.errImport', { msg: e?.message || e })
   } finally {
     loading.value = false
   }
