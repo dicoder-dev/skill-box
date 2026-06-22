@@ -43,7 +43,7 @@ async function fetchSources() {
       activeSourceId.value = sources.value[0].id
     }
   } catch (e) {
-    error.value = `源加载失败: ${e?.message || e}`
+    error.value = t('market.errLoadSources', { msg: e?.message || e })
   }
 }
 
@@ -61,7 +61,7 @@ async function fetchSkills() {
     items.value = res.items || []
     total.value = res.total || 0
   } catch (e) {
-    error.value = `列表加载失败: ${e?.message || e}`
+    error.value = t('market.errLoadList', { msg: e?.message || e })
   } finally {
     loading.value = false
   }
@@ -78,7 +78,7 @@ async function onRefresh() {
     page.value = 1
     await fetchSkills()
   } catch (e) {
-    error.value = `刷新失败: ${e?.message || e}`
+    error.value = t('market.errRefresh', { msg: e?.message || e })
   } finally {
     refreshing.value = false
   }
@@ -97,7 +97,7 @@ function onSelectSource(id) {
 }
 
 async function onInstall(item) {
-  if (!confirm(`确定把 "${item.name}" 装到 ${installScope.value} 吗?`)) return
+  if (!confirm(t('market.installConfirm', { name: item.name, scope: installScope.value }))) return
   installing.value = true
   installError.value = ''
   installOk.value = ''
@@ -108,9 +108,9 @@ async function onInstall(item) {
       scope: installScope.value,
       project_id: 0,
     })
-    installOk.value = `已装:${res?.skill?.name || item.name} (v${res?.skill?.version || '?'})`
+    installOk.value = t('market.okInstalled', { name: res?.skill?.name || item.name, version: res?.skill?.version || '?' })
   } catch (e) {
-    installError.value = `装失败: ${e?.message || e}`
+    installError.value = t('market.errInstall', { msg: e?.message || e })
   } finally {
     installing.value = false
   }
