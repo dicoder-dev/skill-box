@@ -102,7 +102,6 @@ onMounted(async () => {
     <div class="state-section-title">getters</div>
     <div class="state-grid">
       <span class="k">isWeb</span><span class="v">{{ isWeb }}</span>
-      <span class="k">isDesktopMode</span><span class="v">{{ isDesktopMode }}</span>
       <span class="k">authEnabled</span><span class="v">{{ authEnabled }}</span>
       <span class="k">deployLabel</span><span class="v">{{ deployLabel }}</span>
     </div>
