@@ -645,7 +645,7 @@ onUnmounted(() => {
 
 .breadcrumb-brand {
   @apply px-2.5 py-1 rounded-full text-xs font-medium;
-  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
   color: white;
 }
 
