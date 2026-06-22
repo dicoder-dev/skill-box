@@ -144,6 +144,11 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 		})
 		if err != nil {
 			out.AllOK = false
+			s.audit("apply_failed", in.SkillID, map[string]any{
+				"tool":   tool,
+				"scope":  scope,
+				"error":  err.Error(),
+			})
 		}
 		if res != nil {
 			row := &entity.SkillApply{
@@ -154,7 +159,15 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 				PreSnapshot: res.PreSnapshot.Marshal(),
 				AppliedAt:   res.FinishedAt,
 			}
-			_, _ = s.applyModel().Create(row)
+			created, _ := s.applyModel().Create(row)
+			if created != nil && res.Status == skillapp.StatusSuccess {
+				s.audit("apply", in.SkillID, map[string]any{
+					"tool":         tool,
+					"scope":        scope,
+					"target_path":  res.TargetPath,
+					"apply_id":     created.ID,
+				})
+			}
 			res.PreSnapshot = nil
 		}
 		out.Applies = append(out.Applies, res)
