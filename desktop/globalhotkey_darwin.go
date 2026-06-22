@@ -13,7 +13,7 @@
 //     "系统设置 → 隐私与安全 → 辅助功能"勾选 skill-box。
 //   - Carbon 是 deprecated API(自 macOS 10.8),但仍然是注册全局热键的唯一
 //     公开稳定 API。SwiftUI / AppKit 没有原生 hotkey 接口。
-//   - 本文件只暴露 combo="Cmd+Shift+S" 一组绑定(Cmd+Shift+S);
+//   - 本文件只暴露 combo="Cmd+Shift+S" 一组绑定;
 //     V2 扩展需要动态 combo 解析(modifiers + keycode 拆分)。
 package desktop
 
@@ -60,17 +60,15 @@ import (
 	"sync"
 )
 
-// GlobalHotKeyManager 全局 hotkey 句柄,跟 non-darwin 版接口一致。
-type GlobalHotKeyManager struct {
-	mu       sync.Mutex
-	handlers map[string]func()
-	installed bool
-}
+// 平台特定存储(handler + mu),跨 NewGlobalHotKeyManager 共享。
+var (
+	ghkMu       sync.Mutex
+	ghkHandlers = make(map[string]func())
+)
 
-// NewGlobalHotKeyManager 构造 darwin 实现。
-func NewGlobalHotKeyManager() *GlobalHotKeyManager {
-	return &GlobalHotKeyManager{
-		handlers: make(map[string]func()),
+func init() {
+	NewGlobalHotKeyManager = func() *GlobalHotKeyManager {
+		return &GlobalHotKeyManager{}
 	}
 }
 
@@ -81,22 +79,13 @@ func fire(id uint32) {
 	if id != 1 {
 		return
 	}
-	// 全局唯一句柄(由 globalhotkey_other.go 的同名类型保证不存在)
-	mgrMu.Lock()
-	h := globalHotKeyHandlers["Cmd+Shift+S"]
-	mgrMu.Unlock()
+	ghkMu.Lock()
+	h := ghkHandlers["Cmd+Shift+S"]
+	ghkMu.Unlock()
 	if h != nil {
 		go h()
 	}
 }
-
-// globalHotKeyHandlers / mgrMu 是 darwin fire() 与 GlobalHotKeyManager
-// 共享的存储 — 把它们放在 darwin 版内,non-darwin 版用同名但不同实现,
-// 避免编译冲突。
-var (
-	globalHotKeyHandlers = make(map[string]func())
-	mgrMu                sync.Mutex
-)
 
 // Register 注册一个全局快捷键。
 // 当前 V1 仅支持 combo="Cmd+Shift+S"(macOS)。
@@ -108,11 +97,11 @@ func (g *GlobalHotKeyManager) Register(combo string, h func()) error {
 	if combo != "Cmd+Shift+S" {
 		return fmt.Errorf("globalhotkey: combo %q not supported (only Cmd+Shift+S in V1)", combo)
 	}
-	mgrMu.Lock()
-	globalHotKeyHandlers[combo] = h
+	ghkMu.Lock()
+	ghkHandlers[combo] = h
 	installed := g.installed
 	g.installed = true
-	mgrMu.Unlock()
+	ghkMu.Unlock()
 	if installed {
 		return nil
 	}
@@ -121,6 +110,7 @@ func (g *GlobalHotKeyManager) Register(combo string, h func()) error {
 	const keycode = 1
 	rc := C.registerHotKey(C.uint(mods), C.uint(keycode))
 	if rc != 1 {
+		g.installed = false
 		return fmt.Errorf("globalhotkey: RegisterEventHotKey failed (likely missing Accessibility entitlement)")
 	}
 	return nil
