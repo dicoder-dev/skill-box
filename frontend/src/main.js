@@ -6,7 +6,6 @@ import { resolveBaseURL } from './api/http.js'
 import { http } from './core/utils/requests'
 import { getRuntime, dumpRuntime } from './core/utils/runtime.js'
 import { enableDebug, dlog, isDebug } from './core/utils/debug.js'
-import { platform } from './platform/index.js'
 import { useAppStore } from './core/store/app.js'
 import i18n from './core/i18n/index.js'
 
