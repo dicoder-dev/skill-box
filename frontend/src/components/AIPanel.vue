@@ -155,8 +155,8 @@ function copy(text) {
 <template>
   <aside class="ai-panel">
     <header class="ai-header">
-      <strong>AI 助手</strong>
-      <button class="link" @click="clear" title="清空对话">清空</button>
+      <strong>{{ t('skills.ai.header') }}</strong>
+      <button class="link" @click="clear" :title="t('skills.ai.clear')">{{ t('skills.ai.clear') }}</button>
     </header>
 
     <div class="presets">
@@ -170,12 +170,12 @@ function copy(text) {
       >
         {{ p.title }}
       </button>
-      <span v-if="!presets.length" class="hint">暂未配置 AI provider 或内置 preset</span>
+      <span v-if="!presets.length" class="hint">{{ t('skills.ai.hintNoProvider') }}</span>
     </div>
 
     <div class="history" ref="historyEl">
       <p v-if="!messages.length" class="empty">
-        先选一个 preset(优化 frontmatter / 检验 description / 润色正文 / 查重复 / 安全检查),再发问。
+        {{ t('skills.ai.empty') }}
       </p>
       <article
         v-for="(m, i) in messages"
@@ -183,24 +183,24 @@ function copy(text) {
         class="msg"
         :class="['role-' + m.role, { pending: m.pending }]"
       >
-        <div class="meta">{{ m.role === 'user' ? '你' : 'AI' }}</div>
+        <div class="meta">{{ m.role === 'user' ? t('skills.ai.roleUser') : t('skills.ai.roleAssistant') }}</div>
         <pre class="body">{{ m.text }}<span v-if="m.pending" class="cursor">▍</span></pre>
-        <button v-if="!m.pending && m.text" class="link small" @click="copy(m.text)">复制</button>
+        <button v-if="!m.pending && m.text" class="link small" @click="copy(m.text)">{{ t('skills.ai.copy') }}</button>
       </article>
     </div>
 
     <footer class="composer">
       <textarea
         v-model="input"
-        :placeholder="activePreset ? '补充说明(可空)' : '先选 preset'"
+        :placeholder="activePreset ? t('skills.ai.inputPlaceholderHint') : t('skills.ai.inputPlaceholderNoPreset')"
         :disabled="!activePreset"
         rows="3"
         @keydown.meta.enter.prevent="send"
         @keydown.ctrl.enter.prevent="send"
       />
       <div class="actions">
-        <button v-if="busy" class="danger" @click="stop">停止</button>
-        <button v-else class="primary" :disabled="!activePreset" @click="send">发送</button>
+        <button v-if="busy" class="danger" @click="stop">{{ t('skills.ai.stop') }}</button>
+        <button v-else class="primary" :disabled="!activePreset" @click="send">{{ t('skills.ai.send') }}</button>
       </div>
     </footer>
   </aside>
