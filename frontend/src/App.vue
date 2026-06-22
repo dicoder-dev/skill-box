@@ -365,17 +365,75 @@ onUnmounted(() => {
    ============================================ */
 .sidebar {
   width: 260px;
+  position: relative;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-sidebar);
   box-shadow: var(--shadow-sidebar);
-  transition: all 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-/* 品牌区域 */
+/* 品牌区域 - 顶部留出空间避开 macOS 交通灯按钮 */
 .sidebar-brand {
-  @apply flex items-center gap-3 px-4;
-  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 56px 16px 20px;  /* 顶部 56px 留给 macOS 红绿灯 */
   border-bottom: 1px solid var(--border-sidebar);
+  position: relative;
+}
+
+/* 非 macOS 系统 / web 端:品牌区域顶部空间缩小 */
+@media (max-width: 768px), (hover: none) {
+  .sidebar-brand {
+    padding-top: 16px;
+  }
+}
+
+/* 拖拽手柄 - 位于侧边栏右边缘 */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(37, 99, 235, 0.08),
+    rgba(37, 99, 235, 0.2)
+  );
+}
+
+.resize-grip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding: 8px 0;
+}
+
+.resize-handle:hover .resize-grip,
+.resize-handle.active .resize-grip {
+  opacity: 1;
+}
+
+.resize-grip span {
+  display: block;
+  width: 2px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: 1px;
 }
 
 .brand-icon {
