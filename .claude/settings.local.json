@@ -55,7 +55,44 @@
       "Bash(echo \"===web EXIT=$?===\")",
       "Bash(echo \"===bootstrap EXIT=$?===\")",
       "Bash(go test:*)",
-      "Bash(echo \"===test EXIT=$?===\")"
+      "Bash(echo \"===test EXIT=$?===\")",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/skillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/skillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/service/skillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/controller/skillbox/cskillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/gapi/service/audit/... ./internal/gapi/controller/skillbox/caudit/... ./internal/gapi/controller/skillbox/cskillpkg/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build ./internal/... ./cmd/bootstrap/... ./cmd/web/... ./cmd/gapi/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/skillpkg/... ./internal/gapi/service/audit/... ./internal/gapi/controller/skillbox/cskillpkg/... ./internal/gapi/controller/skillbox/caudit/...)",
+      "Bash(GOCACHE=/tmp/go-cache go test ./internal/skillpkg/... ./internal/skilladapter/... ./internal/skillstore/... ./internal/skillimporter/... ./internal/skillapp/... ./internal/skillaudit/... ./internal/skilltester/... ./internal/skillmarket/... ./internal/aiengine/... ./internal/settings/... ./internal/gapi/service/skill/... ./internal/gapi/service/skillapp/... ./internal/gapi/service/skillaudit/... ./internal/gapi/service/skilltester/... ./internal/gapi/service/market/... ./internal/gapi/service/audit/... ./internal/gapi/service/project/... ./internal/gapi/service/ai/... ./internal/gapi/service/skillpkg/... ./internal/gapi/controller/skillbox/...)",
+      "Bash(GOCACHE=/tmp/go-cache go build -o /Volumes/MyDrive/Home/dicoder/projects/skill-box/bin/web ./cmd/web)",
+      "Bash(GOCACHE=/tmp/go-cache go build -o bin/web ./api-server/cmd/web)",
+      "Bash(GOCACHE=/tmp/go-cache go build -o bin/gapi ./api-server/cmd/gapi)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Skill(update-config)",
+      "Bash(python3 -c \"import os; print\\(os.path.relpath\\('/Volumes/MyDrive/Home/dicoder/projects/skill-box/frontend/src/style.css', '/Volumes/MyDrive/Home/dicoder/projects/skill-box'\\)\\)\")",
+      "Bash(/tmp/hook_test.sh)",
+      "Bash(mkdir -p /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks)",
+      "Bash(cp /tmp/hook_test.sh /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
+      "Bash(chmod +x /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
+      "Bash(cp /tmp/auto-commit.bak /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)",
+      "Bash(rm -f /tmp/claude-hook-sentinel.txt)",
+      "Bash(bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh",
+            "timeout": 15,
+            "statusMessage": "Auto-committing change"
+          }
+        ]
+      }
     ]
   }
 }
