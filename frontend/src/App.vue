@@ -101,11 +101,17 @@ function onBusEvent(name, payload) {
     switchTab(payload)
   }
 }
+// 兜底:也监听 window CustomEvent,eventBus.inject 失败时仍能跳转。
+function onWindowEvent(e) {
+  if (e?.type === 'skillbox:switch-tab') onBusEvent('switch-tab', e.detail)
+}
 onMounted(() => {
   eventBus.on('switch-tab', onBusEvent)
+  window.addEventListener('skillbox:switch-tab', onWindowEvent)
 })
 onUnmounted(() => {
   eventBus.off('switch-tab', onBusEvent)
+  window.removeEventListener('skillbox:switch-tab', onWindowEvent)
 })
 </script>
 
