@@ -1,12 +1,5 @@
 <script setup>
-// AIPanel.vue - 可折叠 AI 助手侧栏。
-//
-// 顶部 preset 横排 chips,中间对话历史(用户/助手气泡),底部输入框 + 发送。
-// 用法:
-//   <AIPanel :context-text="someSkillMd" @apply="onApply" />
-//
-// 暴露事件:
-//   - apply(text) 助手产出"最终"内容时触发(让父组件把改写后的内容回填到表单)
+// AIPanel.vue - 可折叠 AI 助手侧栏
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listPresets, chatStream } from '@/api/skillbox/ai.js'
@@ -14,18 +7,15 @@ import { listPresets, chatStream } from '@/api/skillbox/ai.js'
 const { t } = useI18n()
 
 const props = defineProps({
-  // 当前编辑器里选中的 skill 全文(可空)。preset 在渲染 prompt 时会塞到 vars.skill_md。
   contextText: { type: String, default: '' },
-  // 选定的 provider 名字;空 = 后端按 priority 自动选
   provider: { type: String, default: '' },
 })
 
 const emit = defineEmits(['apply', 'error'])
 
-// 内部状态
 const presets = ref([])
-const activePreset = ref(null) // 当前选中的 preset 对象
-const messages = ref([])       // 对话历史 [{role, text, pending?}]
+const activePreset = ref(null)
+const messages = ref([])
 const input = ref('')
 const busy = ref(false)
 const historyEl = ref(null)
@@ -36,7 +26,6 @@ async function loadPresets() {
     const resp = await listPresets()
     presets.value = resp?.items || []
   } catch (e) {
-    // 后端暂未启 AI 时静默降级
     presets.value = []
   }
 }
@@ -56,7 +45,6 @@ function scrollToBottom() {
 function pickPreset(p) {
   activePreset.value = p
   if (p.id === 'find_duplicates') {
-    // 查重:多 skill 对比;给个轻提示
     pushMsg('assistant', t('skills.ai.pickedDedupe'))
   } else {
     pushMsg('assistant', t('skills.ai.pickedPreset', { title: p.title, description: p.description }))
@@ -88,7 +76,6 @@ async function send() {
   input.value = ''
   busy.value = true
 
-  // 占位 assistant 消息,等待流式追加
   const placeholderIdx = messages.value.length
   pushMsg('assistant', '', { pending: true })
 
@@ -105,16 +92,13 @@ async function send() {
       messages.value[placeholderIdx].pending = false
       busy.value = false
       emit('error', ev.err)
-    } else if (ev.kind === 'done') {
-      // 流式结束由 [DONE] 触发 onDone,这里不重复处理
-    }
+    } else if (ev.kind === 'done') {}
   }
   const onDone = () => {
     finished = true
     messages.value[placeholderIdx].pending = false
     busy.value = false
     if (buf && activePreset.value.id === 'optimize_frontmatter') {
-      // 给父组件一个"应用"的钩子(让父组件把改写后的 markdown 写回表单)
       emit('apply', buf)
     }
   }
@@ -155,7 +139,10 @@ function copy(text) {
 <template>
   <aside class="ai-panel">
     <header class="ai-header">
-      <strong>{{ t('skills.ai.header') }}</strong>
+      <strong>
+        <Icon icon="mdi:robot" width="14" height="14" class="ai-icon" />
+        {{ t('skills.ai.header') }}
+      </strong>
       <button class="link" @click="clear" :title="t('skills.ai.clear')">{{ t('skills.ai.clear') }}</button>
     </header>
 
@@ -175,7 +162,8 @@ function copy(text) {
 
     <div class="history" ref="historyEl">
       <p v-if="!messages.length" class="empty">
-        {{ t('skills.ai.empty') }}
+        <Icon icon="mdi:chat-outline" width="24" height="24" />
+        <span>{{ t('skills.ai.empty') }}</span>
       </p>
       <article
         v-for="(m, i) in messages"
@@ -199,8 +187,14 @@ function copy(text) {
         @keydown.ctrl.enter.prevent="send"
       />
       <div class="actions">
-        <button v-if="busy" class="danger" @click="stop">{{ t('skills.ai.stop') }}</button>
-        <button v-else class="primary" :disabled="!activePreset" @click="send">{{ t('skills.ai.send') }}</button>
+        <button v-if="busy" class="danger" @click="stop">
+          <Icon icon="mdi:stop" width="12" height="12" />
+          {{ t('skills.ai.stop') }}
+        </button>
+        <button v-else class="primary" :disabled="!activePreset" @click="send">
+          <Icon icon="mdi:send" width="12" height="12" />
+          {{ t('skills.ai.send') }}
+        </button>
       </div>
     </footer>
   </aside>
@@ -214,37 +208,237 @@ function copy(text) {
   min-width: 320px;
   max-width: 420px;
   height: 100%;
-  background: #fbfbfd;
-  border-left: 1px solid #e5e7eb;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
   font-size: 13px;
-  color: #1a1a1a;
+  color: var(--text);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  transition: all 0.3s ease;
 }
-.ai-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #eef0f3; }
-.presets { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #eef0f3; }
+
+.ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-header strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ai-icon {
+  color: #7c3aed;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
 .presets .chip {
-  font-size: 12px; padding: 4px 8px; border-radius: 999px;
-  border: 1px solid #d0d0d0; background: #fff; cursor: pointer; color: #4b5563;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-.presets .chip:hover { border-color: #2563eb; color: #2563eb; }
-.presets .chip.active { background: #2563eb; color: #fff; border-color: #2563eb; }
-.presets .hint { color: #9ca3af; font-size: 12px; }
-.history { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.history .empty { color: #9ca3af; font-size: 12px; margin: auto 0; text-align: center; }
-.msg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 6px; }
-.msg.role-user { background: #eef2ff; align-self: flex-end; max-width: 90%; }
-.msg.role-assistant { background: #fff; border: 1px solid #e5e7eb; align-self: flex-start; max-width: 100%; }
-.msg .meta { font-size: 11px; color: #6b7280; }
-.msg .body { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55; }
-.msg.pending .body { color: #4b5563; }
-.cursor { display: inline-block; animation: blink 1s steps(1) infinite; }
+
+.presets .chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-dim);
+}
+
+.presets .chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.presets .hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  margin: auto 0;
+  text-align: center;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  transition: all 0.3s ease;
+}
+
+.msg.role-user {
+  background: var(--primary-dim);
+  color: var(--text);
+  align-self: flex-end;
+  max-width: 90%;
+}
+
+.msg.role-assistant {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.msg .meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.msg .body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.msg.pending .body {
+  color: var(--text-dim);
+}
+
+.cursor {
+  display: inline-block;
+  animation: blink 1s steps(1) infinite;
+  color: var(--primary);
+}
+
 @keyframes blink { 50% { opacity: 0; } }
-.link { background: none; border: none; color: #2563eb; cursor: pointer; font-size: 12px; padding: 0; }
-.link.small { align-self: flex-end; }
-.composer { border-top: 1px solid #eef0f3; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.composer textarea { width: 100%; resize: vertical; font-family: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #d0d0d0; border-radius: 4px; }
-.composer .actions { display: flex; justify-content: flex-end; gap: 8px; }
-.composer button { font-size: 13px; padding: 5px 12px; border-radius: 4px; border: 1px solid #d0d0d0; background: #fff; cursor: pointer; }
-.composer button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.composer button.danger { background: #b91c1c; color: #fff; border-color: #b91c1c; }
-.composer button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.link:hover {
+  color: var(--primary-hover);
+}
+
+.link.small {
+  align-self: flex-end;
+}
+
+.composer {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.composer textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+.composer textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.composer .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.composer button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.composer button.primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.composer button.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.composer button.danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.composer button.danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.composer button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 </style>
