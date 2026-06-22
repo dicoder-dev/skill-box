@@ -230,7 +230,7 @@ onUnmounted(() => {
             <span class="w-1.5 h-1.5 rounded-full bg-purple-600"></span>{{ t('app.nav.projects.label') }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.projects }}</b>
           </span>
           <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-gray-100 rounded-full text-[12px] text-sb-dim">
-            <span class="w-1.5 h-1.5 rounded-full bg-sb-success"></span>{{ t('app.nav.skills.label') === 'Skills' ? 'Tools' : 'Tools' }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.toolsReady }} / {{ stats.toolsTotal }}</b>
+            <span class="w-1.5 h-1.5 rounded-full bg-sb-success"></span>{{ t('app.toolsLabel') }} <b class="text-sb-text font-semibold ml-0.5">{{ stats.toolsReady }} / {{ stats.toolsTotal }}</b>
           </span>
         </div>
       </header>
