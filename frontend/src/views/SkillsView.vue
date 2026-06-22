@@ -313,11 +313,11 @@ function buildSkillMd() {
 async function submit() {
   error.value = ''
   if (!draft.name.trim()) {
-    error.value = 'name 不能为空'
+    error.value = t('skills.editor.errNameEmpty')
     return
   }
   if (draft.description.trim().length < 10) {
-    error.value = 'description 至少 10 个字符'
+    error.value = t('skills.editor.errDescShort')
     return
   }
   const triggers = draft.triggersText
@@ -325,7 +325,7 @@ async function submit() {
     .map((s) => s.trim())
     .filter(Boolean)
   if (triggers.length === 0) {
-    error.value = 'triggers 至少填一个'
+    error.value = t('skills.editor.errTriggersEmpty')
     return
   }
   const payload = {
