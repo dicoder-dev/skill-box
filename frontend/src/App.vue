@@ -94,6 +94,19 @@ function switchTab(k) {
   // 移动端切 tab 后自动收起侧栏
   if (isMobile.value) sidebarOpen.value = false
 }
+
+// 跨组件跳转入口:子组件 emit('switch-tab', 'skills') → 这里接管走 switchTab
+function onBusEvent(name, payload) {
+  if (name === 'switch-tab') {
+    switchTab(payload)
+  }
+}
+onMounted(() => {
+  eventBus.on('switch-tab', onBusEvent)
+})
+onUnmounted(() => {
+  eventBus.off('switch-tab', onBusEvent)
+})
 </script>
 
 <template>
