@@ -216,7 +216,8 @@ func (a *App) startupAsync() {
 
 		// 3) 注册全局快捷键
 		if shortcutEnabled {
-			combo := PrefKeyGlobalHotKey
+			// 默认 combo = "Cmd+Shift+S";从 prefs 读用户改写值。
+			combo := "Cmd+Shift+S"
 			if a.backend != nil {
 				prefs := a.backend.NewSettings()
 				if prefs != nil {
