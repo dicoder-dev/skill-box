@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { Icon } from '@iconify/vue'
 import {
   listSources,
   listMarketSkills,
