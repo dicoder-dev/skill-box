@@ -14,6 +14,8 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Skill Box:cfg 库在 ParseConfigStruct 时会自动落盘 default 值到当前目录的 configs.yaml
 # 任何子目录下生成的 configs.yaml 都不入库(由 bootstrap.Run 实际配置驱动)
 **/configs.yaml
+# 端到端测试配置 + 跑出来的 e2e 临时数据
+configs.e2e.yaml
 api-server/data.db
 data.db
 
