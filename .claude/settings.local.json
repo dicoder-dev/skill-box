@@ -147,7 +147,8 @@
       "Bash(head:*)",
       "Bash(lsof -nP -iTCP:8082 -sTCP:LISTEN)",
       "Bash(lsof -nP -iTCP:9245 -sTCP:LISTEN)",
-      "Bash(nm /tmp/sb-web)"
+      "Bash(nm /tmp/sb-web)",
+      "Bash(cat /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/pkg/fsutil/*.go)"
     ],
     "defaultMode": "bypassPermissions"
   }
