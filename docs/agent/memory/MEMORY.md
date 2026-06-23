@@ -15,6 +15,8 @@
 | --- | --- | --- |
 | [feedback_communication.md](./feedback_communication.md) | 沟通偏好(语言 / 称呼 / 节奏) | 任何会话开头 |
 | [feedback_safety.md](./feedback_safety.md) | 高风险操作必须确认 | 涉及删除 / 推送 / 强推 |
+| [feedback_tools.md](./feedback_tools.md) | 图片/搜索 MCP 工具偏好 | 涉及图片理解 / 联网搜索 |
+| [feedback_auto_commit.md](./feedback_auto_commit.md) | 功能点完成时 Claude 自主提交(不再用 hook) | 完成任何改动后准备提交时 |
 
 ## Project(项目状态)
 

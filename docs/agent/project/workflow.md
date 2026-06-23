@@ -61,24 +61,62 @@ cd frontend && npm run dev             # :5173,Vite 代理 /api 到后端
 
 ## 三、提交
 
+### 触发:Claude 自主判断
+
+> ⚠️ 不再使用 `.claude/hooks/auto-commit.sh` 的 `PostToolUse` 触发。
+> 提交时机由 **Claude 在功能点完成时自主判断**。详细规则见
+> `docs/agent/memory/feedback_auto_commit.md`。
+
+简单说:
+
+- **完成一个功能点 / 修复** → `git status` + `git diff` → 生成信息 → commit
+- **未完成 / 验证中** → 不提交,继续干
+- **用户明确说"提交吧"** → 立即按同样流程提交
+
 ### Commit 信息
 
 - 简短中文祈使句(参考仓库历史):
   - `修复接口样式`
   - `迁移 ginp 改动`
   - `web: 同步 embed 目录`
-- 不强制 conventional-commit 前缀,但建议在 commit 主题里体现改动区域(后端 / 前端 / build)
+  - `agent: 关闭 PostToolUse hook,改由 Claude 自主提交`
+- 不强制 conventional-commit 前缀,但建议在 commit 主题里体现改动区域(后端 / 前端 / build / agent / docs)
 
 ### 频率
 
 - 每个"完成的功能子集"提交一次
 - **不要把半天 / 一天的工作压成一个巨型 commit**
+- 跨多个功能点的改动 → 分多个 commit(每个 commit 一个功能点)
+
+### 命令
+
+```bash
+# 1) 看改动
+git status
+git diff <file>        # 看实质内容
+
+# 2) 点名 add(不要 git add -A)
+git add <file1> <file2> ...
+
+# 3) commit(用 HEREDOC,带 Co-Authored-By)
+git commit -m "$(cat <<'EOF'
+<区域>: <简短中文祈使句>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+
+# 4) 验证
+git status              # 应该没有未提交改动
+git log -1 --stat       # 看刚提交的改动列表
+```
 
 ### 不提交
 
 - `bin/`、`data.db`、`logs/`、`frontend/dist/`(已 gitignore)
 - `api-server/cmd/web/frontend/dist/`(同步目录,会被覆盖)
 - 真实密钥 / 线上配置
+- `docs/agent/task/<本次>.md` 里的"待 commit"标记(那属于协作元数据)
 
 ## 四、Pull Request
 
