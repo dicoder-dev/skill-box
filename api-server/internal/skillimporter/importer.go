@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"ginp-api/internal/skilladapter"
@@ -215,6 +216,124 @@ type ImportResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// NormalizeForStore 在 Save 前修补 Manifest,适配上游工具 SKILL.md frontmatter
+// 不全的情况(典型:外部 skill 只有 name + description,没有 triggers;
+// 或某些 community skill description 偏短 < 10 字)。
+//
+// 规则:
+//   - Triggers 空:从 Description 头几个有意义的词提取,仍空就放一个 name。
+//   - Description 长度 < 10:用 body 第一段非空非标题文字兜底;
+//     仍空就用 Name + " skill" 兜底(避免 store 拒收)。
+//   - 修补后仍然只补不删,不会动 caller 已经填好的字段。
+func NormalizeForStore(c *skilladapter.Canonical) {
+	if c == nil {
+		return
+	}
+	body := ""
+	if len(c.Files) > 0 {
+		body = c.Files[0].Content
+	}
+
+	// description 兜底
+	if len(c.Manifest.Description) < 10 {
+		if s := FirstBodyParagraph(body, 480); len(s) >= 10 {
+			c.Manifest.Description = s
+		} else {
+			c.Manifest.Description = c.Manifest.Name + " skill"
+		}
+	}
+
+	// triggers 兜底:从 description 抽前几个英文/中文词;仍空就放 name
+	if len(c.Manifest.Triggers) == 0 {
+		ts := ExtractTriggers(c.Manifest.Description, c.Manifest.Name)
+		if len(ts) > 0 {
+			c.Manifest.Triggers = ts
+		}
+	}
+}
+
+// FirstBodyParagraph 跳过 frontmatter 与 # 标题,返回 body 第一段非空文字。
+// 长度超过 max 自动截断在最近的句号/换行。
+func FirstBodyParagraph(md string, max int) string {
+	if md == "" {
+		return ""
+	}
+	// 跳过 frontmatter
+	if strings.HasPrefix(md, "---") {
+		if end := strings.Index(md, "\n---"); end > 0 {
+			md = md[end+4:]
+		}
+	}
+	for _, line := range strings.Split(md, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		// 去掉行内 markdown 标记(链接/粗体/代码)
+		t = strings.TrimSpace(strings.TrimLeft(t, "-*>`"))
+		if t == "" {
+			continue
+		}
+		if len(t) > max {
+			t = t[:max]
+			if i := strings.LastIndexAny(t, "。.!?\n"); i > max/2 {
+				t = t[:i+1]
+			}
+		}
+		return t
+	}
+	return ""
+}
+
+// extractTriggers 从一段文字里提取 1~10 个 trigger 词。
+// 策略:按空格分词,过滤短词(<2)与停用词,去重,补一个 name 兜底。
+func ExtractTriggers(desc, name string) []string {
+	stops := map[string]bool{
+		"the": true, "a": true, "an": true, "is": true, "are": true,
+		"and": true, "or": true, "of": true, "to": true, "for": true,
+		"in": true, "on": true, "with": true, "this": true, "that": true,
+		"be": true, "by": true, "as": true, "at": true, "from": true,
+		"的": true, "了": true, "是": true, "在": true, "和": true,
+		"与": true, "或": true, "把": true, "用": true, "对": true,
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(w string) {
+		w = strings.ToLower(strings.TrimSpace(w))
+		w = strings.Trim(w, ",.;:!?\"'`()[]{}<>")
+		if len(w) < 2 || len(w) > 32 {
+			return
+		}
+		if stops[w] {
+			return
+		}
+		if seen[w] {
+			return
+		}
+		seen[w] = true
+		out = append(out, w)
+	}
+	// 用空白 + 非字母数字 拆
+	for _, f := range strings.FieldsFunc(desc, func(r rune) bool {
+		return !(r == '-' || r == '_' ||
+			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			(0x4E00 <= r && r <= 0x9FFF)) // CJK
+	}) {
+		add(f)
+		if len(out) >= 9 {
+			break
+		}
+	}
+	if len(out) == 0 && name != "" {
+		out = append(out, name)
+	}
+	if len(out) > 10 {
+		out = out[:10]
+	}
+	return out
+}
+
 // Import 把指定条目从目标工具目录导入到 skillbox 全局 store。
 // 入参 items 通常来自前端在 Report 上勾选出来的子集;空 items 表示"全部导入"。
 func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, error) {
@@ -260,6 +379,10 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 		}
 		c := fs.Canonical
 		c.Manifest.Version = ver
+		// 兜底:外部工具的 SKILL.md frontmatter 可能只有 name+description
+		// 没有 triggers / description 过短。store 校验要求严格,直接 Save 会失败。
+		// normalizeForStore 自动补全,不影响已经合法的 manifest。
+		NormalizeForStore(&c)
 		if err := im.store.Save(c, skilladapter.ScopeGlobal, 0); err != nil {
 			out = append(out, ImportResult{
 				ToolID: it.ToolID, Name: it.Name, Version: ver,

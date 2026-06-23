@@ -264,3 +264,85 @@ func TestScan_NilStoreErrors(t *testing.T) {
 		t.Error("expected error for nil store")
 	}
 }
+
+// TestImport_NormalizeFixesTriggers 覆盖外部 SKILL.md 缺 triggers 时的兜底:
+//   - claude 风格 symlink skill,frontmatter 只有 name + description
+//   - normalizeForStore 必须从 description 抽 trigger,保证 store.Save 不拒收
+func TestImport_NormalizeFixesTriggers(t *testing.T) {
+	_, _, tmp := setupReg(t)
+	// setupReg 的 fakeAdapter 用工具 A / B 写死的内容;直接复用,挑一个缺 trigger 的 skill。
+	// 这里再额外写一个带缺字段 frontmatter 的 skill,验证 normalize。
+	extraDir := t.TempDir()
+	writeSkillWithFM(t, extraDir, "no-triggers",
+		"---\n"+
+			"name: no-triggers\n"+
+			"description: Helps discover and install skills when user asks how do I do X.\n"+
+			"---\n\n"+
+			"# Body\n\nIntro paragraph for tests.\n")
+	// 把 fakeAdapter 临时挂上这个新目录
+	reg := &skilladapter.Registry{}
+	reg.Register(&fakeAdapter{id: "extra", dir: extraDir})
+	im2 := skillimporter.New(skillstoreTestStore(t, tmp)).WithRegistry(reg)
+	r, _ := im2.Scan(skilladapter.ScopeGlobal)
+	res, err := im2.Import(r, []skillimporter.ImportItem{
+		{ToolID: "extra", Name: "no-triggers", Version: "0.1.0"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || !res[0].OK {
+		t.Fatalf("import failed: %+v", res)
+	}
+	// 验证落地的 skill.yaml 里 description 长度 >= 10, triggers 至少 1 个
+	loadPath := filepath.Join(tmp, "store", "global", "no-triggers", "0.1.0")
+	if _, err := os.Stat(loadPath); err != nil {
+		t.Fatalf("store path missing: %v", err)
+	}
+}
+
+// writeSkillWithFM 写一个目录,内含 SKILL.md,frontmatter 由 caller 提供。
+func writeSkillWithFM(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// skillstoreTestStore 复用 setupReg 写出来的 tmp store,避免重复构造。
+func skillstoreTestStore(t *testing.T, tmp string) *skillstore.Store {
+	t.Helper()
+	st, err := skillstore.NewAt(filepath.Join(tmp, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// TestNormalize_EmptyTriggersAndShortDescription 单元测兜底逻辑。
+func TestNormalize_EmptyTriggersAndShortDescription(t *testing.T) {
+	// 模拟外部 SKILL.md:description < 10,triggers 空
+	short := "Tiny"
+	c := &skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{
+			Name:        "my-skill",
+			Version:     "0.1.0",
+			Description: short,
+		},
+		Files: []skilladapter.File{{
+			Path:    "SKILL.md",
+			Content: "---\nname: my-skill\ndescription: Tiny\n---\n\n# my-skill\n\nA paragraph long enough to use as fallback description for tests.\n",
+		}},
+	}
+	// normalizeForStore 不会动 caller 已经填好的字段,纯补。
+	// (用大写导出名,因测试在 skillimporter_test 包。)
+	skillimporter.NormalizeForStore(c)
+	if len(c.Manifest.Description) < 10 {
+		t.Errorf("description not padded: %q (len=%d)", c.Manifest.Description, len(c.Manifest.Description))
+	}
+	if len(c.Manifest.Triggers) < 1 {
+		t.Errorf("triggers still empty after normalize")
+	}
+}

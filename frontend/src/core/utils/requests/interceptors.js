@@ -134,16 +134,21 @@ export function installDefaultInterceptors() {
     },
   )
 
-  // (3) 业务码剥离
+  // (3) 业务码剥离 + 透传 data
+  //
+  // 目标:无论后端包不包成功信封,业务代码 await listSkills() 拿到的都是
+  // 实际的数据体,而不是 client 的 {ok, status, data} 包装壳。
+  //
+  // 区分两类响应:
+  //   a) 包了信封:data.code/success 存在
+  //      - code=1 → 返回 data.data(或 data 自身)
+  //      - 其他  → 抛 BusinessError
+  //   b) 没包信封:data 是 JSON 对象但无 code/success 字段
+  //      - 直接返回 data,业务层 .items/.total 正常用
+  //   c) text / null:返回 resp(原始 fetch 包装)
   response.use((resp) => {
     const data = resp && resp.data
-    // /api/health 之类不走统一结构,data 是 {status, service, ts}——直接返回原 resp
-    if (
-      data &&
-      typeof data === 'object' &&
-      // 兼容字段:code / success / status
-      ('code' in data || 'success' in data)
-    ) {
+    if (data && typeof data === 'object' && ('code' in data || 'success' in data)) {
       const code = data.code !== undefined ? data.code : data.success ? 1 : 0
       if (code !== 1) {
         throw new BusinessError({
@@ -155,6 +160,9 @@ export function installDefaultInterceptors() {
       }
       return data.data !== undefined ? data.data : data
     }
+    // 裸 JSON 响应(无信封):直接透传 data,让业务层 .items/.total 正常工作。
+    if (data && typeof data === 'object') return data
+    // text / null / 非对象:保留 resp 包装(健康检查、流式端点等)
     return resp
   })
 }
