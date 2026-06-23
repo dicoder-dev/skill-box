@@ -57,3 +57,13 @@ func (m *WindowManager) ShowPrimary() {
 	}
 	m.primary.Focus()
 }
+
+// ToggleMaximise 切换主窗口的最大化状态。wails v3 alpha 60 的 Window 接口
+// 提供 ToggleMaximise(),这里做一层包装并在 primary 缺失时安全 no-op,
+// 让 cdesktop 的 hook 注入不需要在调用前判空。
+func (m *WindowManager) ToggleMaximise() {
+	if m == nil || m.primary == nil {
+		return
+	}
+	m.primary.ToggleMaximise()
+}
