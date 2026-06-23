@@ -24,9 +24,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// desktopHooks 返回当前桌面端 OS 能力钩子(由 bootstrap.Serve 注入,见 hooks 包)。
-func desktopHooks() hooks.BootstrapHooks { return hooks.Get() }
-
 // ===== /api/desktop/app/* =====
 
 // RequestAppHealth / RequestAppVersion / RequestAppQuit 都是无入参占位。
