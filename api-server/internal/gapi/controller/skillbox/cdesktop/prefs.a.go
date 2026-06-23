@@ -14,7 +14,9 @@ package cdesktop
 
 import (
 	"runtime"
+	"sync"
 
+	"ginp-api/cmd/bootstrap"
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/settings"
@@ -22,6 +24,32 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// backendMu / currentBackend 用于把 *bootstrap.Backend 注入 cdesktop 控制器。
+//
+// 注入时机:bootstrap.Serve() 在创建 gin server 之前会调 SetBackend,
+// 使 controller 在第一次 HTTP 请求到来时能拿到 backend 句柄(包括 DesktopHooks)。
+// Web 部署下 backend 永远不会被注入(Serve 走不同的路径),controller 此时
+// 全部能力回退到"不可用"语义。
+var (
+	backendMu      sync.RWMutex
+	currentBackend *bootstrap.Backend
+)
+
+// SetBackend 由 bootstrap.Serve 在初始化阶段调用,传入当前进程内的 *Backend。
+// 重复调用以最后一次为准;传 nil 表示清空(Web 部署关闭时)。
+func SetBackend(b *bootstrap.Backend) {
+	backendMu.Lock()
+	currentBackend = b
+	backendMu.Unlock()
+}
+
+// backend 返回当前 *Backend,可能为 nil(Web 部署 / 未初始化阶段)。
+func backend() *bootstrap.Backend {
+	backendMu.RLock()
+	defer backendMu.RUnlock()
+	return currentBackend
+}
 
 // ===== /api/desktop/app/* =====
 
