@@ -19,13 +19,14 @@ import { getRuntime } from '@/core/utils/runtime.js'
 
 // 自动生成的 wails v3 绑定:每个 service 一个模块,内部用 Call.ByID(methodID, ...args) 调到 Go。
 // 这些模块依赖 @wailsio/runtime 暴露的 window.runtime,在桌面 webview 里由 Wails 注入;
-// 在 web 端不要 import 它们(SSG/打包时需要做别名/分支,这里通过 web 兜底实现绕过)。
-import * as AppBindings from '@/bindings/skill-box/desktop/services/appservice.js'
-import * as WindowBindings from '@/bindings/skill-box/desktop/services/windowservice.js'
-import * as PlatformBindings from '@/bindings/skill-box/desktop/services/platformservice.js'
-import * as NotifyBindings from '@/bindings/skill-box/desktop/services/notifyservice.js'
-import * as ShortcutBindings from '@/bindings/skill-box/desktop/services/shortcutservice.js'
-import * as PrefsBindings from '@/bindings/skill-box/desktop/services/prefsservice.js'
+// 在 web 端不会走到这些调用路径(createWebPlatform 已兜底)。
+// bindings 物理目录在 frontend/bindings/(与 src 平级),不走 @/ 别名。
+import * as AppBindings from '../../../bindings/skill-box/desktop/services/appservice.js'
+import * as WindowBindings from '../../../bindings/skill-box/desktop/services/windowservice.js'
+import * as PlatformBindings from '../../../bindings/skill-box/desktop/services/platformservice.js'
+import * as NotifyBindings from '../../../bindings/skill-box/desktop/services/notifyservice.js'
+import * as ShortcutBindings from '../../../bindings/skill-box/desktop/services/shortcutservice.js'
+import * as PrefsBindings from '../../../bindings/skill-box/desktop/services/prefsservice.js'
 
 const runMode = (typeof window !== 'undefined'
   ? (window.__APP_RUNTIME__?.runMode || getRuntime().runMode)
