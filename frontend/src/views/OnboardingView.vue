@@ -268,34 +268,57 @@ function selectableInTool(tid) {
 // 拉取单个 skill 的标题(从 source_path/SKILL.md 的第一行 # ...)。
 // 失败 / 解析失败 / 不存在 → 空字符串。
 async function fetchTitle(sourcePath) {
-  if (!sourcePath) return ''
-  if (sourcePath in skillTitles.value) return skillTitles.value[sourcePath]
+  if (!sourcePath) return { title: '', description: '' }
+  if (sourcePath in skillTitles.value) {
+    return skillTitles.value[sourcePath]
+  }
   try {
-    const r = await platform.fs.readText(sourcePath).catch(() => null)
-    const title = r ? parseMarkdownTitle(r) : ''
-    skillTitles.value = { ...skillTitles.value, [sourcePath]: title }
-    return title
+    // source_path 是目录,fsutil.ReadText 只读文件 → 拼上 SKILL.md
+    const mdPath = sourcePath.replace(/\/+$/, '') + '/SKILL.md'
+    const r = await platform.fs.readText(mdPath).catch(() => null)
+    const meta = r ? parseSkillMeta(r) : { title: '', description: '' }
+    skillTitles.value = { ...skillTitles.value, [sourcePath]: meta }
+    return meta
   } catch (_) {
-    skillTitles.value = { ...skillTitles.value, [sourcePath]: '' }
-    return ''
+    skillTitles.value = { ...skillTitles.value, [sourcePath]: { title: '', description: '' } }
+    return { title: '', description: '' }
   }
 }
 
-// 解析 SKILL.md 第一行 # 标题(跳 frontmatter 段)。
-function parseMarkdownTitle(md) {
-  if (!md) return ''
+// 解析 SKILL.md frontmatter + body,抽出 description 字段和首行 # 标题。
+function parseSkillMeta(md) {
+  const out = { title: '', description: '' }
+  if (!md) return out
   let body = md
   if (body.startsWith('---')) {
     const end = body.indexOf('\n---', 3)
-    if (end > 0) body = body.slice(end + 4)
+    if (end > 0) {
+      const fm = body.slice(3, end)
+      for (const line of fm.split('\n')) {
+        const m = line.match(/^\s*description\s*:\s*(.+?)\s*$/)
+        if (m) {
+          let v = m[1]
+          if (
+            (v.startsWith('"') && v.endsWith('"')) ||
+            (v.startsWith("'") && v.endsWith("'"))
+          ) {
+            v = v.slice(1, -1)
+          }
+          out.description = v
+          break
+        }
+      }
+      body = body.slice(end + 4)
+    }
   }
   for (const line of body.split('\n')) {
     const t = line.trim()
     if (t.startsWith('# ')) {
-      return t.slice(2).trim()
+      out.title = t.slice(2).trim()
+      break
     }
   }
-  return ''
+  return out
 }
 
 // 在系统文件管理器中显示 skill 所在目录(桌面端有实现,Web 端 no-op)。
@@ -370,13 +393,6 @@ onMounted(async () => {
           <p>{{ t('onboarding.subtitle') }}</p>
         </div>
       </div>
-      <div v-if="phase === 'scan'" class="header-actions">
-        <button class="ghost" :disabled="loading" @click="doScan" :title="t('onboarding.btnRescanTitle')">
-          <span v-if="loading" class="spinner"></span>
-          <Icon v-else icon="mdi:refresh" width="14" height="14" />
-          {{ loading ? t('onboarding.btnRescanning') : t('onboarding.btnRescan') }}
-        </button>
-      </div>
     </header>
 
     <p v-if="error" class="message message-error">
@@ -390,12 +406,33 @@ onMounted(async () => {
 
     <!-- 阶段 2: 扫描 + 勾选(tab 面板,按工具拆分) -->
     <section v-else-if="phase === 'scan'" class="card">
-      <header class="card-header">
+      <header class="card-header card-header-row">
         <h3>
           <Icon icon="mdi:folder-search" width="16" height="16" />
           {{ t('onboarding.phase2.title') }}
           <span class="card-sub">— {{ t('onboarding.phase2.foundSuffix', { n: scanReport?.found?.length || 0 }) }}</span>
         </h3>
+        <div v-if="scanReport?.found?.length" class="header-actions">
+          <button
+            class="ghost sm"
+            :disabled="loading"
+            :title="t('onboarding.btnRescanTitle')"
+            @click="doScan"
+          >
+            <span v-if="loading" class="spinner"></span>
+            <Icon v-else icon="mdi:refresh" width="14" height="14" />
+            {{ loading ? t('onboarding.btnRescanning') : t('onboarding.btnRescan') }}
+          </button>
+          <button
+            class="primary sm"
+            :disabled="loading || selected.size === 0"
+            @click="doImport"
+          >
+            <span v-if="loading" class="spinner"></span>
+            <Icon v-else icon="mdi:download" width="14" height="14" />
+            {{ loading ? t('onboarding.phase2.importing') : t('onboarding.phase2.btnImport', { n: selected.size }) }}
+          </button>
+        </div>
       </header>
 
       <div v-if="!scanReport?.found?.length" class="empty-state">
@@ -455,18 +492,26 @@ onMounted(async () => {
               <label
                 class="found-item"
                 :class="{ 'item-disabled': isDisabled(f) }"
-                :title="isDisabled(f) ? disabledReason(f) : ''"
               >
                 <input
                   type="checkbox"
                   :checked="selected.has(keyOf(f))"
                   :disabled="isDisabled(f)"
+                  :title="isDisabled(f) ? disabledReason(f) : ''"
                   @change="toggleSelect(f)"
                 />
                 <div class="f-main">
                   <div class="f-line-1">
                     <span class="f-name"><code>{{ f.name }}</code></span>
                     <span class="f-ver">v{{ f.version }}</span>
+                    <span
+                      v-if="isDisabled(f) && f.category !== 'system'"
+                      class="f-disabled-reason"
+                      :title="disabledReason(f)"
+                    >
+                      <Icon icon="mdi:block-helper" width="11" height="11" />
+                      {{ disabledReason(f) }}
+                    </span>
                     <span v-if="existingNames.has(String(f.name).toLowerCase())" class="f-tag f-tag-exists">
                       <Icon icon="mdi:package-variant" width="11" height="11" />
                       {{ t('onboarding.phase2.tagExists') }}
@@ -512,12 +557,16 @@ onMounted(async () => {
                   type="checkbox"
                   disabled
                   aria-disabled="true"
-                  :title="t('onboarding.phase2.catSystemHint')"
+                  :title="disabledReason(f)"
                 />
                 <div class="f-main">
                   <div class="f-line-1">
                     <span class="f-name"><code>{{ f.name }}</code></span>
                     <span class="f-ver">v{{ f.version }}</span>
+                    <span class="f-disabled-reason" :title="disabledReason(f)">
+                      <Icon icon="mdi:block-helper" width="11" height="11" />
+                      {{ disabledReason(f) }}
+                    </span>
                   </div>
                   <SkillTitle :source-path="f.source_path" :fetcher="fetchTitle" />
                   <div class="f-line-2">
@@ -536,18 +585,6 @@ onMounted(async () => {
               </span>
             </li>
           </ul>
-        </div>
-
-        <div class="card-footer">
-          <button class="ghost" @click="doScan" :disabled="loading">
-            <Icon icon="mdi:refresh" width="14" height="14" />
-            {{ t('onboarding.btnRescan') }}
-          </button>
-          <button class="primary" :disabled="loading || selected.size === 0" @click="doImport">
-            <span v-if="loading" class="spinner"></span>
-            <Icon v-else icon="mdi:download" width="14" height="14" />
-            {{ loading ? t('onboarding.phase2.importing') : t('onboarding.phase2.btnImport', { n: selected.size }) }}
-          </button>
         </div>
       </div>
     </section>
@@ -697,6 +734,18 @@ onMounted(async () => {
   border-bottom: 1px solid var(--border);
 }
 
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card-header-row h3 {
+  margin: 0;
+}
+
 .card-header h3 {
   display: flex;
   align-items: center;
@@ -813,7 +862,15 @@ onMounted(async () => {
   margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
-  scrollbar-width: thin;
+  /* 完全隐藏滚动条:Firefox / Webkit 都吃 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tool-tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .tool-tab {
@@ -1080,6 +1137,33 @@ onMounted(async () => {
   background: var(--accent-amber-bg);
   color: var(--accent-amber);
   border: 1px solid var(--accent-amber-border);
+}
+
+/* 不可选中原因(直接显示在 li 内,不再只 hover) */
+.f-disabled-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.found-list-system .f-disabled-reason {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-faint);
 }
 
 /* line-2: 文件夹图标 + 路径 */

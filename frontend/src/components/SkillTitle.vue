@@ -1,13 +1,15 @@
 <script setup>
-// SkillTitle - 显示 SKILL.md 的首行 # 标题。
+// SkillTitle - 显示 SKILL.md 的元信息(description / title)。
 //
 // 用法:
 //   <SkillTitle :source-path="f.source_path" :fetcher="fetchTitle" />
 //
-// props.fetcher 接收 sourcePath 异步返回 title 字符串(后端读文件+前端解析);
-// fetcher 内部走 platform.fs.readText 抽象,失败返空串。
+// props.fetcher 接收 sourcePath 异步返回 { title, description };
+// 优先展示 description(更有信息量),空时回落到 title(首行 # 标题),
+// 两者都没有就不渲染,避免占位造成抖动。
 //
-// 标题为空时不渲染(<> 避免占位造成抖动),由调用方决定留白。
+// 后端实现走 platform.fs.readText(source_path + '/SKILL.md'),
+// 前端用 parseSkillMeta 抽 frontmatter.description + body 首个 # 标题。
 
 import { ref, watch, onMounted } from 'vue'
 
@@ -16,19 +18,18 @@ const props = defineProps({
   fetcher: { type: Function, required: true },
 })
 
-const title = ref('')
-const loading = ref(false)
+const text = ref('')
 let reqId = 0
 
 async function load() {
   const myId = ++reqId
-  loading.value = true
   try {
-    const t = await props.fetcher(props.sourcePath)
-    // 防止过期请求覆盖新值
-    if (myId === reqId) title.value = t || ''
-  } finally {
-    if (myId === reqId) loading.value = false
+    const meta = await props.fetcher(props.sourcePath)
+    if (myId !== reqId) return
+    // description 优先,空时回落到 title(# 首行)
+    text.value = (meta?.description || meta?.title || '').trim()
+  } catch (_) {
+    if (myId === reqId) text.value = ''
   }
 }
 
@@ -37,8 +38,8 @@ watch(() => props.sourcePath, load)
 </script>
 
 <template>
-  <div v-if="title" class="skill-title">
-    <span class="skill-title-label">{{ title }}</span>
+  <div v-if="text" class="skill-title">
+    <span class="skill-title-label" :title="text">{{ text }}</span>
   </div>
 </template>
 
@@ -46,16 +47,17 @@ watch(() => props.sourcePath, load)
 .skill-title {
   margin: 2px 0 4px;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--text-dim);
+  /* 允许 2 行,避免一行截断太短看不全 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .skill-title-label {
-  /* 标题是从 SKILL.md 第一行取的描述,可能很长 → 截断 */
-  display: inline-block;
-  max-width: 100%;
+  display: inline;
 }
 </style>
