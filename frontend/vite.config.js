@@ -39,10 +39,12 @@ function resolveBackendPort() {
 const backendPort = resolveBackendPort();
 const backendTarget = `http://127.0.0.1:${backendPort}`;
 
-// 桌面端 dev 模式识别:由启动命令注入 VITE_DEPLOY_MODE=desktop。
-// wails3 dev 启动 Vite 时通常不会自动设这个变量,所以 wails 的 dev 任务
-// 应当显式 `VITE_DEPLOY_MODE=desktop vite` 来开启桌面形态。
-// 未设置时兑底为 web(默认行为,不影响 Web 单进程开发)。
+// 桌面端 dev 模式识别:由启动命令注入 VITE_DEPLOY_MODE 环境变量。
+//   - 根 task dev  → VITE_DEPLOY_MODE=desktop → 桌面形态
+//   - 根 task web  → VITE_DEPLOY_MODE=web     → Web 形态
+// 完全靠命令(task / shell)决定,不再读任何文件配置,避免 wails3 dev
+// 与 wails3 task web* 行为不一致。
+// 未设置时兑底 web(本地直接 `npm run dev` 默认按 web 走)。
 const deployMode = (process.env.VITE_DEPLOY_MODE || "web").toLowerCase();
 const runtimeScript = `<script>window.__APP_RUNTIME__=${JSON.stringify({
   runMode: deployMode === "desktop" ? "desktop" : "web",
