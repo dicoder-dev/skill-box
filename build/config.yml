@@ -29,10 +29,12 @@ info:
 
 # 开发模式配置
 # 既支持桌面端（wails3 dev）也支持 Web 端（wails3 task web）热更新：
-#   - 桌面端：监听 frontend 源码变化触发 wails3 build DEV=true（blocking），
-#     同步通过 Vite dev server (background) 提供浏览器层 HMR，
-#     应用窗口加载 http://localhost:{{.VITE_PORT}} 即可享受热更新，无需重启 Go 进程。
-#   - Web 端：依赖 web:dev:backend + web:dev:frontend，由 Vite HMR 直接生效。
+#   - 桌面端：wails3 dev 只监听 *.go 改动,触发 wails3 build DEV=true（blocking）+ run（primary）;
+#     前端源码（*.vue/*.js/*.ts/*.css/*.scss/*.html）交给 background 的 Vite dev server 自己监听,
+#     由 Vite 直接做浏览器层 HMR(走 webview 加载的 http://localhost:{{.VITE_PORT}}),无需重启 Go 进程。
+#     如果把前端后缀误加到 watched_extension,会触发 wails3 build,整个桌面进程被重启,
+#     webview 还没接收 HMR 推送就被干掉,表现就是 "改前端必须关掉重开才生效"。
+#   - Web 端：依赖 web:dev:backend + web:dev:frontend，由 Vite HMR 直接生效(走 gin 同源)。
 dev_mode:
   root_path: .
   log_level: warn
@@ -57,14 +59,14 @@ dev_mode:
       - "package-lock.json"
       - "yarn.lock"
       - "pnpm-lock.yaml"
+    # 注意:前端文件后缀(*.vue/*.js/*.ts/*.css/*.scss/*.html)不要写到这里,
+    # 它们由 background 启动的 Vite dev server 自己监听,直接做浏览器层 HMR。
+    # 如果也加到 wails3 dev 的 watched_extension,会触发 blocking 的 wails3 build,
+    # 桌面进程被整个重启,webview 还没接收 HMR 推送就被干掉了,
+    # 表现就是 "改前端必须关掉重开才生效"。
+    # 这里只保留 *.go,后端真改了才走完整的 build + run 链。
     watched_extension:
       - "*.go"
-      - "*.js"                 # 监听通过 //wails:include 指令嵌入的 JS/TS 文件变化。
-      - "*.ts"
-      - "*.vue"                # Vue 单文件组件
-      - "*.css"                # 样式文件（PostCSS/Tailwind 等）
-      - "*.scss"
-      - "*.html"
     git_ignore: true
   executes:
     - cmd: wails3 build DEV=true

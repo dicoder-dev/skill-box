@@ -40,9 +40,9 @@ provide('appBus', eventBus)
 const isDark = ref(false)
 
 // 侧边栏宽度（可拖拽调节，持久化）
-const sidebarWidth = ref(260)
 const MIN_SIDEBAR_WIDTH = 200
 const MAX_SIDEBAR_WIDTH = 420
+const sidebarWidth = ref(MIN_SIDEBAR_WIDTH)
 
 // 初始化时从 localStorage 读取主题偏好和侧边栏宽度
 onMounted(() => {
@@ -141,7 +141,6 @@ const stats = ref({
   toolsTotal: 0,
 })
 const backendOK = ref(false)
-const lastHealth = ref('')
 
 async function refreshStats() {
   try {
@@ -156,7 +155,6 @@ async function refreshStats() {
     stats.value.toolsTotal = adapters.length
     stats.value.toolsReady = adapters.filter((a) => a.global_ok).length
     backendOK.value = true
-    lastHealth.value = new Date().toLocaleTimeString()
   } catch (_) {
     backendOK.value = false
   }
@@ -269,7 +267,6 @@ onUnmounted(() => {
           <span :class="['status-dot', backendOK ? 'dot-ok' : 'dot-error']"></span>
           <span class="status-text">
             {{ backendOK ? t('app.backendOk') : t('app.backendDown') }}
-            <span v-if="lastHealth" class="status-time">{{ lastHealth }}</span>
           </span>
         </div>
 
@@ -406,12 +403,7 @@ onUnmounted(() => {
 
 .resize-handle:hover,
 .resize-handle.active {
-  background: linear-gradient(
-    to right,
-    transparent,
-    rgba(13, 148, 136, 0.08),
-    rgba(13, 148, 136, 0.2)
-  );
+  background: var(--bg-sidebar-hover);
 }
 
 .resize-grip {
@@ -432,16 +424,16 @@ onUnmounted(() => {
   display: block;
   width: 2px;
   height: 16px;
-  background: var(--primary);
+  background: var(--text-faint);
   border-radius: 1px;
 }
 
 .brand-icon {
-  @apply flex items-center justify-center rounded-lg;
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  @apply flex items-center justify-center rounded-md;
+  width: 32px;
+  height: 32px;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
@@ -556,22 +548,16 @@ onUnmounted(() => {
 }
 
 .dot-ok {
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  background: var(--success);
 }
 
 .dot-error {
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  background: var(--danger);
 }
 
 .status-text {
   @apply text-xs truncate;
   color: var(--text-sidebar-muted);
-}
-
-.status-time {
-  @apply opacity-70;
 }
 
 .theme-toggle {
@@ -644,9 +630,9 @@ onUnmounted(() => {
 }
 
 .breadcrumb-brand {
-  @apply px-2.5 py-1 rounded-full text-xs font-medium;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  @apply px-2.5 py-1 rounded-md text-xs font-medium;
+  background: var(--text);
+  color: var(--bg-card);
 }
 
 .breadcrumb-sep {
@@ -677,21 +663,21 @@ onUnmounted(() => {
 }
 
 .stat-badge-purple {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
-  border-color: rgba(245, 158, 11, 0.2);
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 .stat-badge-purple strong {
-  color: #d97706;
+  color: var(--text);
 }
 
 .stat-badge-green {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
-  border-color: rgba(16, 185, 129, 0.2);
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 .stat-badge-green strong {
-  color: #059669;
+  color: var(--text);
 }
 
 /* 内容区域 */

@@ -345,19 +345,19 @@ onMounted(loadStatus)
 }
 
 .view-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
 .view-icon-teal {
-  background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+  background: var(--text);
 }
 
 .view-title h1 {
@@ -413,7 +413,7 @@ onMounted(loadStatus)
   justify-content: center;
   font-size: 13px;
   font-weight: 600;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   flex-shrink: 0;
   transition: all 0.3s ease;
@@ -421,12 +421,12 @@ onMounted(loadStatus)
 
 .step.active .step-number {
   background: var(--primary);
-  color: white;
+  color: var(--bg-card);
 }
 
 .step.done .step-number {
   background: var(--success);
-  color: white;
+  color: var(--bg-card);
 }
 
 .step-title {
@@ -539,7 +539,7 @@ onMounted(loadStatus)
 }
 
 .grid th {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 11px;
@@ -580,7 +580,7 @@ onMounted(loadStatus)
 }
 
 .badge-muted {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
 }
 
@@ -612,7 +612,7 @@ onMounted(loadStatus)
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
@@ -701,7 +701,7 @@ onMounted(loadStatus)
 
 .stat-card {
   padding: 20px;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border-radius: var(--radius);
   text-align: center;
   transition: all 0.3s ease;
@@ -779,7 +779,7 @@ onMounted(loadStatus)
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }

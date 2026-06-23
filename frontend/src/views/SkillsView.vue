@@ -789,14 +789,14 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .view-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
@@ -861,13 +861,13 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .scope-tab-active {
-  background: var(--primary);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
 }
 
 .scope-tab-active:hover {
   background: var(--primary-hover);
-  color: white;
+  color: var(--bg-card);
 }
 
 .search-box {
@@ -894,16 +894,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  color: #d97706;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: var(--radius-sm);
   font-weight: 500;
 }
 
 .ai-btn:hover {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%);
-  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
 }
 
 /* Apply 工具栏 */
@@ -1124,7 +1124,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .grid th {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 11px;
@@ -1146,7 +1146,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .skill-version {
-  color: var(--primary);
+  color: var(--text-dim);
 }
 
 .td-dim {
@@ -1171,13 +1171,14 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .badge-blue {
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--text);
+  color: var(--bg-card);
 }
 
 .badge-gray {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
+  border: 1px solid var(--border);
 }
 
 /* 操作按钮 */
@@ -1209,15 +1210,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .action-btn-apply {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
-  border-color: rgba(16, 185, 129, 0.3);
-  color: #059669;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg-card);
 }
 
 .action-btn-apply:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
-  border-color: rgba(16, 185, 129, 0.4);
-  color: #047857;
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: var(--bg-card);
 }
 
 .action-btn-danger:hover:not(:disabled) {
@@ -1294,7 +1295,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .badge-rolled_back {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
 }
 
@@ -1360,10 +1361,12 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .tag-list li.tag-implicit {
-  background: var(--warning-dim);
+  background: var(--bg-subtle);
   margin: 0 -20px;
   padding: 10px 20px;
   border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
 }
 
 .tag-id {
@@ -1373,7 +1376,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 .tag-name code {
   background: var(--primary-dim);
-  color: var(--primary);
+  color: var(--text);
 }
 
 .tag-msg {
@@ -1392,7 +1395,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 .diff-panel {
   margin-top: 20px;
   padding: 16px;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -1452,15 +1455,18 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .diff-kind-added .diff-file-header {
-  background: var(--success-dim);
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--success);
 }
 
 .diff-kind-removed .diff-file-header {
-  background: var(--danger-dim);
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--danger);
 }
 
 .diff-kind-modified .diff-file-header {
-  background: var(--warning-dim);
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--warning);
 }
 
 .diff-kind-unchanged .diff-file-header {
@@ -1506,13 +1512,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .diff-line-added {
-  background: rgba(16, 185, 129, 0.15);
-  color: #047857;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-left: 3px solid var(--success);
 }
 
 .diff-line-removed {
-  background: rgba(239, 68, 68, 0.15);
-  color: #b91c1c;
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border-left: 3px solid var(--danger);
+  text-decoration: line-through;
 }
 
 .diff-line-context {
@@ -1529,22 +1538,22 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 /* 测试面板 */
 .test-panel-status-passed {
-  border-color: var(--success-dim);
-  background: linear-gradient(to bottom, var(--success-dim), var(--bg-card));
+  border-color: var(--border);
+  background: var(--bg-card);
 }
 
 .test-panel-status-failed {
-  border-color: var(--danger-dim);
-  background: linear-gradient(to bottom, var(--danger-dim), var(--bg-card));
+  border-color: var(--border);
+  background: var(--bg-card);
 }
 
 .test-panel-status-errored {
-  border-color: var(--warning-dim);
-  background: linear-gradient(to bottom, var(--warning-dim), var(--bg-card));
+  border-color: var(--border);
+  background: var(--bg-card);
 }
 
 .test-panel-status-skipped {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
 }
 
 .test-status-badge {
@@ -1553,8 +1562,8 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  background: var(--primary);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
 }
 
 .test-summary {
@@ -1608,7 +1617,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .status-skipped {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
 }
 
@@ -1628,7 +1637,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 }
 
 .test-detail pre {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   padding: 12px;
   border-radius: var(--radius-sm);
   font-size: 11px;
@@ -1642,7 +1651,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }

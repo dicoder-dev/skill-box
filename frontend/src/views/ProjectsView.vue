@@ -229,19 +229,19 @@ onMounted(reload)
 }
 
 .view-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
 .view-icon-purple {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: var(--text-dim);
 }
 
 .view-title h1 {
@@ -420,7 +420,7 @@ onMounted(reload)
 }
 
 .grid th {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 11px;
@@ -521,7 +521,7 @@ onMounted(reload)
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }

@@ -151,7 +151,7 @@ onMounted(async () => {
   word-break: break-all;
 }
 .state-grid .v.code {
-  color: #646cff;
+  color: var(--text);
 }
 @media (prefers-color-scheme: light) {
   .state-card {
@@ -159,7 +159,7 @@ onMounted(async () => {
     background: rgba(0, 0, 0, 0.02);
   }
   .state-grid .v.code {
-    color: #535bf2;
+    color: var(--text);
   }
 }
 </style>

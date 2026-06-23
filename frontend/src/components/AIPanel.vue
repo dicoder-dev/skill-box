@@ -234,7 +234,7 @@ function copy(text) {
 }
 
 .ai-icon {
-  color: #d97706;
+  color: var(--text);
 }
 
 .presets {
@@ -264,7 +264,7 @@ function copy(text) {
 
 .presets .chip.active {
   background: var(--primary);
-  color: white;
+  color: var(--bg-card);
   border-color: var(--primary);
 }
 
@@ -311,7 +311,7 @@ function copy(text) {
 }
 
 .msg.role-assistant {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text);
   align-self: flex-start;
@@ -417,7 +417,7 @@ function copy(text) {
 
 .composer button.primary {
   background: var(--primary);
-  color: white;
+  color: var(--bg-card);
   border-color: var(--primary);
 }
 
@@ -428,7 +428,7 @@ function copy(text) {
 
 .composer button.danger {
   background: var(--danger);
-  color: white;
+  color: var(--bg-card);
   border-color: var(--danger);
 }
 

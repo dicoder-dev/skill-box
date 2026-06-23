@@ -288,19 +288,19 @@ onMounted(async () => {
 }
 
 .view-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
 .view-icon-orange {
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  background: var(--text-dim);
 }
 
 .view-title h1 {
@@ -407,7 +407,7 @@ onMounted(async () => {
 .source-tab.active {
   background: var(--primary);
   border-color: var(--primary);
-  color: white;
+  color: var(--bg-card);
 }
 
 .source-type {
@@ -419,7 +419,7 @@ onMounted(async () => {
 }
 
 .source-tab:not(.active) .source-type {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-faint);
 }
 
@@ -472,7 +472,7 @@ onMounted(async () => {
 }
 
 .grid th {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 11px;
@@ -507,9 +507,9 @@ onMounted(async () => {
 
 .tag {
   display: inline-block;
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.1) 0%, rgba(13, 148, 136, 0.05) 100%);
-  color: #0d9488;
-  border: 1px solid rgba(13, 148, 136, 0.2);
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 11px;
@@ -524,17 +524,17 @@ onMounted(async () => {
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #059669;
+  background: var(--text);
+  border: 1px solid var(--text);
+  color: var(--bg-card);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .install-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
-  border-color: rgba(16, 185, 129, 0.4);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 /* 分页器 */
@@ -565,7 +565,7 @@ onMounted(async () => {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }

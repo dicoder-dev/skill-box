@@ -240,19 +240,19 @@ onMounted(async () => {
 }
 
 .view-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
-  color: white;
+  background: var(--text);
+  color: var(--bg-card);
   flex-shrink: 0;
 }
 
 .view-icon-amber {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: var(--text-dim);
 }
 
 .view-title h1 {
@@ -287,9 +287,9 @@ onMounted(async () => {
 }
 
 .stat-main {
-  background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%);
+  background: var(--text);
   border: none;
-  color: white;
+  color: var(--bg-card);
 }
 
 .stat-label {
@@ -312,7 +312,7 @@ onMounted(async () => {
 }
 
 .stat-main .stat-value {
-  color: white;
+  color: var(--bg-card);
 }
 
 .chips-container {
@@ -327,7 +327,7 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border-radius: var(--radius-full);
   font-size: 11px;
   color: var(--text-dim);
@@ -431,7 +431,7 @@ onMounted(async () => {
 }
 
 .grid th {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 11px;
@@ -473,7 +473,7 @@ onMounted(async () => {
   border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 600;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -506,7 +506,7 @@ onMounted(async () => {
 }
 
 .payload-content {
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   padding: 12px;
   border-radius: var(--radius-sm);
   font-size: 11px;
@@ -545,7 +545,7 @@ onMounted(async () => {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }
