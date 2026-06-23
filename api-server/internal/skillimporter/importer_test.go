@@ -162,6 +162,36 @@ func TestScan_MissingDirIsNotError(t *testing.T) {
 	}
 }
 
+// TestScan_ToolsFiltersZeroHit 覆盖 phase2 幽灵 tab 修复:
+// 即使 adapter 走完整流程但 0 命中,Tools 字段也必须把这种 tool 过滤掉,
+// 否则前端 phase2 会渲染"空名字 + 数量 0"的 tab。
+func TestScan_ToolsFiltersZeroHit(t *testing.T) {
+	tmp := t.TempDir()
+	store, _ := skillstore.NewAt(filepath.Join(tmp, "store"))
+	// toolA 有内容;toolB 目录存在但 0 命中。
+	toolA := filepath.Join(tmp, "toolA")
+	toolB := filepath.Join(tmp, "toolB")
+	if err := os.MkdirAll(toolA, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(toolB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSkill(t, toolA, "alpha", "alpha skill")
+	reg := &skilladapter.Registry{}
+	reg.Register(&fakeAdapter{id: "toolA", dir: toolA})
+	reg.Register(&fakeAdapter{id: "toolB", dir: toolB})
+	im := skillimporter.New(store).WithRegistry(reg)
+
+	r, err := im.Scan(skilladapter.ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Tools) != 1 || r.Tools[0] != "toolA" {
+		t.Errorf("Tools=%+v; want [toolA]", r.Tools)
+	}
+}
+
 func TestImport_All(t *testing.T) {
 	_, im, tmp := setupReg(t)
 	r, err := im.Scan(skilladapter.ScopeGlobal)

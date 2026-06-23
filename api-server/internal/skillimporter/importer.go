@@ -114,6 +114,12 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 			r.Dirs = append(r.Dirs, ScannedDir{ToolID: a.ToolID(), Errors: []string{err.Error()}})
 			continue
 		}
+		if len(paths) == 0 {
+			// adapter 未声明任何路径(可能没装)。依然在 Tools 列表中占位,
+			// 让前端 phase1 的 adapter 状态表能展示;但 phase2(扫描结果)用
+			// 后处理过的 foundTools 过滤掉,避免出现"空名字 + 数量 0"的幽灵 tab。
+			continue
+		}
 		for _, p := range paths {
 			// 按 root 路径判定 category:adapter 在 BaseAdapter 上声明的 SystemPaths
 			// 覆盖该根(或其子路径)则视为 system,否则 user。
@@ -140,9 +146,15 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 				if src == "" {
 					src = filepath.Join(p, a.LocalName(c))
 				}
+				// ToolName 兜底为 ToolID:极少数 adapter 可能没设 DisplayName,
+				// 前端 phase2 渲染 tool tab 时不允许出现空名字。
+				tn := a.DisplayName()
+				if tn == "" {
+					tn = a.ToolID()
+				}
 				r.FoundSkills = append(r.FoundSkills, FoundSkill{
 					ToolID:     a.ToolID(),
-					ToolName:   a.DisplayName(),
+					ToolName:   tn,
 					SourcePath: src,
 					Category:   cat,
 					Canonical:  c,
@@ -156,6 +168,21 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 
 	r.TotalDirs = len(r.Dirs)
 	r.TotalFound = len(r.FoundSkills)
+	// 过滤 Tools:只保留有 found 命中的 toolID,避免 phase2 渲染"空名字 + 数量 0"
+	// 的幽灵 tab(典型场景:adapter 目录未找到 / 0 命中)。保持原相对顺序。
+	{
+		hit := make(map[string]bool, len(r.FoundSkills))
+		for _, fs := range r.FoundSkills {
+			hit[fs.ToolID] = true
+		}
+		filtered := r.Tools[:0]
+		for _, tid := range r.Tools {
+			if hit[tid] {
+				filtered = append(filtered, tid)
+			}
+		}
+		r.Tools = filtered
+	}
 	// 排序规则:user 在前 system 在后;同档内按 toolID + name 字典序。
 	// 排序是给前端"按档位分组"的兜底;前端 Onboarding phase2 自己也会再分组渲染。
 	sort.Slice(r.FoundSkills, func(i, j int) bool {
