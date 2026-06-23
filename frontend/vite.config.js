@@ -39,8 +39,43 @@ function resolveBackendPort() {
 const backendPort = resolveBackendPort();
 const backendTarget = `http://127.0.0.1:${backendPort}`;
 
+// 桌面端 dev 模式识别:由启动命令注入 VITE_DEPLOY_MODE=desktop。
+// wails3 dev 启动 Vite 时通常不会自动设这个变量,所以 wails 的 dev 任务
+// 应当显式 `VITE_DEPLOY_MODE=desktop vite` 来开启桌面形态。
+// 未设置时兑底为 web(默认行为,不影响 Web 单进程开发)。
+const deployMode = (process.env.VITE_DEPLOY_MODE || "web").toLowerCase();
+const runtimeScript = `<script>window.__APP_RUNTIME__=${JSON.stringify({
+  runMode: deployMode === "desktop" ? "desktop" : "web",
+  // 桌面 dev 模式下后端已经 SetDesktopHooks 注入了真能力,前端可以直接走。
+  needAuth: true,
+  appName: "skill-box",
+})};</script>`;
+
 export default defineConfig({
-  plugins: [vue()],
+  // 把 deployMode 暴露给前端代码:platform/index.js 在拿不到 __APP_RUNTIME__
+  // 时(SSR / 早期报错)也能读到正确的 runMode。
+  define: {
+    "import.meta.env.VITE_RUN_MODE": JSON.stringify(deployMode === "desktop" ? "desktop" : "web"),
+  },
+  plugins: [
+    vue(),
+    {
+      // dev 模式下,直接把 __APP_RUNTIME__ 注入到 index.html。
+      // 之所以不靠后端 gin 注入:wails3 dev 的 webview 加载 Vite dev server,
+      // 不经过 gin,所以后端 injectRuntimeScript 永远不会被调用。
+      name: "inject-app-runtime",
+      apply: "serve",
+      transformIndexHtml() {
+        return [
+          {
+            tag: "script",
+            injectTo: "head-prepend",
+            children: runtimeScript.replace(/^<script>|<\/script>$/g, ""),
+          },
+        ];
+      },
+    },
+  ],
   resolve: {
     alias: {
       // @ → frontend/src,业务侧 import { http } from '@/core/utils/requests'
