@@ -6,6 +6,7 @@
 package cdesktop
 
 import (
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/pkg/ginp"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ type RequestShortcutCombo struct {
 
 // PostShortcutRegister POST /api/desktop/shortcut/register { combo }
 func PostShortcutRegister(c *ginp.ContextPlus, req *RequestShortcutCombo) {
-	h := hooks()
+	h := hooks.Get()
 	if h.ShortcutRegister == nil {
 		c.JSON(501, gin.H{"error": "shortcut.register not available"})
 		return
@@ -36,7 +37,7 @@ func PostShortcutRegister(c *ginp.ContextPlus, req *RequestShortcutCombo) {
 
 // PostShortcutUnregister POST /api/desktop/shortcut/unregister { combo }
 func PostShortcutUnregister(c *ginp.ContextPlus, req *RequestShortcutCombo) {
-	h := hooks()
+	h := hooks.Get()
 	if h.ShortcutUnregister == nil {
 		c.JSON(501, gin.H{"error": "shortcut.unregister not available"})
 		return
@@ -54,7 +55,7 @@ func PostShortcutUnregister(c *ginp.ContextPlus, req *RequestShortcutCombo) {
 
 // GetShortcutList GET /api/desktop/shortcut/list
 func GetShortcutList(c *ginp.ContextPlus, _ *RequestShortcutCombo) {
-	h := hooks()
+	h := hooks.Get()
 	if h.ShortcutList == nil {
 		c.JSON(200, gin.H{"combos": []string{}})
 		return
