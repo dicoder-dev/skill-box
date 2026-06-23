@@ -21,30 +21,29 @@ docs/agent/task/
 ├── README.md               # 本文件
 ├── _template.md            # 任务文件模板
 └── YYYY-MM/                # 按月份分子目录,一个月一个文件夹
-    ├── YYYY-MM-DD_<主题>.md
-    ├── YYYY-MM-DD_<主题>.md
+    ├── MM-DD_<任务类型>_<主题>.md
+    ├── MM-DD_任务类型<主题>.md
     └── ...
 ```
 
 - **月份目录命名:`YYYY-MM/`**(例如 `2026-06/`)
-- **文件名:`YYYY-MM-DD_<主题>.md`**
+- **文件名:`MM-DD_<任务类型>_<主题>.md`**
 - 同月份的任务都进同一个 `YYYY-MM/` 子目录,避免 `task/` 根目录文件膨胀
 - 新月份第一天如果发现还没有对应目录,先 `mkdir -p` 再放文件
 
 ## 文件命名
 
 ```
-docs/agent/task/YYYY-MM/YYYY-MM-DD_<主题>.md
+docs/agent/task/YYYY-MM/<任务类型>_<主题>.md
 ```
 
 - **月份目录:`YYYY-MM/`**(例如 `2026-06/`),按对话开始的月份归类
 - **文件名:`YYYY-MM-DD_<主题>.md`**,日期用对话开始的日期(本地时区)
 - 主题:用动名词短语,简洁可搜索
-  - `docs/agent/task/2026-06/2026-06-23_设计-claude-分层协作方案.md` ✅
-  - `docs/agent/task/2026-06/2026-06-23_docs.md` ❌(太泛)
-  - `docs/agent/task/2026-06/2026-06-23_修复-sys_user-搜索-参数校验.md` ✅
+  - `docs/agent/task/2026-06/06-23_功能开发_claude-分层协作方案.md` ✅
+  - `docs/agent/task/2026-06/06-23_bug修复-sys_user-搜索-参数校验.md` ✅
 
-## 文件结构(模板见 `_template.md`)
+## 文件结构
 
 ```markdown
 # <任务主题>
@@ -85,7 +84,6 @@ docs/agent/task/YYYY-MM/YYYY-MM-DD_<主题>.md
 - **任务开始**:复制 `_template.md` 改名,放到当月目录 `YYYY-MM/`(没有就 mkdir),
   立即填"需求 / 任务列表"
 - **任务中**:每次有进展,更新"任务列表"和"执行进度"
-- **遇到问题**:追加到"问题与方案",**不要写到 `feedback_*.md`**(那是通用规则)
 - **任务结束**:
   1. 把状态改为 `已完成`
   2. 填"总结"
@@ -95,14 +93,3 @@ docs/agent/task/YYYY-MM/YYYY-MM-DD_<主题>.md
   - 把多个不相关任务塞进同一份文件
   - 任务结束后还继续追加内容(开新文件)
 
-## 与其他目录的关系
-
-```
-docs/agent/task/YYYY-MM/<本次>.md
-  ├── 完成后学到的通用规则 → 提炼到 docs/agent/memory/feedback_*.md
-  ├── 完成后发现的新的项目状态 → 提炼到 docs/agent/memory/project_*.md
-  ├── 计划外需求 → 写"需求回流",再并入 docs/project/需求规划.md
-  └── 非平凡的踩坑 → 提炼到 docs/project/开发报告.md
-```
-
-任务文件是 **临时文档**,提炼后才进入长期文档。
