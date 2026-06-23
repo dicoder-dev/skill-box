@@ -51,8 +51,8 @@ func PutClipboardText(c *ginp.ContextPlus, req *RequestSetClipboardText) {
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/clipboard/text", HttpType: ginp.HttpGet,
-		Handler: ginp.BindParamsHandler(GetClipboardText, struct{}{}),
-		Swagger: &ginp.SwaggerInfo{Title: "desktop.clipboard.text.get", Description: "读取剪贴板文本", RequestParams: struct{}{}},
+		Handler: ginp.BindParamsHandler(GetClipboardText, &RequestEmptyClipboard{}),
+		Swagger: &ginp.SwaggerInfo{Title: "desktop.clipboard.text.get", Description: "读取剪贴板文本", RequestParams: RequestEmptyClipboard{}},
 	})
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/clipboard/text", HttpType: ginp.HttpPut,
