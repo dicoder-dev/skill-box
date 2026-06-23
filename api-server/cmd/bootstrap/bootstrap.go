@@ -202,20 +202,22 @@ func Serve(b *Backend) {
 	if b == nil {
 		log.Fatal("bootstrap: Serve called with nil Backend")
 	}
-	// 把 backend 的桌面端 hooks 桥接到 cdesktop controller,
-	// 这样 controller 在 HTTP 请求时能调到真正的 OS 能力。
-	// Web 部署下 hooks 为零值(所有 func 字段都是 nil),cdesktop 端点
-	// 自然降级到 501,前端 guard 捕获后给出友好提示。
+	// 把 backend(实现了 hooks.Provider 接口)桥接到 cdesktop controller,
+	// 这样 controller 在 HTTP 请求时能通过 hooks.Get() 实时拿到 backend
+	// 最新的 desktopHooks 快照。
 	//
-	// 用 hooks 子包的全局 Set/Get 而不是直接 import cdesktop,是为了规避
-	// bootstrap → router → cdesktop → bootstrap 的导入环。
-	hooks.Set(b.GetDesktopHooks())
-	if h := hooks.Get(); h.Notify != nil {
-		log.Printf("bootstrap: desktop hooks installed (Notify=%v, ClipboardText=%v, OpenExternal=%v)",
-			h.Notify != nil, h.ClipboardText != nil, h.OpenExternal != nil)
-	} else {
-		log.Printf("bootstrap: WARNING desktop hooks EMPTY — all cdesktop endpoints will return 501")
-	}
+	// 关键:这里只 Bind backend 指针,不在此时拷贝 hooks 值。原因是时序:
+	//   - go Serve(backend) 在 main 启动后立刻跑,此时 desktop.NewApp
+	//     还没执行 SetDesktopHooks,如果在这里 Set 当前值,以后 NewApp
+	//     注入的 hooks 就拿不到(cdesktop 永远读到第一次的空值)。
+	//   - 改成 Bind backend + Get 时实时读,无论 Serve 早跑还是晚跑,
+	//     cdesktop 都能拿到 NewApp 注入后的真能力。
+	//
+	// Web 部署下 backend 不会被注入,hooks.Get() 始终返回零值,cdesktop
+	// 自然降级到 501,前端 guard 捕获后给出友好提示。
+	hooks.Bind(b)
+	log.Printf("bootstrap: hooks provider bound, current Notify=%v (实时读,后续 SetDesktopHooks 后立即生效)",
+		b.GetDesktopHooks().Notify != nil)
 	srv := New(b.srvOpts)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
