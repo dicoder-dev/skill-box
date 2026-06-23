@@ -122,11 +122,20 @@ tasks:
       - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
 
   # 启动 Vite 开发服务器（前端热更新），端口由 VITE_PORT 决定。
+  #
+  # 默认按桌面端形态运行:VITE_DEPLOY_MODE=desktop 由 vite.config.js 读取,
+  # 写到 import.meta.env.VITE_RUN_MODE 与 index.html 的 __APP_RUNTIME__。
+  # 这样 wails3 dev 启动的 webview(走 Vite,不走后端 gin)也能识别为桌面端,
+  # SettingsView 的桌面偏好卡可见,通知/剪贴板/托盘等能力全部开放。
+  #
+  # 如需切回 Web 形态调试,运行 `VITE_DEPLOY_MODE=web task dev:frontend`。
   dev:frontend:
-    summary: 以前端开发模式运行项目
+    summary: 以前端开发模式运行项目(默认桌面端形态)
     dir: frontend
     deps:
       - task: install:frontend:deps
+    env:
+      VITE_DEPLOY_MODE: '{{.VITE_DEPLOY_MODE | default "desktop"}}'
     cmds:
       - npm run dev -- --port {{.VITE_PORT}} --strictPort
 
