@@ -1,29 +1,40 @@
 // platform/index.js - 平台能力抽象。
 //
 // 识别规则(权威):
-//   由后端在 index.html 注入 window.__APP_RUNTIME__.runMode,
-//   由启动命令决定:
-//     - wails3 dev / 桌面二进制 → "desktop"(webview 加载后端 HTTP server,
-//       桌面能力统一走 /api/desktop/* HTTP 端点)
-//     - go run ./cmd/web / Web 单进程二进制 → "web"
-//   业务代码统一 import { platform } from '@/platform' 使用。
+//   1) 优先 import.meta.env.VITE_RUN_MODE(由 vite.config.js 在 dev 模式
+//      下从 VITE_DEPLOY_MODE 环境变量注入,wails3 dev 启动 Vite 时传
+//      VITE_DEPLOY_MODE=desktop 即可让前端在 Vite dev server 上也识别为桌面端)。
+//   2) 退回 window.__APP_RUNTIME__.runMode(由后端 gin 在生产 index.html
+//      注入,桌面端 release binary 走这条路径)。
+//   3) 都拿不到时兑底 "web"。
 //
-// 退化路径:
-//   1) 拿不到 __APP_RUNTIME__(如 SSR / 早期报错)→ 兜底按"web"处理。
-//   2) runMode="desktop" 但 HTTP 调用失败(后端未启动)→ 桌面能力方法抛
-//      "desktop capability X unavailable",业务可降级提示用户。
+//   决定能力可见性:
+//     - runMode === "desktop" → 桌面端能力可见(通知、剪贴板、托盘、偏好等)
+//     - runMode === "web"     → 仅 Web 能力,桌面调用 guard() 抛 "unavailable"
 //
-// 注意:Wails v3 alpha.60 不再像 v2 那样把 Go service 注入到 window.go.*;
-// 自动生成的 bindings/* 用 $Call.ByID(methodID, ...) 走 fetch /wails/runtime,
-// 而我们的 webview 是由后端 Gin 服务的,没有 /wails/runtime 路由。
-// 因此 platform 层不再走 wails bindings,统一改用后端 HTTP 端点。
-
+//   启动命令对照:
+//     - wails3 dev(VITE_DEPLOY_MODE=desktop) → 桌面形态,Webview 走 Vite
+//     - ./bin/skill-box(release)             → 桌面形态,Webview 走后端 gin
+//     - go run ./cmd/web                     → Web 单进程
 import { getRuntime } from '@/core/utils/runtime.js'
 import { http } from '@/api/http.js'
 
-const runMode = (typeof window !== 'undefined'
-  ? (window.__APP_RUNTIME__?.runMode || getRuntime().runMode)
-  : 'web')
+// 优先级:import.meta.env(Vite dev 注入) > __APP_RUNTIME__(后端注入) > 兑底 web
+function resolveRunMode() {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_RUN_MODE) {
+    return import.meta.env.VITE_RUN_MODE
+  }
+  if (typeof window !== 'undefined' && window.__APP_RUNTIME__?.runMode) {
+    return window.__APP_RUNTIME__.runMode
+  }
+  try {
+    return getRuntime().runMode
+  } catch (_) {
+    return 'web'
+  }
+}
+
+const runMode = resolveRunMode()
 
 // runMode 是单一权威;只有 runMode==="desktop" 才认为是桌面端。
 const isDesktop = runMode === 'desktop'
