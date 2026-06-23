@@ -314,3 +314,32 @@ func (s settingsAdapter) GetAll() (map[string]string, error) {
 // AppFSEmbed 把 embed.FS 适配成 server.New 需要的 io/fs.FS。
 // 这里主要是为了调用方少写一行 import,实际就是 fs.FS 类型别名。
 type AppFSEmbed = fs.FS
+
+// NewFrontendURLFromEnv 根据 wails3 CLI 注入的环境变量构造 dev 模式下的前端 URL。
+//
+// wails3 dev 在启动子进程前会注入 WAILS_VITE_PORT(端口号,默认 9245)与
+// WAILS_VITE_HOST(可选,默认 127.0.0.1);其他进程下这两个变量未设置时返回 ""。
+// 调用方拿到非空结果时,把它赋给 AppConfig.FrontendURL,NewApp 就会让 Webview
+// 加载 Vite dev server,从而享受 Vite HMR 热更新。
+//
+// host / port 也可以通过参数显式覆盖(便于单元测试或自定义场景)。
+func NewFrontendURLFromEnv(host string, port int) string {
+	if port <= 0 {
+		if p := os.Getenv("WAILS_VITE_PORT"); p != "" {
+			if v, err := strconv.Atoi(p); err == nil && v > 0 {
+				port = v
+			}
+		}
+	}
+	if port <= 0 {
+		// 未检测到 Vite 端口,说明不在 wails3 dev 下,返回空 → NewApp 走生产路径。
+		return ""
+	}
+	if host == "" {
+		if h := os.Getenv("WAILS_VITE_HOST"); h != "" {
+			host = h
+		} else {
+			host = "127.0.0.1"
+		}
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(port))
