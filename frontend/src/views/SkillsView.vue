@@ -685,6 +685,14 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
         <div class="table-container">
           <table v-if="items.length" class="grid">
+            <colgroup>
+              <col class="col-name" />
+              <col class="col-version" />
+              <col class="col-source" />
+              <col class="col-project" />
+              <col class="col-updated" />
+              <col class="col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>{{ t('skills.list.colName') }}</th>
@@ -692,7 +700,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
                 <th>{{ t('skills.list.colSource') }}</th>
                 <th>{{ t('skills.list.colProject') }}</th>
                 <th>{{ t('skills.list.colUpdated') }}</th>
-                <th style="width: 280px">{{ t('skills.list.colActions') }}</th>
+                <th>{{ t('skills.list.colActions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -1105,22 +1113,39 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 /* 表格 */
 .table-container {
+  /* 表格外层不加任何 margin/padding:之前用 margin:0 -20px 把表拉出 card
+     内边距,导致 thead 和 tbody 的横向起点跟 card 内容边不齐。
+     改成让 .card 自己负责内边距,table-container 居中。 */
   overflow-x: auto;
-  margin: 0 -20px;
-  padding: 0 20px;
 }
 
 .grid {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  /* table-layout: fixed 让 thead 和 tbody 走同一套列宽分配,
+     避免内容宽度撑开导致标题与数据列错位。 */
+  table-layout: fixed;
 }
+
+/* 各列的固定宽度,合计等于 100%。
+   名称 / 版本 / 来源 / 项目 / 更新时间 / 操作 */
+.grid col.col-name    { width: 18%; }
+.grid col.col-version { width: 10%; }
+.grid col.col-source  { width: 12%; }
+.grid col.col-project { width: 10%; }
+.grid col.col-updated { width: 22%; }
+.grid col.col-actions { width: 28%; }
 
 .grid th, .grid td {
   text-align: left;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   transition: background-color 0.3s ease;
+  /* 长内容截断,避免单格撑爆列宽 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grid th {
@@ -1130,6 +1155,8 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  /* 表头不要被内容撑高 */
+  vertical-align: middle;
 }
 
 .grid tbody tr {
@@ -1693,11 +1720,6 @@ onMounted(() => { reload(); checkUpdateBadge() })
   .apply-toolbar {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .table-container {
-    margin: 0 -16px;
-    padding: 0 16px;
   }
 
   .grid th, .grid td {
