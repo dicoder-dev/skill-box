@@ -36,8 +36,19 @@ tasks:
     cmds:
       - task: "{{OS}}:run"
 
+  # 桌面端 dev:启动 wails3 dev,Webview 加载 Vite dev server。
+  # 通过 VITE_DEPLOY_MODE=desktop 让 vite.config.js 把 runMode=desktop 写到
+  #   1) import.meta.env.VITE_RUN_MODE(前端代码读)
+  #   2) index.html 的 <script>window.__APP_RUNTIME__={runMode:"desktop"}</script>
+  # wails3 dev 启动 Vite 时会 fork 出 vite 子进程并继承当前 shell 的 env,
+  # 所以这里 export 之后子进程自然就拿得到。
+  #
+  # 想临时切回 web 形态(纯调试前端):
+  #   VITE_DEPLOY_MODE=web task dev
   dev:
-    summary: Runs the application in development mode
+    summary: 桌面端 dev(wails3 dev,前端识别为 desktop)
+    env:
+      VITE_DEPLOY_MODE: '{{.VITE_DEPLOY_MODE | default "desktop"}}'
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
