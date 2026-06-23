@@ -16,6 +16,7 @@
 
 | 场景 | 读什么 |
 | --- | --- |
+| **任何会话开头(冷启动)** | `@docs/agent/ONBOARDING.md`(按清单读完即可工作) |
 | 任何会话开头 | `@docs/agent/memory/MEMORY.md` |
 | 接到新任务 | `@docs/agent/task/README.md` + 同主题最近一份 `task/*.md` |
 | 改 Go / Vue 代码 | `@docs/agent/project/conventions.md` `@docs/agent/project/architecture.md` |
