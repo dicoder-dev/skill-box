@@ -337,7 +337,7 @@ onMounted(loadStatus)
                 />
                 <span class="f-name"><code>{{ f.name }}</code></span>
                 <span class="f-ver">v{{ f.version }}</span>
-                <span class="f-path">{{ f.source_path }}</span>
+                <span class="f-path" :title="f.source_path">{{ f.source_path }}</span>
               </label>
             </li>
           </ul>
