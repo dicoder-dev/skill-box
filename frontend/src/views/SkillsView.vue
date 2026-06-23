@@ -63,7 +63,7 @@ async function loadTags(row) {
   tagLoading.value = true
   tagError.value = ''
   try {
-    const out = await listTags({ skill_id: row.ID })
+    const out = await listTags({ skill_id: row.id })
     tagList.value = out?.items || []
   } catch (e) {
     tagError.value = e?.message || String(e)
@@ -79,7 +79,7 @@ async function doCreateTag() {
   tagError.value = ''
   try {
     await createTag({
-      skill_id: selectedSkill.value.ID,
+      skill_id: selectedSkill.value.id,
       tag: newTagName.value.trim(),
       message: newTagMessage.value,
     })
@@ -109,7 +109,7 @@ async function doDiff(leftID, rightID) {
   if (!selectedSkill.value) { tagError.value = t('skills.tag.selectFirst'); return }
   try {
     const out = await diffTag({
-      skill_id: selectedSkill.value.ID,
+      skill_id: selectedSkill.value.id,
       left_tag_id: leftID || 0,
       right_tag_id: rightID || 0,
     })
@@ -144,14 +144,14 @@ async function doApply(row) {
   applyMessage.value = ''
   try {
     const out = await applySkill({
-      skill_id: row.ID,
-      scope: row.Scope,
-      project_id: row.ProjectID,
+      skill_id: row.id,
+      scope: row.scope,
+      project_id: row.project_id,
       tools: [applyTool.value],
     })
     lastApplies.value = out?.applies || []
     applyMessage.value = out?.all_ok
-      ? t('skills.applyBar.appliedOk', { name: row.Name, version: row.Version, tool: applyTool.value })
+      ? t('skills.applyBar.appliedOk', { name: row.name, version: row.version, tool: applyTool.value })
       : t('skills.applyBar.appliedPartial', { detail: (out?.applies || []).filter(a => a?.status !== 'applied').map(a => a?.error || a?.status).join('; ') })
     await loadApplyHistory(row)
     await checkUpdateBadge()
@@ -180,7 +180,7 @@ async function doUndo(applyID) {
 
 async function loadApplyHistory(row) {
   try {
-    const out = await listApplies({ skill_id: row.ID, page: 1, size: 5 })
+    const out = await listApplies({ skill_id: row.id, page: 1, size: 5 })
     applyHistory.value = out?.items || []
   } catch (e) {}
 }
@@ -254,25 +254,25 @@ async function startEdit(row) {
   error.value = ''
   try {
     const full = await getSkill({
-      scope: row.Scope,
-      project_id: row.ProjectID,
-      name: row.Name,
-      version: row.Version,
+      scope: row.scope,
+      project_id: row.project_id,
+      name: row.name,
+      version: row.version,
       full: true,
     })
     const c = full?.canonical?.manifest || {}
     const files = full?.canonical?.files || []
     const md = files.find((f) => f.path === 'SKILL.md')?.content || ''
     Object.assign(draft, {
-      scope: row.Scope,
-      project_id: row.ProjectID,
-      name: row.Name,
-      version: row.Version,
+      scope: row.scope,
+      project_id: row.project_id,
+      name: row.name,
+      version: row.version,
       description: c.description || '',
       triggersText: (c.triggers || []).join('\n'),
       body: extractBody(md),
     })
-    editingKey.value = { scope: row.Scope, name: row.Name, version: row.Version, project_id: row.ProjectID }
+    editingKey.value = { scope: row.scope, name: row.name, version: row.version, project_id: row.project_id }
     editing.value = true
   } catch (e) {
     error.value = e?.message || String(e)
@@ -347,15 +347,15 @@ async function submit() {
 }
 
 async function triggerTest(row) {
-  if (!confirm(t('skills.test.confirmRun', { name: row.Name, version: row.Version }))) return
+  if (!confirm(t('skills.test.confirmRun', { name: row.name, version: row.version }))) return
   testing.value = true
   testError.value = ''
   try {
     const out = await runSkillTest({
-      scope: row.Scope,
-      project_id: row.ProjectID,
-      name: row.Name,
-      version: row.Version,
+      scope: row.scope,
+      project_id: row.project_id,
+      name: row.name,
+      version: row.version,
       trigger: 'manual',
     })
     lastTest.value = out
@@ -367,13 +367,13 @@ async function triggerTest(row) {
 }
 
 async function remove(row) {
-  if (!confirm(t('skills.list.confirmDelete', { name: row.Name, version: row.Version }))) return
+  if (!confirm(t('skills.list.confirmDelete', { name: row.name, version: row.version }))) return
   try {
     await deleteSkill({
-      scope: row.Scope,
-      project_id: row.ProjectID,
-      name: row.Name,
-      version: row.Version,
+      scope: row.scope,
+      project_id: row.project_id,
+      name: row.name,
+      version: row.version,
     })
     await reload()
   } catch (e) {
@@ -550,12 +550,12 @@ onMounted(() => { reload(); checkUpdateBadge() })
           <span class="card-sub">{{ t('skills.applyHistory.count', { count: applyHistory.length }) }}</span>
         </header>
         <ul class="apply-list">
-          <li v-for="h in applyHistory" :key="h.ID || h.id" :class="`apply-status-${h.Status}`">
-            <span class="apply-id">#{{ h.ID || h.id }}</span>
-            <span class="apply-tool-name">{{ h.Tool }}</span>
-            <span class="apply-status-badge" :class="`badge-${h.Status}`">{{ h.Status }}</span>
-            <span class="apply-time">{{ h.AppliedAt?.slice(0, 19) || t('common.dash') }}</span>
-            <button v-if="h.Status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.ID || h.id)">
+          <li v-for="h in applyHistory" :key="h.apply_id || h.ID || h.id" :class="`apply-status-${h.status}`">
+            <span class="apply-id">#{{ h.apply_id || h.ID || h.id }}</span>
+            <span class="apply-tool-name">{{ h.tool }}</span>
+            <span class="apply-status-badge" :class="`badge-${h.status}`">{{ h.status }}</span>
+            <span class="apply-time">{{ h.applied_at?.slice(0, 19) || t('common.dash') }}</span>
+            <button v-if="h.status === 'applied'" class="link danger" :disabled="undoing" @click="doUndo(h.apply_id || h.ID || h.id)">
               {{ undoing ? t('skills.applyHistory.undoing') : t('skills.applyHistory.undone') }}
             </button>
           </li>
@@ -567,7 +567,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <header class="card-header">
           <h4>
             <Icon icon="mdi:tag-outline" width="16" height="16" />
-            {{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.Name }}@{{ selectedSkill.Version }}</code>
+            {{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.name }}@{{ selectedSkill.version }}</code>
           </h4>
           <span class="tag-count">{{ t('skills.tag.count', { count: tagList.length }) }}</span>
           <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">
@@ -591,15 +591,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
           <span class="diff-label">{{ t('skills.tag.diff') }}:</span>
           <select v-model="diffLeftTagID">
             <option :value="0">{{ t('skills.tag.current') }}</option>
-            <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">
-              {{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}
+            <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
+              {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
             </option>
           </select>
           <Icon icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
           <select v-model="diffRightTagID">
             <option :value="0">{{ t('skills.tag.current') }}</option>
-            <option v-for="tg in tagList" :key="tg.ID || tg.id" :value="tg.ID || tg.id">
-              {{ tg.Tag }} ({{ (tg.CreatedAt || '').slice(0, 16) }}){{ tg.IsImplicit ? t('skills.tag.implicit') : '' }}
+            <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
+              {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
             </option>
           </select>
           <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
@@ -607,16 +607,16 @@ onMounted(() => { reload(); checkUpdateBadge() })
         </div>
 
         <ul v-if="tagList.length" class="tag-list">
-          <li v-for="tg in tagList" :key="tg.ID || tg.id" :class="{ 'tag-implicit': tg.IsImplicit }">
-            <span class="tag-id">#{{ tg.ID || tg.id }}</span>
-            <span class="tag-name"><code>{{ tg.Tag }}</code></span>
-            <span class="tag-msg">{{ tg.Message || t('common.dash') }}</span>
-            <span class="tag-time">{{ (tg.CreatedAt || '').slice(0, 19) }}</span>
-            <button class="link" @click="doDiff(tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
-            <button class="link" :disabled="rolling" @click="doRollback(tg.ID || tg.id)">
+          <li v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :class="{ 'tag-implicit': tg.is_implicit }">
+            <span class="tag-id">#{{ tg.tag_id || tg.ID || tg.id }}</span>
+            <span class="tag-name"><code>{{ tg.tag }}</code></span>
+            <span class="tag-msg">{{ tg.message || t('common.dash') }}</span>
+            <span class="tag-time">{{ (tg.created_at || '').slice(0, 19) }}</span>
+            <button class="link" @click="doDiff(tg.tag_id || tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
+            <button class="link" :disabled="rolling" @click="doRollback(tg.tag_id || tg.ID || tg.id)">
               {{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}
             </button>
-            <button class="link danger" @click="doDeleteTag(tg.ID || tg.id)">{{ t('common.delete') }}</button>
+            <button class="link danger" @click="doDeleteTag(tg.tag_id || tg.ID || tg.id)">{{ t('common.delete') }}</button>
           </li>
         </ul>
 
@@ -654,15 +654,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
         <p v-if="testError" class="message message-error">{{ t('skills.test.errPrefix') }} {{ testError }}</p>
         <p v-else-if="lastTest?.run?.summary" class="test-summary">{{ lastTest.run.summary }}</p>
         <ul v-if="lastTest?.results?.length" class="test-list">
-          <li v-for="r in lastTest.results" :key="r.ID || r.id" :class="`test-check test-check-${r.Status}`">
-            <span class="test-check-name">{{ r.Check }}</span>
-            <span class="test-check-status" :class="`status-${r.Status}`">{{ r.Status }}</span>
-            <span class="test-check-msg">{{ r.Message }}</span>
+          <li v-for="r in lastTest.results" :key="r.id || r.ID" :class="`test-check test-check-${r.status}`">
+            <span class="test-check-name">{{ r.check }}</span>
+            <span class="test-check-status" :class="`status-${r.status}`">{{ r.status }}</span>
+            <span class="test-check-msg">{{ r.message }}</span>
           </li>
         </ul>
-        <details v-for="r in lastTest?.results || []" :key="`d-${r.ID || r.id}`" class="test-detail">
-          <summary>{{ r.Check }} detail</summary>
-          <pre>{{ r.Detail }}</pre>
+        <details v-for="r in lastTest?.results || []" :key="`d-${r.id || r.ID}`" class="test-detail">
+          <summary>{{ r.check }} detail</summary>
+          <pre>{{ r.detail }}</pre>
         </details>
       </div>
 
@@ -696,15 +696,15 @@ onMounted(() => { reload(); checkUpdateBadge() })
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in items" :key="`${p.Scope}-${p.ProjectID}-${p.Name}-${p.Version}`">
-                <td><code class="skill-name">{{ p.Name }}</code></td>
-                <td><code class="skill-version">{{ p.Version }}</code></td>
+              <tr v-for="p in items" :key="`${p.scope}-${p.project_id}-${p.name}-${p.version}`">
+                <td><code class="skill-name">{{ p.name }}</code></td>
+                <td><code class="skill-version">{{ p.version }}</code></td>
                 <td>
-                  <span v-if="p.Source === 'market'" class="badge badge-blue">{{ p.Source }}</span>
-                  <span v-else class="badge badge-gray">{{ p.Source }}</span>
+                  <span v-if="p.source === 'market'" class="badge badge-blue">{{ p.source }}</span>
+                  <span v-else class="badge badge-gray">{{ p.source }}</span>
                 </td>
-                <td class="td-dim">{{ p.ProjectID || t('common.dash') }}</td>
-                <td class="td-time">{{ p.UpdatedAt?.slice(0, 19) || t('common.dash') }}</td>
+                <td class="td-dim">{{ p.project_id || t('common.dash') }}</td>
+                <td class="td-time">{{ p.updated_at?.slice(0, 19) || t('common.dash') }}</td>
                 <td class="row-actions">
                   <button class="action-btn action-btn-apply" :disabled="applying" @click="doApply(p)">
                     <Icon icon="mdi:download" width="12" height="12" />
