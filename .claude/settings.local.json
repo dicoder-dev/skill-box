@@ -115,22 +115,31 @@
       "Read(//Users/brody/Library/Logs/**)",
       "Read(//private/var/log/**)",
       "Bash(task desktop:build)",
-      "Bash(GOOS=darwin CGO_ENABLED=1 CGO_CFLAGS=\"-mmacosx-version-min=10.15\" go build -tags production -trimpath -buildvcs=false -ldflags=\"-w -s\" -o bin/skill-box .)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh",
-            "timeout": 15,
-            "statusMessage": "Auto-committing change"
-          }
-        ]
-      }
+      "Bash(GOOS=darwin CGO_ENABLED=1 CGO_CFLAGS=\"-mmacosx-version-min=10.15\" go build -tags production -trimpath -buildvcs=false -ldflags=\"-w -s\" -o bin/skill-box .)",
+      "Read(//Users/brody/.agents/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"modern dashboard dark light mode\" --domain style -n 5)",
+      "Bash(python3 scripts/search.py \"saas dashboard\" --domain color -n 3)",
+      "Bash(lsof -ti:8082)",
+      "Bash(xargs kill:*)",
+      "Bash(sed -i.bak 's/h := hooks\\(\\)/h := hooks.Get\\(\\)/g' clipboard.a.go external.a.go notify.a.go prefs.a.go shortcut.a.go window.a.go)",
+      "Bash(rm -f *.bak)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(go list:*)",
+      "Bash(wails3 --help)",
+      "Bash(wails3 dev:*)",
+      "Bash(VITE_DEPLOY_MODE=desktop npx vite --port 9246 --strictPort)",
+      "Bash(wails3 task:*)",
+      "Bash(awk 'NR==221 || NR==222 || NR==226' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(awk 'NR==226' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -i.bak '223s/buildRuntimeScript\\(\\)/buildRuntimeScript\\(runMode string\\)/' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -n '223,228p' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -i.bak '227s/RunMode: \"web\", //' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -n '225,232p' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -i.bak '230s/defaultStr\\(cfg.RunMode, \"web\"\\)/defaultStr\\(runMode, \"web\"\\)/' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(sed -n '228,234p' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/server.go)",
+      "Bash(awk 'NR==247' /Volumes/MyDrive/Home/dicoder/projects/skill-box/api-server/cmd/bootstrap/bootstrap.go)",
+      "Bash(mkdir -p /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/.disabled)",
+      "Bash(mv /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/auto-commit.sh /Volumes/MyDrive/Home/dicoder/projects/skill-box/.claude/hooks/.disabled/auto-commit.sh.disabled)"
     ]
   }
 }
