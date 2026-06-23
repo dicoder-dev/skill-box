@@ -21,6 +21,7 @@ docs/
 │
 └── agent/                          # AI 协作上下文(给 Claude 看的)
     ├── README.md                   # 本文件 —— 分层契约
+    ├── ONBOARDING.md               # 新会话冷启动清单(第一份必读)
     │
     ├── memory/                     # 跨会话长期记忆
     │   ├── MEMORY.md               # 索引(必读,Claude 默认会扫这个)
