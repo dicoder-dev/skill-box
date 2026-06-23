@@ -28,6 +28,11 @@ info:
 #   comments: "产品备注信息"
 
 # 开发模式配置
+# 既支持桌面端（wails3 dev）也支持 Web 端（wails3 task web）热更新：
+#   - 桌面端：监听 frontend 源码变化触发 wails3 build DEV=true（blocking），
+#     同步通过 Vite dev server (background) 提供浏览器层 HMR，
+#     应用窗口加载 http://localhost:{{.VITE_PORT}} 即可享受热更新，无需重启 Go 进程。
+#   - Web 端：依赖 web:dev:backend + web:dev:frontend，由 Vite HMR 直接生效。
 dev_mode:
   root_path: .
   log_level: warn
@@ -36,16 +41,25 @@ dev_mode:
     dir:
       - .git
       - node_modules
-      - frontend
+      - frontend/node_modules   # Vite 依赖与锁文件变化噪声大，跳过
+      - frontend/dist          # 构建产物目录，跳过
+      - frontend/logs
       - bin
+      - api-server/cmd/web/frontend/dist  # embed 同步目录，跳过
     file:
       - .DS_Store
       - .gitignore
       - .gitkeep
+      - "*.db"                 # SQLite 数据文件变化频繁，跳过
     watched_extension:
       - "*.go"
-      - "*.js" # 监听通过 //wails:include 指令嵌入的 JS/TS 文件变化。
-      - "*.ts" # frontend 目录会通过上面的 dir 整体排除。
+      - "*.js"                 # 监听通过 //wails:include 指令嵌入的 JS/TS 文件变化。
+      - "*.ts"
+      - "*.vue"                # Vue 单文件组件
+      - "*.css"                # 样式文件（PostCSS/Tailwind 等）
+      - "*.scss"
+      - "*.html"
+      - "*.json"               # i18n / package.json 变化时也需要重建
     git_ignore: true
   executes:
     - cmd: wails3 build DEV=true
