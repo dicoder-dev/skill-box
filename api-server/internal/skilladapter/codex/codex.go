@@ -44,7 +44,9 @@ func Register() {
 		Adapter.base = &skilladapter.BaseAdapter{
 			ID:        id,
 			Display:   "Codex",
-			IconEmoji: "\xf0\x9f\xa7\x96", // 🧖
+			// IconEmoji 已废弃:项目规范禁止 emoji 作为图标。前端按 tool_id
+			// 映射 mdi 图标渲染。这里留空串避免向前端输出乱码字节。
+			IconEmoji: "",
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
 				skilladapter.ScopeProject: {".codex/skills"},

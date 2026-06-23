@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
@@ -20,8 +20,24 @@ const hasReport = ref(false)
 
 const scanReport = ref(null)
 const selected = ref(new Set())
+// 当前激活的工具 tab id;phase === 'scan' 时使用。
+const activeToolId = ref('')
 
 const importResult = ref(null)
+
+// tool_id → mdi 图标映射。
+// 后端 IconEmoji 字段已废弃(2026-06-23 清理乱码字节,项目规范禁 emoji),
+// 改由前端按 tool_id 决定图标,5 个工具都给到语义化的 mdi 图标。
+const toolIconMap = {
+  claude: 'mdi:robot-outline',
+  codex: 'mdi:cube-outline',
+  cursor: 'mdi:cursor-default-click-outline',
+  opencode: 'mdi:code-braces',
+  trae: 'mdi:shield-outline',
+}
+function iconOf(toolId) {
+  return toolIconMap[toolId] || 'mdi:puzzle-outline'
+}
 
 async function loadStatus() {
   loading.value = true
@@ -47,6 +63,11 @@ async function doScan() {
     const res = await runOnboardingScan()
     scanReport.value = res
     selected.value = new Set((res.found || []).map((f) => keyOf(f)))
+    // 默认激活第一个有发现的 tab,避免空 tab。
+    const firstTid = (res.tools || []).find(
+      (tid) => (res.summary || {})[tid] > 0,
+    ) || (res.tools || [])[0]
+    activeToolId.value = firstTid || ''
     phase.value = 'scan'
   } catch (e) {
     error.value = t('onboarding.errScan', { msg: e?.message || e })
@@ -67,17 +88,48 @@ function toggleSelect(found) {
   selected.value = s
 }
 
-function selectAll() { selected.value = new Set((scanReport.value?.found || []).map(keyOf)) }
-function selectNone() { selected.value = new Set() }
-
+// 按 tool_id 分组的 skill 列表 + 元数据(显示名 / 数量 / 当前 tab id)。
 const foundByTool = computed(() => {
   const groups = {}
+  // 先按 scanReport.tools 顺序建空组,保证 tab 顺序稳定(后端已排序)
+  for (const tid of scanReport.value?.tools || []) {
+    groups[tid] = { name: '', items: [] }
+  }
   for (const f of scanReport.value?.found || []) {
     if (!groups[f.tool_id]) groups[f.tool_id] = { name: f.tool_name, items: [] }
+    if (!groups[f.tool_id].name) groups[f.tool_id].name = f.tool_name
     groups[f.tool_id].items.push(f)
   }
   return groups
 })
+
+const toolTabs = computed(() =>
+  Object.entries(foundByTool.value).map(([tid, g]) => ({
+    toolId: tid,
+    name: g.name,
+    count: g.items.length,
+    icon: iconOf(tid),
+  })),
+)
+
+// 工具内"全选/全不选":只动当前 tab 的 skill,不影响其它 tab 已选项。
+function selectAllInTool(tid) {
+  const s = new Set(selected.value)
+  for (const f of foundByTool.value[tid]?.items || []) s.add(keyOf(f))
+  selected.value = s
+}
+function selectNoneInTool(tid) {
+  const s = new Set(selected.value)
+  for (const f of foundByTool.value[tid]?.items || []) s.delete(keyOf(f))
+  selected.value = s
+}
+function selectedInTool(tid) {
+  let n = 0
+  for (const f of foundByTool.value[tid]?.items || []) {
+    if (selected.value.has(keyOf(f))) n++
+  }
+  return n
+}
 
 async function doImport() {
   loading.value = true
@@ -108,6 +160,7 @@ function reset() {
   scanReport.value = null
   importResult.value = null
   selected.value = new Set()
+  activeToolId.value = ''
 }
 
 function goSkills() {
@@ -187,7 +240,7 @@ onMounted(loadStatus)
       <table v-else class="grid">
         <thead>
           <tr>
-            <th style="width: 50px"></th>
+            <th style="width: 44px"></th>
             <th>{{ t('onboarding.phase1.colTool') }}</th>
             <th>{{ t('onboarding.phase1.colId') }}</th>
             <th>{{ t('onboarding.phase1.colGlobalPath') }}</th>
@@ -196,7 +249,9 @@ onMounted(loadStatus)
         </thead>
         <tbody>
           <tr v-for="a in adapters" :key="a.tool_id">
-            <td class="icon-cell">{{ a.icon }}</td>
+            <td class="icon-cell">
+              <Icon :icon="iconOf(a.tool_id)" width="20" height="20" class="tool-icon" />
+            </td>
             <td><strong>{{ a.display_name }}</strong></td>
             <td><code>{{ a.tool_id }}</code></td>
             <td class="td-path">{{ a.global_path || t('common.dash') }}</td>
@@ -221,7 +276,7 @@ onMounted(loadStatus)
       </div>
     </section>
 
-    <!-- 阶段 2: 扫描 + 勾选 -->
+    <!-- 阶段 2: 扫描 + 勾选(tab 面板,按工具拆分) -->
     <section v-else-if="phase === 'scan'" class="card">
       <header class="card-header">
         <h3>
@@ -237,20 +292,43 @@ onMounted(loadStatus)
       </div>
 
       <div v-else>
-        <div class="bulk-actions">
-          <button class="sm" @click="selectAll">{{ t('onboarding.phase2.selectAll') }}</button>
-          <button class="sm ghost" @click="selectNone">{{ t('onboarding.phase2.selectNone') }}</button>
-          <span class="selection-info">{{ t('onboarding.phase2.selected', { sel: selected.size, total: scanReport.found.length }) }}</span>
+        <!-- 工具 tab 栏:瑞士风,上划线 + 数字徽章 -->
+        <div class="tool-tabs" role="tablist">
+          <button
+            v-for="tab in toolTabs"
+            :key="tab.toolId"
+            role="tab"
+            :aria-selected="activeToolId === tab.toolId"
+            :class="['tool-tab', { active: activeToolId === tab.toolId }]"
+            @click="activeToolId = tab.toolId"
+          >
+            <Icon :icon="tab.icon" width="16" height="16" class="tab-icon" />
+            <span class="tab-name">{{ tab.name }}</span>
+            <span class="tab-count">{{ tab.count }}</span>
+          </button>
         </div>
 
-        <div v-for="(g, tid) in foundByTool" :key="tid" class="tool-group">
-          <header class="group-header">
-            <span class="group-name">{{ g.name }}</span>
-            <code class="group-id">{{ tid }}</code>
-            <span class="group-count">{{ g.items.length }}</span>
-          </header>
+        <!-- 当前 tab 内容 -->
+        <div v-if="activeToolId && foundByTool[activeToolId]" class="tool-panel">
+          <div class="bulk-actions">
+            <button class="sm" @click="selectAllInTool(activeToolId)">
+              {{ t('onboarding.phase2.selectAll') }}
+            </button>
+            <button class="sm ghost" @click="selectNoneInTool(activeToolId)">
+              {{ t('onboarding.phase2.selectNone') }}
+            </button>
+            <span class="selection-info">
+              {{ t('onboarding.phase2.selected', {
+                  sel: selectedInTool(activeToolId),
+                  total: foundByTool[activeToolId].items.length,
+              }) }}
+            </span>
+          </div>
+
           <ul class="found-list">
-            <li v-for="f in g.items" :key="keyOf(f)" :class="{ selected: selected.has(keyOf(f)) }">
+            <li v-for="f in foundByTool[activeToolId].items"
+                :key="keyOf(f)"
+                :class="{ selected: selected.has(keyOf(f)) }">
               <label class="found-item">
                 <input
                   type="checkbox"
@@ -557,7 +635,10 @@ onMounted(loadStatus)
 }
 
 .icon-cell {
-  font-size: 20px;
+  color: var(--accent-blue);
+}
+.tool-icon {
+  vertical-align: middle;
 }
 
 .td-path {
@@ -601,44 +682,74 @@ onMounted(loadStatus)
   margin-left: auto;
 }
 
-/* 工具组 */
-.tool-group {
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  transition: border-color 0.3s ease;
-}
-
-.group-header {
+/* 工具 tab 栏:瑞士风,上划线 + 数字徽章 */
+.tool-tabs {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--bg-subtle);
+  gap: 4px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.group-name {
-  font-weight: 600;
+.tool-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tool-tab:hover:not(.active) {
   color: var(--text);
 }
 
-.group-id {
-  font-size: 11px;
-  color: var(--text-faint);
+.tool-tab.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
 }
 
-.group-count {
-  margin-left: auto;
-  padding: 2px 8px;
-  background: var(--accent-violet-bg);
-  color: var(--accent-violet);
-  border: 1px solid var(--accent-violet-border);
-  border-radius: var(--radius-full);
+.tool-tab .tab-icon {
+  flex-shrink: 0;
+}
+
+.tool-tab .tab-name {
+  font-weight: 500;
+}
+
+.tool-tab .tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--bg-subtle);
+  color: var(--text-dim);
   font-size: 11px;
   font-weight: 600;
+  font-feature-settings: 'tnum';
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tool-tab.active .tab-count {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+}
+
+/* 当前 tab 内容区(单工具的 skill 列表) */
+.tool-panel {
+  padding-top: 4px;
 }
 
 /* 发现列表 */

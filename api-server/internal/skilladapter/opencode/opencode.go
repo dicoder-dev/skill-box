@@ -39,7 +39,7 @@ func Register() {
 		Adapter.base = &skilladapter.BaseAdapter{
 			ID:        id,
 			Display:   "OpenCode",
-			IconEmoji: "ð§",
+			IconEmoji: "", // 已废弃:项目规范禁止 emoji 作为图标,前端按 tool_id 映射 mdi 图标。
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
 				skilladapter.ScopeProject: []string{".opencode/skills"},
