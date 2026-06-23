@@ -16,8 +16,11 @@ type RequestSetClipboardText struct {
 	Text string `json:"text"`
 }
 
+// RequestEmptyClipboard 占位无入参(handler 只需要 c)。
+type RequestEmptyClipboard struct{}
+
 // GetClipboardText GET /api/desktop/clipboard/text
-func GetClipboardText(c *ginp.ContextPlus, _ struct{}) {
+func GetClipboardText(c *ginp.ContextPlus, _ *RequestEmptyClipboard) {
 	h := hooks()
 	if h.ClipboardText == nil {
 		c.JSON(501, gin.H{"error": "clipboard read not available"})
