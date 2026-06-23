@@ -343,3 +343,4 @@ func NewFrontendURLFromEnv(host string, port int) string {
 		}
 	}
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port))
+}
