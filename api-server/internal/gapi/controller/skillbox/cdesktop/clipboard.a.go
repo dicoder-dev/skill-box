@@ -6,6 +6,7 @@
 package cdesktop
 
 import (
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/pkg/ginp"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,7 @@ type RequestEmptyClipboard struct{}
 
 // GetClipboardText GET /api/desktop/clipboard/text
 func GetClipboardText(c *ginp.ContextPlus, _ *RequestEmptyClipboard) {
-	h := hooks()
+	h := hooks.Get()
 	if h.ClipboardText == nil {
 		c.JSON(501, gin.H{"error": "clipboard read not available"})
 		return
@@ -36,7 +37,7 @@ func GetClipboardText(c *ginp.ContextPlus, _ *RequestEmptyClipboard) {
 
 // PutClipboardText PUT /api/desktop/clipboard/text { text }
 func PutClipboardText(c *ginp.ContextPlus, req *RequestSetClipboardText) {
-	h := hooks()
+	h := hooks.Get()
 	if h.SetClipboardText == nil {
 		c.JSON(501, gin.H{"error": "clipboard write not available"})
 		return
