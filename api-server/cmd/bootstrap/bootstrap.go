@@ -109,7 +109,7 @@ type dbsHolder struct {
 // 调用时机:Boot 返回 *Backend 之后、Serve 启动 HTTP server 之前的窗口期。
 // 桌面端入口(skill-box/main.go)在 desktop.NewApp 阶段调用。
 // 这里只持有值,Serve 阶段才会桥接到 hooks.Set(那时 router 已注册)。
-func (b *Backend) SetDesktopHooks(h hooks.BootstrapHooks) {
+func (b *Backend) SetDesktopHooks(h BootstrapHooks) {
 	if b == nil {
 		return
 	}
@@ -119,9 +119,9 @@ func (b *Backend) SetDesktopHooks(h hooks.BootstrapHooks) {
 // GetDesktopHooks 返回当前注入的桌面端回调(只读快照,调用方不允许改)。
 // 在桌面端启动链路里,Serve 会用它来桥接 hooks.Set;controller 本身不
 // 直接走这个 getter,而是通过 hooks.Get() 拿到全局值。
-func (b *Backend) GetDesktopHooks() hooks.BootstrapHooks {
+func (b *Backend) GetDesktopHooks() BootstrapHooks {
 	if b == nil {
-		return hooks.BootstrapHooks{}
+		return BootstrapHooks{}
 	}
 	return b.desktopHooks
 }
