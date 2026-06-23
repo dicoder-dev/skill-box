@@ -182,7 +182,7 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	// 缺失字段(如 clipboard / openExternal)在桌面端都已有对应实现,
 	// 全部填齐,Web 部署下 backend 不会被注入,钩子保持 nil 自然降级到 501。
 	if backend != nil {
-		backend.SetDesktopHooks(bootstrap.BootstrapHooks{
+		hooks := bootstrap.BootstrapHooks{
 			Notify:                     notifier.Notify,
 			NotifyHasPermission:        notifier.HasPermission,
 			NotifyRequestAuthorization: notifier.RequestAuthorization,
