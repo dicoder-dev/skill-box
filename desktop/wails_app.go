@@ -4,6 +4,9 @@ import (
 	"context"
 	"io/fs"
 	"log"
+	"net"
+	"os"
+	"strconv"
 	"time"
 
 	"ginp-api/cmd/bootstrap"
@@ -25,6 +28,14 @@ type AppConfig struct {
 	MinWidth, MinHeight int
 	// BackgroundColour 主窗口背景色(R,G,B),各分量 0-255。
 	BackgroundColour [3]uint8
+	// FrontendURL 可选:自定义前端入口 URL。非空时 Webview 加载此 URL,
+	// 而不是 backend.URL()。
+	//
+	// 典型用途:`wails3 dev` 时由 wails3 CLI 注入 WAILS_VITE_PORT,搭配
+	// `wails3 task common:dev:frontend` 起 Vite dev server,让桌面端 Webview
+	// 加载 http://localhost:<port>/,享受 Vite HMR 热更新,改前端代码无需重启 Go 进程。
+	// 不传则走 backend 内置 gin + embed.FS 的生产路径。
+	FrontendURL string
 }
 
 // App 包装 *application.App,提供 Quit 优雅退出。
