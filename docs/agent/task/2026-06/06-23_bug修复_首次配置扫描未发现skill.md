@@ -1,60 +1,94 @@
 # Bug 修复:首次配置扫描未发现本机已装的 skill
 
 **日期:** 2026-06-23
-**状态:** 已完成
+**状态:** 已完成(两阶段修复)
 
 ## 1. 需求
 首次配置界面"开始扫描"按钮触发后,扫描报告 `found` 数量为 0,无法发现本机已经安装的 skill。需要让扫描能正确发现本机所有 skill。
 
 ## 2. 任务列表
-- [x] 定位扫描主入口:PostOnboardingScan → skillimporter.Scan → BaseAdapter.Scan
-- [x] 复现并列出根因(隐藏目录 / 嵌套 / symlink)
-- [x] 修复 BaseAdapter.Scan:递归扫描 + 不跳过隐藏目录 + 跟随 symlink
-- [x] 验证本地扫描结果能匹配实际 skill 数量(0 → 74)
-- [x] 提交 git(commit: c2c7512)
+- [x] **阶段 1** 修复 BaseAdapter.Scan 递归扫描(隐藏目录 / 嵌套 / symlink) - commit c2c7512
+- [x] **阶段 2** 修复 adapter 子包未在生产代码 import 导致 Registry 为空 - 本次修复
+- [x] 验证本地扫描结果能匹配实际 skill 数量(0 → 74+)
 
-## 3. 执行进度
-- HH:MM 复现:扫描后 `report.FoundSkills` 长度=0
-- HH:MM 定位:`api-server/internal/skilladapter/base.go:50-82` BaseAdapter.Scan 实现缺陷
-- HH:MM 三个具体问题:
-  1. **跳过隐藏目录** (line 65-67):`strings.HasPrefix(e.Name(), ".")` 会跳过 `.system`(5 个 skill)和 `.curated`(20+ skill)
-  2. **只扫描一层** (line 50-82 的 `os.ReadDir`):Claude marketplaces 路径 `~/.claude/plugins/marketplaces/<m>/plugins/<p>/skills/<n>/SKILL.md` 是 4 层嵌套,扫不到
-  3. **不跟随 symlink** (line 61 `!e.IsDir()`):Trae 的 skill 全部是 symlink → `../../.agents/skills/xxx`,`e.IsDir()` 对指向目录的 symlink 返回 false,会被跳过
-- HH:MM 改写:递归 walkSkills + 跟随 symlink + EvalSymlinks 去重 + maxScanDepth=8
-- HH:MM 新增 5 个单元测试(隐藏目录/嵌套/symlink/最大深度/元数据文件跳过)
-- HH:MM 真实目录端到端验证:trae 5 + codex-.system 5 + codex-.curated 39 + claude-marketplaces 25 = 74 个
+## 3. 阶段 1 回顾(已提交 c2c7512)
+BaseAdapter.Scan 三个具体问题:
+1. 跳过隐藏目录(漏 .system / .curated)
+2. 只扫描一层(漏 Claude marketplaces 4 层嵌套)
+3. 不跟随 symlink(漏 Trae 全部 symlink skill)
 
-## 4. 问题与方案
-> 现象 → 定位 → 方案 → 教训
+实现为递归 walkSkills + EvalSymlinks 去重 + maxScanDepth=8 + 5 个新单元测试。
 
-**现象**:用户本机装了 ~40 个 skill(codex 25+, trae 5, claude 10+),扫描全为 0。
+## 4. 阶段 2 根因 — adapter 子包未在生产路径 import
 
-**定位**:BaseAdapter.Scan 的实现做了三个"看似安全"的判断:
+**现象**:用户报告"修复后还是没找到"。阶段 1 修复在单元测试里通过(adapters_integration_test.go),但在桌面应用里仍然报 `0 dirs, 0 skills across 0 tools`。
+
+**定位**:
+- `nm bin/skill-box` 符号表里只有 `skilladapter.All / ParseSkillMD / Registry.All / Registry.Get`,**完全没有 trae / claude / codex / cursor / opencode 子包的符号**
+- 全仓库 grep:`adapters_integration_test.go` 是唯一 import 这些子包的位置
+- 各子包都靠 `func init() { Register() }` 把 adapter 注册到 `defaultRegistry`
+- 生产入口(`cmd/gapi/main.go` / `cmd/web/main.go`)只走 `bootstrap.Run()`,bootstrap 包里**没有**任何位置 import 这些子包
+- 后果:Go 链接器把从未被引用的包整个丢弃 → 各 adapter 的 `init()` 从未执行 → Registry 永远是空的 → `skilladapter.All()` 返回 `[]` → 扫描到 0 个 tool,0 个 skill
+
+**为什么测试通过了**:`adapters_integration_test.go` 里 blank import 了 5 个子包,跑测试时它们被链入。但生产二进制走的是 `cmd/gapi/main.go` / `cmd/web/main.go`,根本不会进 test 文件。
+
+**为什么前几次桌面应用重启也没用**:前面 `wails3 task dev` 走的是 `build/config.yml` 的 dev_mode.executes 链(`*.go` 改动 → `wails3 build DEV=true` → `task run`),会自动重新 build 后端。但 build 出来的二进制依然没 import 子包,所以 build 多少次都是同样的"Registry 是空的"。
+
+## 5. 阶段 2 修复
+
+**新增** `api-server/cmd/bootstrap/adapters_import.go`,blank import 所有 5 个子 adapter 包:
 ```go
-if !e.IsDir() { continue }                        // 漏 symlink
-if strings.HasPrefix(e.Name(), ".") { continue }  // 漏 .system/.curated
-// os.ReadDir 只读一层                                       // 漏嵌套
+package bootstrap
+
+import (
+	_ "ginp-api/internal/skilladapter/claude"
+	_ "ginp-api/internal/skilladapter/codex"
+	_ "ginp-api/internal/skilladapter/cursor"
+	_ "ginp-api/internal/skilladapter/opencode"
+	_ "ginp-api/internal/skilladapter/trae"
+)
 ```
 
-**方案**:把 BaseAdapter.Scan 改为基于"找含 SKILL.md 的目录"的递归扫描:
-- 入口是 DiscoverPaths 给的根目录(顶层)
-- 递归向下找所有子目录里**直接含 SKILL.md 文件**的目录
-- symlink 解析为目录后继续递归
-- 跳过 `.DS_Store` / `.marker` 这样的非目录、文件
-- 仍跳过嵌套过深(>8 层)防止死循环
+**为什么放在 cmd/bootstrap**:
+- `cmd/gapi/main.go` / `cmd/web/main.go` / 桌面端 `skill-box/main.go` 三个入口都过这里,一处 import 等价于全局生效
+- 与已有的 `internal/gapi/router/routers_import.go`(blank import 所有 controller)同模式,显式声明依赖
 
-**教训**:写通用扫描时,"跳过隐藏目录"是个常见反 pattern;正确的处理是"找目标文件(SKILL.md)在哪"。
+**验证**:`nm /tmp/sb-web`(用 cmd/web 入口编译)现在能看到全部 5 个 adapter 包的方法符号:
+```
+_ginp-api/internal/skilladapter/claude.(*adapter).Scan
+_ginp-api/internal/skilladapter/codex.(*adapter).Scan
+_ginp-api/internal/skilladapter/cursor.(*adapter).Scan
+_ginp-api/internal/skilladapter/opencode.(*adapter).Scan
+_ginp-api/internal/skilladapter/trae.(*adapter).Scan
+```
+以及它们的 `.inittask`(init 函数被链入)。
 
-## 5. 需求回流
+## 6. 问题与方案
+> 现象 → 定位 → 方案 → 教训
+
+**现象**:阶段 1 修复了 Scan 逻辑,测试通过,二进制重 build 了,用户还是看不到 skill。
+
+**定位**:测试和生产代码路径不一致——单测有 blank import,但生产入口链上没有。Go 链接器丢弃未引用的包,init 从未触发。
+
+**方案**:在 cmd/bootstrap 加 `adapters_import.go`,blank import 5 个子 adapter 包,放占位符 `{placeholder_adapter_import}` 方便后续生成工具自动追加。
+
+**教训**:用 init() 做注册的模式,在 Go 里必须有显式 import 触发。如果不显式 import,链接器会整个干掉包,init 不跑,注册不发生。**包内 docstring 说"启动时由各 adapter 子包在自己的 init() 里调用 defaultRegistry.Register"是骗人的**——没有 import,init 不会"启动时调用"。
+
+更稳的做法:把 adapter 注册从 init 改成显式的 `RegisterAll(registry)` 函数,在 main 入口处调用一次。这样 import 关系不在依赖,只看调用关系。但 init 模式更符合 Go 习惯,目前的修复方式更简单,保留即可。
+
+## 7. 需求回流
 无。
 
-## 6. 总结(任务结束时填)
-- **完成了什么**:BaseAdapter.Scan 从 1 层非递归改为递归扫描 + 跟随 symlink + 允许隐藏目录,5 个新测试覆盖。
-- **留下了什么**:commit c2c7512;base.go 重写 + base_test.go 新建;真实目录验证脚本已删除(临时)
+## 8. 总结(任务结束时填)
+- **完成了什么**:两阶段修复:
+  - 阶段 1(commit c2c7512):BaseAdapter.Scan 改为递归 + 跟随 symlink + 不跳隐藏目录,5 个单元测试。
+  - 阶段 2(本次):在 cmd/bootstrap/adapters_import.go blank import 5 个子 adapter 包,触发它们的 init 注册。
+- **留下了什么**:commit 待提;base.go + base_test.go(阶段 1)+ adapters_import.go(阶段 2)
 - **留给下次的事**:
   - Claude marketplaces 下同名 skill 出现 3 次(access/configure),因为不同 plugin 下名字相同。是否要按 plugin 来源去重?目前按 (tool_id, name) 去重,import 阶段会冲掉,需要决策。
-  - `importResult.source_path` 当前显示的是 `<filepath>/<name>`,嵌套时是冗长全路径,UI 截断即可。
+  - `importResult.source_path` 当前显示的是 `filepath/<name>`,嵌套时是冗长全路径,UI 截断即可。
+  - 阶段 2 验证靠 `nm` 看符号表确认;真实端到端验证得在桌面应用里点击"开始扫描"看 Report,等用户确认。
 - **复盘**:
-  - 做得好的:从用户报修直接看到 3 个"看似安全"的过滤都出问题,根因定位非常快。
-  - 能改进的:Claude marketplaces 的 4 层嵌套其实是"在 adapter 层拆 3 个 DiscoverPaths"也能搞定,但递归更通用,新工具接入时不用再改 BaseAdapter。
-
+  - 做得好的:阶段 1 修复后立刻做了单元测试 + 真实目录验证脚本(74 个),以为搞定了;但忽视了"测试通过 ≠ 生产生效"。
+  - 做得不好的:阶段 1 提交时,没考虑过"为什么 Registry 会有东西"这个隐含前提。应该在 commit 之前先 `nm` 一下二进制,确认 trae/claude 等符号在不在,避免一次没修干净。
+  - 阶段 2 的关键诊断动作是 `nm` 看符号表 + 全仓库 grep 引用子包的位置,这两步定位非常快。
