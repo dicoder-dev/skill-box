@@ -11,16 +11,59 @@
 //
 // 用法:
 //   桌面端 main 启动时由 desktop.NewApp 构造 BootstrapHooks 并通过
-//   backend.SetDesktopHooks 注入;bootstrap.Serve 再把它同步到本包的
-//   currentHooks;cdesktop 各 handler 通过 Get() 读取后调到真 OS 能力。
+//   backend.SetDesktopHooks 注入;bootstrap 在 Serve 之前把 backend 指针
+//   Bind 到本包;cdesktop 各 handler 通过 Get() 实时读 backend 的最新
+//   desktopHooks —— 这样 backend.SetDesktopHooks 之后,后续所有 HTTP
+//   请求立即拿到新值,不用重启 server。
+//
+// 为什么不在 Serve 启动时一次性 Set 到 current 变量:
+//   时序问题:go Serve(backend) 在 goroutine 里立刻跑,此时 desktop.NewApp
+//   还没执行 SetDesktopHooks,Serve 第一次 Set 的是空值。后续 NewApp 再注入
+//   也不会传播到 current(只 Set 一次)。改成持有 backend 指针 + 实时读,
+//   彻底解决时序。
 package hooks
 
 import "sync"
 
+// Provider 让本包通过 Backend/任意持有者读取最新 BootstrapHooks。
+// bootstrap 包实现这个接口(只读 getter),解耦本包与具体 backend 类型。
+type Provider interface {
+	// GetDesktopHooks 返回当前注入的 BootstrapHooks 快照(可能为零值)。
+	GetDesktopHooks() BootstrapHooks
+}
+
+var (
+	mu       sync.RWMutex
+	provider Provider
+)
+
+// Bind 由 bootstrap.Serve 调用,把 backend(实现 Provider 接口)注入本包。
+// 重复调用以最后一次为准;传 nil 清空(Web 部署关闭时)。
+func Bind(p Provider) {
+	mu.Lock()
+	provider = p
+	mu.Unlock()
+}
+
+// Get 返回当前 backend 中注入的 hooks(只读快照)。
+//
+// 实现方式:实时从 Provider.GetDesktopHooks 读,而不是读本包缓存。
+// 原因:desktop.SetDesktopHooks 之后 backend 的 hooks 会更新,如果缓存
+// 在 Bind 时一次性拷走,后续 Get 拿到的还是旧值;实时读则总是最新。
+func Get() BootstrapHooks {
+	mu.RLock()
+	p := provider
+	mu.RUnlock()
+	if p == nil {
+		return BootstrapHooks{}
+	}
+	return p.GetDesktopHooks()
+}
+
 // BootstrapHooks 桌面端 OS 能力钩子集合。
 //
 // 每个字段都是可选的(nil 表示该能力在当前部署形态不可用,HTTP 端点应返回 501)。
-// 由 desktop 包在 NewApp 时通过 backend.SetBootstrapHooks 注入。
+// 由 desktop 包在 NewApp 时通过 backend.SetDesktopHooks 注入。
 //
 // 类型定义在本包里,because both bootstrap 和 cdesktop 都需要它,放在任意
 // 一边都会引发循环依赖。bootstrap 包通过类型别名 `BootstrapHooks =
@@ -39,24 +82,4 @@ type BootstrapHooks struct {
 	ShortcutUnregister         func(combo string) error
 	ShortcutList               func() []string
 	AppQuit                    func()
-}
-
-var (
-	mu      sync.RWMutex
-	current BootstrapHooks
-)
-
-// Set 由 bootstrap.Serve 调用,把 backend 已注入的 hooks 同步到本包。
-// 重复调用以最后一次为准;传零值清空(Web 部署关闭时)。
-func Set(h BootstrapHooks) {
-	mu.Lock()
-	current = h
-	mu.Unlock()
-}
-
-// Get 返回当前注入的 hooks(只读快照)。handler 通过这个读到 func 字段。
-func Get() BootstrapHooks {
-	mu.RLock()
-	defer mu.RUnlock()
-	return current
 }
