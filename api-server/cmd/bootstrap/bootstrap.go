@@ -87,6 +87,33 @@ type Backend struct {
 }
 
 // dbsHolder 持有 write/read 两个 *gorm.DB,供桌面端 settings 等服务按需构造。
+// 不导出指针,只通过 NewSettings 工厂方法构造,避免外部误持 db 句柄。
+type dbsHolder struct {
+	write *gorm.DB
+	read  *gorm.DB
+}
+
+// SetDesktopHooks 注入桌面端回调。多次调用以最后一次为准;nil 全部清空。
+//
+// 调用时机:Boot 返回 *Backend 之后、Serve 启动 HTTP server 之前的窗口期。
+// 桌面端入口(skill-box/main.go)在 desktop.NewApp 阶段调用。
+// 这里只持有值,Serve 阶段才会桥接到 hooks.Set(那时 router 已注册)。
+func (b *Backend) SetDesktopHooks(h hooks.BootstrapHooks) {
+	if b == nil {
+		return
+	}
+	b.desktopHooks = h
+}
+
+// GetDesktopHooks 返回当前注入的桌面端回调(只读快照,调用方不允许改)。
+// 在桌面端启动链路里,Serve 会用它来桥接 hooks.Set;controller 本身不
+// 直接走这个 getter,而是通过 hooks.Get() 拿到全局值。
+func (b *Backend) GetDesktopHooks() hooks.BootstrapHooks {
+	if b == nil {
+		return hooks.BootstrapHooks{}
+	}
+	return b.desktopHooks
+}
 
 // NewSettings 构造一个新的 settings.Service,供桌面端 PrefsService 等场景使用。
 // 每次调用都 new 一个 Service 实例,db 句柄是共享的;Service 本身无状态,
