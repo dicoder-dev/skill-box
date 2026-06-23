@@ -6,6 +6,7 @@
 package cdesktop
 
 import (
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/pkg/ginp"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ type RequestOpenExternal struct {
 
 // PostOpenExternal POST /api/desktop/open-external { url }
 func PostOpenExternal(c *ginp.ContextPlus, req *RequestOpenExternal) {
-	h := hooks()
+	h := hooks.Get()
 	if h.OpenExternal == nil {
 		c.JSON(501, gin.H{"error": "openExternal not available"})
 		return
