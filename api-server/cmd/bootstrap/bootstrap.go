@@ -75,6 +75,70 @@ type Backend struct {
 	srvOpts ServerOptions // Boot 时已装配好,Serve 直接用
 	port    int           // 从 srvOpts.Addr 解析得到
 	dbs     *dbsHolder    // DB 句柄,供桌面端 settings 等服务按需构造
+
+	// DesktopHooks 桌面端特有的回调,Web 模式下全为 nil。
+	// 由桌面端入口(skill-box/main.go)在 NewApp 阶段注入,供 cdesktop
+	// 等 controller 通过 HTTP 调用时调到真正的 OS 能力。
+	//
+	// 同步调用约定:每个 hook 在自己 goroutine 里跑,失败由 hook 内部记录,
+	// HTTP handler 只看返回值,不阻塞 OS API。
+	desktopHooks DesktopHooks
+}
+
+// DesktopHooks 桌面端 OS 能力钩子集合。
+//
+// 设计要点:
+//   - 每个字段都是可选的(nil 表示能力在当前部署形态不可用,HTTP 端点应返回 501);
+//   - 由 desktop 包在 NewApp 时通过 Backend.SetDesktopHooks 注入;
+//   - Web 部署下所有字段保持 nil,cdesktop 端点自然降级到 501,前端 guard
+//     捕获后 throw,业务可提示"该能力仅桌面端可用"。
+type DesktopHooks struct {
+	// Notify 发送一条系统通知。返回 error 表示系统调用失败(权限拒绝等)。
+	Notify func(id, title, body string) error
+	// NotifyHasPermission 查询当前通知授权状态。
+	NotifyHasPermission func() bool
+	// NotifyRequestAuthorization 触发系统弹授权窗。
+	NotifyRequestAuthorization func() (bool, error)
+	// ClipboardText 读取剪贴板文本。
+	ClipboardText func() (string, error)
+	// SetClipboardText 写入剪贴板文本。
+	SetClipboardText func(text string) error
+	// OpenExternal 用系统默认浏览器打开 URL。
+	OpenExternal func(url string) error
+	// WindowShow 主窗口显示。
+	WindowShow func()
+	// WindowToggleAlwaysOnTop 切换置顶。
+	WindowToggleAlwaysOnTop func() bool
+	// WindowToggleMaximise 切换最大化。
+	WindowToggleMaximise func()
+	// ShortcutRegister 注册全局快捷键;失败返回 error。
+	ShortcutRegister func(combo string) error
+	// ShortcutUnregister 注销全局快捷键;失败返回 error。
+	ShortcutUnregister func(combo string) error
+	// ShortcutList 列出已注册 combo。
+	ShortcutList func() []string
+	// AppQuit 触发 Wails 主循环退出。
+	AppQuit func()
+}
+
+// SetDesktopHooks 注入桌面端回调。多次调用以最后一次为准;nil 全部清空。
+//
+// 调用时机:Boot 返回 *Backend 之后、Serve 启动 HTTP server 之前的窗口期。
+// 桌面端入口(skill-box/main.go)在 desktop.NewApp 阶段调用。
+func (b *Backend) SetDesktopHooks(h DesktopHooks) {
+	if b == nil {
+		return
+	}
+	b.desktopHooks = h
+}
+
+// DesktopHooks 返回当前注入的桌面端回调(只读,不允许外部修改)。
+// controller 通过这个 getter 调到真能力,而不是直接持有 *Backend 的可写引用。
+func (b *Backend) DesktopHooks() DesktopHooks {
+	if b == nil {
+		return DesktopHooks{}
+	}
+	return b.desktopHooks
 }
 
 // dbsHolder 持有 write/read 两个 *gorm.DB,供桌面端 settings 等服务按需构造。
