@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"sync"
 
-	"ginp-api/cmd/bootstrap"
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/settings"
@@ -25,30 +24,49 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// backendMu / currentBackend 用于把 *bootstrap.Backend 注入 cdesktop 控制器。
+// BackendHooks 桌面端 OS 能力钩子集合,由调用方(bootstrap)在初始化阶段注入。
 //
-// 注入时机:bootstrap.Serve() 在创建 gin server 之前会调 SetBackend,
-// 使 controller 在第一次 HTTP 请求到来时能拿到 backend 句柄(包括 DesktopHooks)。
-// Web 部署下 backend 永远不会被注入(Serve 走不同的路径),controller 此时
-// 全部能力回退到"不可用"语义。
-var (
-	backendMu      sync.RWMutex
-	currentBackend *bootstrap.Backend
-)
-
-// SetBackend 由 bootstrap.Serve 在初始化阶段调用,传入当前进程内的 *Backend。
-// 重复调用以最后一次为准;传 nil 表示清空(Web 部署关闭时)。
-func SetBackend(b *bootstrap.Backend) {
-	backendMu.Lock()
-	currentBackend = b
-	backendMu.Unlock()
+// 设计要点:
+//   - 每个字段都是可选的(nil 表示该能力在当前部署形态不可用);
+//   - cdesktop 端点看到 nil hook 时返回 501 + 明确 error,前端 guard 捕获后
+//     提示用户"该能力仅桌面端可用"。
+//   - 接口定义留在 cdesktop 包内,避免 bootstrap 依赖 cdesktop 形成循环(bootstrap
+//     装配 router → router imports cdesktop → 反向不应 import bootstrap)。
+type BackendHooks struct {
+	Notify                       func(id, title, body string) error
+	NotifyHasPermission          func() bool
+	NotifyRequestAuthorization   func() (bool, error)
+	ClipboardText                func() (string, error)
+	SetClipboardText             func(text string) error
+	OpenExternal                 func(url string) error
+	WindowShow                   func()
+	WindowToggleAlwaysOnTop      func() bool
+	WindowToggleMaximise         func()
+	ShortcutRegister             func(combo string) error
+	ShortcutUnregister           func(combo string) error
+	ShortcutList                 func() []string
+	AppQuit                      func()
 }
 
-// backend 返回当前 *Backend,可能为 nil(Web 部署 / 未初始化阶段)。
-func backend() *bootstrap.Backend {
-	backendMu.RLock()
-	defer backendMu.RUnlock()
-	return currentBackend
+// currentHooks 由 SetHooks 注入,所有端点 handler 通过 hooks() 读。
+var (
+	hooksMu      sync.RWMutex
+	currentHooks BackendHooks
+)
+
+// SetHooks 由 bootstrap 在 Serve 启动前调用,注入当前进程可用的桌面端回调。
+// 重复调用以最后一次为准;传空结构体清空所有 hook(Web 部署关闭时)。
+func SetHooks(h BackendHooks) {
+	hooksMu.Lock()
+	currentHooks = h
+	hooksMu.Unlock()
+}
+
+// hooks 返回当前注入的 hook 集合(只读快照)。
+func hooks() BackendHooks {
+	hooksMu.RLock()
+	defer hooksMu.RUnlock()
+	return currentHooks
 }
 
 // ===== /api/desktop/app/* =====
