@@ -600,6 +600,20 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
         <div class="table-container">
           <table v-if="items.length" class="grid">
+            <!-- 列宽分配:内联 style 写在 col 上最稳(不受 Vue scoped 影响)。
+                 name 18% / version 10% / source 12% / project 10% /
+                 updated 22% / actions 28% = 100%。
+                 之前是 <th style="width:280px"> 固定 280px,前 5 列内容较短,
+                 浏览器按内容自动分配时把 actions 列撑到 280px、其他列挤 1/3,
+                 看起来像"标题没对齐"。改 fixed 布局 + colgroup 显式分配。 -->
+            <colgroup>
+              <col style="width: 18%" />
+              <col style="width: 10%" />
+              <col style="width: 12%" />
+              <col style="width: 10%" />
+              <col style="width: 22%" />
+              <col style="width: 28%" />
+            </colgroup>
             <thead>
               <tr>
                 <th>{{ t('skills.list.colName') }}</th>
@@ -607,7 +621,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
                 <th>{{ t('skills.list.colSource') }}</th>
                 <th>{{ t('skills.list.colProject') }}</th>
                 <th>{{ t('skills.list.colUpdated') }}</th>
-                <th style="width: 280px">{{ t('skills.list.colActions') }}</th>
+                <th>{{ t('skills.list.colActions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -1206,15 +1220,19 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 /* 表格 */
 .table-container {
+  /* 不再做 margin:0 -20px / padding:0 20px 横向溢出;
+     由 .card 自身内边距负责,table 在 card 内自然铺满。 */
   overflow-x: auto;
-  margin: 0 -20px;
-  padding: 0 20px;
 }
 
 .grid {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  /* table-layout: fixed 让 thead 和 tbody 共用 colgroup 给的列宽,
+     不会被 <td> 长内容(如 updated_at 19 字符)撑开,标题列和数据列
+     永远起始位置一致。 */
+  table-layout: fixed;
 }
 
 .grid th, .grid td {
