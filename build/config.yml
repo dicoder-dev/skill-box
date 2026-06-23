@@ -51,6 +51,12 @@ dev_mode:
       - .gitignore
       - .gitkeep
       - "*.db"                 # SQLite 数据文件变化频繁，跳过
+      # package*.json 由 npm 自己管(lock 文件 install 时也会更新时间戳),
+      # 它们变化不应该触发 build;手动升级依赖时单独跑 install:frontend:deps。
+      - "package.json"
+      - "package-lock.json"
+      - "yarn.lock"
+      - "pnpm-lock.yaml"
     watched_extension:
       - "*.go"
       - "*.js"                 # 监听通过 //wails:include 指令嵌入的 JS/TS 文件变化。
@@ -59,7 +65,6 @@ dev_mode:
       - "*.css"                # 样式文件（PostCSS/Tailwind 等）
       - "*.scss"
       - "*.html"
-      - "*.json"               # i18n / package.json 变化时也需要重建
     git_ignore: true
   executes:
     - cmd: wails3 build DEV=true
