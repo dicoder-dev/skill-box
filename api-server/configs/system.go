@@ -6,14 +6,13 @@ import "ginp-api/pkg/cfg"
 var System = new(SystemConfig)
 
 // SystemConfig 系统配置
+//
+// 部署形态(runMode = "web" / "desktop")不再放这里。运行形态由启动命令
+// 显式声明(BootOptions.RunMode / web:dev:frontend env),单源真相,避免
+// 配置文件 + 启动命令双源歧义。
 type SystemConfig struct {
 	AppName       string `default:"dianji"`
 	UserCenterUrl string `default:"http://localhost:8082"`
-
-	// RunMode 部署形态,影响鉴权默认策略与前端运行时配置注入。
-	//   web     - Web 端,默认 NeedAuth=true
-	//   desktop - 桌面端,默认 NeedAuth=false
-	RunMode string `default:"web" configkey:"system.run_mode"`
 
 	// NeedAuth 是否启用 JWT 鉴权中间件。
 	//   true  - 业务接口走 JWT 鉴权,失败返回 401

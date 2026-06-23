@@ -31,7 +31,6 @@ skillbox:
 system:
     app_name: dianji
     need_auth: "true"
-    run_mode: web
     user_center_url: http://localhost:8082
 tencent:
     cos:

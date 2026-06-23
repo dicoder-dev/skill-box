@@ -135,15 +135,22 @@ tasks:
 
   # 前端开发模式：Vite dev server，端口由 VITE_PORT 决定。
   # 强制 VITE_DEPLOY_MODE=web:Web 单进程形态下走同源,不能把前端识别成桌面端。
+  # WEB_DEV_OPEN_BROWSER=1 时,启动后用系统默认浏览器打开 http://localhost:{{.VITE_PORT}}/
+  # (仅 web 任务支持;wails3 dev 是 macOS native 窗口,本来就不开浏览器)
   web:dev:frontend:
-    summary: 启动 Vite 开发服务器（Web 端调试）
+    summary: 启动 Vite 开发服务器（Web 端调试,可选自动开浏览器）
     dir: frontend
     deps:
       - task: common:install:frontend:deps
     env:
       VITE_DEPLOY_MODE: web
     cmds:
-      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+      - |
+        if [ "{{.WEB_DEV_OPEN_BROWSER}}" = "1" ]; then
+          # 后台异步打开浏览器,不等它退出(浏览器关掉不应影响 server)
+          (sleep 2 && open "http://localhost:{{.VITE_PORT}}/") &
+        fi
+        npm run dev -- --port {{.VITE_PORT}} --strictPort
 
   # 主入口：单终端并行启动后端 + 前端。Ctrl-C 一并停掉。
   # - 后端走 `&` 后台跑；前端也走 `&` 后台；脚本 wait 前端，前端退出时 kill 后端
@@ -153,8 +160,11 @@ tasks:
   # - 用 `wails3 task` 而不是裸 `task` 是因为宿主 shell PATH 里不一定有 task CLI
   # - 后端日志用 awk 加 "[backend] " 前缀，方便和 Vite 输出区分；awk 里 fflush() 强制行刷新，
   #   不加 fflush 的话 task 在子进程里会走块缓冲，终端看不到实时输出
+  # - 默认 WEB_DEV_OPEN_BROWSER=1 自动 open 浏览器,关掉用 WEB_DEV_OPEN_BROWSER=0 task web
   web:
-    summary: 并行启动 Web 端前后端（开发模式，单终端即可）
+    summary: 并行启动 Web 端前后端（默认自动开浏览器）
+    env:
+      WEB_DEV_OPEN_BROWSER: '{{.WEB_DEV_OPEN_BROWSER | default "1"}}'
     cmds:
       - |
         wails3 task web:dev:backend 2>&1 | awk '{ printf "[backend] %s\n", $0; fflush() }' & BACKEND_PID=$!

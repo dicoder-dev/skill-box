@@ -30,10 +30,11 @@ docs/
     │   ├── project_*.md            # 项目状态(目标 / 期限 / 在做什么)
     │   └── reference_*.md          # 外部资源指针(看板 / 文档 / 平台)
     │
-    ├── task/                       # 每个对话 / 任务的过程文件
-    │   ├── README.md               # 任务文件命名/结构规范
+    ├── task/                       # 每个对话 / 任务的过程文件(任何对话都建)
+    │   ├── README.md               # 任务文件命名/结构规范 + 月份目录约定
     │   ├── _template.md            # 任务文件模板
-    │   └── YYYY-MM-DD_<主题>.md    # 单次任务的过程记录
+    │   └── YYYY-MM/                # 按月份分子目录,一个月一个文件夹
+    │       └── YYYY-MM-DD_<主题>.md
     │
     └── project/                    # AI 工作流要遵守的"项目规则"
         ├── README.md               # 规则总入口
@@ -49,19 +50,20 @@ docs/
 | --------------------------------- | -------------------------------------------------------------- |
 | **新会话冷启动(零上下文)**       | `docs/agent/ONBOARDING.md`(按清单读完) → `MEMORY.md`           |
 | 用户开头打招呼 / 无具体任务       | `docs/agent/memory/MEMORY.md`(拿历史偏好 + 用户画像)          |
-| 用户给一个具体任务                | `docs/agent/task/README.md` + 同主题最近的 task 文件           |
+| 用户给一个具体任务                | `docs/agent/task/README.md` + 当月目录 `docs/agent/task/YYYY-MM/` 里同主题最近 task |
 | 改 Go 后端代码                    | `docs/agent/project/conventions.md` + `architecture.md`        |
 | 改 Vue 前端代码                   | `docs/agent/project/conventions.md` + `tech_stack.md`          |
 | 提 PR / 改 commit                 | `docs/agent/project/workflow.md`                               |
-| 用户问"为什么之前那样做"          | `docs/agent/memory/feedback_*.md` + `docs/agent/task/` 同主题  |
+| 用户问"为什么之前那样做"          | `docs/agent/memory/feedback_*.md` + `docs/agent/task/YYYY-MM/` 同主题 |
 | 第一次进入项目                    | 全部 `docs/agent/project/*` + `MEMORY.md`                      |
 
 ## 强制规则(给 Claude 自己看的)
 
 1. **不要把所有 `docs/` 一次塞进上下文**。需要什么,显式 `@文件路径` 或 `Read` 指定。
 2. **根 `CLAUDE.md` 是入口,不是说明书**。任何超过 200 行的内容必须搬到 `docs/` 下。
-3. **新增任务 → 在 `docs/agent/task/` 下建一份 `<日期>_<主题>.md`**,
+3. **任何对话都要在 `docs/agent/task/YYYY-MM/` 下建一份 `<日期>_<主题>.md`**,
    任务结束后在文件里追加 `## 总结` 小节,不要新建独立的"总结文件"。
+   闲聊也要建(用最简版:用户原话 + Claude 答复),保留上下文,只有纯查询性闲聊可以省略。
 4. **学到新东西 → 立刻决定落点**:
    - 改的是 Claude 的行为 → `memory/feedback_*.md`
    - 改的是用户信息 → `memory/user_*.md`

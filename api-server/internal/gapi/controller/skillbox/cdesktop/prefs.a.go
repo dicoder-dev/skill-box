@@ -40,10 +40,14 @@ type RespondAppVersion struct {
 // GetAppVersion GET /api/desktop/app/version
 func GetAppVersion(c *ginp.ContextPlus, _ *RequestAppVersion) {
 	appName := ""
-	runMode := ""
 	if configs.System != nil {
 		appName = configs.System.AppName
-		runMode = configs.System.RunMode
+	}
+	// runMode 从启动命令注入的 dbs.IsDesktop() 推断,不再读
+	// configs.System.RunMode(已删除,避免双源歧义)。
+	runMode := "web"
+	if dbs.IsDesktop() {
+		runMode = "desktop"
 	}
 	c.JSON(200, RespondAppVersion{
 		AppName: appName,

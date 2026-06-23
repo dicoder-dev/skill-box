@@ -40,6 +40,13 @@ type ServerOptions struct {
 
 	// SPAFallback 启用 NoRoute 时回落 index.html。默认 true（前端为 SPA）。
 	SPAFallback *bool
+
+	// RunMode 部署形态,写入 index.html 的 __APP_RUNTIME__.runMode,
+	// 让前端能识别当前是 web 还是 desktop。
+	// 由调用方在构造 ServerOptions 时传,典型值:"web" / "desktop"。
+	// 留空时 server 端兑底 "web",但前端 import.meta.env.VITE_RUN_MODE
+	// 优先(走 vite.config.js 注入的),与此处一致。
+	RunMode string
 }
 
 // New 构造一个装配好业务路由的 *http.Server，调用方负责 ListenAndServe / Shutdown。
@@ -59,7 +66,7 @@ func New(opts ServerOptions) *http.Server {
 	router.Register(r)
 
 	// 4) 前端 SPA 入口与 fallback(放在最后,确保不抢业务路由)
-	mountFrontRoot(r, opts)
+	mountFrontRoot(r, opts, opts.RunMode)
 
 	addr := opts.Addr
 	if addr == "" {
@@ -126,11 +133,14 @@ func mountFileServer(r *gin.Engine, prefix string, root fs.FS) {
 //
 // index.html 会在写回响应体之前被注入一段 <script>window.__APP_RUNTIME__={...}</script>,
 // 把当前运行模式 / 是否启用鉴权 / 应用名告知前端。注入失败时静默放行,前端兜底走默认值。
-func mountFrontRoot(r *gin.Engine, opts ServerOptions) {
+//
+// runMode 单独传,不再依赖 ServerOptions,因为 runMode 与 server 配置分离
+// (前者由启动命令注入,后者由配置文件控制),单源真相。
+func mountFrontRoot(r *gin.Engine, opts ServerOptions, runMode string) {
 	if opts.FrontRootFS == nil {
 		return
 	}
-	runtimeScript := buildRuntimeScript()
+	runtimeScript := buildRuntimeScript(runMode)
 	fileServer := http.FileServer(http.FS(opts.FrontRootFS))
 	r.GET("/", func(c *gin.Context) {
 		serveIndexWithRuntime(c, opts.FrontRootFS, runtimeScript)
@@ -213,14 +223,14 @@ type runtimePayload struct {
 //
 // 只读一次 configs.System,在 mountFrontRoot 启动时调用,后续请求复用。
 // 字段缺失时给出安全默认值(runMode=web、needAuth=true)。
-func buildRuntimeScript() []byte {
+func buildRuntimeScript(runMode string) []byte {
 	cfg := configs.System
 	if cfg == nil {
 		// bootstrap 早期出错时可能为 nil,这里兜底
-		cfg = &configs.SystemConfig{RunMode: "web", NeedAuth: true, AppName: "skill-box"}
+		cfg = &configs.SystemConfig{NeedAuth: true, AppName: "skill-box"}
 	}
 	payload := runtimePayload{
-		RunMode:  defaultStr(cfg.RunMode, "web"),
+		RunMode:  defaultStr(runMode, "web"),
 		NeedAuth: cfg.NeedAuth,
 		AppName:  defaultStr(cfg.AppName, "skill-box"),
 	}

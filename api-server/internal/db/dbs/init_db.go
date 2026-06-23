@@ -46,7 +46,10 @@ func initPgsql() {
 
 func initSqlite() {
 	dbPath := configs.Db.Sqlite.DbPath
-	if !filepath.IsAbs(dbPath) && configs.System.RunMode == "desktop" {
+	// 桌面端需要把 sqlite 数据文件重定向到 ~/.<AppName>/data.db,
+	// IsDesktop() 由 main 入口在 cfg 加载后通过 dbs.SetRunMode 注入,
+	// 替代已删除的 configs.System.RunMode 字段,避免双源歧义。
+	if !filepath.IsAbs(dbPath) && IsDesktop() {
 		if abs := sharefunc.DbPath(); abs != "" {
 			dbPath = abs
 		}

@@ -45,11 +45,12 @@ func main() {
 	//    Serve 是阻塞的,放 goroutine 里跑;Wails 主循环在另一个 goroutine。
 	backend, err := bootstrap.Boot(bootstrap.BootOptions{
 		ConfigFile: *configPath,
-		RunMode:   "desktop",
-		ServerOptions: func() bootstrap.ServerOptions {
+		RunMode:    "desktop",
+		ServerOptions: func(runMode string) bootstrap.ServerOptions {
 			return bootstrap.ServerOptions{
 				StaticFS:    distFS,
 				FrontRootFS: distFS,
+				RunMode:     runMode,
 			}
 		},
 	})

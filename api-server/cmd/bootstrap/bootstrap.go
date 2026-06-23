@@ -49,7 +49,10 @@ var ConfigFile = DefaultConfigFile
 // ServerOptionsBuilder 由调用方传入,负责把外部资源(embed.FS 等)拼成 ServerOptions。
 // 设计为函数式是为了规避循环引用:本包被 cmd/web、cmd/gapi、skill-box/main 三处使用,
 // 让调用方在自己的 main 闭包里构造 ServerOptions,避免 bootstrap 反向依赖这些包。
-type ServerOptionsBuilder func() ServerOptions
+//
+// runMode 由 bootstrap 在装配阶段从 BootOptions.RunMode 透传进来(单一权威),
+// 避免配置文件 system.run_mode 与启动命令双源歧义。
+type ServerOptionsBuilder func(runMode string) ServerOptions
 
 // BootOptions 控制启动行为。
 type BootOptions struct {
@@ -167,13 +170,15 @@ func Boot(opts BootOptions) (*Backend, error) {
 	cfg.ParseConfigStruct(configs.Tencent)
 
 	// 桌面端:把 configs/data.db/logs 锚到 ~/.<AppName>/,并把 cfg 重指到该目录下的 configs.yaml。
-	// - 首次运行:从原始配置(默认 ./configs.yaml,或 -config 传入)种子到数据目录;
-	//   若源没有"可用"配置(db.use_type 缺失或对应类型关键字段为空),写硬编码默认。
-	// - 调用方传了 RunMode 时,override 后写回数据目录(避免污染原配置文件)。
+	// - 首次运行:从原始配置(默认 ./configs.yaml,或 -config 传入)种子到数据目录。
+	// - 部署形态由 opts.RunMode 单源决定,不再回写到配置文件。
 	applyDataDir(ConfigFile, opts.RunMode)
 
 	// 关键:dbs 包的 useDbType 需要在 cfg 加载完后同步过来。
 	dbs.SetDbType(configs.Db.UseType)
+	// 关键:sqlite 数据路径在桌面端要重定向到 ~/.<AppName>/data.db,
+	// 由 dbs 包内的 IsDesktop() 判断;这里把 RunMode 注入到 dbs。
+	dbs.SetRunMode(opts.RunMode)
 
 	if !opts.DisableLogger {
 		StartGinLogger()
@@ -185,7 +190,7 @@ func Boot(opts BootOptions) (*Backend, error) {
 	if !opts.DisableTask {
 		StartTask()
 	}
-	srvOpts, err := buildServerOptions(opts.ServerOptions)
+	srvOpts, err := buildServerOptions(opts.ServerOptions, opts.RunMode)
 	if err != nil {
 		return nil, err
 	}
@@ -245,10 +250,12 @@ func (b *Backend) URL() string {
 }
 
 // buildServerOptions 装配 ServerOptions,Addr 留空时用 configs.ServerPort() 兜底。
-func buildServerOptions(builder ServerOptionsBuilder) (ServerOptions, error) {
+// runMode 由调用方在 builder 内传(典型用法:Boot 阶段从 BootOptions.RunMode 拿),
+// 不在这里硬编码,避免配置文件与启动命令双源歧义。
+func buildServerOptions(builder ServerOptionsBuilder, runMode string) (ServerOptions, error) {
 	var srvOpts ServerOptions
 	if builder != nil {
-		srvOpts = builder()
+		srvOpts = builder(runMode)
 	} else {
 		srvOpts = ServerOptions{
 			ViewGlob:  "view/*",
@@ -257,6 +264,11 @@ func buildServerOptions(builder ServerOptionsBuilder) (ServerOptions, error) {
 	}
 	if srvOpts.Addr == "" {
 		srvOpts.Addr = "127.0.0.1:" + configs.Server.Port
+	}
+	// builder 内部也可以不读 runMode,这里兜底填一份,保证 index.html 注入
+	// 永远拿到值(空时 buildRuntimeScript 内部再兑底 "web")。
+	if srvOpts.RunMode == "" {
+		srvOpts.RunMode = runMode
 	}
 	return srvOpts, nil
 }
@@ -289,15 +301,12 @@ func parsePortFromAddr(addr string) int {
 //
 //	或 -config 显式传入)。applyDataDir 用它做"首次种子"。
 //
-// overrideRunMode  :调用方显式声明的运行形态("desktop"),非空时 override 内存并回写数据目录。
+// overrideRunMode  :调用方显式声明的运行形态("desktop"),完全由启动命令
+//	传入,不再回写到配置文件(避免双源歧义)。
 func applyDataDir(originalConfigPath, overrideRunMode string) {
-	runMode := configs.System.RunMode
-	if overrideRunMode != "" {
-		runMode = overrideRunMode
-		if configs.System == nil {
-			configs.System = &configs.SystemConfig{}
-		}
-		configs.System.RunMode = runMode
+	runMode := overrideRunMode
+	if runMode == "" {
+		runMode = "web"
 	}
 	if runMode != "desktop" {
 		return
@@ -362,13 +371,9 @@ func applyDataDir(originalConfigPath, overrideRunMode string) {
 	cfg.ParseConfigStruct(configs.Email)
 	cfg.ParseConfigStruct(configs.Tencent)
 
-	// 若调用方 override 了 RunMode,在新 viper 上再写一次(写的是数据目录的文件)。
-	if overrideRunMode != "" {
-		if err := cfg.Set("system.run_mode", overrideRunMode); err != nil {
-			log.Printf("bootstrap: persist system.run_mode=%q failed: %v", overrideRunMode, err)
-		}
-		cfg.ParseConfigStruct(configs.System)
-	}
+	// 注意:此处不再回写 system.run_mode 到数据目录的 configs.yaml。
+	// 部署形态由启动命令单一权威(BootOptions.RunMode),配置文件里
+	// 也不再保留 run_mode 字段,避免双源歧义。
 
 	// 锚定日志目录;StartGinLogger / middleware 会自动跟随。
 	if logsDir != "" {

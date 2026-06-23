@@ -42,11 +42,12 @@ func main() {
 	// 所以这里读 configs.ServerPort() 是安全的。
 	bootstrap.Run(bootstrap.BootOptions{
 		ConfigFile: *configPath,
-		ServerOptions: func() bootstrap.ServerOptions {
+		ServerOptions: func(runMode string) bootstrap.ServerOptions {
 			return bootstrap.ServerOptions{
 				Addr:        "0.0.0.0:" + configs.Server.Port,
 				StaticFS:    distFS,
 				FrontRootFS: distFS,
+				RunMode:     runMode,
 			}
 		},
 	})
