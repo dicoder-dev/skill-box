@@ -195,7 +195,10 @@ func Serve(b *Backend) {
 	// 这样 controller 在 HTTP 请求时能调到真正的 OS 能力。
 	// Web 部署下 hooks 为零值(所有 func 字段都是 nil),cdesktop 端点
 	// 自然降级到 501,前端 guard 捕获后给出友好提示。
-	cdesktop.SetHooks(b.DesktopHooks())
+	//
+	// 用 hooks 子包的全局 Set/Get 而不是直接 import cdesktop,是为了规避
+	// bootstrap → router → cdesktop → bootstrap 的导入环。
+	hooks.Set(b.GetDesktopHooks())
 	srv := New(b.srvOpts)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
