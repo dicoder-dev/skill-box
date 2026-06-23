@@ -268,6 +268,10 @@ export default {
       btnBack: 'Back',
       btnImport: 'Import {n} into store',
       importing: 'Importing…',
+      catUser: 'User skills',
+      catSystem: 'System skills',
+      catSystemHint: 'System-level skills (tool-built-in / vendor curated / plugin bundled) are read-only and cannot be imported',
+      catSectionDivider: 'The following system-level skills cannot be selected',
     },
     phase3: {
       title: 'Import complete',

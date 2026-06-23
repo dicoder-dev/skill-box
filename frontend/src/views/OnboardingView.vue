@@ -62,10 +62,19 @@ async function doScan() {
   try {
     const res = await runOnboardingScan()
     scanReport.value = res
-    selected.value = new Set((res.found || []).map((f) => keyOf(f)))
-    // 默认激活第一个有发现的 tab,避免空 tab。
+    // 默认勾选:仅 user 级别。system 级别(工具自带 / vendor curated /
+    // plugin 内建)只读展示,不能误导入覆盖本地 store。
+    selected.value = new Set(
+      (res.found || [])
+        .filter((f) => f.category !== 'system')
+        .map((f) => keyOf(f)),
+    )
+    // 默认激活第一个有 user 级别发现的 tab,避免空 tab。
     const firstTid = (res.tools || []).find(
-      (tid) => (res.summary || {})[tid] > 0,
+      (tid) =>
+        (res.found || []).some(
+          (f) => f.tool_id === tid && f.category !== 'system',
+        ),
     ) || (res.tools || [])[0]
     activeToolId.value = firstTid || ''
     phase.value = 'scan'
@@ -89,6 +98,9 @@ function toggleSelect(found) {
 }
 
 // 按 tool_id 分组的 skill 列表 + 元数据(显示名 / 数量 / 当前 tab id)。
+//
+// 组内排序:user 级别在前 system 级别在后 —— 用户日常用的 skill 优先展示,
+// 系统自带 / plugin 内建 / vendor curated 的列在下方,只读不可勾选。
 const foundByTool = computed(() => {
   const groups = {}
   // 先按 scanReport.tools 顺序建空组,保证 tab 顺序稳定(后端已排序)
@@ -100,6 +112,15 @@ const foundByTool = computed(() => {
     if (!groups[f.tool_id].name) groups[f.tool_id].name = f.tool_name
     groups[f.tool_id].items.push(f)
   }
+  // 组内按 category(user 先 system 后)稳定排序。
+  for (const tid of Object.keys(groups)) {
+    groups[tid].items.sort((a, b) => {
+      const ax = a.category === 'system' ? 1 : 0
+      const bx = b.category === 'system' ? 1 : 0
+      if (ax !== bx) return ax - bx
+      return a.name.localeCompare(b.name)
+    })
+  }
   return groups
 })
 
@@ -107,25 +128,33 @@ const toolTabs = computed(() =>
   Object.entries(foundByTool.value).map(([tid, g]) => ({
     toolId: tid,
     name: g.name,
-    count: g.items.length,
+    count: g.items.filter((f) => f.category !== 'system').length,
+    totalCount: g.items.length,
     icon: iconOf(tid),
   })),
 )
 
-// 工具内"全选/全不选":只动当前 tab 的 skill,不影响其它 tab 已选项。
+// 工具内"全选/全不选":只动当前 tab 的 user 级别 skill,不影响 system(不可勾)。
 function selectAllInTool(tid) {
   const s = new Set(selected.value)
-  for (const f of foundByTool.value[tid]?.items || []) s.add(keyOf(f))
+  for (const f of foundByTool.value[tid]?.items || []) {
+    if (f.category === 'system') continue
+    s.add(keyOf(f))
+  }
   selected.value = s
 }
 function selectNoneInTool(tid) {
   const s = new Set(selected.value)
-  for (const f of foundByTool.value[tid]?.items || []) s.delete(keyOf(f))
+  for (const f of foundByTool.value[tid]?.items || []) {
+    if (f.category === 'system') continue
+    s.delete(keyOf(f))
+  }
   selected.value = s
 }
 function selectedInTool(tid) {
   let n = 0
   for (const f of foundByTool.value[tid]?.items || []) {
+    if (f.category === 'system') continue
     if (selected.value.has(keyOf(f))) n++
   }
   return n
@@ -304,7 +333,9 @@ onMounted(loadStatus)
           >
             <Icon :icon="tab.icon" width="16" height="16" class="tab-icon" />
             <span class="tab-name">{{ tab.name }}</span>
-            <span class="tab-count">{{ tab.count }}</span>
+            <span class="tab-count">
+              {{ tab.count }}<span v-if="tab.totalCount > tab.count" class="tab-count-sys">+{{ tab.totalCount - tab.count }}</span>
+            </span>
           </button>
         </div>
 
@@ -320,13 +351,21 @@ onMounted(loadStatus)
             <span class="selection-info">
               {{ t('onboarding.phase2.selected', {
                   sel: selectedInTool(activeToolId),
-                  total: foundByTool[activeToolId].items.length,
+                  total: foundByTool[activeToolId].items.filter((f) => f.category !== 'system').length,
               }) }}
             </span>
           </div>
 
-          <ul class="found-list">
-            <li v-for="f in foundByTool[activeToolId].items"
+          <!-- 分档小标题:用户 skill 在前,系统 skill 在后 -->
+          <div
+            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'user' || !f.category)"
+            class="cat-label cat-user"
+          >
+            <Icon icon="mdi:account-circle-outline" width="14" height="14" />
+            {{ t('onboarding.phase2.catUser') }}
+          </div>
+          <ul v-if="foundByTool[activeToolId].items.some((f) => f.category !== 'system')" class="found-list">
+            <li v-for="f in foundByTool[activeToolId].items.filter((x) => x.category !== 'system')"
                 :key="keyOf(f)"
                 :class="{ selected: selected.has(keyOf(f)) }">
               <label class="found-item">
@@ -339,6 +378,39 @@ onMounted(loadStatus)
                 <span class="f-ver">v{{ f.version }}</span>
                 <span class="f-path" :title="f.source_path">{{ f.source_path }}</span>
               </label>
+            </li>
+          </ul>
+
+          <div
+            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')"
+            class="cat-divider"
+          >
+            <span class="cat-divider-text">{{ t('onboarding.phase2.catSectionDivider') }}</span>
+          </div>
+          <div
+            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')"
+            class="cat-label cat-system"
+          >
+            <Icon icon="mdi:lock-outline" width="14" height="14" />
+            {{ t('onboarding.phase2.catSystem') }}
+            <span class="cat-hint">— {{ t('onboarding.phase2.catSystemHint') }}</span>
+          </div>
+          <ul v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')" class="found-list found-list-system">
+            <li v-for="f in foundByTool[activeToolId].items.filter((x) => x.category === 'system')"
+                :key="keyOf(f)"
+                class="system-item">
+              <span class="found-item found-item-system">
+                <input
+                  type="checkbox"
+                  disabled
+                  aria-disabled="true"
+                  :title="t('onboarding.phase2.catSystemHint')"
+                />
+                <span class="f-name"><code>{{ f.name }}</code></span>
+                <span class="f-ver">v{{ f.version }}</span>
+                <span class="f-path" :title="f.source_path">{{ f.source_path }}</span>
+                <Icon icon="mdi:lock-outline" width="12" height="12" class="lock-icon" />
+              </span>
             </li>
           </ul>
         </div>
@@ -745,6 +817,103 @@ onMounted(loadStatus)
 .tool-tab.active .tab-count {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
+}
+
+.tool-tab .tab-count-sys {
+  margin-left: 4px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.tool-tab.active .tab-count-sys {
+  color: var(--text-dim);
+}
+
+/* 分档小标题(user / system) */
+.cat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.cat-user {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald-border);
+}
+
+.cat-system {
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.cat-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--text-faint);
+  margin-left: 6px;
+}
+
+.cat-divider {
+  margin: 18px 0 12px;
+  text-align: center;
+  position: relative;
+}
+
+.cat-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.cat-divider-text {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-card);
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.3px;
+}
+
+/* 系统级 skill 列表:灰色背景,checkbox 禁用 + 锁图标 */
+.found-list-system {
+  opacity: 0.78;
+}
+
+.found-list-system .found-item-system {
+  cursor: not-allowed;
+}
+
+.found-list-system .found-item-system input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.found-list-system .f-name code,
+.found-list-system .f-ver,
+.found-list-system .f-path {
+  color: var(--text-dim);
+}
+
+.lock-icon {
+  color: var(--text-faint);
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 /* 当前 tab 内容区(单工具的 skill 列表) */

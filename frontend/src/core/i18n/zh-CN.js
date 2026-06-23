@@ -271,6 +271,10 @@ export default {
       btnBack: '返回上一步',
       btnImport: '导入 {n} 个到 store',
       importing: '导入中…',
+      catUser: '用户技能',
+      catSystem: '系统技能',
+      catSystemHint: '系统级 skill(工具自带 / vendor curated / plugin 内建)只读展示,不能导入',
+      catSectionDivider: '以下系统级 skill 不可勾选',
     },
     phase3: {
       title: '导入完成',
