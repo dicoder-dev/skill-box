@@ -74,3 +74,20 @@ func (m *ShortcutManager) List() []string {
 	}
 	return out
 }
+
+// Unregister 注销一个全局快捷键。combo 未注册时返回 nil(幂等)。
+// 与 Register 对称:先从内存表里抹掉,再走 ghk.Unregister 真正解绑 OS 端。
+// SetEnabled(false) 期间 Register 是 no-op,所以这里 ghk.Unregister 也会
+// 失败返回 nil —— 关闭态无需报错。
+func (m *ShortcutManager) Unregister(combo string) error {
+	if m == nil || combo == "" {
+		return nil
+	}
+	m.mu.Lock()
+	delete(m.handlers, combo)
+	m.mu.Unlock()
+	if m.ghk != nil {
+		return m.ghk.Unregister(combo)
+	}
+	return nil
+}
