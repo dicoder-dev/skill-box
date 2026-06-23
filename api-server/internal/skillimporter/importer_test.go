@@ -7,9 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // fakeAdapter 模拟一个指向指定 dir 的 BaseAdapter。
@@ -345,4 +350,97 @@ func TestNormalize_EmptyTriggersAndShortDescription(t *testing.T) {
 	if len(c.Manifest.Triggers) < 1 {
 		t.Errorf("triggers still empty after normalize")
 	}
+}
+
+// TestImport_WithDB_DoubleWrites 覆盖 importer.WithDB 后的双写行为。
+// store 写盘 + mskill 表落库都要成功,重复导入走 Update 而不是 Create(避免唯一约束冲突)。
+func TestImport_WithDB_DoubleWrites(t *testing.T) {
+	_, _, tmp := setupReg(t)
+	store := skillstoreTestStore(t, tmp)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&entity.Skill{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 重新建一个带 db 的 importer,共用 setupReg 的 tmp 目录 + reg
+	_, _, _ = setupReg(t)
+	im2 := skillimporter.New(store).WithDB(db).WithRegistry(regFromTmp(t, tmp))
+
+	r, err := im2.Scan(skilladapter.ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := im2.Import(r, []skillimporter.ImportItem{
+		{ToolID: "toolA", Name: "alpha", Version: "0.1.0"},
+		{ToolID: "toolA", Name: "beta", Version: "0.1.0"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("results=%+v; want 2", res)
+	}
+	for _, x := range res {
+		if !x.OK {
+			t.Errorf("import failed: %+v err=%s", x, x.Error)
+		}
+	}
+
+	// 1) 物理盘已落库
+	if _, err := os.Stat(filepath.Join(tmp, "store", "global", "alpha", "0.1.0")); err != nil {
+		t.Errorf("store alpha missing: %v", err)
+	}
+	// 2) DB 已落库
+	var rows []entity.Skill
+	if err := db.Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("db rows=%d; want 2", len(rows))
+	}
+	for _, r := range rows {
+		if r.Source != "imported" {
+			t.Errorf("row %s source=%q; want imported", r.Name, r.Source)
+		}
+		if r.Scope != "global" || r.ProjectID != 0 {
+			t.Errorf("row %s scope=%q proj=%d; want global/0", r.Name, r.Scope, r.ProjectID)
+		}
+		if r.ManifestJSON == "" {
+			t.Errorf("row %s manifest empty", r.Name)
+		}
+	}
+
+	// 3) 重复导入同一项:应该走 Update,不能冲突报错
+	res2, err := im2.Import(r, []skillimporter.ImportItem{
+		{ToolID: "toolA", Name: "alpha", Version: "0.1.0"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res2) != 1 || !res2[0].OK {
+		t.Fatalf("re-import failed: %+v", res2)
+	}
+	// DB 行数不变(还是 2 条)
+	if err := db.Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Errorf("after reimport rows=%d; want 2", len(rows))
+	}
+}
+
+// regFromTmp 复现 setupReg 的目录结构(只是导出一个 reg 给需要重用的场景)。
+func regFromTmp(t *testing.T, tmp string) *skilladapter.Registry {
+	t.Helper()
+	toolA := filepath.Join(tmp, "toolA")
+	toolB := filepath.Join(tmp, "toolB")
+	reg := &skilladapter.Registry{}
+	reg.Register(&fakeAdapter{id: "toolA", dir: toolA})
+	reg.Register(&fakeAdapter{id: "toolB", dir: toolB})
+	return reg
 }

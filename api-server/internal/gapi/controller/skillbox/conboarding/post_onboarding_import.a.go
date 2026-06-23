@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
@@ -45,7 +46,9 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	im := skillimporter.New(store)
+	// 传入 dbWrite,importer 在 store.Save 成功后会把 mskill 行 upsert 落库。
+	// 之前只写盘不写库,导致前端 listSkills 走 DB 查不到记录,看起来像"成功但数据没了"。
+	im := skillimporter.New(store).WithDB(dbs.GetWriteDb())
 
 	// 还原 report(只填 importer.Import 实际用到的字段)
 	report := &skillimporter.Report{

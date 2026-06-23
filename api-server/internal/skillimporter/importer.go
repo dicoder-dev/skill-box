@@ -8,6 +8,7 @@
 package skillimporter
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -15,8 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"ginp-api/internal/gapi/entity"
+	mskill "ginp-api/internal/gapi/model/skillbox/mskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillstore"
+
+	"gorm.io/gorm"
 )
 
 // CategoryFound skill 在原工具里的归类(user = 用户自有 / system = 工具自带或 vendor)。
@@ -63,8 +68,9 @@ type Report struct {
 
 // Importer 跨工具的导入器;scan / import 都通过它。
 type Importer struct {
-	store *skillstore.Store
-	reg   *skilladapter.Registry // nil = 用默认全局
+	store   *skillstore.Store
+	reg     *skilladapter.Registry // nil = 用默认全局
+	dbWrite *gorm.DB               // nil = 跳过 DB 写库(测试 / 纯盘导入场景)
 }
 
 // New 构造 Importer;store 必传(用于 Import 阶段的物理落地)。
@@ -75,6 +81,13 @@ func New(store *skillstore.Store) *Importer {
 // WithRegistry 让 Importer 使用自定义 registry(测试用);返回 *Importer 便于链式。
 func (im *Importer) WithRegistry(reg *skilladapter.Registry) *Importer {
 	im.reg = reg
+	return im
+}
+
+// WithDB 让 Importer 在 Import 阶段同步落库。
+// 不传则只写盘,跟旧行为一致(便于测试,以及只跑盘导入的脚本场景)。
+func (im *Importer) WithDB(db *gorm.DB) *Importer {
+	im.dbWrite = db
 	return im
 }
 
@@ -390,11 +403,65 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 			})
 			continue
 		}
+		// 双写 DB:store 是 source of truth,DB 落库失败也要让用户看见。
+		// 若没传 dbWrite(测试/脚本场景),跳过 —— 物理盘已经成功,不会影响功能。
+		// 重复导入同 (scope, name, version) 走 Update 覆盖,跟 store 的覆盖语义一致;
+		// 避免触发 idx_skill_scope_proj_name_ver 唯一约束。
+		if im.dbWrite != nil {
+			if dbErr := im.upsertDBRow(c, fs.ToolID); dbErr != nil {
+				out = append(out, ImportResult{
+					ToolID: it.ToolID, Name: it.Name, Version: ver,
+					OK: false, Error: "db upsert failed: " + dbErr.Error(),
+				})
+				continue
+			}
+		}
 		out = append(out, ImportResult{
 			ToolID: it.ToolID, Name: it.Name, Version: ver, OK: true,
 		})
 	}
 	return out, nil
+}
+
+// upsertDBRow 落库一条 mskill 行。
+// 已存在则 Update ManifestJSON/Source/SourceRef,不存在则 Create。
+// 不抛 panic,所有错误回传;store 已经是 source of truth,DB 失败不影响盘上数据。
+func (im *Importer) upsertDBRow(c skilladapter.Canonical, toolID string) error {
+	scope := skilladapter.ScopeGlobal
+	mj, err := json.Marshal(c.Manifest)
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+	row := &entity.Skill{
+		Scope:        scope,
+		ProjectID:    0,
+		Name:         c.Manifest.Name,
+		Version:      c.Manifest.Version,
+		Source:       "imported",
+		SourceRef:    toolID,
+		ManifestJSON: string(mj),
+	}
+	// 先按唯一键查,存在就 Update,不存在就 Create。
+	var existing entity.Skill
+	tx := im.dbWrite.Where(map[string]interface{}{
+		mskill.FieldScope:     scope,
+		mskill.FieldName:      c.Manifest.Name,
+		mskill.FieldProjectID: 0,
+		mskill.FieldVersion:   c.Manifest.Version,
+	}).First(&existing)
+	if tx.Error == nil && existing.ID > 0 {
+		// 已存在:刷 manifest + source 标记,不动 id/created_at
+		updates := &entity.Skill{
+			ManifestJSON: string(mj),
+			Source:       "imported",
+			SourceRef:    toolID,
+		}
+		return im.dbWrite.Model(&entity.Skill{}).
+			Where(mskill.FieldID+" = ?", existing.ID).
+			Updates(updates).Error
+	}
+	// 兜底:用 model.Create 走标准路径(里面 dbops.Create 会设置 ID)
+	return im.dbWrite.Create(row).Error
 }
 
 // FilterByTool 返回 Report 中指定 tool 的 FoundSkill 列表(常用于前端"按工具分组展示")。
