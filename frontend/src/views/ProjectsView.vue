@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listProjects, createProject, deleteProject } from '@/api/skillbox/projects'
+import Modal from '@/components/Modal.vue'
 
 const { t } = useI18n()
 
@@ -53,13 +54,43 @@ async function submit() {
 }
 
 async function remove(id) {
-  if (!confirm(t('projects.confirmDelete', { id }))) return
+  const ok = await openConfirm({
+    title: t('common.delete'),
+    message: t('projects.confirmDelete', { id }),
+    variant: 'danger',
+    confirmText: t('common.delete'),
+  })
+  if (!ok) return
   try {
     await deleteProject(id)
     await reload()
   } catch (e) {
     error.value = e?.message || String(e)
   }
+}
+
+// 通用确认弹窗
+const confirmOpen = ref(false)
+const confirmOpts = reactive({
+  title: '',
+  message: '',
+  confirmText: '',
+  cancelText: '',
+  variant: 'default',
+  resolve: null,
+})
+function openConfirm(opts) {
+  confirmOpts.title = opts.title || t('common.confirm')
+  confirmOpts.message = opts.message || ''
+  confirmOpts.confirmText = opts.confirmText || t('common.confirm')
+  confirmOpts.cancelText = opts.cancelText || t('common.cancel')
+  confirmOpts.variant = opts.variant || 'default'
+  confirmOpen.value = true
+  return new Promise((resolve) => { confirmOpts.resolve = resolve })
+}
+function resolveConfirm(ok) {
+  if (confirmOpts.resolve) confirmOpts.resolve(ok)
+  confirmOpen.value = false
 }
 
 function gotoPage(p) {
@@ -97,9 +128,9 @@ onMounted(reload)
           @keyup.enter="() => { filter.page = 1; reload() }"
         />
       </div>
-      <button class="primary" @click="showForm = !showForm">
-        <Icon :icon="showForm ? 'mdi:close' : 'mdi:plus'" width="16" height="16" />
-        {{ showForm ? t('projects.btnCancel') : t('projects.btnNew') }}
+      <button class="primary" @click="showForm = true">
+        <Icon icon="mdi:plus" width="16" height="16" />
+        {{ t('projects.btnNew') }}
       </button>
     </div>
 
@@ -108,45 +139,46 @@ onMounted(reload)
       {{ error }}
     </p>
 
-    <!-- 创建表单 -->
-    <form v-if="showForm" class="card form-card" @submit.prevent="submit">
-      <header class="form-header">
-        <h3>
-          <Icon icon="mdi:folder-plus" width="18" height="18" />
-          {{ t('projects.formTitle') }}
-        </h3>
-      </header>
-
-      <div class="form-grid">
-        <div class="form-field">
-          <label>{{ t('projects.name') }}</label>
-          <input v-model="form.name" :placeholder="t('projects.nameHint')" />
+    <!-- 创建项目弹窗 -->
+    <Modal
+      v-model="showForm"
+      size="md"
+      :title="t('projects.formTitle')"
+    >
+      <template #title-icon>
+        <Icon icon="mdi:folder-plus" width="18" height="18" />
+      </template>
+      <form class="form" @submit.prevent="submit">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>{{ t('projects.name') }}</label>
+            <input v-model="form.name" :placeholder="t('projects.nameHint')" />
+          </div>
+          <div class="form-field">
+            <label>{{ t('projects.alias') }}</label>
+            <input v-model="form.alias" :placeholder="t('projects.aliasHint')" />
+          </div>
+          <div class="form-field form-field-full">
+            <label>{{ t('projects.rootPath') }}</label>
+            <input v-model="form.root_path" :placeholder="t('projects.rootPathHint')" />
+          </div>
+          <div class="form-field form-field-full">
+            <label>{{ t('projects.description') }}</label>
+            <input v-model="form.description" :placeholder="t('projects.descriptionHint')" />
+          </div>
         </div>
-        <div class="form-field">
-          <label>{{ t('projects.alias') }}</label>
-          <input v-model="form.alias" :placeholder="t('projects.aliasHint')" />
-        </div>
-        <div class="form-field form-field-full">
-          <label>{{ t('projects.rootPath') }}</label>
-          <input v-model="form.root_path" :placeholder="t('projects.rootPathHint')" />
-        </div>
-        <div class="form-field form-field-full">
-          <label>{{ t('projects.description') }}</label>
-          <input v-model="form.description" :placeholder="t('projects.descriptionHint')" />
-        </div>
-      </div>
-
-      <div class="form-actions">
+      </form>
+      <template #footer>
         <button type="button" class="ghost" @click="showForm = false">
           <Icon icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
-        <button type="submit" class="primary">
+        <button type="button" class="primary" @click="submit">
           <Icon icon="mdi:check" width="14" height="14" />
           {{ t('common.create') }}
         </button>
-      </div>
-    </form>
+      </template>
+    </Modal>
 
     <!-- 列表卡片 -->
     <div class="card">
@@ -206,6 +238,28 @@ onMounted(reload)
         </button>
       </footer>
     </div>
+
+    <!-- 通用确认弹窗 -->
+    <Modal
+      v-model="confirmOpen"
+      size="sm"
+      :title="confirmOpts.title"
+      :close-on-mask="false"
+    >
+      <p class="confirm-message">{{ confirmOpts.message }}</p>
+      <template #footer>
+        <button type="button" class="ghost" @click="resolveConfirm(false)">
+          {{ confirmOpts.cancelText }}
+        </button>
+        <button
+          type="button"
+          :class="confirmOpts.variant === 'danger' ? 'danger' : 'primary'"
+          @click="resolveConfirm(true)"
+        >
+          {{ confirmOpts.confirmText }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -336,43 +390,17 @@ onMounted(reload)
   font-weight: normal;
 }
 
-/* 表单卡片 */
-.form-card {
-  animation: slideDown 0.2s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.form-header {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.form-header h3 {
+/* 弹窗内表单 */
+.form {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
+  flex-direction: column;
+  gap: 14px;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
 }
 
 .form-field {
@@ -389,14 +417,6 @@ onMounted(reload)
   font-size: 12px;
   font-weight: 500;
   color: var(--text-dim);
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
 }
 
 /* 表格 */
@@ -514,6 +534,15 @@ onMounted(reload)
 .pager-info {
   font-size: 13px;
   color: var(--text-dim);
+}
+
+/* 确认弹窗 */
+.confirm-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-line;
 }
 
 /* 空状态 */

@@ -7,6 +7,7 @@ import { runSkillTest } from '@/api/skillbox/skill_test'
 import { applySkill, undoApply, listApplies, checkUpdates } from '@/api/skillbox/skill_apply'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
+import Modal from '@/components/Modal.vue'
 
 const { t } = useI18n()
 
@@ -20,8 +21,8 @@ const total = ref(0)
 const page = ref(1)
 const size = 10
 
-// 编辑器状态
-const editing = ref(false)
+// 编辑器状态(弹窗)
+const editorOpen = ref(false)
 const draft = reactive({
   scope: 'global',
   project_id: 0,
@@ -45,7 +46,8 @@ const updating = ref(false)
 const updateBadge = ref({ total: 0, updates: 0 })
 const applyHistory = ref([])
 
-// Tag / Diff / Rollback
+// Tag 弹窗状态
+const tagOpen = ref(false)
 const tagList = ref([])
 const tagLoading = ref(false)
 const tagError = ref('')
@@ -58,8 +60,63 @@ const diffRightTagID = ref(0)
 const rolling = ref(false)
 const selectedSkill = ref(null)
 
+// 测试结果弹窗
+const testOpen = ref(false)
+const testing = ref(false)
+const testError = ref('')
+const lastTest = ref(null)
+
+// 通用确认弹窗(取代原生 confirm)
+const confirmOpen = ref(false)
+const confirmOpts = reactive({
+  title: '',
+  message: '',
+  confirmText: '',
+  cancelText: '',
+  variant: 'default', // default | danger
+  resolve: null,
+})
+function openConfirm(opts) {
+  confirmOpts.title = opts.title || t('common.confirm')
+  confirmOpts.message = opts.message || ''
+  confirmOpts.confirmText = opts.confirmText || t('common.confirm')
+  confirmOpts.cancelText = opts.cancelText || t('common.cancel')
+  confirmOpts.variant = opts.variant || 'default'
+  confirmOpen.value = true
+  return new Promise((resolve) => { confirmOpts.resolve = resolve })
+}
+function resolveConfirm(ok) {
+  if (confirmOpts.resolve) confirmOpts.resolve(ok)
+  confirmOpen.value = false
+}
+
+// AI 侧栏
+const aiOpen = ref(false)
+function toggleAI() { aiOpen.value = !aiOpen.value }
+
+// 当前正在编辑的 SKILL.md 全文
+const currentSkillMd = computed(() => {
+  if (!editorOpen.value) return ''
+  try { return buildSkillMd() } catch (_) { return '' }
+})
+
+function onAIApply(text) {
+  const m = text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
+  draft.body = m ? m[1].trim() : text.trim()
+}
+
 async function loadTags(row) {
   selectedSkill.value = row
+  tagOpen.value = true
+  tagList.value = []
+  diffResult.value = null
+  newTagName.value = ''
+  newTagMessage.value = ''
+  await loadTagList(row)
+}
+
+async function loadTagList(row) {
+  if (!row) return
   tagLoading.value = true
   tagError.value = ''
   try {
@@ -86,7 +143,7 @@ async function doCreateTag() {
     newTagName.value = ''
     newTagMessage.value = ''
     tagMessage.value = t('skills.tag.msgCreated')
-    await loadTags(selectedSkill.value)
+    await loadTagList(selectedSkill.value)
   } catch (e) {
     tagError.value = e?.message || String(e)
   } finally {
@@ -95,11 +152,17 @@ async function doCreateTag() {
 }
 
 async function doDeleteTag(tagID) {
-  if (!confirm(t('skills.tag.confirmDelete', { id: tagID }))) return
+  const ok = await openConfirm({
+    title: t('common.delete'),
+    message: t('skills.tag.confirmDelete', { id: tagID }),
+    variant: 'danger',
+    confirmText: t('common.delete'),
+  })
+  if (!ok) return
   try {
     await deleteTag({ tag_id: tagID })
     tagMessage.value = t('skills.tag.msgDeleted', { id: tagID })
-    await loadTags(selectedSkill.value)
+    await loadTagList(selectedSkill.value)
   } catch (e) {
     tagError.value = e?.message || String(e)
   }
@@ -122,7 +185,13 @@ async function doDiff(leftID, rightID) {
 }
 
 async function doRollback(tagID) {
-  if (!confirm(t('skills.tag.confirmRollback', { id: tagID }))) return
+  const ok = await openConfirm({
+    title: t('skills.tag.rollbackTo'),
+    message: t('skills.tag.confirmRollback', { id: tagID }),
+    confirmText: t('skills.tag.rollbackTo'),
+    variant: 'danger',
+  })
+  if (!ok) return
   rolling.value = true
   tagError.value = ''
   try {
@@ -130,7 +199,7 @@ async function doRollback(tagID) {
     tagMessage.value = t('skills.tag.msgRolledBack', { pre: out.pre_rollback_tag, files: out.files_restored })
     diffResult.value = null
     await reload()
-    if (selectedSkill.value) await loadTags(selectedSkill.value)
+    if (selectedSkill.value) await loadTagList(selectedSkill.value)
   } catch (e) {
     tagError.value = e?.message || String(e)
   } finally {
@@ -163,7 +232,13 @@ async function doApply(row) {
 }
 
 async function doUndo(applyID) {
-  if (!confirm(t('skills.tag.confirmUndo', { id: applyID }))) return
+  const ok = await openConfirm({
+    title: t('skills.applyHistory.undone'),
+    message: t('skills.tag.confirmUndo', { id: applyID }),
+    confirmText: t('skills.applyHistory.undone'),
+    variant: 'danger',
+  })
+  if (!ok) return
   undoing.value = true
   applyError.value = ''
   try {
@@ -197,26 +272,6 @@ async function checkUpdateBadge() {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
 
-// Skill 测试
-const testing = ref(false)
-const testError = ref('')
-const lastTest = ref(null)
-
-// AI 侧栏
-const aiOpen = ref(false)
-function toggleAI() { aiOpen.value = !aiOpen.value }
-
-// 当前正在编辑的 SKILL.md 全文
-const currentSkillMd = computed(() => {
-  if (!editing.value) return ''
-  try { return buildSkillMd() } catch (_) { return '' }
-})
-
-function onAIApply(text) {
-  const m = text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
-  draft.body = m ? m[1].trim() : text.trim()
-}
-
 async function reload() {
   loading.value = true
   error.value = ''
@@ -247,11 +302,24 @@ function startNew() {
     body: '',
   })
   editingKey.value = null
-  editing.value = true
+  error.value = ''
+  editorOpen.value = true
 }
 
 async function startEdit(row) {
   error.value = ''
+  editorOpen.value = true
+  // 先给一个空 draft,再异步加载详情
+  Object.assign(draft, {
+    scope: row.scope,
+    project_id: row.project_id,
+    name: row.name,
+    version: row.version,
+    description: '',
+    triggersText: '',
+    body: '',
+  })
+  editingKey.value = null
   try {
     const full = await getSkill({
       scope: row.scope,
@@ -273,7 +341,6 @@ async function startEdit(row) {
       body: extractBody(md),
     })
     editingKey.value = { scope: row.scope, name: row.name, version: row.version, project_id: row.project_id }
-    editing.value = true
   } catch (e) {
     error.value = e?.message || String(e)
   }
@@ -339,7 +406,7 @@ async function submit() {
     } else {
       await createSkill(payload)
     }
-    editing.value = false
+    editorOpen.value = false
     await reload()
   } catch (e) {
     error.value = e?.message || String(e)
@@ -347,9 +414,16 @@ async function submit() {
 }
 
 async function triggerTest(row) {
-  if (!confirm(t('skills.test.confirmRun', { name: row.name, version: row.version }))) return
+  const ok = await openConfirm({
+    title: t('skills.test.title'),
+    message: t('skills.test.confirmRun', { name: row.name, version: row.version }),
+    confirmText: t('skills.list.btnTest'),
+  })
+  if (!ok) return
+  testOpen.value = true
   testing.value = true
   testError.value = ''
+  lastTest.value = null
   try {
     const out = await runSkillTest({
       scope: row.scope,
@@ -367,7 +441,13 @@ async function triggerTest(row) {
 }
 
 async function remove(row) {
-  if (!confirm(t('skills.list.confirmDelete', { name: row.name, version: row.version }))) return
+  const ok = await openConfirm({
+    title: t('common.delete'),
+    message: t('skills.list.confirmDelete', { name: row.name, version: row.version }),
+    variant: 'danger',
+    confirmText: t('common.delete'),
+  })
+  if (!ok) return
   try {
     await deleteSkill({
       scope: row.scope,
@@ -482,68 +562,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
       <p v-if="applyMessage" class="message message-success">{{ applyMessage }}</p>
       <p v-if="applyError" class="message message-error">{{ applyError }}</p>
 
-      <!-- 编辑器 -->
-      <form v-if="editing" class="editor-card" @submit.prevent="submit">
-        <header class="editor-header">
-          <h3>
-            <Icon :icon="editingKey ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
-            {{ editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew') }}
-          </h3>
-          <span v-if="editingKey" class="editor-hint">
-            <code>{{ editingKey.name }}@{{ editingKey.version }}</code>
-          </span>
-        </header>
-
-        <div class="editor-grid">
-          <div class="editor-field">
-            <label>{{ t('skills.editor.name') }}</label>
-            <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
-          </div>
-          <div class="editor-field">
-            <label>{{ t('skills.editor.version') }}</label>
-            <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
-          </div>
-          <div class="editor-field">
-            <label>{{ t('skills.editor.scope') }}</label>
-            <select v-model="draft.scope" :disabled="!!editingKey">
-              <option value="global">global</option>
-              <option value="project">project</option>
-            </select>
-          </div>
-          <div class="editor-field" v-if="draft.scope === 'project'">
-            <label>{{ t('skills.editor.projectId') }}</label>
-            <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
-          </div>
-        </div>
-
-        <div class="editor-field-full">
-          <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
-          <textarea v-model="draft.description" rows="2"></textarea>
-        </div>
-
-        <div class="editor-field-full">
-          <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
-          <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review"></textarea>
-        </div>
-
-        <div class="editor-field-full">
-          <label>{{ t('skills.editor.body') }}</label>
-          <textarea v-model="draft.body" rows="14" class="code"></textarea>
-        </div>
-
-        <div class="editor-actions">
-          <button type="button" class="ghost" @click="editing = false">
-            <Icon icon="mdi:close" width="14" height="14" />
-            {{ t('common.cancel') }}
-          </button>
-          <button type="submit" class="primary">
-            <Icon :icon="editingKey ? 'mdi:content-save' : 'mdi:plus'" width="14" height="14" />
-            {{ editingKey ? t('common.save') : t('common.create') }}
-          </button>
-        </div>
-      </form>
-
-      <!-- Apply 历史 -->
+      <!-- Apply 历史(只显示最近 5 条,这里保持内嵌卡片) -->
       <div v-if="applyHistory.length" class="card">
         <header class="card-header">
           <h3>{{ t('skills.applyHistory.title') }}</h3>
@@ -560,110 +579,6 @@ onMounted(() => { reload(); checkUpdateBadge() })
             </button>
           </li>
         </ul>
-      </div>
-
-      <!-- Tag 面板 -->
-      <div v-if="selectedSkill" class="card">
-        <header class="card-header">
-          <h4>
-            <Icon icon="mdi:tag-outline" width="16" height="16" />
-            {{ t('skills.tag.titlePrefix') }} — <code>{{ selectedSkill.name }}@{{ selectedSkill.version }}</code>
-          </h4>
-          <span class="tag-count">{{ t('skills.tag.count', { count: tagList.length }) }}</span>
-          <button class="link" @click="selectedSkill = null; tagList = []; diffResult = null">
-            <Icon icon="mdi:close" width="14" height="14" />
-            {{ t('common.close') }}
-          </button>
-        </header>
-
-        <p v-if="tagMessage" class="message message-success">{{ tagMessage }}</p>
-        <p v-if="tagError" class="message message-error">{{ tagError }}</p>
-
-        <div class="tag-create">
-          <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
-          <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
-          <button class="primary" :disabled="tagLoading" @click="doCreateTag">
-            {{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}
-          </button>
-        </div>
-
-        <div v-if="tagList.length" class="tag-actions">
-          <span class="diff-label">{{ t('skills.tag.diff') }}:</span>
-          <select v-model="diffLeftTagID">
-            <option :value="0">{{ t('skills.tag.current') }}</option>
-            <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
-              {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
-            </option>
-          </select>
-          <Icon icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
-          <select v-model="diffRightTagID">
-            <option :value="0">{{ t('skills.tag.current') }}</option>
-            <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
-              {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
-            </option>
-          </select>
-          <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
-          <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
-        </div>
-
-        <ul v-if="tagList.length" class="tag-list">
-          <li v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :class="{ 'tag-implicit': tg.is_implicit }">
-            <span class="tag-id">#{{ tg.tag_id || tg.ID || tg.id }}</span>
-            <span class="tag-name"><code>{{ tg.tag }}</code></span>
-            <span class="tag-msg">{{ tg.message || t('common.dash') }}</span>
-            <span class="tag-time">{{ (tg.created_at || '').slice(0, 19) }}</span>
-            <button class="link" @click="doDiff(tg.tag_id || tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
-            <button class="link" :disabled="rolling" @click="doRollback(tg.tag_id || tg.ID || tg.id)">
-              {{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}
-            </button>
-            <button class="link danger" @click="doDeleteTag(tg.tag_id || tg.ID || tg.id)">{{ t('common.delete') }}</button>
-          </li>
-        </ul>
-
-        <!-- Diff 结果 -->
-        <div v-if="diffResult" class="diff-panel">
-          <header class="diff-header">
-            <h4>{{ t('skills.tag.resultTitle') }}</h4>
-            <div class="diff-stats">
-              <span class="stat stat-added">+{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
-              <span class="stat stat-removed">-{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
-              <span class="stat stat-modified">~{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
-              <span class="stat stat-unchanged">={{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
-            </div>
-          </header>
-          <div v-for="f in diffResult.files" :key="f.path" :class="['diff-file', `diff-kind-${f.kind}`]">
-            <div class="diff-file-header">
-              <span class="diff-file-kind">{{ f.kind }}</span>
-              <code class="diff-file-path">{{ f.path }}</code>
-            </div>
-            <pre v-if="f.lines?.length" class="diff-content"><span v-for="(l, i) in f.lines" :key="i" :class="`diff-line diff-line-${l.kind}`"><span class="diff-line-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
-</span></pre>
-          </div>
-        </div>
-      </div>
-
-      <!-- 测试面板 -->
-      <div v-if="lastTest || testError" class="card" :class="`test-panel-status-${(lastTest?.run?.status || 'errored')}`">
-        <header class="card-header">
-          <h3>
-            <Icon icon="mdi:test-tube" width="16" height="16" />
-            {{ t('skills.test.title') }}
-          </h3>
-          <span v-if="lastTest?.run" class="test-status-badge">{{ lastTest.run.status }}</span>
-        </header>
-        <p v-if="testError" class="message message-error">{{ t('skills.test.errPrefix') }} {{ testError }}</p>
-        <p v-else-if="lastTest?.run?.summary" class="test-summary">{{ lastTest.run.summary }}</p>
-        <ul v-if="lastTest?.results?.length" class="test-list">
-          <li v-for="r in lastTest.results" :key="r.id || r.ID" :class="`test-check test-check-${r.status}`">
-            <span class="test-check-name">{{ r.check }}</span>
-            <span class="test-check-status" :class="`status-${r.status}`">{{ r.status }}</span>
-            <span class="test-check-msg">{{ r.message }}</span>
-          </li>
-        </ul>
-        <details v-for="r in lastTest?.results || []" :key="`d-${r.id || r.ID}`" class="test-detail">
-          <summary>{{ r.check }} detail</summary>
-          <pre>{{ r.detail }}</pre>
-        </details>
       </div>
 
       <!-- 错误提示 -->
@@ -685,14 +600,6 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
         <div class="table-container">
           <table v-if="items.length" class="grid">
-            <colgroup>
-              <col class="col-name" />
-              <col class="col-version" />
-              <col class="col-source" />
-              <col class="col-project" />
-              <col class="col-updated" />
-              <col class="col-actions" />
-            </colgroup>
             <thead>
               <tr>
                 <th>{{ t('skills.list.colName') }}</th>
@@ -700,7 +607,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
                 <th>{{ t('skills.list.colSource') }}</th>
                 <th>{{ t('skills.list.colProject') }}</th>
                 <th>{{ t('skills.list.colUpdated') }}</th>
-                <th>{{ t('skills.list.colActions') }}</th>
+                <th style="width: 280px">{{ t('skills.list.colActions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -761,6 +668,220 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
     <!-- AI 面板 -->
     <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
+
+    <!-- 技能编辑器弹窗 -->
+    <Modal
+      v-model="editorOpen"
+      size="xl"
+      :title="editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew')"
+    >
+      <template #title-icon>
+        <Icon :icon="editingKey ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
+      </template>
+      <form class="editor-form" @submit.prevent="submit">
+        <div v-if="editingKey" class="editor-hint-bar">
+          <code>{{ editingKey.name }}@{{ editingKey.version }}</code>
+        </div>
+        <div class="editor-grid">
+          <div class="editor-field">
+            <label>{{ t('skills.editor.name') }}</label>
+            <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
+          </div>
+          <div class="editor-field">
+            <label>{{ t('skills.editor.version') }}</label>
+            <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
+          </div>
+          <div class="editor-field">
+            <label>{{ t('skills.editor.scope') }}</label>
+            <select v-model="draft.scope" :disabled="!!editingKey">
+              <option value="global">global</option>
+              <option value="project">project</option>
+            </select>
+          </div>
+          <div class="editor-field" v-if="draft.scope === 'project'">
+            <label>{{ t('skills.editor.projectId') }}</label>
+            <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
+          </div>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
+          <textarea v-model="draft.description" rows="2"></textarea>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
+          <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review"></textarea>
+        </div>
+
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.body') }}</label>
+          <textarea v-model="draft.body" rows="14" class="code"></textarea>
+        </div>
+
+        <p v-if="error" class="message message-error" style="margin: 0 0 12px">
+          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          {{ error }}
+        </p>
+      </form>
+      <template #footer>
+        <button type="button" class="ghost" @click="editorOpen = false">
+          <Icon icon="mdi:close" width="14" height="14" />
+          {{ t('common.cancel') }}
+        </button>
+        <button type="button" class="primary" @click="submit">
+          <Icon :icon="editingKey ? 'mdi:content-save' : 'mdi:plus'" width="14" height="14" />
+          {{ editingKey ? t('common.save') : t('common.create') }}
+        </button>
+      </template>
+    </Modal>
+
+    <!-- Tag 管理弹窗 -->
+    <Modal
+      v-model="tagOpen"
+      size="xl"
+      :title="selectedSkill ? t('skills.tag.titlePrefix') + ' — ' + selectedSkill.name + '@' + selectedSkill.version : t('skills.tag.titlePrefix')"
+    >
+      <template #title-icon>
+        <Icon icon="mdi:tag-outline" width="18" height="18" />
+      </template>
+
+      <p v-if="tagMessage" class="message message-success">
+        <Icon icon="mdi:check-circle-outline" width="14" height="14" />
+        {{ tagMessage }}
+      </p>
+      <p v-if="tagError" class="message message-error">
+        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+        {{ tagError }}
+      </p>
+
+      <div class="tag-create">
+        <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
+        <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
+        <button class="primary" :disabled="tagLoading" @click="doCreateTag">
+          {{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}
+        </button>
+      </div>
+
+      <div v-if="tagList.length" class="tag-actions">
+        <span class="diff-label">{{ t('skills.tag.diff') }}:</span>
+        <select v-model="diffLeftTagID">
+          <option :value="0">{{ t('skills.tag.current') }}</option>
+          <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
+            {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
+          </option>
+        </select>
+        <Icon icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
+        <select v-model="diffRightTagID">
+          <option :value="0">{{ t('skills.tag.current') }}</option>
+          <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
+            {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
+          </option>
+        </select>
+        <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
+        <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
+      </div>
+
+      <ul v-if="tagList.length" class="tag-list">
+        <li v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :class="{ 'tag-implicit': tg.is_implicit }">
+          <span class="tag-id">#{{ tg.tag_id || tg.ID || tg.id }}</span>
+          <span class="tag-name"><code>{{ tg.tag }}</code></span>
+          <span class="tag-msg">{{ tg.message || t('common.dash') }}</span>
+          <span class="tag-time">{{ (tg.created_at || '').slice(0, 19) }}</span>
+          <button class="link" @click="doDiff(tg.tag_id || tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
+          <button class="link" :disabled="rolling" @click="doRollback(tg.tag_id || tg.ID || tg.id)">
+            {{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}
+          </button>
+          <button class="link danger" @click="doDeleteTag(tg.tag_id || tg.ID || tg.id)">{{ t('common.delete') }}</button>
+        </li>
+      </ul>
+
+      <div v-else-if="!tagLoading" class="empty-state empty-state-sm">
+        <Icon icon="mdi:tag-off-outline" width="36" height="36" />
+        <p class="empty-title">{{ t('common.dash') }}</p>
+      </div>
+
+      <!-- Diff 结果 -->
+      <div v-if="diffResult" class="diff-panel">
+        <header class="diff-header">
+          <h4>{{ t('skills.tag.resultTitle') }}</h4>
+          <div class="diff-stats">
+            <span class="stat stat-added">+{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
+            <span class="stat stat-removed">-{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
+            <span class="stat stat-modified">~{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
+            <span class="stat stat-unchanged">={{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
+          </div>
+        </header>
+        <div v-for="f in diffResult.files" :key="f.path" :class="['diff-file', `diff-kind-${f.kind}`]">
+          <div class="diff-file-header">
+            <span class="diff-file-kind">{{ f.kind }}</span>
+            <code class="diff-file-path">{{ f.path }}</code>
+          </div>
+          <pre v-if="f.lines?.length" class="diff-content"><span v-for="(l, i) in f.lines" :key="i" :class="`diff-line diff-line-${l.kind}`"><span class="diff-line-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
+</span></pre>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- 测试结果弹窗 -->
+    <Modal
+      v-model="testOpen"
+      size="lg"
+      :title="t('skills.test.title')"
+    >
+      <template #title-icon>
+        <Icon icon="mdi:test-tube" width="18" height="18" />
+      </template>
+
+      <div :class="['test-status-row', `test-status-${lastTest?.run?.status || 'errored'}`]">
+        <span v-if="lastTest?.run" class="test-status-badge">{{ lastTest.run.status }}</span>
+        <p v-if="testError" class="message message-error" style="margin: 0">
+          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          {{ t('skills.test.errPrefix') }} {{ testError }}
+        </p>
+        <p v-else-if="lastTest?.run?.summary" class="test-summary">{{ lastTest.run.summary }}</p>
+      </div>
+
+      <ul v-if="lastTest?.results?.length" class="test-list">
+        <li v-for="r in lastTest.results" :key="r.id || r.ID" :class="`test-check test-check-${r.status}`">
+          <span class="test-check-name">{{ r.check }}</span>
+          <span class="test-check-status" :class="`status-${r.status}`">{{ r.status }}</span>
+          <span class="test-check-msg">{{ r.message }}</span>
+        </li>
+      </ul>
+
+      <details v-for="r in lastTest?.results || []" :key="`d-${r.id || r.ID}`" class="test-detail">
+        <summary>{{ r.check }} detail</summary>
+        <pre>{{ r.detail }}</pre>
+      </details>
+
+      <div v-if="testing" class="test-loading">
+        <span class="spinner"></span>
+        <span>{{ t('common.processing') }}</span>
+      </div>
+    </Modal>
+
+    <!-- 通用确认弹窗 -->
+    <Modal
+      v-model="confirmOpen"
+      size="sm"
+      :title="confirmOpts.title"
+      :close-on-mask="false"
+    >
+      <p class="confirm-message">{{ confirmOpts.message }}</p>
+      <template #footer>
+        <button type="button" class="ghost" @click="resolveConfirm(false)">
+          {{ confirmOpts.cancelText }}
+        </button>
+        <button
+          type="button"
+          :class="confirmOpts.variant === 'danger' ? 'danger' : 'primary'"
+          @click="resolveConfirm(true)"
+        >
+          {{ confirmOpts.confirmText }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -1029,36 +1150,18 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-weight: normal;
 }
 
-/* 编辑器 */
-.editor-card {
-  background: var(--bg-card);
+/* 编辑器表单(弹窗内) */
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.editor-hint-bar {
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  padding: 24px;
-  margin-bottom: 16px;
-}
-
-.editor-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.editor-header h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.editor-hint {
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
   font-size: 12px;
   color: var(--text-dim);
 }
@@ -1066,8 +1169,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 .editor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 14px;
 }
 
 .editor-field {
@@ -1086,7 +1188,6 @@ onMounted(() => { reload(); checkUpdateBadge() })
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 16px;
 }
 
 .editor-field-full label {
@@ -1103,49 +1204,24 @@ onMounted(() => { reload(); checkUpdateBadge() })
   min-height: 100px;
 }
 
-.editor-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
 /* 表格 */
 .table-container {
-  /* 表格外层不加任何 margin/padding:之前用 margin:0 -20px 把表拉出 card
-     内边距,导致 thead 和 tbody 的横向起点跟 card 内容边不齐。
-     改成让 .card 自己负责内边距,table-container 居中。 */
   overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
 }
 
 .grid {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  /* table-layout: fixed 让 thead 和 tbody 走同一套列宽分配,
-     避免内容宽度撑开导致标题与数据列错位。 */
-  table-layout: fixed;
 }
-
-/* 各列的固定宽度,合计等于 100%。
-   名称 / 版本 / 来源 / 项目 / 更新时间 / 操作 */
-.grid col.col-name    { width: 18%; }
-.grid col.col-version { width: 10%; }
-.grid col.col-source  { width: 12%; }
-.grid col.col-project { width: 10%; }
-.grid col.col-updated { width: 22%; }
-.grid col.col-actions { width: 28%; }
 
 .grid th, .grid td {
   text-align: left;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   transition: background-color 0.3s ease;
-  /* 长内容截断,避免单格撑爆列宽 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .grid th {
@@ -1155,8 +1231,6 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  /* 表头不要被内容撑高 */
-  vertical-align: middle;
 }
 
 .grid tbody tr {
@@ -1336,7 +1410,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-size: 12px;
 }
 
-/* Tag 面板 */
+/* Tag 面板(弹窗内) */
 .tag-count {
   font-size: 12px;
   color: var(--text-dim);
@@ -1563,25 +1637,18 @@ onMounted(() => { reload(); checkUpdateBadge() })
   user-select: none;
 }
 
-/* 测试面板 */
-.test-panel-status-passed {
-  border-color: var(--border);
-  background: var(--bg-card);
+/* 测试结果(弹窗内) */
+.test-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
-.test-panel-status-failed {
-  border-color: var(--border);
-  background: var(--bg-card);
-}
-
-.test-panel-status-errored {
-  border-color: var(--border);
-  background: var(--bg-card);
-}
-
-.test-panel-status-skipped {
-  background: var(--bg-subtle);
-}
+.test-status-row.test-status-passed { color: var(--success); }
+.test-status-row.test-status-failed { color: var(--danger); }
+.test-status-row.test-status-errored { color: var(--warning); }
 
 .test-status-badge {
   padding: 3px 10px;
@@ -1596,7 +1663,9 @@ onMounted(() => { reload(); checkUpdateBadge() })
 .test-summary {
   color: var(--text-dim);
   font-size: 13px;
-  margin: 8px 0;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .test-list {
@@ -1607,7 +1676,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
 
 .test-list li {
   display: grid;
-  grid-template-columns: 120px 80px 1fr;
+  grid-template-columns: 140px 90px 1fr;
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px dashed var(--border);
@@ -1673,6 +1742,23 @@ onMounted(() => { reload(); checkUpdateBadge() })
   margin: 8px 0 0;
 }
 
+.test-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+  color: var(--text-dim);
+}
+
+/* 确认弹窗 */
+.confirm-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-line;
+}
+
 /* 空状态 */
 .empty-state {
   padding: 48px 24px;
@@ -1681,6 +1767,10 @@ onMounted(() => { reload(); checkUpdateBadge() })
   background: var(--bg-subtle);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
+}
+
+.empty-state-sm {
+  padding: 24px 16px;
 }
 
 .empty-state .empty-icon {
@@ -1720,6 +1810,11 @@ onMounted(() => { reload(); checkUpdateBadge() })
   .apply-toolbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .table-container {
+    margin: 0 -16px;
+    padding: 0 16px;
   }
 
   .grid th, .grid td {

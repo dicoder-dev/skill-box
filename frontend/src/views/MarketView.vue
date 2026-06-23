@@ -8,6 +8,7 @@ import {
   refreshSource,
   installMarketSkill,
 } from '@/api/skillbox/market.js'
+import Modal from '@/components/Modal.vue'
 
 const { t } = useI18n()
 
@@ -96,7 +97,12 @@ function onSelectSource(id) {
 }
 
 async function onInstall(item) {
-  if (!confirm(t('market.installConfirm', { name: item.name, scope: installScope.value }))) return
+  const ok = await openConfirm({
+    title: t('market.btnInstall'),
+    message: t('market.installConfirm', { name: item.name, scope: installScope.value }),
+    confirmText: t('market.btnInstall'),
+  })
+  if (!ok) return
   installing.value = true
   installError.value = ''
   installOk.value = ''
@@ -113,6 +119,38 @@ async function onInstall(item) {
   } finally {
     installing.value = false
   }
+}
+
+// 详情弹窗
+const detailOpen = ref(false)
+const detailItem = ref(null)
+function openDetail(item) {
+  detailItem.value = item
+  detailOpen.value = true
+}
+
+// 通用确认弹窗(取代原生 confirm)
+const confirmOpen = ref(false)
+const confirmOpts = reactive({
+  title: '',
+  message: '',
+  confirmText: '',
+  cancelText: '',
+  variant: 'default',
+  resolve: null,
+})
+function openConfirm(opts) {
+  confirmOpts.title = opts.title || t('common.confirm')
+  confirmOpts.message = opts.message || ''
+  confirmOpts.confirmText = opts.confirmText || t('common.confirm')
+  confirmOpts.cancelText = opts.cancelText || t('common.cancel')
+  confirmOpts.variant = opts.variant || 'default'
+  confirmOpen.value = true
+  return new Promise((resolve) => { confirmOpts.resolve = resolve })
+}
+function resolveConfirm(ok) {
+  if (confirmOpts.resolve) confirmOpts.resolve(ok)
+  confirmOpen.value = false
 }
 
 onMounted(async () => {
@@ -215,7 +253,7 @@ onMounted(async () => {
               <th>{{ t('market.colAuthor') }}</th>
               <th>{{ t('market.colDescription') }}</th>
               <th>{{ t('market.colTags') }}</th>
-              <th style="width: 100px"></th>
+              <th style="width: 160px"></th>
             </tr>
           </thead>
           <tbody>
@@ -233,10 +271,15 @@ onMounted(async () => {
                 </span>
               </td>
               <td>
-                <button class="install-btn" :disabled="installing" @click="onInstall(it)">
-                  <Icon icon="mdi:download" width="12" height="12" />
-                  {{ installing ? t('market.installing') : t('market.btnInstall') }}
-                </button>
+                <div class="row-actions">
+                  <button class="action-btn" :title="t('common.edit')" @click="openDetail(it)">
+                    <Icon icon="mdi:eye-outline" width="12" height="12" />
+                  </button>
+                  <button class="install-btn" :disabled="installing" @click="onInstall(it)">
+                    <Icon icon="mdi:download" width="12" height="12" />
+                    {{ installing ? t('market.installing') : t('market.btnInstall') }}
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -265,6 +308,80 @@ onMounted(async () => {
         </button>
       </footer>
     </div>
+
+    <!-- 详情弹窗 -->
+    <Modal
+      v-model="detailOpen"
+      size="lg"
+      :title="detailItem?.name || ''"
+    >
+      <template #title-icon>
+        <Icon icon="mdi:information-outline" width="18" height="18" />
+      </template>
+      <div v-if="detailItem" class="detail-grid">
+        <div class="detail-row">
+          <span class="detail-label">{{ t('market.colVersion') }}</span>
+          <code>{{ detailItem.version || t('common.dash') }}</code>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">{{ t('market.colAuthor') }}</span>
+          <span>{{ detailItem.author || t('common.dash') }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">ID</span>
+          <code class="detail-id">{{ detailItem.remote_id }}</code>
+        </div>
+        <div class="detail-row detail-row-full">
+          <span class="detail-label">{{ t('market.colDescription') }}</span>
+          <p class="detail-desc">{{ detailItem.description || t('common.dash') }}</p>
+        </div>
+        <div v-if="detailItem.tags" class="detail-row detail-row-full">
+          <span class="detail-label">{{ t('market.colTags') }}</span>
+          <div class="detail-tags">
+            <span v-for="tg in String(detailItem.tags).split(',').filter(Boolean)" :key="tg" class="tag">
+              {{ tg }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button type="button" class="ghost" @click="detailOpen = false">
+          <Icon icon="mdi:close" width="14" height="14" />
+          {{ t('common.close') }}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="installing"
+          @click="detailOpen = false; onInstall(detailItem)"
+        >
+          <Icon icon="mdi:download" width="14" height="14" />
+          {{ t('market.btnInstall') }}
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 通用确认弹窗 -->
+    <Modal
+      v-model="confirmOpen"
+      size="sm"
+      :title="confirmOpts.title"
+      :close-on-mask="false"
+    >
+      <p class="confirm-message">{{ confirmOpts.message }}</p>
+      <template #footer>
+        <button type="button" class="ghost" @click="resolveConfirm(false)">
+          {{ confirmOpts.cancelText }}
+        </button>
+        <button
+          type="button"
+          :class="confirmOpts.variant === 'danger' ? 'danger' : 'primary'"
+          @click="resolveConfirm(true)"
+        >
+          {{ confirmOpts.confirmText }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -535,6 +652,90 @@ onMounted(async () => {
 .install-btn:hover:not(:disabled) {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+}
+
+/* 行内操作按钮组 */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+/* 详情弹窗 */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.detail-row-full {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.detail-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+.detail-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-line;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 确认弹窗 */
+.confirm-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-line;
 }
 
 /* 分页器 */
