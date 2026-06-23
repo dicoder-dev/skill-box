@@ -17,7 +17,6 @@ import (
 
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 
