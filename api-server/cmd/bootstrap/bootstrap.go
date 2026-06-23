@@ -86,6 +86,17 @@ type Backend struct {
 	desktopHooks hooks.BootstrapHooks
 }
 
+// BootstrapHooks 是 hooks.BootstrapHooks 的对外类型别名。
+//
+// hooks 子包位于 ginp-api/internal/ 路径下,skill-box/desktop 这种外部
+// 模块无法直接 import。这里在 bootstrap 包做一层转发,既保留了
+// hooks 子包规避导入环的初衷,又让桌面端代码能用
+// `backend.SetDesktopHooks(bootstrap.BootstrapHooks{...})` 这种方式注入。
+//
+// 字段集与 hooks.BootstrapHooks 完全一致(同一个底层类型),赋值与传参
+// 都按结构体值语义处理,不会产生额外的运行时开销。
+type BootstrapHooks = hooks.BootstrapHooks
+
 // dbsHolder 持有 write/read 两个 *gorm.DB,供桌面端 settings 等服务按需构造。
 // 不导出指针,只通过 NewSettings 工厂方法构造,避免外部误持 db 句柄。
 type dbsHolder struct {
