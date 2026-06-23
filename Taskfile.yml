@@ -123,11 +123,14 @@ tasks:
       - go run ./cmd/web -config ../{{.WEB_CONFIG_FILE}}
 
   # 前端开发模式：Vite dev server，端口由 VITE_PORT 决定。
+  # 强制 VITE_DEPLOY_MODE=web:Web 单进程形态下走同源,不能把前端识别成桌面端。
   web:dev:frontend:
     summary: 启动 Vite 开发服务器（Web 端调试）
     dir: frontend
     deps:
       - task: common:install:frontend:deps
+    env:
+      VITE_DEPLOY_MODE: web
     cmds:
       - npm run dev -- --port {{.VITE_PORT}} --strictPort
 
