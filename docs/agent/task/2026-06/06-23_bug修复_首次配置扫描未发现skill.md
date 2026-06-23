@@ -8,8 +8,9 @@
 
 ## 2. 任务列表
 - [x] **阶段 1** 修复 BaseAdapter.Scan 递归扫描(隐藏目录 / 嵌套 / symlink) - commit c2c7512
-- [x] **阶段 2** 修复 adapter 子包未在生产代码 import 导致 Registry 为空 - 本次修复
-- [x] 验证本地扫描结果能匹配实际 skill 数量(0 → 74+)
+- [x] **阶段 2** 修复 adapter 子包未在生产代码 import 导致 Registry 为空 - commit a380eb2
+- [x] **阶段 3** 修复后端 onboarding 三个接口没用标准业务信封 - 本次修复
+- [x] 验证本地扫描结果能匹配实际 skill 数量(0 → 80)
 
 ## 3. 阶段 1 回顾(已提交 c2c7512)
 BaseAdapter.Scan 三个具体问题:
@@ -63,6 +64,31 @@ _ginp-api/internal/skilladapter/trae.(*adapter).Scan
 ```
 以及它们的 `.inittask`(init 函数被链入)。
 
+用户确认阶段 2 后:**后端日志显示 `7 dirs, 80 skills across 5 tools`** —— 后端真的找到了。
+
+## 5.5 阶段 3 根因 — 后端 onboarding 三个接口没用标准业务信封
+
+**现象**:后端日志说找到 80 个 skill,但前端 OnboardingView 依然显示"没有发现任何技能"。
+
+**定位**:
+- 前端 `core/utils/requests/interceptors.js` 的默认 response 拦截器(第 138-159 行)对响应做业务码剥离:
+  ```js
+  if ('code' in data || 'success' in data) {
+    const code = data.code !== undefined ? data.code : data.success ? 1 : 0
+    if (code !== 1) throw new BusinessError(...)
+    return data.data !== undefined ? data.data : data
+  }
+  return resp  // 没有 code 字段时,原样返回整个 resp(data + status)
+  ```
+- 后端 `PostOnboardingScan` / `GetOnboardingStatus` / `PostOnboardingImport` 直接 `c.JSON(200, envelope)`,**没有套 `c.SuccessData(envelope)` 这层 `{code, msg, data}` 信封**
+- 后果:拦截器拿到 `{scanned_at, tools, found, ...}` 时,`'code' in data` 为 false,走 else 分支,返回 `{data: envelope, status: 200}`(整个 axios 风格 resp)
+- 前端 `runOnboardingScan()` 拿到的是 `{data: {scanned_at, tools, found}, status: 200}` 而不是 envelope 本身,`res.found` 为 undefined
+- OnboardingView 模板 `v-if="!scanReport?.found?.length"` 命中空状态分支,显示"没有发现任何技能"
+
+**修复**:
+- `post_onboarding_scan.a.go` / `get_onboarding_status.a.go` / `post_onboarding_import.a.go` 三个成功路径改成 `c.SuccessData(resp, "...")`
+- 失败路径(400 / 500)继续返回 `c.JSON(code, gin.H{"error": "..."})`,这种不带 `code` 字段的响应会被拦截器原样返回,由 axios 走 HTTP 错误分支
+
 ## 6. 问题与方案
 > 现象 → 定位 → 方案 → 教训
 
@@ -80,15 +106,18 @@ _ginp-api/internal/skilladapter/trae.(*adapter).Scan
 无。
 
 ## 8. 总结(任务结束时填)
-- **完成了什么**:两阶段修复:
+- **完成了什么**:三阶段修复:
   - 阶段 1(commit c2c7512):BaseAdapter.Scan 改为递归 + 跟随 symlink + 不跳隐藏目录,5 个单元测试。
-  - 阶段 2(本次):在 cmd/bootstrap/adapters_import.go blank import 5 个子 adapter 包,触发它们的 init 注册。
-- **留下了什么**:commit 待提;base.go + base_test.go(阶段 1)+ adapters_import.go(阶段 2)
+  - 阶段 2(commit a380eb2):在 cmd/bootstrap/adapters_import.go blank import 5 个子 adapter 包,触发它们的 init 注册。
+  - 阶段 3(本次):后端 onboarding 三个接口的成功路径改走 `c.SuccessData(resp, msg)`(标准 `{code, msg, data}` 信封),与前端默认拦截器期望对齐;失败路径继续返回 `{error}` 让 axios 走 HTTP 错误分支。
+- **留下了什么**:commit 待提;三个 onboarding controller 各 1 行改动 + 注释
 - **留给下次的事**:
   - Claude marketplaces 下同名 skill 出现 3 次(access/configure),因为不同 plugin 下名字相同。是否要按 plugin 来源去重?目前按 (tool_id, name) 去重,import 阶段会冲掉,需要决策。
   - `importResult.source_path` 当前显示的是 `filepath/<name>`,嵌套时是冗长全路径,UI 截断即可。
-  - 阶段 2 验证靠 `nm` 看符号表确认;真实端到端验证得在桌面应用里点击"开始扫描"看 Report,等用户确认。
+  - 全仓库其它 controller 可能也存在"直接 c.JSON 不走 SuccessData"的问题,本次只修了 onboarding 三个,值得全量扫一遍(可作为一次性重构)。
 - **复盘**:
   - 做得好的:阶段 1 修复后立刻做了单元测试 + 真实目录验证脚本(74 个),以为搞定了;但忽视了"测试通过 ≠ 生产生效"。
   - 做得不好的:阶段 1 提交时,没考虑过"为什么 Registry 会有东西"这个隐含前提。应该在 commit 之前先 `nm` 一下二进制,确认 trae/claude 等符号在不在,避免一次没修干净。
   - 阶段 2 的关键诊断动作是 `nm` 看符号表 + 全仓库 grep 引用子包的位置,这两步定位非常快。
+  - 阶段 3 的关键诊断动作是看后端日志 vs 前端显示的矛盾,然后去翻前端默认拦截器逻辑,发现是"统一信封"假设在前端硬编码,后端 onboarding 没遵守。教训:统一信封是前后端契约,任何一端绕过都会让前端拿到错误形状,这类问题应在后端 review 里专门扫一遍 `c.JSON(200, X)` 是否漏了 `SuccessData`。
+  - 三个阶段层层叠,都是"看起来很对但生产不能用"。根本教训:**bug 修复以"用户在 UI 上看到结果"为准,不能停在"后端日志正确"**。

@@ -81,7 +81,8 @@ func GetOnboardingStatus(c *ginp.ContextPlus, _ *RequestOnboardingStatus) {
 		resp.HasReport = true
 		resp.TotalFound = len(cached.Found)
 	}
-	c.JSON(200, resp)
+	// 走标准业务信封 {code, msg, data},前端默认拦截器据此剥离 data。
+	c.SuccessData(resp, "onboarding status ok")
 }
 
 func init() {

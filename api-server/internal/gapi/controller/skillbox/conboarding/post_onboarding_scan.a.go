@@ -67,7 +67,8 @@ func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 	onboardingCache.Unlock()
 
 	logger.Info("onboarding scan: %s", report.String())
-	c.JSON(200, envelope)
+	// 走标准业务信封 {code, msg, data},前端默认拦截器据此剥离 data。
+	c.SuccessData(envelope, "onboarding scan done")
 }
 
 func init() {

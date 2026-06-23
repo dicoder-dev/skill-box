@@ -33,6 +33,9 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 	cached := onboardingCache.lastReport
 	onboardingCache.RUnlock()
 	if cached == nil {
+		// 错误路径仍走非信封格式:{error} 不带 code。
+		// 前端拦截器在 'code' in data 时才剥信封,这里没有 code,会被原样返回,
+		// 调用方 http.post 拿到 {error, status, data} 走错误分支。
 		c.JSON(400, gin.H{"error": "no cached scan; call /api/skillbox/onboarding/scan first"})
 		return
 	}
@@ -86,7 +89,8 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 		}
 	}
 	logger.Info("onboarding import: total=%d ok=%d failed=%d", resp.Total, resp.OK, resp.Failed)
-	c.JSON(200, resp)
+	// 走标准业务信封 {code, msg, data},前端默认拦截器据此剥离 data。
+	c.SuccessData(resp, "onboarding import done")
 }
 
 func init() {
