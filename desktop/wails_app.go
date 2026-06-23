@@ -123,7 +123,17 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	app.RegisterService(application.NewService(notifySvc))
 	app.RegisterService(application.NewService(shortcutSvc))
 
-	// 主窗口:加载后端 URL(注意 Webview 走 HTTP,不走 Wails AssetServer)
+	// 主窗口:加载前端 URL。
+	//   - cfg.FrontendURL 非空:桌面端 Webview 直接加载此 URL(典型场景 = wails3 dev,
+	//     URL 指向 Vite dev server,享受浏览器层 HMR,改前端代码无需重启 Go 进程)。
+	//   - cfg.FrontendURL 为空:走生产路径,加载 backend 自带 gin + embed.FS,
+	//     由桌面端 in-process 后端直接出 dist 静态资源。
+	frontendURL := cfg.FrontendURL
+	if frontendURL == "" {
+		frontendURL = backend.URL() + "/"
+	} else {
+		log.Printf("desktop: Webview using custom frontend URL %q (dev/HMR mode)", frontendURL)
+	}
 	primary := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: cfg.Name,
 		Width: cfg.Width, Height: cfg.Height,
@@ -133,7 +143,7 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 			cfg.BackgroundColour[1],
 			cfg.BackgroundColour[2],
 		),
-		URL: backend.URL() + "/",
+		URL: frontendURL,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
