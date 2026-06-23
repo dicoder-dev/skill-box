@@ -35,6 +35,24 @@
   --primary-dim: #f5f5f5;
   --primary-active: #262626;
 
+  /* Accent 强调色(克制版,用于 badge / stat / 状态点)
+     设计原则:背景用 50-tint,边框 200-tint,文字 600-tint,保持柔和不刺眼 */
+  --accent-blue: #2563eb;        /* 蓝,主知识/技能 */
+  --accent-blue-bg: #eff6ff;
+  --accent-blue-border: #bfdbfe;
+  --accent-violet: #7c3aed;      /* 紫,项目 */
+  --accent-violet-bg: #f5f3ff;
+  --accent-violet-border: #ddd6fe;
+  --accent-emerald: #059669;     /* 翠,工具/成功 */
+  --accent-emerald-bg: #ecfdf5;
+  --accent-emerald-border: #a7f3d0;
+  --accent-amber: #b45309;       /* 橙,警告 */
+  --accent-amber-bg: #fffbeb;
+  --accent-amber-border: #fde68a;
+  --accent-rose: #be123c;        /* 玫,危险/错误 */
+  --accent-rose-bg: #fff1f2;
+  --accent-rose-border: #fecdd3;
+
   /* 状态色 - 保持语义化,但更克制 */
   --success: #15803d;
   --success-dim: #f5f5f5;
@@ -99,6 +117,24 @@
   --warning-dim: #262626;
   --danger: #f87171;
   --danger-dim: #262626;
+
+  /* Accent 强调色 - 暗黑模式
+     暗黑下用 400-tint 当文字色(更亮),bg 用 950/900-tint 深底,border 用 800-tint */
+  --accent-blue: #60a5fa;
+  --accent-blue-bg: #172554;
+  --accent-blue-border: #1e3a8a;
+  --accent-violet: #a78bfa;
+  --accent-violet-bg: #2e1065;
+  --accent-violet-border: #4c1d95;
+  --accent-emerald: #34d399;
+  --accent-emerald-bg: #022c22;
+  --accent-emerald-border: #064e3b;
+  --accent-amber: #fbbf24;
+  --accent-amber-bg: #451a03;
+  --accent-amber-border: #78350f;
+  --accent-rose: #fb7185;
+  --accent-rose-bg: #4c0519;
+  --accent-rose-border: #881337;
 
   /* 阴影 - 暗黑模式 */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -375,6 +411,41 @@ table.grid tbody tr:hover {
   color: var(--text-dim);
   border: 1px solid var(--border);
 }
+
+/* badge 色彩变体 - 用于源 / 作用域 / 状态等需要语义区分的场景 */
+.badge.blue {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue-border);
+}
+.badge.violet {
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+  border: 1px solid var(--accent-violet-border);
+}
+.badge.emerald {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald-border);
+}
+.badge.amber {
+  background: var(--accent-amber-bg);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber-border);
+}
+.badge.rose {
+  background: var(--accent-rose-bg);
+  color: var(--accent-rose);
+  border: 1px solid var(--accent-rose-border);
+}
+
+/* 状态点 - 用 accent 色做轻量指示 */
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.dot.blue { background: var(--accent-blue); }
+.dot.violet { background: var(--accent-violet); }
+.dot.emerald { background: var(--accent-emerald); }
+.dot.amber { background: var(--accent-amber); }
+.dot.rose { background: var(--accent-rose); }
 
 /* ============================================
    分页器样式

@@ -9,16 +9,15 @@
 export default {
   app: {
     brand: 'Skill Box',
-    tagline: 'Unified skill manager for AI tools',
     closeSidebar: 'Close sidebar',
     openSidebar: 'Open sidebar',
     nav: {
-      skills: { label: 'Skills', desc: 'Browse / edit / test' },
-      projects: { label: 'Projects', desc: 'Project roots / scopes' },
-      market: { label: 'Market', desc: '3rd-party skill marketplace' },
-      onboarding: { label: 'Onboarding', desc: 'First-time scan / import' },
-      audit: { label: 'Audit', desc: 'Operation logs / audit' },
-      settings: { label: 'Settings', desc: 'Prefs / notifications / shortcuts' },
+      skills: { label: 'Skills' },
+      projects: { label: 'Projects' },
+      market: { label: 'Market' },
+      onboarding: { label: 'Onboarding' },
+      audit: { label: 'Audit' },
+      settings: { label: 'Settings' },
     },
     backendOk: 'Backend connected',
     backendDown: 'Backend down',

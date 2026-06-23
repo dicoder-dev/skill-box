@@ -164,12 +164,12 @@ onMounted(refreshStats)
 
 // 侧栏配置
 const navItems = computed(() => [
-  { key: 'skills',      label: t('app.nav.skills.label'),      desc: t('app.nav.skills.desc'),      icon: 'mdi:book-open-variant' },
-  { key: 'projects',   label: t('app.nav.projects.label'),    desc: t('app.nav.projects.desc'),    icon: 'mdi:folder-multiple-outline' },
-  { key: 'market',     label: t('app.nav.market.label'),      desc: t('app.nav.market.desc'),      icon: 'mdi:cart-outline' },
-  { key: 'onboarding',  label: t('app.nav.onboarding.label'),  desc: t('app.nav.onboarding.desc'),  icon: 'mdi:compass-outline' },
-  { key: 'audit',      label: t('app.nav.audit.label'),       desc: t('app.nav.audit.desc'),       icon: 'mdi:script-text-outline' },
-  { key: 'settings',    label: t('app.nav.settings.label'),   desc: t('app.nav.settings.desc'),    icon: 'mdi:cog-outline' },
+  { key: 'skills',      label: t('app.nav.skills.label'),      icon: 'mdi:book-open-variant' },
+  { key: 'projects',   label: t('app.nav.projects.label'),    icon: 'mdi:folder-multiple-outline' },
+  { key: 'market',     label: t('app.nav.market.label'),      icon: 'mdi:cart-outline' },
+  { key: 'onboarding',  label: t('app.nav.onboarding.label'),  icon: 'mdi:compass-outline' },
+  { key: 'audit',      label: t('app.nav.audit.label'),       icon: 'mdi:script-text-outline' },
+  { key: 'settings',    label: t('app.nav.settings.label'),   icon: 'mdi:cog-outline' },
 ])
 
 function switchTab(k) {
@@ -224,7 +224,6 @@ onUnmounted(() => {
         </div>
         <div class="brand-text">
           <span class="brand-name">{{ t('app.brand') }}</span>
-          <span class="brand-tagline">{{ t('app.tagline') }}</span>
         </div>
         <button
           v-if="isMobile"
@@ -252,9 +251,6 @@ onUnmounted(() => {
           </span>
           <span class="nav-content">
             <span class="nav-label">{{ n.label }}</span>
-            <span :class="['nav-desc', tab === n.key ? 'nav-desc-active' : '']">
-              {{ n.desc }}
-            </span>
           </span>
           <span v-if="tab === n.key" class="nav-indicator"></span>
         </button>
@@ -317,17 +313,17 @@ onUnmounted(() => {
         </div>
 
         <div class="topbar-right">
-          <div class="stat-badge">
+          <div class="stat-badge stat-badge-blue">
             <Icon icon="mdi:book-open-variant" width="12" height="12" />
             <span>{{ t('app.nav.skills.label') }}</span>
             <strong>{{ stats.skills }}</strong>
           </div>
-          <div class="stat-badge stat-badge-purple">
+          <div class="stat-badge stat-badge-violet">
             <Icon icon="mdi:folder-multiple-outline" width="12" height="12" />
             <span>{{ t('app.nav.projects.label') }}</span>
             <strong>{{ stats.projects }}</strong>
           </div>
-          <div class="stat-badge stat-badge-green">
+          <div class="stat-badge stat-badge-emerald">
             <Icon icon="mdi:tools" width="12" height="12" />
             <span>{{ t('app.toolsLabel') }}</span>
             <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
@@ -447,12 +443,6 @@ onUnmounted(() => {
   transition: color 0.3s ease;
 }
 
-.brand-tagline {
-  @apply text-xs truncate;
-  color: var(--text-sidebar-muted);
-  transition: color 0.3s ease;
-}
-
 .mobile-close-btn {
   @apply p-1.5 rounded-lg;
   color: var(--text-sidebar-muted);
@@ -499,6 +489,10 @@ onUnmounted(() => {
   color: var(--bg-sidebar-active-text);
 }
 
+.nav-item-active .nav-icon {
+  color: var(--accent-blue);
+}
+
 .nav-icon {
   @apply flex items-center justify-center flex-shrink-0;
   width: 24px;
@@ -515,21 +509,15 @@ onUnmounted(() => {
   transition: color 0.2s ease;
 }
 
-.nav-desc {
-  @apply text-xs truncate mt-0.5;
-  color: var(--text-sidebar-muted);
-  transition: color 0.2s ease;
-}
-
-.nav-desc-active {
-  color: var(--bg-sidebar-active-text);
-  opacity: 0.85;
-}
-
-/* 导航激活指示器 */
+/* 导航激活指示器 - 左侧彩色竖条(克制不刺眼) */
 .nav-indicator {
-  @apply absolute right-2 w-1.5 h-1.5 rounded-full;
-  background: var(--bg-sidebar-active-text);
+  position: absolute;
+  left: 0;
+  top: 25%;
+  height: 50%;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-blue);
 }
 
 /* 侧边栏底部 */
@@ -662,23 +650,30 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.stat-badge-purple {
-  background: var(--bg-card);
-  border-color: var(--border);
+/* 三种语义色彩 - 技能(蓝) / 项目(紫) / 工具(翠) */
+.stat-badge-blue {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue-border);
+  color: var(--accent-blue);
 }
+.stat-badge-blue :deep(.iconify),
+.stat-badge-blue strong { color: var(--accent-blue); }
 
-.stat-badge-purple strong {
-  color: var(--text);
+.stat-badge-violet {
+  background: var(--accent-violet-bg);
+  border-color: var(--accent-violet-border);
+  color: var(--accent-violet);
 }
+.stat-badge-violet :deep(.iconify),
+.stat-badge-violet strong { color: var(--accent-violet); }
 
-.stat-badge-green {
-  background: var(--bg-card);
-  border-color: var(--border);
+.stat-badge-emerald {
+  background: var(--accent-emerald-bg);
+  border-color: var(--accent-emerald-border);
+  color: var(--accent-emerald);
 }
-
-.stat-badge-green strong {
-  color: var(--text);
-}
+.stat-badge-emerald :deep(.iconify),
+.stat-badge-emerald strong { color: var(--accent-emerald); }
 
 /* 内容区域 */
 .content-area {
