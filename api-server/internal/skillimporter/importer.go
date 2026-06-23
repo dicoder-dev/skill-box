@@ -114,10 +114,17 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 				entry.Errors = append(entry.Errors, scanErr.Error())
 			}
 			for _, c := range cs {
+				// 优先用 adapter 给的真实 skill 目录(SourceDir 由 readSkillDir 写入),
+				// 对多层嵌套(claude marketplaces 6 层)更准确;空时回退到
+				// scan 根 + LocalName,兼容未来不带 SourceDir 的 adapter。
+				src := c.SourceDir
+				if src == "" {
+					src = filepath.Join(p, a.LocalName(c))
+				}
 				r.FoundSkills = append(r.FoundSkills, FoundSkill{
 					ToolID:     a.ToolID(),
 					ToolName:   a.DisplayName(),
-					SourcePath: filepath.Join(p, a.LocalName(c)),
+					SourcePath: src,
 					Canonical:  c,
 				})
 			}

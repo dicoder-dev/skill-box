@@ -33,6 +33,9 @@ type File struct {
 type Canonical struct {
 	Manifest Manifest `yaml:"manifest" json:"manifest"`
 	Files    []File   `yaml:"files" json:"files"`
+	// SourceDir 是 adapter 在本地磁盘上找到该 skill 的绝对路径(读 SKILL.md 的目录)。
+	// 用于在 importer.Scan 里产出 FoundSkill.SourcePath;不参与序列化导出。
+	SourceDir string `yaml:"-" json:"-"`
 }
 
 // Scope 作用域。

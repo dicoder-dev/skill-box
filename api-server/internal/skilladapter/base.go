@@ -146,6 +146,7 @@ func looksLikeSkillContainer(name string) bool {
 
 // readSkillDir 读取一个 skill 目录,产出 Canonical(只填 SKILL.md 一个文件;
 // 其它附属文件 v1 不导入,可在 P1 加)。
+// 真实目录绝对路径同时写入 c.SourceDir,供 importer 产出 FoundSkill.SourcePath。
 func readSkillDir(dir string) (Canonical, error) {
 	skillMD := filepath.Join(dir, "SKILL.md")
 	content, err := os.ReadFile(skillMD)
@@ -157,6 +158,13 @@ func readSkillDir(dir string) (Canonical, error) {
 		return Canonical{}, err
 	}
 	c.Files = []File{{Path: "SKILL.md", Content: string(content)}}
+	// 用 EvalSymlinks 解析真实路径,避免 symlink 链上 source_path 一会儿是
+	// ~/.claude/skills 一会儿是 ~/.agents/skills/xxx,便于前端稳定展示。
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		c.SourceDir = real
+	} else {
+		c.SourceDir = dir
+	}
 	return *c, nil
 }
 
