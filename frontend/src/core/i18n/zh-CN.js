@@ -18,7 +18,7 @@ export default {
       skills: { label: '技能' },
       projects: { label: '项目' },
       market: { label: '市场' },
-      onboarding: { label: '首次配置' },
+      onboarding: { label: '导入技能' },
       audit: { label: '审计' },
       settings: { label: '设置' },
     },
@@ -238,8 +238,11 @@ export default {
   },
 
   onboarding: {
-    title: '首次配置',
+    title: '导入技能',
     subtitle: '扫描本机 5 个 AI 编程工具的技能目录,把发现的技能勾选导入到 Skill Box 自己的 store(全局作用域)。',
+    btnRescan: '重新扫描',
+    btnRescanning: '扫描中…',
+    btnRescanTitle: '重新扫描 5 个 adapter',
     steps: {
       status: '查看状态',
       scan: '扫描 + 勾选',
@@ -264,7 +267,8 @@ export default {
     phase2: {
       title: '扫描结果',
       foundSuffix: '发现 {n} 个技能',
-      empty: '这次扫描没找到任何技能。可以重扫或先装一些。',
+      empty: '这次扫描没找到任何技能',
+      emptyHint: '可以点右上角"重新扫描",或先去工具里装一些 skill',
       selectAll: '全选当前',
       selectNone: '清空当前',
       selected: '已选 {sel} / {total}',
@@ -275,6 +279,10 @@ export default {
       catSystem: '系统技能',
       catSystemHint: '系统级 skill(工具自带 / vendor curated / plugin 内建)只读展示,不能导入',
       catSectionDivider: '以下系统级 skill 不可勾选',
+      tagExists: '已存在',
+      disabledSystem: '系统级 skill 不能导入',
+      disabledExists: '客户端 store 中已存在同名 skill,无法重复导入',
+      disabledExclusive: '同名 skill 已被另一个工具勾选,请先取消',
     },
     phase3: {
       title: '导入完成',

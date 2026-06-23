@@ -15,7 +15,7 @@ export default {
       skills: { label: 'Skills' },
       projects: { label: 'Projects' },
       market: { label: 'Market' },
-      onboarding: { label: 'Onboarding' },
+      onboarding: { label: 'Import skills' },
       audit: { label: 'Audit' },
       settings: { label: 'Settings' },
     },
@@ -235,8 +235,11 @@ export default {
   },
 
   onboarding: {
-    title: 'Onboarding',
+    title: 'Import skills',
     subtitle: 'Scan skill directories of the 5 AI coding tools on this machine, pick which ones to import into the Skill Box store (global scope).',
+    btnRescan: 'Rescan',
+    btnRescanning: 'Scanning…',
+    btnRescanTitle: 'Rescan all 5 adapters',
     steps: {
       status: 'Status',
       scan: 'Scan + select',
@@ -261,7 +264,8 @@ export default {
     phase2: {
       title: 'Scan result',
       foundSuffix: '{n} skills found',
-      empty: 'No skills found this time. Try again or install some first.',
+      empty: 'No skills found this time.',
+      emptyHint: 'Click "Rescan" in the top right, or install some skills first',
       selectAll: 'Select current',
       selectNone: 'Clear current',
       selected: '{sel} / {total} selected',
@@ -272,6 +276,10 @@ export default {
       catSystem: 'System skills',
       catSystemHint: 'System-level skills (tool-built-in / vendor curated / plugin bundled) are read-only and cannot be imported',
       catSectionDivider: 'The following system-level skills cannot be selected',
+      tagExists: 'Exists',
+      disabledSystem: 'System-level skills cannot be imported',
+      disabledExists: 'A skill with the same name already exists in the client store',
+      disabledExclusive: 'The same skill is already selected from another tool — deselect first',
     },
     phase3: {
       title: 'Import complete',

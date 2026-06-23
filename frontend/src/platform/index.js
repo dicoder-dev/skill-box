@@ -84,6 +84,32 @@ function createWebPlatform() {
         window.open(url, '_blank', 'noopener')
       },
     },
+    fs: {
+      // 读本地文件文本(Web 端走后端 HTTP,fsutil 兜底处理;失败抛错给调用方)
+      async readText(path) {
+        try {
+          const r = await http.post('/api/desktop/fs/read-text', { path })
+          return r?.content || ''
+        } catch (e) {
+          throw new Error(`readText(${path}) failed: ${e?.message || e}`)
+        }
+      },
+      // reveal 在系统文件管理器显示该路径。
+      // Web 端桌面 hook 不存在 → 501 带回退 URL(父目录 file://),用 openExternal 打开。
+      async reveal(path) {
+        try {
+          await http.post('/api/desktop/fs/reveal', { path })
+          return true
+        } catch (e) {
+          const fb = e?.data?.fallback_url || e?.response?.data?.fallback_url
+          if (fb) {
+            window.open(fb, '_blank', 'noopener')
+            return true
+          }
+          throw new Error(`reveal(${path}) failed: ${e?.message || e}`)
+        }
+      },
+    },
     notify: {
       async hasPermission() { return false },
       async requestPermission() { return false },
@@ -144,6 +170,24 @@ function createDesktopPlatform() {
         http.put('/api/desktop/clipboard/text', { text })),
       openExternal: guard('platform.openExternal', (url) =>
         http.post('/api/desktop/open-external', { url })),
+    },
+    fs: {
+      async readText(path) {
+        const r = await http.post('/api/desktop/fs/read-text', { path })
+        return r?.content || ''
+      },
+      async reveal(path) {
+        try {
+          await http.post('/api/desktop/fs/reveal', { path })
+          return true
+        } catch (e) {
+          // 兜底:桌面端没装 hook(Web 部署)时,fs.reveal 端点返 501 + fallback_url
+          // 这里不再二次 openExternal(避免循环),由调用方决定后续动作
+          const fb = e?.data?.fallback_url || e?.response?.data?.fallback_url
+          if (fb) return { ok: false, fallbackUrl: fb }
+          throw e
+        }
+      },
     },
     notify: {
       hasPermission: guard('notify.hasPermission', () => http.get('/api/desktop/notify/permission')),
