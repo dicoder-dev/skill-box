@@ -24,8 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// hooks 返回当前桌面端 OS 能力钩子(由 bootstrap.Serve 注入,见 hooks 包)。
-func hooks() hooks.BootstrapHooks { return hooks.Get() }
+// desktopHooks 返回当前桌面端 OS 能力钩子(由 bootstrap.Serve 注入,见 hooks 包)。
+func desktopHooks() hooks.BootstrapHooks { return hooks.Get() }
 
 // ===== /api/desktop/app/* =====
 
