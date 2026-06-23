@@ -25,7 +25,7 @@ import (
 
 // ===== /api/desktop/app/* =====
 
-// RequestAppHealth / RequestAppVersion / RequestAppQuit 都是无入参。
+// RequestAppHealth / RequestAppVersion / RequestAppQuit 都是无入参占位。
 type RequestAppHealth struct{}
 type RequestAppVersion struct{}
 type RequestAppQuit struct{}
@@ -54,23 +54,22 @@ func GetAppVersion(c *ginp.ContextPlus, _ *RequestAppVersion) {
 
 // GetAppHealth GET /api/desktop/app/health
 func GetAppHealth(c *ginp.ContextPlus, _ *RequestAppHealth) {
-	c.JSON(200, ginp.H{"status": "ok", "go_version": runtime.Version()})
+	c.JSON(200, gin.H{"status": "ok", "go_version": runtime.Version()})
 }
 
 // PostAppQuit POST /api/desktop/app/quit
 // 当前仅返回 200 占位;真正退出由前端通过 menu 触发 Wails app.Quit(),
 // 这个端点保留以便未来通过后端命令式退出(避免前端与 wails 主循环耦合)。
 func PostAppQuit(c *ginp.ContextPlus, _ *RequestAppQuit) {
-	c.JSON(200, ginp.H{"ok": true})
+	c.JSON(200, gin.H{"ok": true})
 }
 
 // ===== /api/desktop/prefs =====
-
-// RequestPrefGet 单 key 查询。
-// 走 query string:GET /api/desktop/prefs?key=xxx
-// 这里 BindParams 不读 query,而是 handler 内自己读 c.Query("key")。
-// 但 BindParams 仍需要个空 struct 占位,才能注册 handler。
-type RequestPrefGet struct{}
+//
+// 单条 / 全量走同一 GET 端点,用 query key 区分:
+//   GET /api/desktop/prefs         → RespondPrefGetAll
+//   GET /api/desktop/prefs?key=xxx → RespondPrefGet
+// 这样避免在 gin 上重复注册 GET /api/desktop/prefs 触发 panic。
 
 // RequestPrefSet 写单条偏好。
 type RequestPrefSet struct {
@@ -78,8 +77,8 @@ type RequestPrefSet struct {
 	Value string `json:"value"`
 }
 
-// RequestPrefGetAll 无入参。
-type RequestPrefGetAll struct{}
+// RequestPrefGet 无入参(handler 内自己读 query)。
+type RequestPrefGet struct{}
 
 // RespondPrefGet 返回单条偏好。
 // 字段定义对齐前端 platform.prefs.get 的 [value, exists] 解构。
@@ -93,42 +92,22 @@ type RespondPrefGetAll struct {
 	Items map[string]string `json:"items"`
 }
 
-// GetPref GET /api/desktop/prefs?key=xxx
+// GetPref GET /api/desktop/prefs(?key=xxx)
+// 有 key → 单条;无 key → 全部。避免 gin 重复路由注册。
 func GetPref(c *ginp.ContextPlus, _ *RequestPrefGet) {
-	key := c.Query("key")
-	if key == "" {
-		c.JSON(400, ginp.H{"error": "missing key"})
-		return
-	}
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	v, ok, err := st.Get(key)
-	if err != nil {
-		c.JSON(500, ginp.H{"error": err.Error()})
+	if key := c.Query("key"); key != "" {
+		v, ok, err := st.Get(key)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, RespondPrefGet{Value: v, Exists: ok})
 		return
 	}
-	c.JSON(200, RespondPrefGet{Value: v, Exists: ok})
-}
-
-// PutPref PUT /api/desktop/prefs { key, value }
-func PutPref(c *ginp.ContextPlus, req *RequestPrefSet) {
-	if req.Key == "" {
-		c.JSON(400, ginp.H{"error": "missing key"})
-		return
-	}
-	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	if err := st.Set(req.Key, req.Value); err != nil {
-		c.JSON(500, ginp.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, ginp.H{"ok": true})
-}
-
-// GetPrefAll GET /api/desktop/prefs (无 query)
-func GetPrefAll(c *ginp.ContextPlus, _ *RequestPrefGetAll) {
-	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	snap, err := st.GetAll()
 	if err != nil {
-		c.JSON(500, ginp.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 	items := map[string]string{}
@@ -136,6 +115,20 @@ func GetPrefAll(c *ginp.ContextPlus, _ *RequestPrefGetAll) {
 		items = snap.Items
 	}
 	c.JSON(200, RespondPrefGetAll{Items: items})
+}
+
+// PutPref PUT /api/desktop/prefs { key, value }
+func PutPref(c *ginp.ContextPlus, req *RequestPrefSet) {
+	if req.Key == "" {
+		c.JSON(400, gin.H{"error": "missing key"})
+		return
+	}
+	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	if err := st.Set(req.Key, req.Value); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
 }
 
 func init() {
@@ -159,8 +152,8 @@ func init() {
 	// prefs
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/prefs", HttpType: ginp.HttpGet,
-		Handler: ginp.BindParamsHandler(GetPrefAll, &RequestPrefGetAll{}),
-		Swagger: &ginp.SwaggerInfo{Title: "desktop.prefs.all", Description: "取全部桌面偏好(无 query 时)", RequestParams: RequestPrefGetAll{}},
+		Handler: ginp.BindParamsHandler(GetPref, &RequestPrefGet{}),
+		Swagger: &ginp.SwaggerInfo{Title: "desktop.prefs.get", Description: "取单条偏好(?key=xxx)或全部(无 query)", RequestParams: RequestPrefGet{}},
 	})
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/prefs", HttpType: ginp.HttpPut,
