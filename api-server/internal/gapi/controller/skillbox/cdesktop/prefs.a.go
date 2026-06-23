@@ -19,6 +19,8 @@ import (
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ===== /api/desktop/app/* =====
