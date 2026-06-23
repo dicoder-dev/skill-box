@@ -126,7 +126,7 @@ onMounted(loadStatus)
     <!-- 页面头部 -->
     <header class="view-header">
       <div class="view-title">
-        <div class="view-icon view-icon-teal">
+        <div class="view-icon view-icon-violet">
           <Icon icon="mdi:compass-outline" width="24" height="24" />
         </div>
         <div>
@@ -202,7 +202,7 @@ onMounted(loadStatus)
             <td class="td-path">{{ a.global_path || t('common.dash') }}</td>
             <td>
               <span v-if="a.global_ok" class="badge badge-success">{{ t('onboarding.phase1.detected') }}</span>
-              <span v-else class="badge badge-muted">{{ t('onboarding.phase1.missing') }}</span>
+              <span v-else class="badge badge-warning">{{ t('onboarding.phase1.missing') }}</span>
             </td>
           </tr>
         </tbody>
@@ -351,13 +351,14 @@ onMounted(loadStatus)
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--text);
-  color: var(--bg-card);
+  background: var(--accent-violet);
+  color: #ffffff;
   flex-shrink: 0;
 }
 
-.view-icon-teal {
-  background: var(--text);
+.view-icon-violet {
+  background: var(--accent-violet);
+  color: #ffffff;
 }
 
 .view-title h1 {
@@ -395,13 +396,13 @@ onMounted(loadStatus)
 }
 
 .step.active {
-  background: var(--primary-dim);
-  border-color: var(--primary);
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
 }
 
 .step.done {
-  background: var(--success-dim);
-  border-color: var(--success);
+  background: var(--accent-emerald-bg);
+  border-color: var(--accent-emerald);
 }
 
 .step-number {
@@ -420,13 +421,13 @@ onMounted(loadStatus)
 }
 
 .step.active .step-number {
-  background: var(--primary);
-  color: var(--bg-card);
+  background: var(--accent-blue);
+  color: #ffffff;
 }
 
 .step.done .step-number {
-  background: var(--success);
-  color: var(--bg-card);
+  background: var(--accent-emerald);
+  color: #ffffff;
 }
 
 .step-title {
@@ -437,11 +438,11 @@ onMounted(loadStatus)
 }
 
 .step.active .step-title {
-  color: var(--primary);
+  color: var(--accent-blue);
 }
 
 .step.done .step-title {
-  color: var(--success);
+  color: var(--accent-emerald);
 }
 
 .step-connector {
@@ -453,7 +454,7 @@ onMounted(loadStatus)
 }
 
 .step-connector.done {
-  background: var(--success);
+  background: var(--accent-emerald);
 }
 
 /* 消息提示 */
@@ -575,13 +576,15 @@ onMounted(loadStatus)
 }
 
 .badge-success {
-  background: var(--success-dim);
-  color: var(--success);
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald-border);
 }
 
-.badge-muted {
-  background: var(--bg-subtle);
-  color: var(--text-dim);
+.badge-warning {
+  background: var(--accent-amber-bg);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber-border);
 }
 
 /* 批量操作 */
@@ -630,10 +633,12 @@ onMounted(loadStatus)
 .group-count {
   margin-left: auto;
   padding: 2px 8px;
-  background: var(--bg-card);
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+  border: 1px solid var(--accent-violet-border);
   border-radius: var(--radius-full);
   font-size: 11px;
-  color: var(--text-dim);
+  font-weight: 600;
 }
 
 /* 发现列表 */
@@ -653,7 +658,11 @@ onMounted(loadStatus)
 }
 
 .found-list li.selected {
-  background: var(--primary-dim);
+  background: var(--accent-blue-bg);
+}
+
+.found-item input[type="checkbox"]:checked {
+  accent-color: var(--accent-blue);
 }
 
 .found-item {
@@ -702,17 +711,20 @@ onMounted(loadStatus)
 .stat-card {
   padding: 20px;
   background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   text-align: center;
   transition: all 0.3s ease;
 }
 
 .stat-success {
-  background: var(--success-dim);
+  background: var(--accent-emerald-bg);
+  border-color: var(--accent-emerald-border);
 }
 
 .stat-error {
-  background: var(--danger-dim);
+  background: var(--accent-rose-bg);
+  border-color: var(--accent-rose-border);
 }
 
 .stat-number {
@@ -723,6 +735,9 @@ onMounted(loadStatus)
   line-height: 1;
   margin-bottom: 8px;
 }
+
+.stat-success .stat-number { color: var(--accent-emerald); }
+.stat-error .stat-number { color: var(--accent-rose); }
 
 .stat-label {
   font-size: 12px;
@@ -754,12 +769,20 @@ onMounted(loadStatus)
 }
 
 .result-ok {
-  color: var(--success);
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
 }
 
 .result-error {
-  color: var(--danger);
+  background: var(--accent-rose-bg);
+  color: var(--accent-rose);
 }
+
+.result-ok .r-name,
+.result-error .r-name { color: var(--text); }
+
+.result-ok .r-tool,
+.result-error .r-tool { color: var(--text-dim); }
 
 .r-tool {
   font-family: 'JetBrains Mono', monospace;
