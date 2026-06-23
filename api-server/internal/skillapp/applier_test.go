@@ -51,6 +51,7 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
 
 func newReg(t *testing.T, a skilladapter.Adapter) *skilladapter.Registry {
 	t.Helper()

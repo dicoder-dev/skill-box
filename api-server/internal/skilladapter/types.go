@@ -90,4 +90,10 @@ type Adapter interface {
 	// Validate Apply 前的轻量校验(目录可写 / 字段合法)。
 	// 字段合规已在 skillstore.Save 阶段校验过,这里只做工具特有的检查。
 	Validate(c Canonical) error
+
+	// IsSystemPath 判断给定扫描根是否属于该 adapter 的 system 级别。
+	// system skill 是工具自带 / vendor curated / plugin 内建的那批,
+	// 前端 phase2 据此把它们列为只读参考、不可勾选。
+	// 不实现则默认全 user(BaseAdapter 已实现,空 SystemPaths 时返回 false)。
+	IsSystemPath(p string) bool
 }

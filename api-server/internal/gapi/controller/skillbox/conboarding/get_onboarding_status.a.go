@@ -32,6 +32,8 @@ type onboardingFoundLite struct {
 	Name       string `json:"name"`
 	Version    string `json:"version"`
 	SourcePath string `json:"source_path"`
+	// Category user | system,用于前端 phase2 排序 + 决定是否可勾选。
+	Category string `json:"category"`
 }
 
 // RequestOnboardingStatus 无入参。

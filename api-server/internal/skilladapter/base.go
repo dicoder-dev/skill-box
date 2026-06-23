@@ -21,6 +21,10 @@ type BaseAdapter struct {
 	LocalNameFn func(c Canonical) string
 	// Tools 提供每个 scope 下的候选 skills 根目录;DiscoverPaths 直接返回。
 	Tools map[string][]string
+	// SystemPaths 标记哪些扫描根属于"系统级"(plugin 自带 / vendor curated 等),
+	// 前端 phase2 会把扫出来的 skill 列为不可勾选的"只读参考",避免把工具自带
+	// 的 skill 当作 user skill 误导入覆盖。空 map 表示该工具没有 system 路径。
+	SystemPaths map[string][]string
 }
 
 func (b *BaseAdapter) ToolID() string      { return b.ID }
@@ -28,7 +32,56 @@ func (b *BaseAdapter) DisplayName() string { return b.Display }
 func (b *BaseAdapter) Icon() string        { return b.IconEmoji }
 
 func (b *BaseAdapter) DiscoverPaths(scope string) ([]string, error) {
-	return b.Tools[scope], nil
+	// 合并 user 根(Tools)与 system 根(SystemPaths),统一返回;
+	// caller 通过 IsSystemPath 判断每条根的档位。
+	seen := make(map[string]bool)
+	var out []string
+	for _, p := range b.Tools[scope] {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	for _, p := range b.SystemPaths[scope] {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// IsSystemPath 判定给定的扫描根路径是否属于该 adapter 的 system 级别。
+//
+// 路径比较前先 EvalSymlinks 拿真实路径,再用字符串前缀匹配 ——
+// 这样 symlink (如 ~/.claude/skills/<name> → ~/.agents/skills/xxx) 不影响分类,
+// 但仍然要避免一个 system 路径恰好是 user 路径前缀的乌龙,所以同时要求
+// "完全相等 或 后跟分隔符"。
+func (b *BaseAdapter) IsSystemPath(p string) bool {
+	if len(b.SystemPaths) == 0 {
+		return false
+	}
+	realP, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		realP = p
+	}
+	for _, list := range b.SystemPaths {
+		for _, sp := range list {
+			realSP, err := filepath.EvalSymlinks(sp)
+			if err != nil {
+				realSP = sp
+			}
+			if realP == realSP {
+				return true
+			}
+			if strings.HasPrefix(realP, realSP+string(filepath.Separator)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (b *BaseAdapter) LocalName(c Canonical) string {
@@ -60,6 +113,12 @@ const maxScanDepth = 8
 //     os.ReadDir 的 entry.IsDir() 对 symlink 指向目录时返回 false,需要 os.Stat 二次确认。
 //   - 用 EvalSymlinks 真实路径做去重,防止 symlink 环导致死循环 / 重复发现。
 //   - 限最大深度 maxScanDepth 兜底。
+//   - 跳过 system 子树:本 adapter 声明的 SystemPaths(无论是哪个 scope)
+//     都会被作为"跳过集合",在 user 根扫描时不会下钻到对应子路径,避免
+//     system skill 被当作 user skill 重复发现。
+//
+// root 自身若是 system 路径仍允许扫描 —— caller 显式以 system 根调用时,
+// 我们要把这个根下的 skill 全部识别为 system 类别。
 func (b *BaseAdapter) Scan(root string) ([]Canonical, error) {
 	// 入口不存在当 0 个,不是 error(与原行为一致)
 	if _, err := os.Stat(root); err != nil {
@@ -70,23 +129,62 @@ func (b *BaseAdapter) Scan(root string) ([]Canonical, error) {
 	}
 	var out []Canonical
 	seen := make(map[string]bool)
-	walkSkills(root, 0, seen, &out)
+	skip := b.systemPathSet()
+	// root 自身从 skip 集合里移除:它要么不是 system 路径,要么是 caller
+	// 主动以 system 根身份调进来(由 importer 打 category=system),都该扫。
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		delete(skip, real)
+	} else {
+		delete(skip, root)
+	}
+	walkSkills(root, 0, seen, skip, &out)
 	sort.Slice(out, func(i, j int) bool { return out[i].Manifest.Name < out[j].Manifest.Name })
 	return out, nil
 }
 
+// systemPathSet 把 SystemPaths(跨 scope)摊平 + 解析 symlink 真实路径,
+// 给 walkSkills 作为"子树跳过表"用。
+func (b *BaseAdapter) systemPathSet() map[string]bool {
+	if len(b.SystemPaths) == 0 {
+		return nil
+	}
+	set := make(map[string]bool)
+	for _, list := range b.SystemPaths {
+		for _, sp := range list {
+			real, err := filepath.EvalSymlinks(sp)
+			if err != nil {
+				real = sp
+			}
+			set[real] = true
+		}
+	}
+	return set
+}
+
 // walkSkills 递归向下找"自身有 SKILL.md 的目录"。
 // 找到后该目录视为一个 skill,不再下钻;否则继续向下递归。
-func walkSkills(dir string, depth int, seen map[string]bool, out *[]Canonical) {
+//
+// skip 是 system 路径真实路径集合 —— 当前路径(以及它的祖先)命中集合时,不再下钻。
+// 这样 BaseAdapter.Scan(user_root) 会自动绕开 SystemPaths 下的子树,避免重复。
+func walkSkills(dir string, depth int, seen map[string]bool, skip map[string]bool, out *[]Canonical) {
 	if depth > maxScanDepth {
 		return
 	}
-	// 用真实路径去重,防止 symlink 环
+	// 当前目录是 system 根 → 直接跳过,不视为 skill 也不下钻
 	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		if skip[real] {
+			return
+		}
 		if seen[real] {
 			return
 		}
 		seen[real] = true
+	} else {
+		// EvalSymlinks 失败(如 symlink 损坏)也用原始路径做一次去重
+		if seen[dir] {
+			return
+		}
+		seen[dir] = true
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -99,6 +197,10 @@ func walkSkills(dir string, depth int, seen map[string]bool, out *[]Canonical) {
 			continue
 		}
 		path := filepath.Join(dir, name)
+		// 子目录命中 system 集合 → 整个子树跳过,不视为 skill 不下钻
+		if real, err := filepath.EvalSymlinks(path); err == nil && skip[real] {
+			continue
+		}
 		// os.Stat 自动跟随 symlink;对 symlink → 目录的情况也能正确判定为目录
 		info, err := os.Stat(path)
 		if err != nil || !info.IsDir() {
@@ -114,7 +216,7 @@ func walkSkills(dir string, depth int, seen map[string]bool, out *[]Canonical) {
 			continue
 		}
 		// 没有 SKILL.md → 继续下钻(Claude marketplaces 的中间层)
-		walkSkills(path, depth+1, seen, out)
+		walkSkills(path, depth+1, seen, skip, out)
 	}
 }
 

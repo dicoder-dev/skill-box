@@ -38,6 +38,7 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
 
 func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.Store, *skilladapter.Registry) {
 	t.Helper()

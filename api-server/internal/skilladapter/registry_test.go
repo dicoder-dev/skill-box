@@ -15,6 +15,7 @@ func (s *stubAdapter) Scan(string) ([]Canonical, error)        { return nil, nil
 func (s *stubAdapter) Apply(Canonical, string) error           { return nil }
 func (s *stubAdapter) LocalName(c Canonical) string            { return c.Manifest.Name }
 func (s *stubAdapter) Validate(Canonical) error                { return nil }
+func (s *stubAdapter) IsSystemPath(string) bool               { return false }
 
 func TestRegistry_RegisterGetAll(t *testing.T) {
 	// 用独立 registry 避免污染 package-level 默认表。

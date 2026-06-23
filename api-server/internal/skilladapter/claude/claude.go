@@ -5,6 +5,10 @@
 //   2) ~/.claude/plugins/marketplaces/*/plugins/<plugin>/skills/<name>/SKILL.md
 //                                            ← plugin 自带的 skill(深度 ~6 层)
 //
+// 分档:
+//   - user   : ~/.claude/skills 下的 symlink skill(默认勾选,可取消)
+//   - system : ~/.claude/plugins/marketplaces 下的 plugin skill(只读参考,不可勾选)
+//
 // 全都加进扫描根目录,BaseAdapter.Scan 会递归 walk;symlink 也会被 BaseAdapter.Scan 跟随。
 //
 // 全部按 BaseAdapter 通用逻辑处理(目录 + SKILL.md + YAML frontmatter)。
@@ -34,13 +38,14 @@ func Register() {
 	registerOnce.Do(func() {
 		home, _ := os.UserHomeDir()
 		var global []string
+		var system []string
 		if home != "" {
 			// ~/.claude/skills 是 Claude Code 真正的用户 skill 目录,
 			// 里面是 symlink(目标一般在 ~/.agents/skills/...),BaseAdapter.Scan 会跟随。
 			global = append(global, filepath.Join(home, ".claude", "skills"))
-			// ~/.claude/plugins/marketplaces 下也有 plugin 自带的 skill(深度 6 层),
-			// 一起扫进来,扩大覆盖。
-			global = append(global, filepath.Join(home, ".claude", "plugins", "marketplaces"))
+			// ~/.claude/plugins/marketplaces 下是 plugin 自带的 skill(深度 6 层),
+			// 在 phase2 列表里归为 system,只读展示、不可勾选。
+			system = append(system, filepath.Join(home, ".claude", "plugins", "marketplaces"))
 		}
 		Adapter.base = &skilladapter.BaseAdapter{
 			ID:        id,
@@ -49,6 +54,9 @@ func Register() {
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
 				skilladapter.ScopeProject: []string{".claude/skills"},
+			},
+			SystemPaths: map[string][]string{
+				skilladapter.ScopeGlobal: system,
 			},
 		}
 		skilladapter.Register(Adapter)
@@ -73,3 +81,4 @@ func (a *adapter) LocalName(c skilladapter.Canonical) string {
 func (a *adapter) Validate(c skilladapter.Canonical) error {
 	return a.base.Validate(c)
 }
+func (a *adapter) IsSystemPath(p string) bool { return a.base.IsSystemPath(p) }

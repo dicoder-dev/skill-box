@@ -18,21 +18,34 @@ import (
 	"ginp-api/internal/skillstore"
 )
 
+// CategoryFound skill 在原工具里的归类(user = 用户自有 / system = 工具自带或 vendor)。
+//
+// 前端 Onboarding phase2 据此决定是否可勾选 —— user 默认勾选可取消,
+// system 只读列出不可勾(避免把工具内建 skill 误导入覆盖本地 store)。
+type Category string
+
+const (
+	CategoryUser   Category = "user"
+	CategorySystem Category = "system"
+)
+
 // FoundSkill 单次扫描中发现的一个 skill。
 type FoundSkill struct {
 	ToolID     string                 `json:"tool_id"`
 	ToolName   string                 `json:"tool_name"`
 	SourcePath string                 `json:"source_path"` // 该 skill 在原工具里的绝对路径
+	Category   Category               `json:"category"`    // user | system
 	Canonical  skilladapter.Canonical `json:"canonical"`
 }
 
 // ScannedDir 单个扫描根目录的结果。
 type ScannedDir struct {
-	ToolID string   `json:"tool_id"`
-	Path   string   `json:"path"`
-	Exists bool     `json:"exists"`
-	Found  int      `json:"found"`
-	Errors []string `json:"errors,omitempty"`
+	ToolID   string   `json:"tool_id"`
+	Path     string   `json:"path"`
+	Category Category `json:"category"` // user | system
+	Exists   bool     `json:"exists"`
+	Found    int      `json:"found"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 // Report 一次完整扫描的产出。
@@ -102,7 +115,13 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 			continue
 		}
 		for _, p := range paths {
-			entry := ScannedDir{ToolID: a.ToolID(), Path: p}
+			// 按 root 路径判定 category:adapter 在 BaseAdapter 上声明的 SystemPaths
+			// 覆盖该根(或其子路径)则视为 system,否则 user。
+			cat := CategoryUser
+			if sys, ok := a.(interface{ IsSystemPath(string) bool }); ok && sys.IsSystemPath(p) {
+				cat = CategorySystem
+			}
+			entry := ScannedDir{ToolID: a.ToolID(), Path: p, Category: cat}
 			if _, err := filepath.EvalSymlinks(p); err != nil {
 				// 路径不存在或权限不足
 				r.Dirs = append(r.Dirs, entry)
@@ -125,6 +144,7 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 					ToolID:     a.ToolID(),
 					ToolName:   a.DisplayName(),
 					SourcePath: src,
+					Category:   cat,
 					Canonical:  c,
 				})
 			}
@@ -136,7 +156,12 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 
 	r.TotalDirs = len(r.Dirs)
 	r.TotalFound = len(r.FoundSkills)
+	// 排序规则:user 在前 system 在后;同档内按 toolID + name 字典序。
+	// 排序是给前端"按档位分组"的兜底;前端 Onboarding phase2 自己也会再分组渲染。
 	sort.Slice(r.FoundSkills, func(i, j int) bool {
+		if r.FoundSkills[i].Category != r.FoundSkills[j].Category {
+			return r.FoundSkills[i].Category == CategoryUser
+		}
 		if r.FoundSkills[i].ToolID != r.FoundSkills[j].ToolID {
 			return r.FoundSkills[i].ToolID < r.FoundSkills[j].ToolID
 		}

@@ -33,6 +33,7 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
 
 // scanDirForTest 等价于 BaseAdapter.Scan 的扫描逻辑(只读 SKILL.md)。
 // 抽出来避免 importer 反向 import base adapter。

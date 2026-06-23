@@ -67,3 +67,4 @@ func (a *adapter) LocalName(c skilladapter.Canonical) string {
 func (a *adapter) Validate(c skilladapter.Canonical) error {
 	return a.base.Validate(c)
 }
+func (a *adapter) IsSystemPath(p string) bool { return a.base.IsSystemPath(p) }

@@ -56,6 +56,7 @@ func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 			Name:       fs.Canonical.Manifest.Name,
 			Version:    fs.Canonical.Manifest.Version,
 			SourcePath: fs.SourcePath,
+			Category:   string(fs.Category),
 		})
 	}
 	if envelope.Summary == nil {

@@ -2,10 +2,14 @@
 //
 // Codex 在本机(2026-06 探测)的 skill 目录:
 //
-//	~/.codex/skills/                          ← 用户/链接的 skill
-//	~/.codex/skills/.system/<name>/SKILL.md   ← 系统内置
-//	~/.codex/vendor_imports/skills/skills/.curated/<name>/SKILL.md
+//	~/.codex/skills/                          ← user 级 skill
+//	~/.codex/skills/.system/<name>/SKILL.md   ← system 级 skill
+//	~/.codex/vendor_imports/skills/skills/.curated/<name>/SKILL.md ← system 级(vendor curated)
 //	<project>/.codex/skills/<name>/SKILL.md   ← 项目级
+//
+// 分档:
+//   - user   : ~/.codex/skills(默认勾选,可取消)
+//   - system : .system / vendor_imports/.curated(只读参考,不可勾选)
 //
 // 全部按 BaseAdapter 通用逻辑处理(目录 + SKILL.md + YAML frontmatter)。
 package codex
@@ -34,9 +38,10 @@ func Register() {
 	registerOnce.Do(func() {
 		home, _ := os.UserHomeDir()
 		var global []string
+		var system []string
 		if home != "" {
-			global = append(global,
-				filepath.Join(home, ".codex", "skills"),
+			global = append(global, filepath.Join(home, ".codex", "skills"))
+			system = append(system,
 				filepath.Join(home, ".codex", "skills", ".system"),
 				filepath.Join(home, ".codex", "vendor_imports", "skills", "skills", ".curated"),
 			)
@@ -50,6 +55,9 @@ func Register() {
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
 				skilladapter.ScopeProject: {".codex/skills"},
+			},
+			SystemPaths: map[string][]string{
+				skilladapter.ScopeGlobal: system,
 			},
 		}
 		skilladapter.Register(Adapter)
@@ -74,3 +82,4 @@ func (a *adapter) LocalName(c skilladapter.Canonical) string {
 func (a *adapter) Validate(c skilladapter.Canonical) error {
 	return a.base.Validate(c)
 }
+func (a *adapter) IsSystemPath(p string) bool { return a.base.IsSystemPath(p) }
