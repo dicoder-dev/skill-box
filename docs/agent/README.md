@@ -47,6 +47,7 @@ docs/
 
 | 场景                              | Claude 应该读什么                                              |
 | --------------------------------- | -------------------------------------------------------------- |
+| **新会话冷启动(零上下文)**       | `docs/agent/ONBOARDING.md`(按清单读完) → `MEMORY.md`           |
 | 用户开头打招呼 / 无具体任务       | `docs/agent/memory/MEMORY.md`(拿历史偏好 + 用户画像)          |
 | 用户给一个具体任务                | `docs/agent/task/README.md` + 同主题最近的 task 文件           |
 | 改 Go 后端代码                    | `docs/agent/project/conventions.md` + `architecture.md`        |
