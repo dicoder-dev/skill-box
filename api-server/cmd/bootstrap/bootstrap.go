@@ -210,6 +210,12 @@ func Serve(b *Backend) {
 	// 用 hooks 子包的全局 Set/Get 而不是直接 import cdesktop,是为了规避
 	// bootstrap → router → cdesktop → bootstrap 的导入环。
 	hooks.Set(b.GetDesktopHooks())
+	if h := hooks.Get(); h.Notify != nil {
+		log.Printf("bootstrap: desktop hooks installed (Notify=%v, ClipboardText=%v, OpenExternal=%v)",
+			h.Notify != nil, h.ClipboardText != nil, h.OpenExternal != nil)
+	} else {
+		log.Printf("bootstrap: WARNING desktop hooks EMPTY — all cdesktop endpoints will return 501")
+	}
 	srv := New(b.srvOpts)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
