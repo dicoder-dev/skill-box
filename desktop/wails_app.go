@@ -175,6 +175,59 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 		OnOpenSettings: openSettings,
 	}, notifier)
 
+	// 注入桌面端 OS 能力钩子,让 cdesktop 各个 HTTP 端点能调到真能力。
+	// 注入时机:Serve 之前;bootstrap.Serve 启动 gin server 时会再
+	// 通过 hooks.Set 同步到 cdesktop controller。
+	//
+	// 缺失字段(如 clipboard / openExternal)在桌面端都已有对应实现,
+	// 全部填齐,Web 部署下 backend 不会被注入,钩子保持 nil 自然降级到 501。
+	if backend != nil {
+		backend.SetDesktopHooks(hooks.BootstrapHooks{
+			Notify:                     notifier.Notify,
+			NotifyHasPermission:        notifier.HasPermission,
+			NotifyRequestAuthorization: notifier.RequestAuthorization,
+			ClipboardText: func() (string, error) {
+				if app.Clipboard == nil {
+					return "", fmt.Errorf("clipboard not available")
+				}
+				text, ok := app.Clipboard.Text()
+				if !ok {
+					return "", fmt.Errorf("clipboard read failed")
+				}
+				return text, nil
+			},
+			SetClipboardText: func(text string) error {
+				if app.Clipboard == nil {
+					return fmt.Errorf("clipboard not available")
+				}
+				if !app.Clipboard.SetText(text) {
+					return fmt.Errorf("clipboard write failed")
+				}
+				return nil
+			},
+			OpenExternal: func(url string) error {
+				if app.Browser == nil {
+					return fmt.Errorf("browser not available")
+				}
+				return app.Browser.OpenURL(url)
+			},
+			WindowShow:              showPrimary,
+			WindowToggleAlwaysOnTop: windowMgr.ToggleAlwaysOnTop,
+			WindowToggleMaximise:    windowMgr.ToggleMaximise,
+			ShortcutRegister: func(combo string) error {
+				return shortcut.Register(combo, func() {
+					if w := windowMgr.Primary(); w != nil {
+						w.Show()
+						w.Focus()
+					}
+				})
+			},
+			ShortcutUnregister: shortcut.Unregister,
+			ShortcutList:       shortcut.List,
+			AppQuit:            quitApp,
+		})
+	}
+
 	return &App{
 		app:      app,
 		backend:  backend,
