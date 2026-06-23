@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ginp-api/cmd/bootstrap"
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"skill-box/desktop/services"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
