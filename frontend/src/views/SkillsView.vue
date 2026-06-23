@@ -599,29 +599,34 @@ onMounted(() => { reload(); checkUpdateBadge() })
         </header>
 
         <div class="table-container">
-          <table v-if="items.length" class="grid">
-            <!-- 列宽分配:内联 style 写在 col 上最稳(不受 Vue scoped 影响)。
-                 name 18% / version 10% / source 12% / project 10% /
-                 updated 22% / actions 28% = 100%。
-                 之前是 <th style="width:280px"> 固定 280px,前 5 列内容较短,
-                 浏览器按内容自动分配时把 actions 列撑到 280px、其他列挤 1/3,
-                 看起来像"标题没对齐"。改 fixed 布局 + colgroup 显式分配。 -->
+          <!-- table-layout: fixed + th width HTML 属性:
+               - <col style="width:.."> 在 Wails 内嵌 webview 偶尔被忽略
+                 (Chromium 历史上 col width 支持有 bug)
+               - <th width="130"> 是 HTML 4/5 都支持的稳定方式
+               - 内联 style="table-layout:fixed" 防止 Vue scoped 改写被覆盖
+               列宽: name 130 / version 70 / source 90 / project 60 /
+               updated 200 / actions 480 ≈ 1030px,5 个 icon-btn 至少 480px。 -->
+          <table
+            v-if="items.length"
+            class="grid"
+            style="table-layout: fixed; width: 100%; min-width: 0;"
+          >
             <colgroup>
-              <col style="width: 18%" />
-              <col style="width: 10%" />
-              <col style="width: 12%" />
-              <col style="width: 10%" />
-              <col style="width: 22%" />
-              <col style="width: 28%" />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
             </colgroup>
             <thead>
               <tr>
-                <th>{{ t('skills.list.colName') }}</th>
-                <th>{{ t('skills.list.colVersion') }}</th>
-                <th>{{ t('skills.list.colSource') }}</th>
-                <th>{{ t('skills.list.colProject') }}</th>
-                <th>{{ t('skills.list.colUpdated') }}</th>
-                <th>{{ t('skills.list.colActions') }}</th>
+                <th width="130">{{ t('skills.list.colName') }}</th>
+                <th width="70">{{ t('skills.list.colVersion') }}</th>
+                <th width="90">{{ t('skills.list.colSource') }}</th>
+                <th width="60">{{ t('skills.list.colProject') }}</th>
+                <th width="200">{{ t('skills.list.colUpdated') }}</th>
+                <th width="480">{{ t('skills.list.colActions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -1249,6 +1254,7 @@ onMounted(() => { reload(); checkUpdateBadge() })
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  text-align: center;
 }
 
 .grid tbody tr {
