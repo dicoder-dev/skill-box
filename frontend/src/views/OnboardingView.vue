@@ -95,15 +95,11 @@ async function doScan() {
   try {
     const [res] = await Promise.all([runOnboardingScan(), loadExistingNames()])
     scanReport.value = res
-    // 默认勾选:仅 user 级别。system 级别(工具自带 / vendor curated /
-    // plugin 内建)只读展示,不能误导入覆盖本地 store。
-    // 同时跳过客户端已存在的同名 skill —— 那是重复,不该默认勾选。
-    selected.value = new Set(
-      (res.found || [])
-        .filter((f) => f.category !== 'system')
-        .filter((f) => !existingNames.value.has(String(f.name).toLowerCase()))
-        .map((f) => keyOf(f)),
-    )
+    // 默认不勾选任何 skill —— 让用户自己选,避免跨工具同名 skill
+    // 默认勾第一个 tool 把其它全锁死(详见 disabledExclusive)。
+    // 用户从 0 开始勾,选了 claude::find-skills 之后 trae::find-skills 会
+    // 自动 disabled + 提示"已被另一个工具勾选",符合预期。
+    selected.value = new Set()
     // 默认激活第一个有 user 级别发现的 tab,避免空 tab。
     const firstTid = (res.tools || []).find(
       (tid) =>
@@ -158,18 +154,21 @@ function selectExclusiveByName(s, found) {
 // 是否应该被禁用:
 //   1) system 级别 → 不可勾选(后端也允许,但 UI 锁死)
 //   2) 客户端 store 已存在同名 skill → 置灰 + 提示"客户端已存在"
-//   3) 跨工具同名:另一个 tool_id 已被勾选 → 当前项禁用
+//   3) 跨工具同名互斥:同 (name, version) 已被另一个 tool_id 勾上 → 当前 disabled
+//      自身 key 不在 selected 里(还没勾自己),直接看 selected 里有没有别的
+//      tool_id 的同名同版本即可 —— 不要用 sel === k 排除自己,因为 k 是 found
+//      自己,selected 里压根没有,k 永远不等于 sel。
 function isDisabled(found) {
   if (found.category === 'system') return true
   if (existingNames.value.has(String(found.name).toLowerCase())) return true
-  const k = keyOf(found)
+  const wantName = String(found.name).toLowerCase()
+  const wantVer = found.version
   for (const sel of selected.value) {
-    if (sel === k) continue
     const [tid, nameVer] = sel.split('::')
     const [n, v] = nameVer.split('@')
     if (
-      String(n).toLowerCase() === String(found.name).toLowerCase() &&
-      v === found.version &&
+      String(n).toLowerCase() === wantName &&
+      v === wantVer &&
       tid !== found.tool_id
     ) {
       return true
@@ -339,13 +338,15 @@ async function doImport() {
   error.value = ''
   success.value = ''
   try {
-    const items = (selected.value.size === (scanReport.value?.found || []).length)
-      ? []
-      : Array.from(selected.value).map((k) => {
-          const [tool_id, nameVer] = k.split('::')
-          const [name, version] = nameVer.split('@')
-          return { tool_id, name, version }
-        })
+    // 始终传用户实际勾选的 items,不要走"空数组 = 全选"优化。
+    // 之前 selected.size === found.length 触发的 [] 会被后端当作"全部导入",
+    // 但我们已经在 UI 上禁了 system(不勾)+ 已存在的(不勾),selected 不可能
+    // 等于 found.length;一旦出现这个巧合,[] 会把 system 也导进去,违反约束。
+    const items = Array.from(selected.value).map((k) => {
+      const [tool_id, nameVer] = k.split('::')
+      const [name, version] = nameVer.split('@')
+      return { tool_id, name, version }
+    })
     const res = await runOnboardingImport(items)
     importResult.value = res
     phase.value = 'import'
