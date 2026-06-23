@@ -12,6 +12,7 @@ import (
 
 	"ginp-api/cmd/bootstrap"
 	"skill-box/desktop/services"
+	"skill-box/pkg/fsutil"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -211,6 +212,10 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 				}
 				return app.Browser.OpenURL(url)
 			},
+			// 本地文件能力(fsutil)与桌面 UI 解耦,直接复用 api-server 内的实现,
+			// 桌面端和 Web 端读文件/reveal 行为完全一致。
+			FsReadText: fsutil.ReadText,
+			FsReveal:   fsutil.Reveal,
 			WindowShow:              showPrimary,
 			WindowToggleAlwaysOnTop: windowMgr.ToggleAlwaysOnTop,
 			WindowToggleMaximise:    windowMgr.ToggleMaximise,

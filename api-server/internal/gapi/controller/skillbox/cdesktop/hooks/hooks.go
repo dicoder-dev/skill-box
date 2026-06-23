@@ -75,6 +75,13 @@ type BootstrapHooks struct {
 	ClipboardText              func() (string, error)
 	SetClipboardText           func(text string) error
 	OpenExternal               func(url string) error
+	// FsReadText 读文件文本内容(给前端获取 SKILL.md 等),返回内容 + error。
+	// 限制 1 MB(超过返 error),避免把巨大文件拉爆内存。
+	FsReadText func(path string) (string, error)
+	// FsReveal 在系统文件管理器中显示给定路径(若 path 是文件,定位到该文件;
+	// 在 macOS 走 `open -R` / Windows 走 `explorer /select` / Linux 走 xdg-open
+	// 父目录)。Web 端无桌面,hook 不会注入,前端走到降级(打开父目录 file://)。
+	FsReveal func(path string) error
 	WindowShow                 func()
 	WindowToggleAlwaysOnTop    func() bool
 	WindowToggleMaximise       func()
