@@ -61,8 +61,13 @@ func main() {
 
 	// 2) 客户端:启动 Wails。如果以后要做"只跑后端 + 第三方前端"模式,
 	// 把这一段替换成 select{} 阻塞即可。
+	//
+	// dev 模式:wails3 dev 启动前会自动注入 WAILS_VITE_PORT(默认 9245)。
+	// 这里读出来后把 Webview 切到 Vite dev server,前端代码改动由 Vite HMR
+	// 直接热替换,Go 进程不需要重启。否则按原逻辑加载 backend 内置 gin + embed.FS。
 	app := desktop.NewApp(desktop.AppConfig{
-		Name: "Skill Box",
+		Name:        "Skill Box",
+		FrontendURL: desktop.NewFrontendURLFromEnv("", 0),
 	}, backend)
 
 	// 3) 运行 Wails 主循环(阻塞)
