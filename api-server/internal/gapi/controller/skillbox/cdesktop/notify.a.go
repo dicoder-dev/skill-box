@@ -10,6 +10,7 @@
 package cdesktop
 
 import (
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/pkg/ginp"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +28,7 @@ type RequestNotifyPermission struct{}
 
 // PostNotifyShow POST /api/desktop/notify/show
 func PostNotifyShow(c *ginp.ContextPlus, req *RequestNotifyShow) {
-	h := hooks()
+	h := hooks.Get()
 	if h.Notify == nil {
 		c.JSON(501, gin.H{"error": "notify: not available in current deployment (web/headless)"})
 		return
@@ -45,7 +46,7 @@ func PostNotifyShow(c *ginp.ContextPlus, req *RequestNotifyShow) {
 
 // GetNotifyPermission GET /api/desktop/notify/permission
 func GetNotifyPermission(c *ginp.ContextPlus, _ *RequestNotifyPermission) {
-	h := hooks()
+	h := hooks.Get()
 	if h.NotifyHasPermission == nil {
 		c.JSON(200, gin.H{"granted": false, "available": false})
 		return
@@ -56,7 +57,7 @@ func GetNotifyPermission(c *ginp.ContextPlus, _ *RequestNotifyPermission) {
 // PostNotifyPermissionRequest POST /api/desktop/notify/permission/request
 // 触发系统弹授权窗(macOS 首次启动)。同步等用户响应或超时。
 func PostNotifyPermissionRequest(c *ginp.ContextPlus, _ *RequestNotifyPermission) {
-	h := hooks()
+	h := hooks.Get()
 	if h.NotifyRequestAuthorization == nil {
 		c.JSON(501, gin.H{"error": "notify authorization not available"})
 		return
