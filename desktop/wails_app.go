@@ -225,7 +225,12 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 			ShortcutUnregister: shortcut.Unregister,
 			ShortcutList:       shortcut.List,
 			AppQuit:            quitApp,
-		})
+		}
+		backend.SetDesktopHooks(hooks)
+		log.Printf("desktop: SetDesktopHooks installed (Notify=%v, ClipboardText=%v, OpenExternal=%v)",
+			hooks.Notify != nil, hooks.ClipboardText != nil, hooks.OpenExternal != nil)
+	} else {
+		log.Printf("desktop: backend is nil, skipping SetDesktopHooks (all cdesktop endpoints will 501)")
 	}
 
 	return &App{
