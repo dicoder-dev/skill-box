@@ -10,6 +10,8 @@ wails3 文档地址：https://v3.wails.io/quick-start/why-wails/
 
 # 项目说明
 * docs/project/项目架构.md 这个文档是项目的架构说明，有需要时可以进行阅读和理解
+* 请求日志存放在家目录/.skill-box/logs 里面遇到问题时不要瞎猜看看请求数据和响应数据
+* 必要时可以调用相关 skill 或者 mcp 来联网搜索查询相关数据或者文档，不要瞎猜
 
 # 必须遵守
 * 前端界面开发时，禁止使用 emoji 作为项目图标，优先使用 ui-ux-pro-max skill作为界面开发指导
