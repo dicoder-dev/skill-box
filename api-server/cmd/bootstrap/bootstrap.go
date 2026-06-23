@@ -224,6 +224,11 @@ func Serve(b *Backend) {
 	if b == nil {
 		log.Fatal("bootstrap: Serve called with nil Backend")
 	}
+	// 把 backend 的桌面端 hooks 桥接到 cdesktop controller,
+	// 这样 controller 在 HTTP 请求时能调到真正的 OS 能力。
+	// Web 部署下 hooks 为零值(所有 func 字段都是 nil),cdesktop 端点
+	// 自然降级到 501,前端 guard 捕获后给出友好提示。
+	cdesktop.SetHooks(b.DesktopHooks())
 	srv := New(b.srvOpts)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
