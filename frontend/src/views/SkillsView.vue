@@ -1691,14 +1691,18 @@ onMounted(() => {
   background: var(--bg-card);
   color: var(--text-faint);
   border-color: var(--border);
+  border-style: dashed; /* 未命中虚线边框,有命中时 active 覆盖回 solid */
+  opacity: 0.7;
 }
-.chip-tool.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); }
+.chip-tool.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); opacity: 0.85; }
 .chip-tool.chip-active {
   background: var(--text);
   color: var(--bg-card);
   border-color: var(--text);
+  border-style: solid;
+  opacity: 1;
 }
-.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); }
+.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); opacity: 1; }
 
 .chip-count {
   display: inline-flex;
@@ -1727,16 +1731,21 @@ onMounted(() => {
   background: var(--bg-card);
   color: var(--text-faint);
   border-color: var(--border);
+  border-style: dashed;
+  opacity: 0.7;
 }
-.chip-scope-target.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); }
+.chip-scope-target.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); opacity: 0.85; }
 .chip-scope-target.chip-active {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
   border-color: var(--accent-blue-border);
+  border-style: solid;
+  opacity: 1;
 }
 .chip-scope-target.chip-active:hover {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
+  opacity: 1;
 }
 
 .chip-mini-list {
