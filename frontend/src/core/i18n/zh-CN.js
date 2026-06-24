@@ -175,6 +175,7 @@ export default {
       tagsEmpty: '还没有标签,点右上角打一个',
       bodyEmpty: 'SKILL.md 还没有正文',
       bodyTitle: '正文',
+      bodyEditing: '编辑正文 (Markdown)',
       tooltipTest: '测试',
       tooltipTag: '打标签',
       tooltipOpenFolder: '在文件夹打开',

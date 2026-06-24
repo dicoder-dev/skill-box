@@ -42,6 +42,70 @@ const currentTagList = ref([])    // 当前 skill 的 tag 列表
 const currentLoading = ref(false)
 const currentError = ref('')
 
+// 内联编辑
+const editing = ref(false)        // 是否处于内联编辑态
+const editBody = ref('')          // 编辑器内的 body 文本
+const editError = ref('')         // 校验错误
+const editSaving = ref(false)     // 保存中
+
+function startInlineEdit() {
+  if (!current.value) return
+  editBody.value = currentBody.value || ''
+  editError.value = ''
+  editing.value = true
+}
+function cancelInlineEdit() {
+  editing.value = false
+  editBody.value = ''
+  editError.value = ''
+}
+async function saveInlineEdit() {
+  if (!current.value) return
+  editError.value = ''
+  editSaving.value = true
+  try {
+    // 重新拼 SKILL.md(保留 frontmatter,只换 body)
+    const newMd = rebuildSkillMd(editBody.value)
+    await updateSkill({
+      scope: current.value.scope,
+      project_id: current.value.project_id,
+      name: current.value.name,
+      version: current.value.version,
+      source: current.value.source || 'local',
+      manifest: {
+        name: current.value.name,
+        version: current.value.version,
+        description: currentMeta.description || '',
+        triggers: currentMeta.triggers || [],
+      },
+      files: [{ path: 'SKILL.md', content: newMd }],
+    })
+    currentMd.value = newMd
+    currentBody.value = extractBody(newMd)
+    editing.value = false
+  } catch (e) {
+    editError.value = e?.message || String(e)
+  } finally {
+    editSaving.value = false
+  }
+}
+
+// 用现有 frontmatter 重新拼一份 SKILL.md(只替换 body)
+function rebuildSkillMd(newBody) {
+  const fm = {
+    name: current.value?.name || '',
+    version: current.value?.version || '',
+    description: currentMeta.description || '',
+    triggers: currentMeta.triggers || [],
+  }
+  const yaml = Object.entries(fm)
+    .map(([k, v]) => Array.isArray(v)
+      ? `${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`
+      : `${k}: ${JSON.stringify(v)}`)
+    .join('\n')
+  return `---\n${yaml}\n---\n\n${newBody || ''}\n`
+}
+
 // 项目列表(scope 多选用)
 const projects = ref([])
 
@@ -144,6 +208,8 @@ function extractBody(skillmd) {
 
 // 选中列表项
 function selectItem(row) {
+  // 切换 skill 时清掉内联编辑态,避免把旧 skill 的 editBody 带到新 skill
+  if (editing.value) cancelInlineEdit()
   selectedKey.value = skillKey(row)
   loadCurrent(row)
 }
@@ -369,20 +435,6 @@ function startNew() {
   error.value = ''
   editorOpen.value = true
 }
-function startEdit() {
-  if (!current.value) return
-  Object.assign(draft, {
-    scope: current.value.scope,
-    project_id: current.value.project_id,
-    name: current.value.name,
-    version: current.value.version,
-    description: currentMeta.description || '',
-    triggersText: (currentMeta.triggers || []).join('\n'),
-    body: currentBody.value || '',
-  })
-  editingKey.value = { scope: current.value.scope, name: current.value.name, version: current.value.version, project_id: current.value.project_id }
-  editorOpen.value = true
-}
 function buildSkillMd() {
   const triggers = draft.triggersText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
   const m = {
@@ -431,6 +483,7 @@ async function removeCurrent() {
   if (!ok) return
   try {
     await deleteSkill({ scope: row.scope, project_id: row.project_id, name: row.name, version: row.version })
+    if (editing.value) cancelInlineEdit()
     current.value = null
     selectedKey.value = null
     await reload()
@@ -717,24 +770,55 @@ onMounted(() => {
         <section class="detail-section detail-body">
           <header class="section-header">
             <h3>
-              <Icon icon="mdi:text-box-outline" width="14" height="14" />
-              {{ t('skills.list.bodyTitle') }}
+              <Icon :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
+              {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
             </h3>
-            <button class="ghost-link" @click="startEdit">
-              <Icon icon="mdi:pencil" width="12" height="12" />
-              {{ t('common.edit') }}
-            </button>
+            <div v-if="!editing" class="body-actions">
+              <button class="ghost-link" :title="t('common.edit')" @click="startInlineEdit">
+                <Icon icon="mdi:pencil" width="12" height="12" />
+                {{ t('common.edit') }}
+              </button>
+            </div>
+            <div v-else class="body-actions">
+              <button class="ghost-link" :disabled="editSaving" @click="cancelInlineEdit">
+                <Icon icon="mdi:close" width="12" height="12" />
+                {{ t('common.cancel') }}
+              </button>
+              <button class="ghost-link primary-link" :disabled="editSaving" @click="saveInlineEdit">
+                <span v-if="editSaving" class="spinner spinner-sm"></span>
+                <Icon v-else icon="mdi:content-save" width="12" height="12" />
+                {{ editSaving ? t('common.processing') : t('common.save') }}
+              </button>
+            </div>
           </header>
-          <div v-if="currentLoading" class="detail-loading">
-            <span class="spinner"></span>
-            <span>{{ t('common.processing') }}</span>
-          </div>
-          <p v-else-if="currentError" class="message message-error">
+
+          <p v-if="editError" class="message message-error">
             <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
-            {{ currentError }}
+            {{ editError }}
           </p>
-          <div v-else-if="currentBody" class="md-body" v-html="renderedHtml"></div>
-          <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
+
+          <!-- 编辑态:内联 textarea(Markdown 原文) -->
+          <textarea
+            v-if="editing"
+            v-model="editBody"
+            class="md-editor"
+            spellcheck="false"
+            :placeholder="t('skills.list.bodyEmpty')"
+          ></textarea>
+
+          <!-- 查看态:渲染 -->
+          <template v-else>
+            <div v-if="currentLoading" class="detail-loading">
+              <span class="spinner"></span>
+              <span>{{ t('common.processing') }}</span>
+            </div>
+            <p v-else-if="currentError" class="message message-error">
+              <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+              {{ currentError }}
+            </p>
+            <div v-else-if="currentBody" class="md-body" v-html="renderedHtml"></div>
+            <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
+          </template>
         </section>
       </template>
     </section>
@@ -964,9 +1048,12 @@ onMounted(() => {
 .skills-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  height: 100%;
+  /* 占满父级(.content-area)高度,不要 height:100%(在 flex 父中脆弱) */
+  flex: 1;
   min-height: 0;
+  align-self: stretch;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1360,6 +1447,33 @@ onMounted(() => {
 }
 
 .ghost-link:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border); }
+.ghost-link:disabled { opacity: 0.5; cursor: not-allowed; }
+.ghost-link.primary-link { color: var(--primary); }
+.ghost-link.primary-link:hover { background: var(--primary-dim); }
+
+.body-actions { display: inline-flex; align-items: center; gap: 4px; }
+
+.md-editor {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  padding: 12px 14px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.md-editor:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
 
 .chip-row {
   display: flex;

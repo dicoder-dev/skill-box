@@ -172,6 +172,7 @@ export default {
       tagsEmpty: 'No tags yet, click the icon above to create one',
       bodyEmpty: 'SKILL.md has no body yet',
       bodyTitle: 'Body',
+      bodyEditing: 'Editing body (Markdown)',
       tooltipTest: 'Test',
       tooltipTag: 'Tag',
       tooltipOpenFolder: 'Open in folder',
