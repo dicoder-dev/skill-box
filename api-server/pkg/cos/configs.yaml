@@ -14,12 +14,14 @@ ai:
     top_p: 1
 db:
     mysql:
+        db: ""
         dbname: ""
         ip: 127.0.0.1
         port: "3306"
         pwd: "123456"
         user: root
     pgsql:
+        db: ""
         dbname: ""
         ip: 127.0.0.1
         port: "5432"
@@ -33,6 +35,7 @@ db:
         pool_size: 10
     sqlite:
         db_path: data.db
+    use_type: sqlite
 email:
     client:
         account: dicoder@126.com
@@ -104,20 +107,30 @@ shop:
             notify_url: ""
             private_key_path: ""
             serial_no: ""
+skillbox:
+    auto_backup: "true"
+    default_scope: global
+    preset_skills_dir: ""
+    store_root: ""
+    tool_paths: ""
 system:
     app:
         name: ginp-admin
+    app_name: dianji
     db:
         type: pgsql
     env: dev
+    need_auth: "true"
     upload:
         default_platform: local
+    user_center_url: http://localhost:8082
     usercenter:
         secret_key: "123456"
         url: http://localhost:8082
 tencent:
     cos:
         allow_prefix: ""
+        bucket_app_id: ""
         bucket_appid: ""
         bucket_name: ""
         duration: 0
