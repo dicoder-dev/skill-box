@@ -7,14 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // fakeAdapter 模拟一个指向指定 dir 的 BaseAdapter。
@@ -215,8 +210,9 @@ func TestImport_All(t *testing.T) {
 			t.Errorf("import %+v failed: %s", x, x.Error)
 		}
 	}
-	// 确认物理落地
-	storeRoot := filepath.Join(tmp, "store", "global")
+	// 确认物理落地(2026-06-24:无 scope/global/<name>/<version> 多层目录,
+	// 直接 ~/.skill-box/skills/<name>/SKILL.md)
+	storeRoot := filepath.Join(tmp, "store")
 	entries, _ := os.ReadDir(storeRoot)
 	if len(entries) != 3 {
 		t.Errorf("store has %d skills, want 3", len(entries))
@@ -298,8 +294,8 @@ func TestImport_NormalizeFixesTriggers(t *testing.T) {
 	if len(res) != 1 || !res[0].OK {
 		t.Fatalf("import failed: %+v", res)
 	}
-	// 验证落地的 skill.yaml 里 description 长度 >= 10, triggers 至少 1 个
-	loadPath := filepath.Join(tmp, "store", "global", "no-triggers", "0.1.0")
+	// 验证落地的 SKILL.md 存在(2026-06-24:store 根直接是 <name>/SKILL.md)
+	loadPath := filepath.Join(tmp, "store", "no-triggers", "SKILL.md")
 	if _, err := os.Stat(loadPath); err != nil {
 		t.Fatalf("store path missing: %v", err)
 	}
@@ -352,24 +348,14 @@ func TestNormalize_EmptyTriggersAndShortDescription(t *testing.T) {
 	}
 }
 
-// TestImport_WithDB_DoubleWrites 覆盖 importer.WithDB 后的双写行为。
-// store 写盘 + mskill 表落库都要成功,重复导入走 Update 而不是 Create(避免唯一约束冲突)。
-func TestImport_WithDB_DoubleWrites(t *testing.T) {
+// TestImport_NoDBWrites 覆盖 2026-06-24 改造后:importer 不再双写 mskill,
+// store 是 source of truth,只校验物理落盘。
+func TestImport_NoDBWrites(t *testing.T) {
 	_, _, tmp := setupReg(t)
 	store := skillstoreTestStore(t, tmp)
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.AutoMigrate(&entity.Skill{}); err != nil {
-		t.Fatal(err)
-	}
-
-	// 重新建一个带 db 的 importer,共用 setupReg 的 tmp 目录 + reg
+	// 没传 db,importer 也不报错(WithDB 保留为 no-op 兼容)
 	_, _, _ = setupReg(t)
-	im2 := skillimporter.New(store).WithDB(db).WithRegistry(regFromTmp(t, tmp))
+	im2 := skillimporter.New(store).WithRegistry(regFromTmp(t, tmp))
 
 	r, err := im2.Scan(skilladapter.ScopeGlobal)
 	if err != nil {
@@ -390,32 +376,15 @@ func TestImport_WithDB_DoubleWrites(t *testing.T) {
 			t.Errorf("import failed: %+v err=%s", x, x.Error)
 		}
 	}
-
-	// 1) 物理盘已落库
-	if _, err := os.Stat(filepath.Join(tmp, "store", "global", "alpha", "0.1.0")); err != nil {
-		t.Errorf("store alpha missing: %v", err)
+	// 物理盘已落库
+	if _, err := os.Stat(filepath.Join(tmp, "store", "alpha", "SKILL.md")); err != nil {
+		t.Errorf("store alpha SKILL.md missing: %v", err)
 	}
-	// 2) DB 已落库
-	var rows []entity.Skill
-	if err := db.Find(&rows).Error; err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("db rows=%d; want 2", len(rows))
-	}
-	for _, r := range rows {
-		if r.Source != "imported" {
-			t.Errorf("row %s source=%q; want imported", r.Name, r.Source)
-		}
-		if r.Scope != "global" || r.ProjectID != 0 {
-			t.Errorf("row %s scope=%q proj=%d; want global/0", r.Name, r.Scope, r.ProjectID)
-		}
-		if r.ManifestJSON == "" {
-			t.Errorf("row %s manifest empty", r.Name)
-		}
+	if _, err := os.Stat(filepath.Join(tmp, "store", "beta", "SKILL.md")); err != nil {
+		t.Errorf("store beta SKILL.md missing: %v", err)
 	}
 
-	// 3) 重复导入同一项:应该走 Update,不能冲突报错
+	// 重复导入同一项:应该走 store 覆盖式,不再有 unique 约束冲突
 	res2, err := im2.Import(r, []skillimporter.ImportItem{
 		{ToolID: "toolA", Name: "alpha", Version: "0.1.0"},
 	})
@@ -424,13 +393,6 @@ func TestImport_WithDB_DoubleWrites(t *testing.T) {
 	}
 	if len(res2) != 1 || !res2[0].OK {
 		t.Fatalf("re-import failed: %+v", res2)
-	}
-	// DB 行数不变(还是 2 条)
-	if err := db.Find(&rows).Error; err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 2 {
-		t.Errorf("after reimport rows=%d; want 2", len(rows))
 	}
 }
 

@@ -16,6 +16,8 @@
 package skillstore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -74,12 +76,10 @@ func (s *Store) DataDir() string {
 	return filepath.Dir(parent)
 }
 
-// HashFile 计算单文件 SHA-256 摘要。
+// HashFile 计算单文件 SHA-256 摘要(hex)。
 func HashFile(content string) string {
-	// 保留签名以兼容外部调用者;实际摘要由 caller 用 crypto/sha256 计算。
-	// 这里仅做占位,真要哈希请调用方自己实现。
-	_ = content
-	return ""
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
 }
 
 // Save 写入 canonical skill(覆盖式)。
@@ -105,9 +105,14 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 	}
 	defer os.RemoveAll(tmp)
 
-	// 写文件
+	// 写文件 — SKILL.md 必须包含 frontmatter,所以无论 caller 是否已带
+	// SKILL.md 字段,这里都用 RenderSkillMD 重新渲染一份,保证 frontmatter
+	// 一定存在且与 Manifest 一致。
+	if err := writeFileAtomic(filepath.Join(tmp, "SKILL.md"), skilladapter.RenderSkillMD(c), 0o644); err != nil {
+		return err
+	}
 	for _, f := range c.Files {
-		if f.Path == "" {
+		if f.Path == "" || f.Path == "SKILL.md" {
 			continue
 		}
 		rel, err := safeRelPath(f.Path)
@@ -355,6 +360,8 @@ func (s *Store) lockScope(dir string) (func(), error) {
 		_ = funlock(f)
 		f.Close()
 		mu.Unlock()
+		// 清理 .lock 临时文件(留 root 看着像脏)
+		_ = os.Remove(lockPath)
 	}
 	return unlock, nil
 }

@@ -35,14 +35,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&entity.MarketSource{}, &entity.MarketSkill{}, &entity.Skill{}, &entity.SkillFile{}); err != nil {
+	if err := db.AutoMigrate(&entity.MarketSource{}, &entity.MarketSkill{}); err != nil {
 		t.Fatal(err)
 	}
 	store, err := skillstore.NewAt(filepath.Join(t.TempDir(), "store"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ssvc := sskill.New(db, db, store)
+	ssvc := sskill.New(store)
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	return &testEnv{
 		svc: smarket.New(db, db, factory),
@@ -192,14 +192,14 @@ func TestInstall_GlobalOk_UsingFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install should succeed via fallback: %v", err)
 	}
-	if out == nil || out.Skill == nil {
+	if out == nil || out.Canonical == nil {
 		t.Fatalf("nil result: %+v", out)
 	}
-	if out.Skill.Name != "code-review" {
-		t.Errorf("skill name: %q", out.Skill.Name)
+	if out.Canonical.Manifest.Name != "code-review" {
+		t.Errorf("skill name: %q", out.Canonical.Manifest.Name)
 	}
-	if out.Skill.Source != "market" {
-		t.Errorf("skill source: %q", out.Skill.Source)
+	if out.Canonical.Manifest.Source != "market" {
+		t.Errorf("skill source: %q", out.Canonical.Manifest.Source)
 	}
 }
 

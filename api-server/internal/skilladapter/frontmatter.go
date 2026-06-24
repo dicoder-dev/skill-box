@@ -131,15 +131,19 @@ func NormalizeName(s string) string {
 }
 
 // RenderSkillMD 把 Canonical{Manifest, Files} 序列化成 SKILL.md 文本。
-// 替换现有 frontmatter(若有);body 保留原 SKILL.md 第一个文件。
+// 替换现有 frontmatter(若有);body 优先取第一个 file(通常是 SKILL.md)
+// 的内容去掉 frontmatter 后的部分;无 file 时给一个最小 body 兜底
+// (避免 caller 传只 Manifest 没 Files 时写出空 SKILL.md)。
 func RenderSkillMD(c Canonical) string {
-	if len(c.Files) == 0 {
-		return ""
+	body := ""
+	if len(c.Files) > 0 {
+		body = c.Files[0].Content
+		if _, existing, err := splitFrontmatter(body); err == nil && existing != "" {
+			body = existing
+		}
 	}
-	body := c.Files[0].Content
-	_, existing, err := splitFrontmatter(body)
-	if err != nil || existing == "" {
-		existing = body
+	if body == "" {
+		body = "# " + c.Manifest.Name + "\n"
 	}
 	yml, err := yaml.Marshal(c.Manifest)
 	if err != nil {
@@ -149,7 +153,7 @@ func RenderSkillMD(c Canonical) string {
 	buf.WriteString("---\n")
 	buf.Write(yml)
 	buf.WriteString("---\n")
-	buf.WriteString(existing)
+	buf.WriteString(body)
 	return buf.String()
 }
 

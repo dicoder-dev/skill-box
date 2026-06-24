@@ -29,13 +29,11 @@ func newTestSvc(t *testing.T) (*sskillpkg.Service, *sskill.Service, *gorm.DB) {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(
-		&entity.Skill{},
-		&entity.SkillFile{},
 		&entity.AuditLog{},
 	); err != nil {
 		t.Fatal(err)
 	}
-	ssvc := sskill.New(db, db, store)
+	ssvc := sskill.New(store)
 	svc := sskillpkg.New(db, db, func() (*sskill.Service, error) { return ssvc, nil })
 	return svc, ssvc, db
 }
@@ -44,8 +42,7 @@ func newTestSvc(t *testing.T) (*sskillpkg.Service, *sskill.Service, *gorm.DB) {
 func TestExportImport_WritesAuditLog(t *testing.T) {
 	svc, ssvc, db := newTestSvc(t)
 	if _, err := ssvc.Create(&sskill.WriteInput{
-		Scope:  skilladapter.ScopeGlobal,
-		Source: "local",
+		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name: "audit-pkg", Version: "0.1.0", Description: "this is a test skill for pkg audit", Triggers: []string{"a"},
 		},

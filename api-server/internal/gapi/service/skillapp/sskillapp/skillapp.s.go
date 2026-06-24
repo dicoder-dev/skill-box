@@ -130,6 +130,9 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 	}
 	full, err := s.loadFull(in.Name)
 	if err != nil {
+		if errors.Is(err, sskill.ErrNotFound) {
+			return nil, ErrSkillNotFound
+		}
 		return nil, err
 	}
 	applier := s.applier()
@@ -395,35 +398,28 @@ func (s *Service) CheckUpdates(in CheckUpdatesInput) ([]skillapp.UpdateItem, err
 	return s.updater.CheckUpdates(items, mkt), nil
 }
 
-// localSkillAsMarketLike 把 sskill 列出的 skill 转成 skillapp.UpdateItem 期望的
-// local 形态。skillapp.updater.CheckUpdates 期望的签名是 []*entity.Skill,
-// 我们直接实现一个简化的 map:仅 name + version 字段。
+// localSkillAsMarketLike 把 store 列出的 skill 转成 skillapp 期望的 local 形态。
+// 2026-06-24:DB 弃用后,local 来源是 skillstore.Store.List;entity.Skill 只剩
+// Name/Version/Source/SourceRef 几个字段(其它字段都已弃用)。用 canonical 的
+// 内容稳定 hash 作为 SkillID,保证 updater 的 seen map 工作。
 func (s *Service) localSkillAsMarketLike(scope string, projectID uint) ([]*entity.Skill, error) {
-	store, err := s.skillSvcFactory()
+	ssvc, err := s.skillSvcFactory()
 	if err != nil {
 		return nil, err
 	}
-	_ = store
-	// 简化:用 sskill.List(keyword="") 列全部,然后过滤
-	canonicals, err := s.skillSvcFactory()
+	canonicals, err := ssvc.List("")
 	if err != nil {
 		return nil, err
 	}
-	_ = canonicals
-	// 这里直接走 store 拉:用 NewStore 工厂
-	fullStore, err := sskill.NewStore()
-	if err != nil {
-		return nil, err
-	}
-	cs, err := fullStore.List("")
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*entity.Skill, 0, len(cs))
-	for _, c := range cs {
+	out := make([]*entity.Skill, 0, len(canonicals))
+	for i, item := range canonicals {
+		_ = canonicals
 		out = append(out, &entity.Skill{
-			Name:    c.Manifest.Name,
-			Version: c.Manifest.Version,
+			ID:        uint(i + 1),
+			Scope:     scope,
+			ProjectID: projectID,
+			Name:      item.Name,
+			Version:   item.Version,
 		})
 	}
 	return out, nil

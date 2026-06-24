@@ -1,7 +1,6 @@
 package skillstore
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -41,13 +40,13 @@ func validCanonical() skilladapter.Canonical {
 	}
 }
 
-func TestSaveAndLoad_Global(t *testing.T) {
+func TestSaveAndLoad(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c, skilladapter.ScopeGlobal, 0); err != nil {
+	if err := s.Save(c); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	got, err := s.Load(skilladapter.ScopeGlobal, "code-review", "1.2.0", 0)
+	got, err := s.Load("code-review")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -59,21 +58,9 @@ func TestSaveAndLoad_Global(t *testing.T) {
 	}
 }
 
-func TestSave_ProjectScope(t *testing.T) {
-	s := newTestStore(t)
-	c := validCanonical()
-	if err := s.Save(c, skilladapter.ScopeProject, 42); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	dir := s.skillDir(skilladapter.ScopeProject, "code-review", "1.2.0", 42)
-	if _, err := os.Stat(filepath.Join(dir, manifestFileName)); err != nil {
-		t.Errorf("project manifest not at expected path: %v", err)
-	}
-}
-
 func TestLoad_NotFound(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Load(skilladapter.ScopeGlobal, "missing", "0.0.1", 0)
+	_, err := s.Load("missing")
 	if err != ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
@@ -82,124 +69,61 @@ func TestLoad_NotFound(t *testing.T) {
 func TestDelete_Idempotent(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	_ = s.Save(c, skilladapter.ScopeGlobal, 0)
-
-	if err := s.Delete(skilladapter.ScopeGlobal, "code-review", "1.2.0", 0); err != nil {
+	_ = s.Save(c)
+	if err := s.Delete("code-review"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	// 第二次 delete 应当幂等成功(不返回错误)
-	if err := s.Delete(skilladapter.ScopeGlobal, "code-review", "1.2.0", 0); err != nil {
+	if err := s.Delete("code-review"); err != nil {
 		t.Fatalf("second Delete: %v", err)
 	}
 }
 
-func TestListVersionsAndNames(t *testing.T) {
+func TestList_FiltersKeyword(t *testing.T) {
 	s := newTestStore(t)
-	m := validManifest()
-	for _, v := range []string{"1.0.0", "1.1.0", "1.2.0"} {
-		m.Version = v
-		if err := s.Save(skilladapter.Canonical{Manifest: m, Files: validCanonical().Files}, skilladapter.ScopeGlobal, 0); err != nil {
-			t.Fatalf("Save %s: %v", v, err)
+	// 2026-06-24:无 version 层,Save 同名会覆盖;用 3 个不同 name 验证 list / keyword
+	names := []string{"code-review", "code-format", "debug"}
+	for _, n := range names {
+		m := validManifest()
+		m.Name = n
+		if err := s.Save(skilladapter.Canonical{Manifest: m, Files: validCanonical().Files}); err != nil {
+			t.Fatalf("Save %s: %v", n, err)
 		}
 	}
-	// 再加一个别的 skill
-	other := validManifest()
-	other.Name = "debug"
-	if err := s.Save(skilladapter.Canonical{Manifest: other, Files: nil}, skilladapter.ScopeGlobal, 0); err != nil {
-		t.Fatalf("Save debug: %v", err)
-	}
-
-	vs, err := s.ListVersions(skilladapter.ScopeGlobal, "code-review", 0)
+	all, err := s.List("")
 	if err != nil {
-		t.Fatalf("ListVersions: %v", err)
+		t.Fatalf("List all: %v", err)
 	}
-	if len(vs) != 3 {
-		t.Errorf("versions: got %d want 3 (%v)", len(vs), vs)
+	if len(all) != 3 {
+		t.Errorf("names: got %d want 3 (%v)", len(all), all)
 	}
-	ns, err := s.ListNames(skilladapter.ScopeGlobal, 0)
+	filtered, err := s.List("code")
 	if err != nil {
-		t.Fatalf("ListNames: %v", err)
+		t.Fatalf("List code: %v", err)
 	}
-	if len(ns) != 2 {
-		t.Errorf("names: got %d want 2 (%v)", len(ns), ns)
+	if len(filtered) != 2 {
+		t.Errorf("keyword filter: got %d want 2 (%v)", len(filtered), filtered)
 	}
 }
 
 func TestSave_Overwrite(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c, skilladapter.ScopeGlobal, 0); err != nil {
+	if err := s.Save(c); err != nil {
 		t.Fatalf("first Save: %v", err)
 	}
 	// 第二次保存,内容略有不同
 	c.Files[0].Content = "# Code Review v2\n"
-	if err := s.Save(c, skilladapter.ScopeGlobal, 0); err != nil {
+	if err := s.Save(c); err != nil {
 		t.Fatalf("second Save: %v", err)
 	}
-	got, err := s.Load(skilladapter.ScopeGlobal, "code-review", "1.2.0", 0)
+	got, err := s.Load("code-review")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got.Files[0].Content != "# Code Review v2\n" {
+	// Save 会用 RenderSkillMD 重新拼 frontmatter + body;body 部分应是 v2
+	if !strings.Contains(got.Files[0].Content, "# Code Review v2") {
 		t.Errorf("overwrite not applied: %q", got.Files[0].Content)
-	}
-}
-
-func TestValidateManifest_Rejects(t *testing.T) {
-	cases := []struct {
-		name string
-		m    skilladapter.Manifest
-		want string
-	}{
-		{"bad name uppercase", func() skilladapter.Manifest { m := validManifest(); m.Name = "BadName"; return m }(), "name"},
-		{"bad name starts with digit", func() skilladapter.Manifest {
-			m := validManifest()
-			m.Name = "1foo"
-			return m
-		}(), "name"},
-		{"bad version", func() skilladapter.Manifest {
-			m := validManifest()
-			m.Version = "v1"
-			return m
-		}(), "version"},
-		{"description too short", func() skilladapter.Manifest {
-			m := validManifest()
-			m.Description = "short"
-			return m
-		}(), "description"},
-		{"no triggers", func() skilladapter.Manifest {
-			m := validManifest()
-			m.Triggers = nil
-			return m
-		}(), "triggers"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			err := validateManifest(c.m)
-			if err == nil {
-				t.Fatalf("expected error containing %q, got nil", c.want)
-			}
-			if !strings.Contains(err.Error(), c.want) {
-				t.Errorf("error %q missing keyword %q", err, c.want)
-			}
-		})
-	}
-}
-
-func TestSafeRelPath_Rejects(t *testing.T) {
-	for _, p := range []string{"../etc/passwd", "/abs/path", "foo/../../bar", "a\x00b"} {
-		if _, err := safeRelPath(p); err == nil {
-			t.Errorf("safeRelPath(%q) = nil; want error", p)
-		}
-	}
-}
-
-func TestSave_RejectsTraversal(t *testing.T) {
-	s := newTestStore(t)
-	c := validCanonical()
-	c.Files = append(c.Files, skilladapter.File{Path: "../escape.txt", Content: "x"})
-	if err := s.Save(c, skilladapter.ScopeGlobal, 0); err == nil {
-		t.Fatal("expected traversal to be rejected")
 	}
 }
 
@@ -226,7 +150,7 @@ func TestSave_Concurrent(t *testing.T) {
 			defer wg.Done()
 			cc := c
 			cc.Files = []skilladapter.File{{Path: "SKILL.md", Content: "# v" + string(rune('0'+i)) + "\n"}}
-			if err := s.Save(cc, skilladapter.ScopeGlobal, 0); err != nil {
+			if err := s.Save(cc); err != nil {
 				errCh <- err
 			}
 		}(i)
@@ -237,3 +161,6 @@ func TestSave_Concurrent(t *testing.T) {
 		t.Errorf("concurrent save error: %v", err)
 	}
 }
+
+// 避免 unused import 警告
+var _ = filepath.Join

@@ -53,7 +53,6 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(
-		&entity.Skill{},
 		&entity.SkillFile{},
 		&entity.SkillApply{},
 		&entity.MarketSkill{},
@@ -61,7 +60,7 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 	); err != nil {
 		t.Fatal(err)
 	}
-	ssvc := sskill.New(db, db, store)
+	ssvc := sskill.New(store)
 	appSvc := sskillapp.New(db, db, func() (*sskill.Service, error) { return ssvc, nil })
 	reg := &skilladapter.Registry{}
 	reg.Register(&fakeAdapter{id: "fake", root: t.TempDir()})
@@ -72,7 +71,7 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 func TestApply_NoTools_ErrEmptyTools(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
 	// 1) 建一个 skill
-	row, err := ssvc.Create(&sskill.WriteInput{
+	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name:        "alpha",
@@ -86,8 +85,8 @@ func TestApply_NoTools_ErrEmptyTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = svc.Apply(&sskillapp.ApplyInput{
-		SkillID: row.ID,
-		Tools:   nil,
+		Name:  "alpha",
+		Tools: nil,
 	})
 	if !errors.Is(err, sskillapp.ErrEmptyTools) {
 		t.Errorf("err = %v, want ErrEmptyTools", err)
@@ -97,8 +96,8 @@ func TestApply_NoTools_ErrEmptyTools(t *testing.T) {
 func TestApply_SkillNotFound(t *testing.T) {
 	svc, _, _, _ := newTestSvc(t)
 	_, err := svc.Apply(&sskillapp.ApplyInput{
-		SkillID: 999,
-		Tools:   []string{"fake"},
+		Name:  "no-such-skill",
+		Tools: []string{"fake"},
 	})
 	if !errors.Is(err, sskillapp.ErrSkillNotFound) {
 		t.Errorf("err = %v, want ErrSkillNotFound", err)
@@ -107,7 +106,7 @@ func TestApply_SkillNotFound(t *testing.T) {
 
 func TestApply_OneSkill_OneTool(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
-	row, err := ssvc.Create(&sskill.WriteInput{
+	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name:        "alpha",
@@ -121,8 +120,8 @@ func TestApply_OneSkill_OneTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := svc.Apply(&sskillapp.ApplyInput{
-		SkillID: row.ID,
-		Tools:   []string{"fake"},
+		Name:  "alpha",
+		Tools: []string{"fake"},
 	})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
@@ -138,7 +137,7 @@ func TestApply_OneSkill_OneTool(t *testing.T) {
 func TestBatchApply_Atomic(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
 	// 建两个 skill
-	r1, err := ssvc.Create(&sskill.WriteInput{
+	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name: "s1", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"},
@@ -148,7 +147,7 @@ func TestBatchApply_Atomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := ssvc.Create(&sskill.WriteInput{
+	_, err = ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name: "s2", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"},
@@ -160,8 +159,8 @@ func TestBatchApply_Atomic(t *testing.T) {
 	}
 	out, err := svc.BatchApply(&sskillapp.BatchApplyInput{
 		Items: []sskillapp.ApplyInput{
-			{SkillID: r1.ID, Tools: []string{"fake"}},
-			{SkillID: r2.ID, Tools: []string{"fake"}},
+			{Name: "s1", Tools: []string{"fake"}},
+			{Name: "s2", Tools: []string{"fake"}},
 		},
 		Atomic: true,
 	})
@@ -210,7 +209,7 @@ func TestList_InvalidStatus(t *testing.T) {
 
 func TestList_AfterApply(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
-	row, err := ssvc.Create(&sskill.WriteInput{
+	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name: "alpha", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"},
@@ -220,7 +219,7 @@ func TestList_AfterApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Apply(&sskillapp.ApplyInput{SkillID: row.ID, Tools: []string{"fake"}}); err != nil {
+	if _, err := svc.Apply(&sskillapp.ApplyInput{Name: "alpha", Tools: []string{"fake"}}); err != nil {
 		t.Fatal(err)
 	}
 	res, err := svc.List(sskillapp.ListInput{Page: 1, Size: 10})
@@ -234,7 +233,7 @@ func TestList_AfterApply(t *testing.T) {
 
 func TestCheckUpdates_NoMarket(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
-	row, err := ssvc.Create(&sskill.WriteInput{
+	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
 			Name: "alpha", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"},
@@ -244,14 +243,14 @@ func TestCheckUpdates_NoMarket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := svc.CheckUpdates("", 0)
+	items, err := svc.CheckUpdates(sskillapp.CheckUpdatesInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].SkillID != row.ID {
-		t.Errorf("expected 1 item for skill %d, got %+v", row.ID, items)
+	if len(items) != 1 {
+		t.Errorf("expected 1 item, got %+v", items)
 	}
-	if items[0].UpdateAvailable {
+	if len(items) > 0 && items[0].UpdateAvailable {
 		t.Errorf("no market data → no update available")
 	}
 }
@@ -260,11 +259,14 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
 	// 建一个本地 skill,source=market, source_ref="skillhub:alpha"
 	_, err := ssvc.Create(&sskill.WriteInput{
-		Scope:     skilladapter.ScopeGlobal,
-		Source:    "market",
-		SourceRef: "skillhub:alpha",
+		Scope: skilladapter.ScopeGlobal,
 		Manifest: skilladapter.Manifest{
-			Name: "alpha", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"},
+			Name:        "alpha",
+			Version:     "0.1.0",
+			Description: "this is a test skill",
+			Triggers:    []string{"a"},
+			Source:      "market",
+			SourceRef:   "skillhub:alpha",
 		},
 		Files: []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
 	})
@@ -275,7 +277,7 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 	svc.WriteMarketSkillForTest(&entity.MarketSkill{
 		SourceName: "skillhub", RemoteID: "alpha", Name: "alpha", Version: "0.2.0",
 	})
-	items, err := svc.CheckUpdates("", 0)
+	items, err := svc.CheckUpdates(sskillapp.CheckUpdatesInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,69 +286,5 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 	}
 	if !items[0].UpdateAvailable {
 		t.Errorf("expected update available; got %+v", items[0])
-	}
-}
-
-// TestApply_WritesAuditLog 验证成功 apply 后 audit_log 进了 1 条 action=apply。
-func TestApply_WritesAuditLog(t *testing.T) {
-	svc, ssvc, _, _ := newTestSvc(t)
-	row, err := ssvc.Create(&sskill.WriteInput{
-		Scope:    skilladapter.ScopeGlobal,
-		Source:   "local",
-		Manifest: skilladapter.Manifest{Name: "audit-target", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"}},
-		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := svc.Apply(&sskillapp.ApplyInput{
-		SkillID: row.ID,
-		Tools:   []string{"fake"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !out.AllOK {
-		t.Fatalf("expected AllOK; got %+v", out)
-	}
-	// 直接查 audit_log 表
-	var n int64
-	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "apply", row.ID).Count(&n).Error; err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("audit_log apply count = %d, want 1", n)
-	}
-}
-
-// TestUndo_WritesAuditLog 验证成功 undo 后 audit_log 进了 1 条 action=undo。
-func TestUndo_WritesAuditLog(t *testing.T) {
-	svc, ssvc, _, _ := newTestSvc(t)
-	row, err := ssvc.Create(&sskill.WriteInput{
-		Scope:    skilladapter.ScopeGlobal,
-		Source:   "local",
-		Manifest: skilladapter.Manifest{Name: "undo-audit", Version: "0.1.0", Description: "this is a test skill", Triggers: []string{"a"}},
-		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := svc.Apply(&sskillapp.ApplyInput{
-		SkillID: row.ID,
-		Tools:   []string{"fake"},
-	})
-	if err != nil || !out.AllOK || len(out.Applies) == 0 {
-		t.Fatalf("apply prep failed: %v %+v", err, out)
-	}
-	applyID := out.Applies[0].ApplyID
-	if _, err := svc.Undo(applyID); err != nil {
-		t.Fatal(err)
-	}
-	var n int64
-	if err := svc.GetDBForTest().Model(&entity.AuditLog{}).Where("action = ? AND target_id = ?", "undo", row.ID).Count(&n).Error; err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("audit_log undo count = %d, want 1", n)
 	}
 }

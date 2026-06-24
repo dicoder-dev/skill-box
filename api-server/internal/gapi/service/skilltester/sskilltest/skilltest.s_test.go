@@ -28,7 +28,6 @@ func newTestSvc(t *testing.T) (*sskilltest.Service, *skillstore.Store) {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(
-		&entity.Skill{},
 		&entity.SkillTestRun{},
 		&entity.SkillTestResult{},
 		&entity.AIProvider{},
@@ -61,15 +60,15 @@ func TestRun_BadScope(t *testing.T) {
 func TestRun_SkillNotFound(t *testing.T) {
 	svc, _ := newTestSvc(t)
 	_, err := svc.Run(&sskilltest.RunRequest{Scope: "global", Name: "ghost", Version: "0.1.0"})
-	if !errors.Is(err, sskilltest.ErrNotFound) {
-		t.Errorf("got %v, want ErrNotFound", err)
+	if !errors.Is(err, sskilltest.ErrStoreLoad) {
+		t.Errorf("got %v, want ErrStoreLoad", err)
 	}
 }
 
 
 func TestList_Empty(t *testing.T) {
 	svc, _ := newTestSvc(t)
-	res, err := svc.List(&sskilltest.ListRequest{SkillID: 999, Page: 1, Size: 10})
+	res, err := svc.List(&sskilltest.ListRequest{Page: 1, Size: 10})
 	if err != nil {
 		t.Fatal(err)
 	}

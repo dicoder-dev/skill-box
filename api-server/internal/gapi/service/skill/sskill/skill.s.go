@@ -133,9 +133,13 @@ func (s *Service) GetFull(name string) (*skilladapter.Canonical, error) {
 }
 
 // Create 新建一个 skill:写盘,失败时回滚。
+// Name 字段缺省时从 Manifest.Name 兜底(2026-06-24:用户友好)。
 func (s *Service) Create(in *WriteInput) (*skilladapter.Canonical, error) {
 	if _, err := normalizeScope(in.Scope); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		in.Name = in.Manifest.Name
 	}
 	name := skilladapter.NormalizeName(in.Name)
 	if name == "" {
@@ -157,6 +161,11 @@ func (s *Service) Update(name string, in *WriteInput) (*skilladapter.Canonical, 
 	}
 	if !s.store.Exists(name) {
 		return nil, ErrNotFound
+	}
+	// Update 时 scope 缺省兜底为 global(2026-06-24:让 sskillaudit.Rollback 之类的
+	// 内部调用可以省去 scope 字段)
+	if in.Scope == "" {
+		in.Scope = skilladapter.ScopeGlobal
 	}
 	if _, err := normalizeScope(in.Scope); err != nil {
 		return nil, err
