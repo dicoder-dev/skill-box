@@ -143,15 +143,13 @@
   --shadow-sidebar: none;
 }
 
-/* HTML 和 Body 基础样式 - 锁定整页高度,让各面板各自滚动 */
+/* HTML 和 Body 基础样式 - 不锁整页高度,让 SkillsView 内部各自滚 */
 html, body, #app {
   margin: 0;
   padding: 0;
-  height: 100vh;
+  min-height: 100vh;
   background: var(--bg);
   transition: background-color 0.3s ease, color 0.3s ease;
-  /* 不让整页滚动;由 .content-area 内部 overflow 接管 */
-  overflow: hidden;
 }
 
 * { box-sizing: border-box; }

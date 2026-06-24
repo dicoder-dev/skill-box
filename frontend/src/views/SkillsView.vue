@@ -1049,16 +1049,25 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
   gap: 0;
-  /* 占满父级(.content-area)高度,不要 height:100%(在 flex 父中脆弱) */
-  flex: 1;
+  /* 取一屏高度 - 顶栏(topbar py-3 + 内容 ≈ 46px) - content-area 上下 padding(20+20)。
+     88 是保守值,小屏可能略多出滚动条,大屏留白;不影响功能。
+     内部 grid row 用 1fr,所以两栏等高并各自 overflow 滚。 */
+  height: calc(100vh - 88px);
   min-height: 0;
-  align-self: stretch;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+/* grid 子项显式 min-height:0,否则 grid item 默认 min-height:auto
+   会被 .detail-pane 的子内容撑大,父级 overflow 失效 */
+.skills-pane,
+.detail-pane {
+  min-height: 0;
 }
 
 /* ============================================

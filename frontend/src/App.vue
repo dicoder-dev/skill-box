@@ -291,7 +291,7 @@ onUnmounted(() => {
     </aside>
 
     <!-- 主内容区 -->
-    <main class="main-content flex flex-col min-w-0 min-h-0">
+    <main class="main-content flex flex-col min-w-0">
       <!-- 顶部栏 -->
       <header class="topbar">
         <div class="topbar-left">
@@ -672,9 +672,10 @@ onUnmounted(() => {
 .stat-badge-emerald :deep(.iconify),
 .stat-badge-emerald strong { color: var(--accent-emerald); }
 
-/* 内容区域 - 高度取父级(flex-1 已分配),内部 overflow 让长内容自己滚 */
+/* 内容区域 - 不强制 overflow:auto,让内部子 view 自己决定滚不滚;
+   内部 .skills-layout 用 calc(100vh - topbar) 自取一屏高度 */
 .content-area {
-  @apply flex-1 h-full p-5 overflow-auto;
+  @apply flex-1 p-5;
   min-height: 0;
 }
 
