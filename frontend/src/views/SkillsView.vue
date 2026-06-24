@@ -11,9 +11,8 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
-import { listProjects } from '@/api/skillbox/projects'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
@@ -106,11 +105,111 @@ function rebuildSkillMd(newBody) {
   return `---\n${yaml}\n---\n\n${newBody || ''}\n`
 }
 
-// 项目列表(scope 多选用)
-const projects = ref([])
+// ====== Scope 两级展示(2026-06-24 改:不再可写,纯只读展示后端实时扫描结果) ======
+// 旧版"勾选全局/项目 → 写回 scope 字段"的设计,被后端"直接读文件系统"方案替代。
+// 现在只展示当前 skill 在 (tool, scope, project) 笛卡尔积下的实际存在情况:
+//   - 工具行:5 个编程工具 chip,数字徽章 = 该工具下有几处命中
+//   - 作用域行:全局 + 各项目 chip,chip 内角标列出哪些工具里有命中
+// 不再写库、不再触发 updateSkill;用户要变更生效位置直接通过本地文件操作。
+const scopeTools = ref([])        // [{tool_id, display_name, icon}]
+const scopeProjects = ref([])     // [{id, name, alias, root_path}]
+const scopeHits = ref([])         // [{tool_id, scope, project_id, project_label, path, exists, is_system}]
+const scopeLoading = ref(false)
+const scopeError = ref('')
 
-// scope 多选:默认 ["global"];其他按项目 ID 字符串
-const activeScopes = ref(['global'])
+// 工具名 → 显示名(优先用后端 tools 数组;缺省时退化到 tool_id 本身)
+const toolDisplay = computed(() => {
+  const m = {}
+  for (const t of scopeTools.value) m[t.tool_id] = t.display_name || t.tool_id
+  return m
+})
+
+// 工具名 → 图标(后端 icon 字段已废弃为空,前端按 tool_id 映射 mdi)
+const TOOL_ICON_MAP = {
+  codex: 'mdi:console',
+  claude: 'mdi:robot-outline',
+  opencode: 'mdi:code-tags',
+  cursor: 'mdi:cursor-default-click-outline',
+  trae: 'mdi:leaf',
+}
+function toolIcon(toolID) { return TOOL_ICON_MAP[toolID] || 'mdi:puzzle-outline' }
+function toolShort(toolID) {
+  // 短名:codex/claude/opencode/cursor/trae 直接用 id,首字母大写
+  if (!toolID) return '?'
+  return toolID.charAt(0).toUpperCase() + toolID.slice(1)
+}
+
+// 命中聚合(后端按路径逐条返回,前端按 (scope, project_id) 聚合成"一个 chip")
+//
+// key 规则:
+//   - global:'global'
+//   - project:'p:<id>'
+// value: { key, scope, project_id, project_label, hits: [...], existsCount }
+const scopeTargets = computed(() => {
+  const map = new Map()
+  for (const h of scopeHits.value) {
+    const key = h.scope === 'global' ? 'global' : `p:${h.project_id}`
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        scope: h.scope,
+        project_id: h.project_id || 0,
+        project_label: h.project_label || (h.scope === 'global' ? t('skills.list.scopeGlobalChip') : ''),
+        hits: [],
+        existsCount: 0,
+      })
+    }
+    const e = map.get(key)
+    e.hits.push(h)
+    if (h.exists) e.existsCount++
+  }
+  // 全局放最前,其余项目按 project_id 升序
+  const list = Array.from(map.values())
+  list.sort((a, b) => {
+    if (a.scope !== b.scope) return a.scope === 'global' ? -1 : 1
+    return a.project_id - b.project_id
+  })
+  return list
+})
+
+// 工具聚合:每个 tool_id 对应 { tool_id, display, icon, hitCount, hasHit }
+const scopeToolSummary = computed(() => {
+  const out = []
+  for (const t of scopeTools.value) {
+    const hits = scopeHits.value.filter((h) => h.tool_id === t.tool_id)
+    const hitCount = hits.filter((h) => h.exists).length
+    out.push({
+      tool_id: t.tool_id,
+      display: t.display_name || t.tool_id,
+      icon: toolIcon(t.tool_id),
+      hitCount,
+      hasHit: hitCount > 0,
+    })
+  }
+  return out
+})
+
+async function loadScopeStatus() {
+  if (!current.value) return
+  scopeLoading.value = true
+  scopeError.value = ''
+  try {
+    const resp = await getSkillScopeStatus({
+      name: current.value.name,
+      version: current.value.version,
+    })
+    scopeTools.value = resp?.tools || []
+    scopeProjects.value = resp?.projects || []
+    scopeHits.value = resp?.hits || []
+  } catch (e) {
+    scopeError.value = e?.message || String(e)
+    scopeTools.value = []
+    scopeProjects.value = []
+    scopeHits.value = []
+  } finally {
+    scopeLoading.value = false
+  }
+}
 
 // AI 侧栏
 const aiOpen = ref(false)
@@ -160,10 +259,7 @@ async function reload() {
 }
 
 async function loadProjects() {
-  try {
-    const resp = await listProjects({ page: 1, size: 200 })
-    projects.value = resp?.items || []
-  } catch (_) { /* 非关键失败,保持空数组 */ }
+  // 旧版用于"作用域可选项",新版 scope-status 接口自带 projects 字段;保留空函数避免调用方报错。
 }
 
 async function loadCurrent(row) {
@@ -191,6 +287,8 @@ async function loadCurrent(row) {
       const out = await listTags({ skill_id: row.id })
       currentTagList.value = out?.items || []
     } catch (_) { currentTagList.value = [] }
+    // 拉 scope 实时状态(工具/作用域两级展示)
+    loadScopeStatus()
   } catch (e) {
     currentError.value = e?.message || String(e)
     current.value = { ...row }
@@ -243,20 +341,6 @@ const filteredItems = computed(() => {
 
 // ====== 渲染后的 markdown HTML ======
 const renderedHtml = computed(() => renderMarkdown(currentBody.value))
-
-// ====== Scope chips ======
-function toggleScope(key) {
-  if (key === 'global') {
-    // 全局必选,不允许取消
-    if (!activeScopes.value.includes('global')) activeScopes.value.push('global')
-    return
-  }
-  const i = activeScopes.value.indexOf(key)
-  if (i >= 0) activeScopes.value.splice(i, 1)
-  else activeScopes.value.push(key)
-}
-function isScopeActive(key) { return activeScopes.value.includes(key) }
-function projectLabel(p) { return p.alias ? `${p.alias} · ${p.name}` : (p.name || p.alias || `#${p.ID}`) }
 
 // ====== Tag 弹窗 ======
 const tagOpen = ref(false)
@@ -531,7 +615,6 @@ function onImported() {
 
 onMounted(() => {
   reload()
-  loadProjects()
 })
 </script>
 
@@ -699,33 +782,83 @@ onMounted(() => {
           {{ openError }}
         </p>
 
-        <!-- scope chips -->
+        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果) -->
         <section class="detail-section">
           <header class="section-header">
             <h3>
               <Icon icon="mdi:earth" width="14" height="14" />
               {{ t('skills.list.scopeLabel') }}
             </h3>
+            <span v-if="!scopeLoading && scopeHits.length" class="muted small-hint">
+              {{ t('skills.list.scopeHitCount', { n: scopeHits.filter((h) => h.exists).length }) }}
+            </span>
           </header>
-          <div class="chip-row">
-            <button
-              :class="['chip', 'chip-global', isScopeActive('global') ? 'chip-active' : '']"
-              @click="toggleScope('global')"
-            >
-              <Icon icon="mdi:earth" width="12" height="12" />
-              {{ t('skills.list.scopeGlobalChip') }}
-            </button>
-            <button
-              v-for="p in projects"
-              :key="p.ID"
-              :class="['chip', 'chip-project', isScopeActive(`p:${p.ID}`) ? 'chip-active' : '']"
-              @click="toggleScope(`p:${p.ID}`)"
-            >
-              <Icon icon="mdi:folder-outline" width="12" height="12" />
-              {{ projectLabel(p) }}
-            </button>
-            <span v-if="!projects.length" class="chip-empty">{{ t('common.dash') }}</span>
-          </div>
+
+          <p v-if="scopeLoading" class="section-loading">
+            <span class="spinner spinner-sm"></span>
+            <span class="muted">…</span>
+          </p>
+          <p v-else-if="scopeError" class="message message-error">
+            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            {{ scopeError }}
+          </p>
+
+          <template v-else>
+            <!-- 第一行:工具(5 个) — 命中数 = 徽章 -->
+            <div class="scope-row">
+              <span class="scope-row-label">{{ t('skills.list.scopeToolsRow') }}</span>
+              <div class="chip-row">
+                <span
+                  v-for="t in scopeToolSummary"
+                  :key="t.tool_id"
+                  :class="['chip', 'chip-tool', t.hasHit ? 'chip-active' : 'chip-muted']"
+                  :title="t.hasHit
+                    ? `${t.display}: ${t.hitCount} 处生效`
+                    : `${t.display}: 0 处生效`"
+                >
+                  <Icon :icon="t.icon" width="12" height="12" />
+                  <span>{{ toolShort(t.tool_id) }}</span>
+                  <span v-if="t.hitCount > 0" class="chip-count">{{ t.hitCount }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- 第二行:作用域(全局 + 各项目) — 命中工具列表 = 角标 -->
+            <div class="scope-row">
+              <span class="scope-row-label">{{ t('skills.list.scopeTargetsRow') }}</span>
+              <div class="chip-row">
+                <span
+                  v-for="tg in scopeTargets"
+                  :key="tg.key"
+                  :class="['chip', 'chip-scope-target', tg.existsCount > 0 ? 'chip-active' : 'chip-muted']"
+                  :title="tg.hits
+                    .filter((h) => h.exists)
+                    .map((h) => `${toolDisplay[h.tool_id] || h.tool_id} · ${h.resolved}`)
+                    .join('\n') || '未生效'"
+                >
+                  <Icon
+                    :icon="tg.scope === 'global' ? 'mdi:earth' : 'mdi:folder-outline'"
+                    width="12"
+                    height="12"
+                  />
+                  <span>{{ tg.project_label }}</span>
+                  <span v-if="tg.existsCount > 0" class="chip-mini-list">
+                    <Icon
+                      v-for="h in tg.hits.filter((x) => x.exists)"
+                      :key="`${h.tool_id}-${h.scope}-${h.project_id}`"
+                      :icon="toolIcon(h.tool_id)"
+                      width="10"
+                      height="10"
+                      class="chip-mini-icon"
+                    />
+                  </span>
+                </span>
+                <span v-if="!scopeTargets.length" class="chip-empty muted">
+                  {{ t('skills.list.scopeEmpty') }}
+                </span>
+              </div>
+            </div>
+          </template>
         </section>
 
         <!-- 标签列表 -->
@@ -1530,6 +1663,104 @@ onMounted(() => {
   color: var(--text-faint);
 }
 
+/* ============================================
+   Scope 两级布局(2026-06-24)
+   - 第一行:工具(5 个)— 命中用 chip-active,未命中用 chip-muted
+   - 第二行:作用域(全局/各项目)— chip-active 标志有命中,
+     chip-mini-list 内显示命中工具的 mdi 图标
+   ============================================ */
+.scope-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.scope-row:last-child { margin-bottom: 0; }
+.scope-row-label {
+  flex: 0 0 64px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-weight: 500;
+  padding-top: 6px;
+  letter-spacing: 0.3px;
+}
+
+/* 工具行 chip:active 用主色(黑),未命中用 muted */
+.chip-tool {
+  cursor: default;
+  background: var(--bg-card);
+  color: var(--text-faint);
+  border-color: var(--border);
+}
+.chip-tool.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); }
+.chip-tool.chip-active {
+  background: var(--text);
+  color: var(--bg-card);
+  border-color: var(--text);
+}
+.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); }
+
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--bg-card);
+  color: var(--text);
+  border-radius: 8px;
+}
+.chip-tool.chip-active .chip-count {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+/* 作用域行 chip:active 蓝色,未命中 muted */
+.chip-scope-target {
+  cursor: default;
+}
+.chip-scope-target.chip-muted {
+  background: var(--bg-card);
+  color: var(--text-faint);
+  border-color: var(--border);
+}
+.chip-scope-target.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); }
+.chip-scope-target.chip-active {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue-border);
+}
+.chip-scope-target.chip-active:hover {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+}
+
+.chip-mini-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--accent-blue-border);
+}
+.chip-mini-icon {
+  color: var(--accent-blue);
+  opacity: 0.85;
+}
+
+.section-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+.small-hint { font-size: 11px; }
+
 .section-empty {
   margin: 0;
   font-size: 12px;
@@ -1795,5 +2026,7 @@ onMounted(() => {
     grid-template-rows: 240px minmax(0, 1fr);
   }
   .skills-pane { border-right: none; border-bottom: 1px solid var(--border); }
+  .scope-row { flex-direction: column; gap: 4px; }
+  .scope-row-label { flex: none; padding-top: 0; }
 }
 </style>

@@ -7,6 +7,8 @@
 //   POST   /api/skillbox/skills/update
 //   POST   /api/skillbox/skills/delete
 
+//   GET    /api/skillbox/skills/scope-status?name=&version=
+
 import { http } from '@/core/utils/requests'
 
 export function listSkills(params = {}) {
@@ -15,6 +17,15 @@ export function listSkills(params = {}) {
 
 export function getSkill(params) {
   return http.get('/api/skillbox/skills/get', { ...params, full: params.full ? 1 : undefined })
+}
+
+/**
+ * 实时扫描所有 adapter 路径,返回某 skill 在 (tool, scope, project) 笛卡尔积下
+ * 哪些位置真实存在 SKILL.md。纯文件系统检查,无 DB 写入。
+ * 响应: { name, version, tools: [...], projects: [...], hits: [...] }
+ */
+export function getSkillScopeStatus(params) {
+  return http.get('/api/skillbox/skills/scope-status', params)
 }
 
 export function createSkill(payload) {
