@@ -58,11 +58,31 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 		ToolSummary: cached.Summary,
 	}
 	for _, f := range cached.Found {
-		c := skilladapter.Canonical{
-			Manifest: skilladapter.Manifest{
-				Name:    f.Name,
-				Version: f.Version,
-			},
+		// 从 SourcePath 重新读盘拿完整 Canonical(含 SKILL.md + 全部附属文件)。
+		// scan 时只缓存了轻量字段(为了不把 SKILL.md 倾到前端),这里必须按
+		// SourcePath 重新 ReadSkillDir 一次,否则 import 会丢失 SKILL.md 实际
+		// 内容(Importer.NormalizeForStore 兜底成 "<name> skill" 占位货)。
+		var c skilladapter.Canonical
+		if f.SourcePath != "" {
+			if full, err := skilladapter.ReadSkillDir(f.SourcePath); err == nil {
+				c = full
+			} else {
+				// SourcePath 读不到(用户在 scan 后手动删了)—— 兜底用轻量字段,
+				// 让 caller 至少能看到一条占位结果而不是整条 import 失败。
+				c = skilladapter.Canonical{
+					Manifest: skilladapter.Manifest{
+						Name:    f.Name,
+						Version: f.Version,
+					},
+				}
+			}
+		} else {
+			c = skilladapter.Canonical{
+				Manifest: skilladapter.Manifest{
+					Name:    f.Name,
+					Version: f.Version,
+				},
+			}
 		}
 		report.FoundSkills = append(report.FoundSkills, skillimporter.FoundSkill{
 			ToolID:     f.ToolID,
