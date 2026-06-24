@@ -19,6 +19,7 @@ import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { platform } from '@/platform'
+import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 
 const { t } = useI18n()
 
@@ -455,10 +456,9 @@ function resolveConfirm(ok) {
   confirmOpen.value = false
 }
 
-// ====== 跳转 Onboarding ======
+// 跳转 Onboarding(以弹窗形式打开)
 function goOnboarding() {
-  // 通过全局 window 事件触发(App.vue 监听)
-  window.dispatchEvent(new CustomEvent('skillbox:switch-tab', { detail: 'onboarding' }))
+  importOpen.value = true
 }
 
 // 列表项键盘可达性
@@ -466,6 +466,14 @@ const listRefs = ref([])
 function focusItem(i) {
   const el = listRefs.value[i]
   if (el) { el.focus() }
+}
+
+// 导入弹窗
+const importOpen = ref(false)
+function openImport() { importOpen.value = true }
+function onImported() {
+  // 导入完成后,刷新列表
+  reload()
 }
 
 onMounted(() => {
@@ -946,6 +954,9 @@ onMounted(() => {
         </button>
       </template>
     </Modal>
+
+    <!-- 导入技能 弹窗 -->
+    <OnboardingImportDialog v-model="importOpen" @imported="onImported" />
   </div>
 </template>
 
@@ -970,7 +981,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-subtle);
+  background: var(--bg-card);
   border-right: 1px solid var(--border);
 }
 
@@ -1063,8 +1074,8 @@ onMounted(() => {
 
 .skill-item:hover { background: var(--bg-hover); }
 .skill-item:focus-visible { background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--text-faint); }
-.skill-item-active { background: var(--bg-card); }
-.skill-item-active:hover { background: var(--bg-card); }
+.skill-item-active { background: var(--bg-subtle); }
+.skill-item-active:hover { background: var(--bg-subtle); }
 
 .skill-item-bar {
   flex-shrink: 0;

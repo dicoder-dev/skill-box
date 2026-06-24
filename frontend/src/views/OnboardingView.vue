@@ -1,4 +1,12 @@
 <script setup>
+// OnboardingView - 导入技能视图(已抽离 view-header,既可作 page 也可作弹窗 body)
+//
+// 使用方式:
+//   - 作为独立 tab:<OnboardingView />  配合 App.vue nav 路由
+//   - 作为弹窗 body:<OnboardingImportDialog /> (后者套 Modal + 移除 view-header 的等效内容)
+//
+// 完成导入后,phase 会进入 'done',用户点"再扫一次"触发 reset,点"去技能页查看" 触发 done 事件。
+
 import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
@@ -9,8 +17,8 @@ import SkillTitle from '@/components/SkillTitle.vue'
 
 const { t } = useI18n()
 
-// 直接进入"扫描结果"阶段,跳过 adapter 状态展示步骤。
-// 状态信息仍可通过 App.vue 顶栏的工具徽章(stats.toolsReady / toolsTotal)查看。
+const emit = defineEmits(['done'])
+
 const phase = ref('scan')
 const appBus = inject('appBus', null)
 
@@ -368,11 +376,7 @@ function reset() {
 }
 
 function goSkills() {
-  if (appBus) {
-    appBus.emit('switch-tab', 'skills')
-  } else {
-    window.dispatchEvent(new CustomEvent('skillbox:switch-tab', { detail: 'skills' }))
-  }
+  emit('done', importResult.value)
 }
 
 onMounted(async () => {
@@ -383,19 +387,6 @@ onMounted(async () => {
 
 <template>
   <div class="onb">
-    <!-- 页面头部 -->
-    <header class="view-header">
-      <div class="view-title">
-        <div class="view-icon view-icon-violet">
-          <Icon icon="mdi:compass-outline" width="24" height="24" />
-        </div>
-        <div>
-          <h1>{{ t('onboarding.title') }}</h1>
-          <p>{{ t('onboarding.subtitle') }}</p>
-        </div>
-      </div>
-    </header>
-
     <p v-if="error" class="message message-error">
       <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
       {{ error }}

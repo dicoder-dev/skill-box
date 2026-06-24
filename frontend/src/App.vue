@@ -5,7 +5,6 @@ import { Icon } from '@iconify/vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
-import OnboardingView from './views/OnboardingView.vue'
 import AuditView from './views/AuditView.vue'
 import SettingsView from './views/SettingsView.vue'
 import { listSkills } from '@/api/skillbox/skills'
@@ -167,14 +166,13 @@ const navItems = computed(() => [
   { key: 'skills',      label: t('app.nav.skills.label'),      icon: 'mdi:book-open-variant' },
   { key: 'projects',   label: t('app.nav.projects.label'),    icon: 'mdi:folder-multiple-outline' },
   { key: 'market',     label: t('app.nav.market.label'),      icon: 'mdi:cart-outline' },
-  { key: 'onboarding',  label: t('app.nav.onboarding.label'),  icon: 'mdi:compass-outline' },
   { key: 'audit',      label: t('app.nav.audit.label'),       icon: 'mdi:script-text-outline' },
   { key: 'settings',    label: t('app.nav.settings.label'),   icon: 'mdi:cog-outline' },
 ])
 
 function switchTab(k) {
   tab.value = k
-  if (k === 'onboarding' || k === 'audit' || k === 'skills') refreshStats()
+  if (k === 'audit' || k === 'skills') refreshStats()
   if (isMobile.value) sidebarOpen.value = false
 }
 
@@ -336,7 +334,6 @@ onUnmounted(() => {
         <ProjectsView v-if="tab === 'projects'" />
         <SkillsView v-else-if="tab === 'skills'" />
         <MarketView v-else-if="tab === 'market'" />
-        <OnboardingView v-else-if="tab === 'onboarding'" />
         <AuditView v-else-if="tab === 'audit'" />
         <SettingsView v-else-if="tab === 'settings'" />
       </div>
