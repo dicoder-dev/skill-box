@@ -4,22 +4,18 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestUpdateSkill 更新入参。
-// Key 字段:(scope, project_id, name, version) → body 里给新 manifest / files。
+// RequestUpdateSkill 更新入参。按 name 定位,body 里给新 manifest / files。
 type RequestUpdateSkill struct {
 	Scope     string                `json:"scope"`
 	ProjectID uint                  `json:"project_id"`
 	Name      string                `json:"name"`
 	Version   string                `json:"version"`
-	Source    string                `json:"source"`
-	SourceRef string                `json:"source_ref"`
 	Manifest  skilladapter.Manifest `json:"manifest"`
 	Files     []skilladapter.File   `json:"files"`
 }
@@ -31,12 +27,12 @@ func UpdateSkill(c *ginp.ContextPlus, req *RequestUpdateSkill) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	svc := sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store)
-	out, uerr := svc.Update(req.Scope, req.Name, req.Version, req.ProjectID, &sskill.WriteInput{
+	svc := sskill.New(store)
+	canon, uerr := svc.Update(req.Name, &sskill.WriteInput{
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
-		Source:    req.Source,
-		SourceRef: req.SourceRef,
+		Name:      req.Name,
+		Version:   req.Version,
 		Manifest:  req.Manifest,
 		Files:     req.Files,
 	})
@@ -54,7 +50,10 @@ func UpdateSkill(c *ginp.ContextPlus, req *RequestUpdateSkill) {
 		}
 		return
 	}
-	c.JSON(200, out)
+	c.JSON(200, gin.H{
+		"name":    canon.Manifest.Name,
+		"version": canon.Manifest.Version,
+	})
 }
 
 func init() {
@@ -67,7 +66,7 @@ func init() {
 		PermissionName: "skillbox.skills.update",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.update",
-			Description:   "按 (scope, project_id, name, version) 更新 skill 内容;version 不允许改",
+			Description:   "按 name 更新 skill 内容;version 写在 SKILL.md frontmatter",
 			RequestParams: RequestUpdateSkill{},
 		},
 	})

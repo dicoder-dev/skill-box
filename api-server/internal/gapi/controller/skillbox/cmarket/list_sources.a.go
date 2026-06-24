@@ -59,6 +59,6 @@ func newService() *smarket.Service {
 		if err != nil {
 			return nil, err
 		}
-		return sskill.New(ww, rr, store), nil
+		return sskill.New(store), nil
 	})
 }

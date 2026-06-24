@@ -4,12 +4,11 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
-)
-
-// RequestCheckUpdates 更新检测请求。query + body 兼容。
+)// RequestCheckUpdates 更新检测请求。query + body 兼容。
 type RequestCheckUpdates struct {
 	Scope     string `json:"scope" form:"scope"`
 	ProjectID uint   `json:"project_id" form:"project_id"`
@@ -36,7 +35,10 @@ func CheckUpdates(c *ginp.ContextPlus, req *RequestCheckUpdates) {
 		}
 	}
 	svc := newService()
-	items, err := svc.CheckUpdates(req.Scope, req.ProjectID)
+	items, err := svc.CheckUpdates(sskillapp.CheckUpdatesInput{
+		Scope:     req.Scope,
+		ProjectID: req.ProjectID,
+	})
 	if err != nil {
 		logger.Error("skill check updates: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})

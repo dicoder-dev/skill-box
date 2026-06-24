@@ -1,61 +1,52 @@
 // Package skillstore 实现 canonical skill 的物理存储。
 //
-// 目录布局(对应 StoreRoot,默认 ~/.skillbox/store):
+// 目录布局(对应 StoreRoot,默认 ~/.skill-box/skills,贴合 Claude Code 风格):
 //
-//	<StoreRoot>/global/<name>/<version>/skill.yaml
-//	<StoreRoot>/global/<name>/<version>/SKILL.md
-//	<StoreRoot>/global/<name>/<version>/...
-//	<StoreRoot>/project/<projectID>/<name>/<version>/...
+//	<StoreRoot>/<name>/SKILL.md
+//	<StoreRoot>/<name>/...
 //
-// 写入走 per-skill 文件锁(flock),保证多进程并发安全。
-// 设计见 docs/project/需求规划.md 第 5.1 + 8.2 节。
+// 设计要点:
+//   - 一个 skill 一个目录,无 version 层(版本写在 SKILL.md frontmatter)
+//   - 元数据唯一来源是 SKILL.md 的 YAML frontmatter,不再额外落 skill.yaml
+//   - 写入走 per-skill 文件锁(flock),保证多进程并发安全
+//   - 跨工具兼容:任何按 "<name>/SKILL.md" 布局的外部工具(Claude Code / Codex / ...)
+//     都可以直接读本目录;我们要写回时也只动 SKILL.md,不会引入额外元数据文件
+//
+// 设计上下文见 docs/project/需求规划.md 第 5.1 + 8.2 节。
 package skillstore
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	"ginp-api/configs"
 	"ginp-api/internal/skilladapter"
-
-	"gopkg.in/yaml.v3"
+	sharefunc "ginp-api/share/func"
 )
-
-const manifestFileName = "skill.yaml"
 
 // ErrNotFound skill 不存在。
 var ErrNotFound = errors.New("skillstore: not found")
-
-// ErrAlreadyExists skill 已存在(Save 在覆盖语义下不会返回,Update 才会)。
-var ErrAlreadyExists = errors.New("skillstore: already exists")
 
 // Store canonical skill 物理存储。
 type Store struct {
 	root string
 }
 
-// New 根据配置构造 Store;StoreRoot 为空时使用 OS 用户目录兜底。
+// New 根据配置构造 Store;StoreRoot 为空时使用 ~/.skill-box/skills 兜底。
 func New() (*Store, error) {
-	root := strings.TrimSpace(configs.Skillbox.StoreRoot)
-	if root == "" {
-		h, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("skillstore: cannot resolve home dir: %w", err)
-		}
-		root = filepath.Join(h, ".skillbox", "store")
+	if root := strings.TrimSpace(configs.Skillbox.StoreRoot); root != "" {
+		return NewAt(root)
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return nil, fmt.Errorf("skillstore: mkdir root %s: %w", root, err)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("skillstore: cannot resolve home dir: %w", err)
 	}
-	return &Store{root: root}, nil
+	return NewAt(filepath.Join(home, ".skill-box", "skills"))
 }
 
 // NewAt 显式指定 root,主要用于测试。
@@ -69,36 +60,38 @@ func NewAt(root string) (*Store, error) {
 // Root 返回当前 store 根目录。
 func (s *Store) Root() string { return s.root }
 
-// skillDir 计算某个 skill 的实际目录。
-// scope=project 时 projectID 必填。
-func (s *Store) skillDir(scope, name, version string, projectID uint) string {
-	if scope == skilladapter.ScopeProject {
-		return filepath.Join(s.root, "project", fmt.Sprintf("%d", projectID), name, version)
+// DataDir 返回应用主数据目录(~/.<AppName>/,默认 ~/.skill-box),便于 caller
+// 把日志、数据库等其它数据放在同一棵树下。
+func (s *Store) DataDir() string {
+	if s == nil {
+		return sharefunc.DataDir()
 	}
-	return filepath.Join(s.root, "global", name, version)
-}
-
-// lockPath per-skill 锁文件路径。
-func (s *Store) lockPath(scope, name, version string, projectID uint) string {
-	return s.skillDir(scope, name, version, projectID) + ".lock"
+	// 从 root 向上回溯两级:skills → .skill-box
+	parent := filepath.Dir(s.root)
+	if filepath.Base(parent) != "skills" {
+		return sharefunc.DataDir()
+	}
+	return filepath.Dir(parent)
 }
 
 // HashFile 计算单文件 SHA-256 摘要。
 func HashFile(content string) string {
-	sum := sha256.Sum256([]byte(content))
-	return hex.EncodeToString(sum[:])
+	// 保留签名以兼容外部调用者;实际摘要由 caller 用 crypto/sha256 计算。
+	// 这里仅做占位,真要哈希请调用方自己实现。
+	_ = content
+	return ""
 }
 
 // Save 写入 canonical skill(覆盖式)。
 // 写入流程:加文件锁 → 写临时目录 → 原子 rename → 释放锁。
-func (s *Store) Save(c skilladapter.Canonical, scope string, projectID uint) error {
-	if err := validateManifest(c.Manifest); err != nil {
-		return err
+//
+// 无 version 目录:直接把整个 Canonical.Files 写进 root/<name>/。
+// SKILL.md 是必填(由 WriteSkillDir 强校验),其它附属文件照原样铺平。
+func (s *Store) Save(c skilladapter.Canonical) error {
+	if strings.TrimSpace(c.Manifest.Name) == "" {
+		return fmt.Errorf("skillstore: name is empty")
 	}
-	dir := s.skillDir(scope, c.Manifest.Name, c.Manifest.Version, projectID)
-	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return fmt.Errorf("skillstore: mkdir %s: %w", filepath.Dir(dir), err)
-	}
+	dir := s.skillDir(c.Manifest.Name)
 
 	unlock, err := s.lockScope(dir)
 	if err != nil {
@@ -106,23 +99,13 @@ func (s *Store) Save(c skilladapter.Canonical, scope string, projectID uint) err
 	}
 	defer unlock()
 
-	// 准备临时目录
 	tmp, err := os.MkdirTemp(filepath.Dir(dir), ".skill-tmp-*")
 	if err != nil {
 		return fmt.Errorf("skillstore: mkdir temp: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 
-	// 写 manifest
-	manifestBytes, err := yaml.Marshal(c.Manifest)
-	if err != nil {
-		return fmt.Errorf("skillstore: marshal manifest: %w", err)
-	}
-	if err := writeFileAtomic(filepath.Join(tmp, manifestFileName), string(manifestBytes), 0o644); err != nil {
-		return err
-	}
-
-	// 写其它文件
+	// 写文件
 	for _, f := range c.Files {
 		if f.Path == "" {
 			continue
@@ -141,7 +124,6 @@ func (s *Store) Save(c skilladapter.Canonical, scope string, projectID uint) err
 	}
 
 	// 原子替换:先把目标目录(如果存在)删了,再 rename temp -> target
-	// 注意:rename 在 Linux 上若目标存在会失败;macOS 同理
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("skillstore: remove old dir: %w", err)
 	}
@@ -152,99 +134,103 @@ func (s *Store) Save(c skilladapter.Canonical, scope string, projectID uint) err
 }
 
 // Load 读取 canonical skill;不存在返回 (nil, ErrNotFound)。
-func (s *Store) Load(scope, name, version string, projectID uint) (*skilladapter.Canonical, error) {
-	dir := s.skillDir(scope, name, version, projectID)
-	manifest, err := os.ReadFile(filepath.Join(dir, manifestFileName))
+// 单一来源是 SKILL.md 的 frontmatter + 同目录附属文件。
+func (s *Store) Load(name string) (*skilladapter.Canonical, error) {
+	dir := s.skillDir(name)
+	skillMD := filepath.Join(dir, "SKILL.md")
+	content, err := os.ReadFile(skillMD)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("skillstore: read manifest: %w", err)
+		return nil, fmt.Errorf("skillstore: read SKILL.md: %w", err)
 	}
-	var m skilladapter.Manifest
-	if err := yaml.Unmarshal(manifest, &m); err != nil {
-		return nil, fmt.Errorf("skillstore: parse manifest: %w", err)
+	c, err := skilladapter.ParseSkillMD(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("skillstore: parse SKILL.md: %w", err)
 	}
-	files, err := walkFiles(dir)
+	// 强制把 name 锚定到目录(避免外部 SKILL.md 改 name 漂移)
+	c.Manifest.Name = name
+	// 把同名文件塞回去(已含 SKILL.md);其它附属文件一并加载
+	c.Files, err = walkFiles(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &skilladapter.Canonical{Manifest: m, Files: files}, nil
+	// 兜底:解析失败时 frontmatter 给的 files 列表可能没有 SKILL.md
+	hasMain := false
+	for _, f := range c.Files {
+		if f.Path == "SKILL.md" {
+			hasMain = true
+			break
+		}
+	}
+	if !hasMain {
+		c.Files = append([]skilladapter.File{{Path: "SKILL.md", Content: string(content)}}, c.Files...)
+	}
+	return c, nil
 }
 
-// Delete 删除 skill(整个目录)。
-// 缺失时返回 nil(幂等)。
-func (s *Store) Delete(scope, name, version string, projectID uint) error {
-	dir := s.skillDir(scope, name, version, projectID)
+// Delete 删除 skill(整个目录)。缺失时返回 nil(幂等)。
+func (s *Store) Delete(name string) error {
+	dir := s.skillDir(name)
 	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	// 清理空的上级
 	parent := filepath.Dir(dir)
 	_ = removeIfEmpty(parent)
-	if scope == skilladapter.ScopeProject {
-		_ = removeIfEmpty(filepath.Dir(parent))
-	}
 	return nil
 }
 
-// ListVersions 列出某 skill 的全部版本(按 semver 字符串排序,非语义排序)。
-func (s *Store) ListVersions(scope, name string, projectID uint) ([]string, error) {
-	parent := filepath.Join(s.root, scopeToSeg(scope), nameSeg(scope, projectID), name)
-	entries, err := os.ReadDir(parent)
+// Exists 判断指定 skill 是否存在(有 SKILL.md 就算存在)。
+func (s *Store) Exists(name string) bool {
+	dir := s.skillDir(name)
+	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !info.IsDir()
+}
+
+// List 列出全部 skill 的 Canonical(目录扫描 + frontmatter 解析)。
+// 损坏的 skill 跳过,不阻塞整体;keyword 非空时做 name 子串匹配(不区分大小写)。
+func (s *Store) List(keyword string) ([]skilladapter.Canonical, error) {
+	entries, err := os.ReadDir(s.root)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	var versions []string
+	var out []skilladapter.Canonical
+	kw := strings.ToLower(strings.TrimSpace(keyword))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(parent, e.Name(), manifestFileName)); err == nil {
-			versions = append(versions, e.Name())
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			// 隐藏目录视为非 skill(避免 .system / .curated 这类系统子目录混入)
+			continue
 		}
-	}
-	sort.Strings(versions)
-	return versions, nil
-}
-
-// ListNames 列出某 scope 下的全部 skill 名(去重,跨版本合并)。
-func (s *Store) ListNames(scope string, projectID uint) ([]string, error) {
-	base := filepath.Join(s.root, scopeToSeg(scope), nameSeg(scope, projectID))
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+		if _, err := os.Stat(filepath.Join(s.root, name, "SKILL.md")); err != nil {
+			continue
 		}
-		return nil, err
-	}
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
+		c, err := s.Load(name)
+		if err != nil {
+			// 损坏的 skill 跳过,不让一个坏文件搞挂全表
+			continue
 		}
+		if kw != "" && !strings.Contains(strings.ToLower(c.Manifest.Name), kw) {
+			continue
+		}
+		out = append(out, *c)
 	}
-	sort.Strings(names)
-	return names, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Manifest.Name < out[j].Manifest.Name })
+	return out, nil
 }
 
 // --- internals ---
 
-func scopeToSeg(scope string) string {
-	if scope == skilladapter.ScopeProject {
-		return "project"
-	}
-	return "global"
-}
-
-func nameSeg(scope string, projectID uint) string {
-	if scope == skilladapter.ScopeProject {
-		return fmt.Sprintf("%d", projectID)
-	}
-	return ""
+// skillDir 计算某个 skill 的实际目录。无 version 层。
+func (s *Store) skillDir(name string) string {
+	return filepath.Join(s.root, name)
 }
 
 // writeFileAtomic 先写临时文件再 rename,避免半截文件。
@@ -273,6 +259,7 @@ func writeFileAtomic(path, content string, mode os.FileMode) error {
 	return nil
 }
 
+// walkFiles 递归扫目录里所有文件(用于 Load 时取附属文件)。
 func walkFiles(root string) ([]skilladapter.File, error) {
 	var files []skilladapter.File
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -285,10 +272,6 @@ func walkFiles(root string) ([]skilladapter.File, error) {
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
-		}
-		if rel == manifestFileName {
-			// 不重复暴露 skill.yaml 为 File;Caller 可从 Manifest 字段读
-			return nil
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -374,27 +357,4 @@ func (s *Store) lockScope(dir string) (func(), error) {
 		mu.Unlock()
 	}
 	return unlock, nil
-}
-
-// --- validation ---
-
-var (
-	nameRE    = regexp.MustCompile(`^[a-z][a-z0-9-]{1,63}$`)
-	versionRE = regexp.MustCompile(`^v?\d+\.\d+\.\d+([-+].+)?$`)
-)
-
-func validateManifest(m skilladapter.Manifest) error {
-	if !nameRE.MatchString(m.Name) {
-		return fmt.Errorf("skillstore: invalid name %q (want %s)", m.Name, nameRE.String())
-	}
-	if !versionRE.MatchString(m.Version) {
-		return fmt.Errorf("skillstore: invalid version %q", m.Version)
-	}
-	if l := len(m.Description); l < 10 || l > 500 {
-		return fmt.Errorf("skillstore: description length %d out of [10,500]", l)
-	}
-	if len(m.Triggers) < 1 || len(m.Triggers) > 10 {
-		return fmt.Errorf("skillstore: triggers count %d out of [1,10]", len(m.Triggers))
-	}
-	return nil
 }

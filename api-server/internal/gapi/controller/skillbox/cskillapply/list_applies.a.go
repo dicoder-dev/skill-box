@@ -1,45 +1,41 @@
 package cskillapply
 
 import (
-	"strconv"
-
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestListApplies 列表请求。query + body 兼容。
+// RequestListApplies 列表请求。2026-06-24 改造:用 (scope, name) 定位。
 type RequestListApplies struct {
-	SkillID uint   `json:"skill_id" form:"skill_id"`
-	Tool    string `json:"tool" form:"tool"`
-	Status  string `json:"status" form:"status"`
-	Page    int    `json:"page" form:"page"`
-	Size    int    `json:"size" form:"size"`
+	Scope string `json:"scope" form:"scope"`
+	Name  string `json:"name" form:"name"`
+	Tool  string `json:"tool" form:"tool"`
+	Status string `json:"status" form:"status"`
+	Page  int    `json:"page" form:"page"`
+	Size  int    `json:"size" form:"size"`
 }
 
 // RespondListApplies 响应。
 type RespondListApplies = sskillapp.ListResult
 
 // ListApplies GET /api/skillbox/skills/apply/list
-//
-// 列出 apply 历史;支持 skill_id / tool / status 过滤 + 分页(按 applied_at desc)。
 func ListApplies(c *ginp.ContextPlus, req *RequestListApplies) {
-	// 兼容 query string
-	if req.SkillID == 0 {
-		if s := c.Query("skill_id"); s != "" {
-			if n, err := strconv.ParseUint(s, 10, 64); err == nil {
-				req.SkillID = uint(n)
-			}
-		}
+	if req.Scope == "" {
+		req.Scope = c.Query("scope")
+	}
+	if req.Name == "" {
+		req.Name = c.Query("name")
 	}
 	svc := newService()
 	out, err := svc.List(sskillapp.ListInput{
-		SkillID: req.SkillID,
-		Tool:    req.Tool,
-		Status:  req.Status,
-		Page:    req.Page,
-		Size:    req.Size,
+		Scope:  req.Scope,
+		Name:   req.Name,
+		Tool:   req.Tool,
+		Status: req.Status,
+		Page:   req.Page,
+		Size:   req.Size,
 	})
 	if err != nil {
 		logger.Error("skill apply list: %v", err)
@@ -59,7 +55,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply.list",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply.list",
-			Description:   "列 apply 历史(按 applied_at desc)",
+			Description:   "列 apply 历史(按 applied_at desc);用 scope+name 定位",
 			RequestParams: RequestListApplies{},
 		},
 	})

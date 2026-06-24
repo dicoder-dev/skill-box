@@ -1,17 +1,16 @@
 package ctag
 
 import (
-	"strconv"
-
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestListTags 列 tag 请求。query + body 兼容。
+// RequestListTags 列 tag 请求。2026-06-24 改造:用 (scope, name) 定位 skill。
 type RequestListTags struct {
-	SkillID uint `json:"skill_id" form:"skill_id"`
+	Scope string `json:"scope" form:"scope"`
+	Name  string `json:"name" form:"name"`
 }
 
 // RespondListTags 响应。
@@ -21,18 +20,15 @@ type RespondListTags struct {
 }
 
 // ListTags GET /api/skillbox/skills/tags/list
-//
-// 列出某 skill 的所有 tag(按 created_at desc)。
 func ListTags(c *ginp.ContextPlus, req *RequestListTags) {
-	if req.SkillID == 0 {
-		if s := c.Query("skill_id"); s != "" {
-			if n, err := strconv.ParseUint(s, 10, 64); err == nil {
-				req.SkillID = uint(n)
-			}
-		}
+	if req.Scope == "" {
+		req.Scope = c.Query("scope")
+	}
+	if req.Name == "" {
+		req.Name = c.Query("name")
 	}
 	svc := newService()
-	items, err := svc.ListTags(req.SkillID)
+	items, err := svc.ListTags(req.Scope, req.Name)
 	if err != nil {
 		logger.Error("tag list: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -51,7 +47,7 @@ func init() {
 		PermissionName: "skillbox.skills.tags.list",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.tags.list",
-			Description:   "列 skill 的所有 tag(按 created_at desc)",
+			Description:   "列 skill 的所有 tag(按 created_at desc);用 scope+name 定位",
 			RequestParams: RequestListTags{},
 		},
 	})

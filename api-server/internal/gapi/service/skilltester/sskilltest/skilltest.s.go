@@ -4,6 +4,9 @@
 //   - 一次 run = 一次 SkillTestRun 记录 + 若干 SkillTestResult(3 个 check)
 //   - AI 走查走 aiengine.Manager + 注入的 SecretStore(沿用 sai 同款实现)
 //   - store 物理文件读不出来 = errored,DB 写失败 = 回滚
+//
+// 2026-06-24 改造:不再走 mskill 表(已弃用),直接用 store.Load(name) 拿 canonical;
+// skill_id 关联键用 0 占位(下游表 scope+name 才是真正的定位键)。
 package sskilltest
 
 import (
@@ -14,7 +17,6 @@ import (
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
-	mskill "ginp-api/internal/gapi/model/skillbox/mskill"
 	mskilltestresult "ginp-api/internal/gapi/model/skillbox/mskilltestresult"
 	mskilltestrun "ginp-api/internal/gapi/model/skillbox/mskilltestrun"
 	"ginp-api/internal/settings"
@@ -28,10 +30,10 @@ import (
 
 // 业务错误。
 var (
-	ErrEmptyKey   = errors.New("skilltest: skill key is empty")
-	ErrNotFound   = errors.New("skilltest: run not found")
-	ErrStoreLoad  = errors.New("skilltest: store load failed")
-	ErrDBPersist  = errors.New("skilltest: db persist failed")
+	ErrEmptyKey  = errors.New("skilltest: skill key is empty")
+	ErrNotFound  = errors.New("skilltest: run not found")
+	ErrStoreLoad = errors.New("skilltest: store load failed")
+	ErrDBPersist = errors.New("skilltest: db persist failed")
 )
 
 // Service 测试服务。dbWrite / dbRead / store / settings / aiEngine 全套依赖。
@@ -53,9 +55,6 @@ func (s *Service) runModel() *mskilltestrun.Model {
 func (s *Service) resultModel() *mskilltestresult.Model {
 	return mskilltestresult.NewModel(s.dbWrite, s.dbRead)
 }
-func (s *Service) skillModel() *mskill.Model {
-	return mskill.NewModel(s.dbWrite, s.dbRead)
-}
 func (s *Service) aiModel() *maiprovider.Model {
 	return maiprovider.NewModel(s.dbWrite, s.dbRead)
 }
@@ -66,7 +65,7 @@ type RunRequest struct {
 	ProjectID uint
 	Name      string
 	Version   string
-	Trigger   string                 // manual / auto,空 = manual
+	Trigger   string // manual / auto,空 = manual
 	Options   skilltester.Options
 }
 
@@ -89,27 +88,16 @@ func (s *Service) Run(req *RunRequest) (*RunResult, error) {
 		version = "0.1.0"
 	}
 
-	// 1) 找 skill 行(用于落 skill_id 引用)
-	conds := []*where.Condition{}
-	conds = append(conds, where.New(mskill.FieldScope, "=", scope).Conditions()...)
-	conds = append(conds, where.New(mskill.FieldName, "=", name).Conditions()...)
-	conds = append(conds, where.New(mskill.FieldProjectID, "=", projectID).Conditions()...)
-	conds = append(conds, where.New(mskill.FieldVersion, "=", version).Conditions()...)
-	row, err := s.skillModel().FindOne(conds)
-	if err != nil {
-		return nil, ErrNotFound
-	}
-
-	// 2) 读 canonical
-	c, err := s.store.Load(scope, name, version, projectID)
+	// 1) 读 canonical(从 store 直接拿,不再查 mskill 表)
+	c, err := s.store.Load(name)
 	if err != nil {
 		return nil, ErrStoreLoad
 	}
 
-	// 3) 准备 AI walker
+	// 2) 准备 AI walker
 	walker := s.buildWalker(req.Options.AIProvider)
 
-	// 4) 跑测试器
+	// 3) 跑测试器
 	trigger := req.Trigger
 	if trigger == "" {
 		trigger = skilltester.TriggerManual
@@ -124,9 +112,8 @@ func (s *Service) Run(req *RunRequest) (*RunResult, error) {
 		Trigger:          trigger,
 	}, walker)
 
-	// 5) 落 run
+	// 4) 落 run
 	runRow := &entity.SkillTestRun{
-		SkillID:    row.ID,
 		Scope:      scope,
 		ProjectID:  projectID,
 		Name:       name,
@@ -142,7 +129,7 @@ func (s *Service) Run(req *RunRequest) (*RunResult, error) {
 		return nil, ErrDBPersist
 	}
 
-	// 6) 落 result(check 一条一行)
+	// 5) 落 result(check 一条一行)
 	results := make([]*entity.SkillTestResult, 0, len(report.Results))
 	for _, r := range report.Results {
 		cres, err := s.resultModel().Create(&entity.SkillTestResult{
@@ -163,9 +150,11 @@ func (s *Service) Run(req *RunRequest) (*RunResult, error) {
 
 // ListRequest 列表入参。
 type ListRequest struct {
-	SkillID uint // 0 = 全部
-	Page    int
-	Size    int
+	Scope     string
+	ProjectID uint
+	Name      string // 0 = 全部
+	Page      int
+	Size      int
 }
 
 // ListResult 列表结果。
@@ -176,11 +165,14 @@ type ListResult struct {
 	Size  int                    `json:"size"`
 }
 
-// List 列出测试 run(可选按 skill_id 过滤)。
+// List 列出测试 run(可选按 scope+name 过滤)。
 func (s *Service) List(req *ListRequest) (*ListResult, error) {
 	var conds []*where.Condition
-	if req.SkillID > 0 {
-		conds = append(conds, where.New(mskilltestrun.FieldSkillID, "=", req.SkillID).Conditions()...)
+	if sc := strings.TrimSpace(req.Scope); sc != "" {
+		conds = append(conds, where.New(mskilltestrun.FieldScope, "=", sc).Conditions()...)
+	}
+	if n := strings.TrimSpace(req.Name); n != "" {
+		conds = append(conds, where.New(mskilltestrun.FieldName, "=", n).Conditions()...)
 	}
 	page := req.Page
 	size := req.Size
@@ -278,7 +270,6 @@ func (s *Service) buildForAI() func(aiengine.Config) (aiengine.Provider, error) 
 		return s.mgr.BuildFromConfig(cfg)
 	}
 }
-
 
 // NewManagerForTester 构造一个绑定了 settings SecretStore 的 aiengine.Manager。
 // 给 cskilltest 在没有完整 sai 依赖时复用。

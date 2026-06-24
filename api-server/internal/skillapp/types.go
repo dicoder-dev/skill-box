@@ -87,12 +87,13 @@ func IsStatusValid(s string) bool {
 }
 
 // ApplyInput 单次 apply 的入参。
+// 2026-06-24 改造:不再用 SkillID 数字 ID,改用 SkillName 字符串作为唯一键。
 type ApplyInput struct {
-	SkillID   uint                       // 来自 sskill 的 Skill.ID
-	Scope     string                     // global / project
-	ProjectID uint                       // scope=project 时必填
-	Tools     []string                   // 目标工具 ID 列表
-	Canonical *skilladapter.Canonical    // 来自 sskill.GetFull
+	SkillName string                    // 来自 sskill 的 Canonical.Manifest.Name
+	Scope     string                    // global / project
+	ProjectID uint                      // scope=project 时必填
+	Tools     []string                  // 目标工具 ID 列表
+	Canonical *skilladapter.Canonical   // 来自 sskill.Get
 }
 
 // ApplyOutput 单次 apply 的产出(每个 tool 一行 entity.SkillApply)。

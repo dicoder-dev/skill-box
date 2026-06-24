@@ -4,18 +4,14 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestDeleteSkill 删除入参。
+// RequestDeleteSkill 删除入参。按 name 定位(不再需要 version)。
 type RequestDeleteSkill struct {
-	Scope     string `json:"scope"`
-	ProjectID uint   `json:"project_id"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
+	Name string `json:"name"`
 }
 
 // DeleteSkill POST /api/skillbox/skills/delete
@@ -25,9 +21,9 @@ func DeleteSkill(c *ginp.ContextPlus, req *RequestDeleteSkill) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	svc := sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store)
-	if derr := svc.Delete(req.Scope, req.Name, req.Version, req.ProjectID); derr != nil {
-		if errors.Is(derr, sskill.ErrInvalidScope) || errors.Is(derr, sskill.ErrEmptyScope) {
+	svc := sskill.New(store)
+	if derr := svc.Delete(req.Name); derr != nil {
+		if errors.Is(derr, sskill.ErrEmptyName) {
 			c.JSON(400, gin.H{"error": derr.Error()})
 			return
 		}
@@ -48,7 +44,7 @@ func init() {
 		PermissionName: "skillbox.skills.delete",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.delete",
-			Description:   "按 (scope, project_id, name, version) 删 skill;幂等",
+			Description:   "按 name 删 skill(整个目录);幂等",
 			RequestParams: RequestDeleteSkill{},
 		},
 	})

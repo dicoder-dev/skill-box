@@ -11,25 +11,27 @@ import (
 	"ginp-api/pkg/logger"
 )
 
-// RequestCreateTag 打 tag 请求。
+// RequestCreateTag 打 tag 请求。2026-06-24 改造:用 (scope, name) 定位 skill。
 type RequestCreateTag struct {
-	SkillID uint   `json:"skill_id"`
-	Tag     string `json:"tag"`
-	Message string `json:"message"`
+	Scope    string `json:"scope"`
+	ProjectID uint  `json:"project_id"`
+	Name     string `json:"name"`
+	Tag      string `json:"tag"`
+	Message  string `json:"message"`
 }
 
 // RespondCreateTag 响应。
 type RespondCreateTag = sskillaudit.CreateTagOutput
 
 // CreateTag POST /api/skillbox/skills/tags/create
-//
-// 给一个 skill 打 tag:把当前所有文件固化到 skill_file_snapshots。
 func CreateTag(c *ginp.ContextPlus, req *RequestCreateTag) {
 	svc := newService()
 	out, err := svc.CreateTag(&sskillaudit.CreateTagInput{
-		SkillID: req.SkillID,
-		Tag:     req.Tag,
-		Message: req.Message,
+		Scope:     req.Scope,
+		ProjectID: req.ProjectID,
+		Name:      req.Name,
+		Tag:       req.Tag,
+		Message:   req.Message,
 	})
 	if err != nil {
 		switch {
@@ -58,7 +60,7 @@ func init() {
 		PermissionName: "skillbox.skills.tags.create",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.tags.create",
-			Description:   "给 skill 打 tag(固化当前文件到 skill_file_snapshots)",
+			Description:   "给 skill 打 tag(固化当前文件到 skill_file_snapshots);用 scope+name 定位",
 			RequestParams: RequestCreateTag{},
 		},
 	})

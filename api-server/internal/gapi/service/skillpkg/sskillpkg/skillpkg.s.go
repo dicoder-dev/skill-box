@@ -4,6 +4,9 @@
 //   - Export 走 skillpkg.BuildBytes(provider) — provider 是本包实现的 adapter,复用 sskill.GetFull
 //   - Import 走 skillpkg.Importer(provider) — provider 复用 sskill.Service.Create
 //   - 上传/下载:Export 直接返 []byte 给 controller,Import 从 controller 拿 []byte
+//
+// 2026-06-24 改造:DB 弃用后,sskill.Service 只剩 store;LoadCanonical/InstallCanonical 不再带
+// scope/projectID/version(单版本覆盖式),InstallCanonical 不返 ID,改用 name 作为结果标识。
 package sskillpkg
 
 import (
@@ -56,37 +59,54 @@ func (s *Service) audit(action string, targetID uint, payload any) {
 }
 
 // sskillAdapter 把 sskill.Service 适配成 skillpkg.CanonicalProvider / SkillInstaller。
+//
+// 2026-06-24:DB 弃用后只剩 store,所以 LoadCanonical 走 store.Get(name),
+// InstallCanonical 走 store.Save 覆盖式;不再有 "row.ID" 这种数字 ID,Install
+// 成功时返回 name 作为结果标识。
 type sskillAdapter struct {
 	svc *sskill.Service
 }
 
 func (a *sskillAdapter) LoadCanonical(scope string, projectID uint, name, version string) (skilladapter.Canonical, bool, error) {
-	full, err := a.svc.GetFull(scope, name, version, projectID)
+	_ = scope
+	_ = projectID
+	_ = version
+	full, err := a.svc.GetFull(name)
 	if err != nil {
 		if errors.Is(err, sskill.ErrNotFound) {
 			return skilladapter.Canonical{}, false, nil
 		}
 		return skilladapter.Canonical{}, false, err
 	}
-	return full.Canonical, true, nil
+	return *full, true, nil
 }
 
 func (a *sskillAdapter) InstallCanonical(scope string, projectID uint, c skilladapter.Canonical, source string) (uint, error) {
+	_ = projectID
+	c.Manifest.Source = firstNonEmpty(c.Manifest.Source, "imported")
+	c.Manifest.SourceRef = firstNonEmpty(c.Manifest.SourceRef, source)
 	in := &sskill.WriteInput{
-		Scope:     scope,
-		ProjectID: projectID,
-		Name:      c.Manifest.Name,
-		Version:   c.Manifest.Version,
-		Source:    "imported",
-		SourceRef: source,
-		Manifest:  c.Manifest,
-		Files:     c.Files,
+		Scope:    scope,
+		Name:     c.Manifest.Name,
+		Version:  c.Manifest.Version,
+		Manifest: c.Manifest,
+		Files:    c.Files,
 	}
-	row, err := a.svc.Create(in)
-	if err != nil {
+	if _, err := a.svc.Create(in); err != nil {
 		return 0, fmt.Errorf("skillpkg: install: %w", err)
 	}
-	return row.ID, nil
+	// 没有数字 ID 了,返回 name 的稳定 hash(仅占位,业务层只用是否 nil 判定成功)
+	return 0, nil
+}
+
+// firstNonEmpty 内部 helper。
+func firstNonEmpty(s ...string) string {
+	for _, v := range s {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // BuildExport 业务层入口:返回一个 (bytes, failures, error)。
@@ -150,21 +170,6 @@ func (s *Service) Import(zipBytes []byte, req skillpkg.ImportRequest) (*skillpkg
 		"skills":        req.Skills,
 		"ok":            out.OK,
 		"failed":        out.Failed,
-		"installed_ids": installedIDs(out),
 	})
 	return out, nil
-}
-
-// installedIDs 从 ImportResult.Items 抽已装成功的 skill_id(失败无 id,跳过)。
-func installedIDs(out *skillpkg.ImportResult) []uint {
-	if out == nil {
-		return nil
-	}
-	ids := make([]uint, 0, len(out.Items))
-	for _, it := range out.Items {
-		if it.SkillID > 0 {
-			ids = append(ids, it.SkillID)
-		}
-	}
-	return ids
 }

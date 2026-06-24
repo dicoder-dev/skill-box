@@ -11,11 +11,11 @@ import (
 	"ginp-api/pkg/logger"
 )
 
-// RequestApplySkill 单 skill apply 请求。
+// RequestApplySkill 单 skill apply 请求。2026-06-24 改造:用 (scope, name) 定位 skill。
 type RequestApplySkill struct {
-	SkillID   uint     `json:"skill_id"`
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
+	Name      string   `json:"name"`
 	Tools     []string `json:"tools"`
 }
 
@@ -23,15 +23,12 @@ type RequestApplySkill struct {
 type RespondApplySkill = sskillapp.ApplyResult
 
 // ApplySkill POST /api/skillbox/skills/apply
-//
-// 把 skill_id 对应的 canonical skill 落到 tools 列表(每个工具一次,失败不互锁)。
-// 返回每工具的 ApplyResult + 是否全部成功。
 func ApplySkill(c *ginp.ContextPlus, req *RequestApplySkill) {
 	svc := newService()
 	out, err := svc.Apply(&sskillapp.ApplyInput{
-		SkillID:   req.SkillID,
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
+		Name:      req.Name,
 		Tools:     req.Tools,
 	})
 	if err != nil {
@@ -59,7 +56,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply",
-			Description:   "把一个 skill 落到一个或多个目标工具",
+			Description:   "把一个 skill 落到一个或多个目标工具;用 scope+name 定位",
 			RequestParams: RequestApplySkill{},
 		},
 	})
@@ -74,6 +71,6 @@ func newService() *sskillapp.Service {
 		if err != nil {
 			return nil, err
 		}
-		return sskill.New(ww, rr, store), nil
+		return sskill.New(store), nil
 	})
 }

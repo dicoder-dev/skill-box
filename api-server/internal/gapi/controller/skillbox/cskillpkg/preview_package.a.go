@@ -34,7 +34,7 @@ func PreviewPackage(c *gin.Context) {
 		return
 	}
 	svc := sskillpkg.New(dbs.GetWriteDb(), dbs.GetReadDb(), func() (*sskill.Service, error) {
-		return sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store), nil
+		return sskill.New(store), nil
 	})
 	mf, err := svc.ParseManifest(body)
 	if err != nil {

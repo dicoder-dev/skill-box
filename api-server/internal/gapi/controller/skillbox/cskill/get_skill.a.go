@@ -4,20 +4,15 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestGetSkill 按 (scope, project_id, name, version) 查。
-// full=true 时返回 canonical + files(给编辑器用);否则只返回 DB 元数据。
+// RequestGetSkill 按 name 查;full=true 时返回 canonical + files(给编辑器用)。
 type RequestGetSkill struct {
-	Scope     string `json:"scope" form:"scope"`
-	ProjectID uint   `json:"project_id" form:"project_id"`
-	Name      string `json:"name" form:"name"`
-	Version   string `json:"version" form:"version"`
-	Full      bool   `json:"full" form:"full"`
+	Name string `json:"name" form:"name"`
+	Full bool   `json:"full" form:"full"`
 }
 
 // GetSkill GET /api/skillbox/skills/get
@@ -27,32 +22,14 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	svc := sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store)
-	if req.Full {
-		full, gerr := svc.GetFull(req.Scope, req.Name, req.Version, req.ProjectID)
-		if gerr != nil {
-			if errors.Is(gerr, sskill.ErrNotFound) {
-				c.JSON(404, gin.H{"error": "not found"})
-				return
-			}
-			if errors.Is(gerr, sskill.ErrInvalidScope) || errors.Is(gerr, sskill.ErrEmptyScope) {
-				c.JSON(400, gin.H{"error": gerr.Error()})
-				return
-			}
-			logger.Error("skill get full: %v", gerr)
-			c.JSON(500, gin.H{"error": gerr.Error()})
-			return
-		}
-		c.JSON(200, full)
-		return
-	}
-	row, gerr := svc.Get(req.Scope, req.Name, req.Version, req.ProjectID)
+	svc := sskill.New(store)
+	canon, gerr := svc.Get(req.Name)
 	if gerr != nil {
 		if errors.Is(gerr, sskill.ErrNotFound) {
 			c.JSON(404, gin.H{"error": "not found"})
 			return
 		}
-		if errors.Is(gerr, sskill.ErrInvalidScope) || errors.Is(gerr, sskill.ErrEmptyScope) {
+		if errors.Is(gerr, sskill.ErrEmptyName) {
 			c.JSON(400, gin.H{"error": gerr.Error()})
 			return
 		}
@@ -60,7 +37,20 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 		c.JSON(500, gin.H{"error": gerr.Error()})
 		return
 	}
-	c.JSON(200, row)
+	if req.Full {
+		c.JSON(200, gin.H{
+			"name":        canon.Manifest.Name,
+			"version":     canon.Manifest.Version,
+			"description": canon.Manifest.Description,
+			"triggers":    canon.Manifest.Triggers,
+			"author":      canon.Manifest.Author,
+			"license":     canon.Manifest.License,
+			"depends_on":  canon.Manifest.DependsOn,
+			"canonical":   canon,
+		})
+		return
+	}
+	c.JSON(200, canon.Manifest)
 }
 
 func init() {
@@ -73,7 +63,7 @@ func init() {
 		PermissionName: "skillbox.skills.get",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.get",
-			Description:   "按 (scope, project_id, name, version) 查 skill;full=true 返回 canonical + files",
+			Description:   "按 name 查 skill;full=true 返回 manifest + files,否则只返 manifest",
 			RequestParams: RequestGetSkill{},
 		},
 	})

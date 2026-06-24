@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/pkg/ginp"
@@ -18,8 +17,6 @@ type RequestCreateSkill struct {
 	ProjectID uint                  `json:"project_id"`
 	Name      string                `json:"name"`
 	Version   string                `json:"version"`
-	Source    string                `json:"source"`
-	SourceRef string                `json:"source_ref"`
 	Manifest  skilladapter.Manifest `json:"manifest"`
 	Files     []skilladapter.File   `json:"files"`
 }
@@ -31,14 +28,12 @@ func CreateSkill(c *ginp.ContextPlus, req *RequestCreateSkill) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	svc := sskill.New(dbs.GetWriteDb(), dbs.GetReadDb(), store)
-	out, cerr := svc.Create(&sskill.WriteInput{
+	svc := sskill.New(store)
+	canon, cerr := svc.Create(&sskill.WriteInput{
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
 		Name:      req.Name,
 		Version:   req.Version,
-		Source:    req.Source,
-		SourceRef: req.SourceRef,
 		Manifest:  req.Manifest,
 		Files:     req.Files,
 	})
@@ -55,7 +50,10 @@ func CreateSkill(c *ginp.ContextPlus, req *RequestCreateSkill) {
 		}
 		return
 	}
-	c.JSON(200, out)
+	c.JSON(200, gin.H{
+		"name":    canon.Manifest.Name,
+		"version": canon.Manifest.Version,
+	})
 }
 
 func init() {
@@ -68,7 +66,7 @@ func init() {
 		PermissionName: "skillbox.skills.create",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.create",
-			Description:   "新建 skill;先写盘(store)再写 DB,失败时回滚物理文件",
+			Description:   "新建 skill;写 SKILL.md 到 ~/.skill-box/skills/<name>/SKILL.md",
 			RequestParams: RequestCreateSkill{},
 		},
 	})

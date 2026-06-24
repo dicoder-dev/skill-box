@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -148,4 +151,116 @@ func RenderSkillMD(c Canonical) string {
 	buf.WriteString("---\n")
 	buf.WriteString(existing)
 	return buf.String()
+}
+
+// safeRelPath 拒绝 ..、绝对路径、含 \0 等可疑 path。包内复用。
+func safeRelPath(p string) (string, error) {
+	if p == "" {
+		return "", errors.New("empty path")
+	}
+	if strings.HasPrefix(p, "/") {
+		return "", fmt.Errorf("absolute path not allowed")
+	}
+	if strings.Contains(p, "\x00") {
+		return "", fmt.Errorf("path contains NUL")
+	}
+	cleaned := filepath.Clean(p)
+	if strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path traversal not allowed")
+	}
+	return cleaned, nil
+}
+
+// WriteSkillDir 把 Canonical 物化到 dir(<name>/SKILL.md + 附属文件)。
+// 单一来源:SKILL.md 包含 frontmatter 元数据 + 全部正文,其它 File 按 Path 铺平。
+// 与 ReadSkillDir 配对使用,保证读写一致。
+//
+// 行为:
+//   - 目录不存在会创建;目标目录已存在时先清空再写(覆盖式,跟旧 skillstore 语义一致)
+//   - SKILL.md 是必填(由 caller 构造 Canonical 时保证;本函数兜底:Files 为空
+//     或没有 SKILL.md 时,自动用 RenderSkillMD 渲染一份)
+//   - 其它 File.Path 必须是相对路径且不含 ..(防穿越)
+func WriteSkillDir(dir string, c Canonical) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("skilladapter: mkdir %s: %w", dir, err)
+	}
+	// 清空目标目录下的文件(. 和 .. 之外的),避免上一次写残留
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("skilladapter: readdir %s: %w", dir, err)
+	}
+	for _, e := range entries {
+		_ = os.RemoveAll(filepath.Join(dir, e.Name()))
+	}
+
+	// 确保 SKILL.md 一定存在
+	hasMain := false
+	for _, f := range c.Files {
+		if f.Path == "SKILL.md" {
+			hasMain = true
+			break
+		}
+	}
+	if !hasMain {
+		c.Files = append([]File{{Path: "SKILL.md", Content: RenderSkillMD(c)}}, c.Files...)
+	}
+
+	for _, f := range c.Files {
+		if f.Path == "" {
+			continue
+		}
+		rel, err := safeRelPath(f.Path)
+		if err != nil {
+			return fmt.Errorf("skilladapter: invalid path %q: %w", f.Path, err)
+		}
+		dst := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("skilladapter: mkdir %s: %w", filepath.Dir(dst), err)
+		}
+		if err := os.WriteFile(dst, []byte(f.Content), 0o644); err != nil {
+			return fmt.Errorf("skilladapter: write %s: %w", dst, err)
+		}
+	}
+	return nil
+}
+
+// ReadSkillDir 从 dir 读 Canonical(等同 base.go 的 readSkillDir,提到本包对外可见)。
+// 约定:目录里必须存在 SKILL.md(作为元数据唯一源);其它附属文件一并加载。
+func ReadSkillDir(dir string) (Canonical, error) {
+	skillMD := filepath.Join(dir, "SKILL.md")
+	content, err := os.ReadFile(skillMD)
+	if err != nil {
+		return Canonical{}, fmt.Errorf("skilladapter: read %s: %w", skillMD, err)
+	}
+	c, err := ParseSkillMD(string(content))
+	if err != nil {
+		return Canonical{}, err
+	}
+	// 装齐所有文件
+	var files []File
+	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files = append(files, File{Path: filepath.ToSlash(rel), Content: string(b)})
+		return nil
+	})
+	if err != nil {
+		return Canonical{}, fmt.Errorf("skilladapter: walk %s: %w", dir, err)
+	}
+	// SKILL.md 一定存在(已 ReadFile 过一次),不需要兜底补
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	c.Files = files
+	return *c, nil
 }

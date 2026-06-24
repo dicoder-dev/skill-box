@@ -122,8 +122,8 @@ type InstallInput struct {
 
 // InstallResult 装到 store 的结果。
 type InstallResult struct {
-	MarketSkill *entity.MarketSkill `json:"market_skill"`
-	Skill       *entity.Skill       `json:"skill"`
+	MarketSkill *entity.MarketSkill     `json:"market_skill"`
+	Canonical   *skilladapter.Canonical `json:"canonical,omitempty"`
 }
 
 // Install 从三方下载,转成 canonical,再走 sskill.Service.Create 落到 store。
@@ -174,20 +174,21 @@ func (s *Service) Install(ctx context.Context, in *InstallInput) (*InstallResult
 	if can.Manifest.License == "" {
 		can.Manifest.License = row.License
 	}
+	// 2026-06-24:WriteInput 不再带 Source/SourceRef;caller 自行把源信息记到 Manifest.Source 字段。
+	can.Manifest.Source = firstNonEmpty(can.Manifest.Source, "market")
+	can.Manifest.SourceRef = firstNonEmpty(can.Manifest.SourceRef, fmt.Sprintf("%s:%s", src.Name, in.RemoteID))
 	created, cerr := ssvc.Create(&sskill.WriteInput{
 		Scope:     scope,
 		ProjectID: in.ProjectID,
 		Name:      can.Manifest.Name,
 		Version:   firstNonEmpty(can.Manifest.Version, row.Version, "0.1.0"),
-		Source:    "market",
-		SourceRef: fmt.Sprintf("%s:%s", src.Name, in.RemoteID),
 		Manifest:  can.Manifest,
 		Files:     can.Files,
 	})
 	if cerr != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, cerr)
 	}
-	return &InstallResult{MarketSkill: row, Skill: created}, nil
+	return &InstallResult{MarketSkill: row, Canonical: created}, nil
 }
 
 // GetMarketSkill 拿单个缓存记录。

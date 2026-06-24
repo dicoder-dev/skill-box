@@ -21,13 +21,14 @@ func NewBatchApplier(a *Applier) *BatchApplier {
 }
 
 // BatchItem 单条 apply 入参(单 skill 单 tool 的笛卡尔基元)。
+// 2026-06-24 改造:用 SkillName + SkillVersion 替代 SkillID。
 type BatchItem struct {
-	SkillID   uint
-	SkillName string
-	Scope     string
-	ProjectID uint
-	Tool      string
-	Canonical *skilladapter.Canonical
+	SkillName    string
+	SkillVersion string
+	Scope        string
+	ProjectID    uint
+	Tool         string
+	Canonical    *skilladapter.Canonical
 }
 
 // BatchOutput 批量结果。
@@ -51,6 +52,7 @@ func (b *BatchApplier) Apply(items []BatchItem, atomic bool) *BatchOutput {
 	successIdx := []int{} // 已成功的 items 下标(回滚时用)
 	for i, it := range items {
 		res, err := b.applier.ApplyOne(ApplyInput{
+			SkillName: it.SkillName,
 			Scope:     it.Scope,
 			ProjectID: it.ProjectID,
 			Tools:     []string{it.Tool},
