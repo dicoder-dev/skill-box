@@ -29,21 +29,32 @@ export function getSkillScopeStatus(params) {
 }
 
 /**
- * 把 skillbox 库里的 skill 复制到目标 (tool, scope, project_id) 位置。
- * force=true 覆盖已有同名。后端 409 + exists=true 时表示同名存在需确认。
- * 响应: { name, tool_id, scope, project_id, path, overwrote }
+ * 把 skillbox 库里的 skill 复制到目标工具的 (scope, project) 位置。
+ * 入参: { scope, project_id, name, tools: [toolID] }
+ * 响应: { name, version, applies: [{tool, target_path, status, apply_id, ...}], all_ok }
+ * 注意:同名已存在时直接覆盖(走 skillapp 内置的 PreSnapshot + 原子写)。
+ * 来源:api-server/internal/gapi/controller/skillbox/cskillapply/apply_skill.a.go
  */
 export function applySkill(payload) {
   return http.post('/api/skillbox/skills/apply', payload)
 }
 
 /**
- * 从目标 (tool, scope, project_id) 位置物理删除该 skill 目录。
- * 路径安全由后端校验(必须落在 adapter 声明的合法根下)。
- * 响应: { name, tool_id, scope, project_id, path, removed }
+ * 列出 skill 的 apply 历史,用于在 unapply 时找到最近一条未撤销的 apply_id。
+ * 入参: { scope, name, tool, status(可选 'applied'/'rolled_back'), page, size }
+ * 响应: { items: [{apply_id, tool, scope, project_id, name, target_path, status, ...}], total, ... }
  */
-export function unapplySkill(payload) {
-  return http.post('/api/skillbox/skills/unapply', payload)
+export function listApplies(params) {
+  return http.get('/api/skillbox/skills/apply/list', params)
+}
+
+/**
+ * 撤销一条 apply(按 apply_id);恢复 PreSnapshot 或删除目标文件。
+ * 入参: { apply_id }
+ * 来源:api-server/internal/gapi/controller/skillbox/cskillapply/undo_skill.a.go
+ */
+export function undoApply(payload) {
+  return http.post('/api/skillbox/skills/apply/undo', payload)
 }
 
 export function createSkill(payload) {

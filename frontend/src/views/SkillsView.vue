@@ -11,7 +11,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, unapplySkill } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
@@ -248,19 +248,7 @@ async function handleToolChipClick(toolSummary) {
     })
     if (!ok) return
     for (const h of targetHits) {
-      busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
-      try {
-        await unapplySkill({
-          name: current.value.name,
-          tool_id: h.tool_id,
-          scope: h.scope,
-          project_id: h.project_id || 0,
-        })
-      } catch (e) {
-        scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
-      } finally {
-        busyKey.value = ''
-      }
+      await doUnapplyOne(h)
     }
     await loadScopeStatus()
     return
@@ -268,7 +256,6 @@ async function handleToolChipClick(toolSummary) {
   // 未生效 → 启用全部
   const targetHits = scopeHits.value.filter((h) => h.tool_id === t.tool_id)
   if (!targetHits.length) return
-  // 先问一次确认,然后对每条非命中的 hit 都触发;遇到 409 同名单独再问覆盖
   const ok = await openConfirm({
     title: t('skills.list.applyConfirmTitle'),
     message: t('skills.list.applyConfirmMessage', {
@@ -306,19 +293,7 @@ async function handleScopeChipClick(target) {
     })
     if (!ok) return
     for (const h of hits) {
-      busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
-      try {
-        await unapplySkill({
-          name: current.value.name,
-          tool_id: h.tool_id,
-          scope: h.scope,
-          project_id: h.project_id || 0,
-        })
-      } catch (e) {
-        scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
-      } finally {
-        busyKey.value = ''
-      }
+      await doUnapplyOne(h)
     }
     await loadScopeStatus()
     return
@@ -343,41 +318,50 @@ async function handleScopeChipClick(target) {
   await loadScopeStatus()
 }
 
-// doApplyOne 启用单个 (tool, scope, project) 组合;同名已存在时弹覆盖确认。
+// doApplyOne 启用单个 (tool, scope, project) 组合。
+//
+// 后端是 cskillapply.ApplySkill:入参 { scope, project_id, name, tools: [toolID] },
+// 同名已存在时由 skillapp 内部走 PreSnapshot + 原子覆盖,所以前端不用单独弹覆盖确认。
 async function doApplyOne(h) {
   busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
   try {
     await applySkill({
       name: current.value.name,
-      tool_id: h.tool_id,
       scope: h.scope,
       project_id: h.project_id || 0,
-      force: false,
+      tools: [h.tool_id],
     })
   } catch (e) {
-    // 409 同名存在 → 弹覆盖确认
-    if (e?.status === 409 || e?.code === 409 || /exists|同名|409/i.test(e?.message || '')) {
-      const ok = await openConfirm({
-        title: t('skills.list.applyOverwriteTitle'),
-        message: t('skills.list.applyOverwriteMessage'),
-        confirmText: t('common.confirm'),
-        variant: 'danger',
-      })
-      if (!ok) { busyKey.value = ''; return }
-      try {
-        await applySkill({
-          name: current.value.name,
-          tool_id: h.tool_id,
-          scope: h.scope,
-          project_id: h.project_id || 0,
-          force: true,
-        })
-      } catch (e2) {
-        scopeError.value = t('skills.list.applyFailed', { msg: e2?.message || String(e2) })
-      }
-    } else {
-      scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
+    scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
+  } finally {
+    busyKey.value = ''
+  }
+}
+
+// doUnapplyOne 停用单个 (tool, scope, project) 组合。
+//
+// 后端用 skillapp 的 apply/undo 机制(走 PreSnapshot 还原或删目标文件),
+// 但 undo 是按 apply_id 撤销,所以前端先 listApplies 找最近一条未撤销的 apply_id。
+// 没找到就报错(用户应该是从外部把目录删了,不走 skillbox undo)。
+async function doUnapplyOne(h) {
+  busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+  try {
+    const list = await listApplies({
+      scope: h.scope,
+      name: current.value.name,
+      tool: h.tool_id,
+      status: 'applied',
+      page: 1,
+      size: 1, // 找最近一条即可
+    })
+    const last = list?.items?.[0]
+    if (!last) {
+      scopeError.value = t('skills.list.unapplyFailed', { msg: 'no active apply record found' })
+      return
     }
+    await undoApply({ apply_id: last.apply_id })
+  } catch (e) {
+    scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
   } finally {
     busyKey.value = ''
   }
