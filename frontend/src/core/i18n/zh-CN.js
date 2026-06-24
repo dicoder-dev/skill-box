@@ -45,6 +45,7 @@ export default {
     processing: '处理中…',
     none: '—',
     dash: '—',
+    confirm: '确认',
     pageOf: '第 {page} / {total} 页 · 共 {count} 条',
     totalCount: '共 {count} 条',
     noData: '该作用域下还没有技能',
@@ -142,7 +143,7 @@ export default {
     },
 
     list: {
-      title: '技能列表',
+      title: '技能',
       colName: '名称',
       colVersion: '版本',
       colSource: '来源',
@@ -159,6 +160,29 @@ export default {
       confirmDelete: '确定删除技能 "{name}@{version}" ?',
       emptyTitle: '该作用域下还没有技能',
       emptyHint: '点右上角"+ 新建技能"开始,或去首次配置从已装工具导入',
+
+      // 左右布局新增
+      btnNewSkill: '新建',
+      btnNewSkillTitle: '新建技能',
+      btnImportSkill: '导入',
+      btnImportSkillTitle: '从已装工具导入',
+      searchTitle: '按名称过滤',
+      selectToView: '从左侧选一个技能查看详情',
+      noFilesHint: '该技能没有可渲染的正文',
+      scopeLabel: '作用域',
+      scopeGlobalChip: '全局',
+      scopeProjectChip: '项目',
+      tagsEmpty: '还没有标签,点右上角打一个',
+      bodyEmpty: 'SKILL.md 还没有正文',
+      bodyTitle: '正文',
+      tooltipTest: '测试',
+      tooltipTag: '打标签',
+      tooltipOpenFolder: '在文件夹打开',
+      tooltipDelete: '删除',
+      copyPath: '复制路径',
+      copied: '已复制',
+      openFailed: '打开失败: {msg}',
+      goOnboarding: '去导入',
     },
 
     ai: {
