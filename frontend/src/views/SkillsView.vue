@@ -1464,6 +1464,8 @@ onMounted(() => {
 
 .md-editor {
   display: block;
+  /* 自适应高度:在 .detail-body (flex:1) 内填满剩余空间;内容少时至少 320px */
+  flex: 1;
   width: 100%;
   min-height: 320px;
   padding: 12px 14px;
@@ -1475,7 +1477,8 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   outline: none;
-  resize: vertical;
+  /* 自适应高度时不需要手动 resize(用户拖拽会破坏自适应),禁止 */
+  resize: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1538,7 +1541,14 @@ onMounted(() => {
 .meta-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.3px; }
 .meta-value { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 
-.detail-body { padding-bottom: 24px; }
+.detail-body {
+  padding-bottom: 24px;
+  /* 占满 .detail-pane 剩余高度,让 .md-editor 能 flex:1 自适应填满 */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .md-body {
   font-size: 13.5px;
