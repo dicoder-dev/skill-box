@@ -246,9 +246,10 @@ func looksLikeSkillContainer(name string) bool {
 	return true
 }
 
-// readSkillDir 读取一个 skill 目录,产出 Canonical(只填 SKILL.md 一个文件;
-// 其它附属文件 v1 不导入,可在 P1 加)。
+// readSkillDir 读取一个 skill 目录,产出 Canonical(包含 SKILL.md + 全部附属文件)。
+//
 // 真实目录绝对路径同时写入 c.SourceDir,供 importer 产出 FoundSkill.SourcePath。
+// Files 列表里 Path 用正斜杠(filepath.ToSlash)统一,便于跨平台比对。
 func readSkillDir(dir string) (Canonical, error) {
 	skillMD := filepath.Join(dir, "SKILL.md")
 	content, err := os.ReadFile(skillMD)
@@ -259,7 +260,12 @@ func readSkillDir(dir string) (Canonical, error) {
 	if err != nil {
 		return Canonical{}, err
 	}
-	c.Files = []File{{Path: "SKILL.md", Content: string(content)}}
+	// 装齐所有文件: SKILL.md 一定在(刚 ReadFile 过一次),其它附属文件一并加载
+	files, err := readDirFiles(dir)
+	if err != nil {
+		return Canonical{}, fmt.Errorf("readSkillDir: walk %s: %w", dir, err)
+	}
+	c.Files = files
 	// 用 EvalSymlinks 解析真实路径,避免 symlink 链上 source_path 一会儿是
 	// ~/.claude/skills 一会儿是 ~/.agents/skills/xxx,便于前端稳定展示。
 	if real, err := filepath.EvalSymlinks(dir); err == nil {
@@ -289,4 +295,42 @@ func (b *BaseAdapter) Apply(c Canonical, targetDir string) error {
 		}
 	}
 	return nil
+}
+
+// readDirFiles 递归扫 dir 下所有文件,产出 File 列表(Path 用正斜杠,已排序)。
+// dir 可能是 symlink(外部工具的 skill 经常用 symlink 链到 ~/.agents/skills/xxx),
+// 内部用 EvalSymlinks 解析真实路径后再 WalkDir,避免 WalkDir 默认不跟随 symlink
+// 导致附属文件被漏掉。
+func readDirFiles(dir string) ([]File, error) {
+	realDir := dir
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		realDir = real
+	}
+	var files []File
+	err := filepath.WalkDir(realDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(realDir, path)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files = append(files, File{
+			Path:    filepath.ToSlash(rel),
+			Content: string(content),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
 }
