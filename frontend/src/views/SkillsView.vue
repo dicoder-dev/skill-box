@@ -11,7 +11,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, unapplySkill } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
@@ -208,6 +208,178 @@ async function loadScopeStatus() {
     scopeHits.value = []
   } finally {
     scopeLoading.value = false
+  }
+}
+
+// ====== scope chip 点击行为(2026-06-24 新增) ======
+// 行为:未生效 chip → 调 apply(同名已存在时弹确认框让用户选覆盖);
+// 已生效 chip → 调 unapply(弹 danger 确认框二次确认)。
+// 进度反馈:用 busyKey 标记当前操作的 (tool_id, scope, project_id),
+// 在 chip 上显示 spinner 避免重复点击。
+const busyKey = ref('') // 形如 "claude|global|0",空表示无操作中
+
+function busyKeyFor(toolID, scope, projectID) {
+  return `${toolID}|${scope}|${projectID || 0}`
+}
+
+function isBusy(toolID, scope, projectID) {
+  return busyKey.value === busyKeyFor(toolID, scope, projectID)
+}
+
+// 工具 chip 行:点击行为 — 找到该工具下的第一个 scope chip 触发(用于"工具级批量"语义)
+// 现阶段未生效时:对所有 (scope=global/project, project_id 已知) 的非命中都触发启用;
+// 至少有一个命中时:对所有命中都触发停用(全停) — 这跟"工具行"维度更匹配。
+async function handleToolChipClick(toolSummary) {
+  if (!current.value) return
+  const t = toolSummary
+  if (t.hitCount > 0) {
+    // 已生效 → 停用全部
+    const targetHits = scopeHits.value.filter((h) => h.tool_id === t.tool_id && h.exists)
+    if (!targetHits.length) return
+    const ok = await openConfirm({
+      title: t('skills.list.unapplyConfirmTitle'),
+      message: t('skills.list.unapplyConfirmMessage', {
+        name: current.value.name,
+        tool: t.display,
+        scope: t('skills.list.scopeToolsRow'),
+      }),
+      confirmText: t('common.delete'),
+      variant: 'danger',
+    })
+    if (!ok) return
+    for (const h of targetHits) {
+      busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+      try {
+        await unapplySkill({
+          name: current.value.name,
+          tool_id: h.tool_id,
+          scope: h.scope,
+          project_id: h.project_id || 0,
+        })
+      } catch (e) {
+        scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
+      } finally {
+        busyKey.value = ''
+      }
+    }
+    await loadScopeStatus()
+    return
+  }
+  // 未生效 → 启用全部
+  const targetHits = scopeHits.value.filter((h) => h.tool_id === t.tool_id)
+  if (!targetHits.length) return
+  // 先问一次确认,然后对每条非命中的 hit 都触发;遇到 409 同名单独再问覆盖
+  const ok = await openConfirm({
+    title: t('skills.list.applyConfirmTitle'),
+    message: t('skills.list.applyConfirmMessage', {
+      name: current.value.name,
+      tool: t.display,
+      scope: t('skills.list.scopeToolsRow'),
+    }),
+    confirmText: t('common.confirm'),
+  })
+  if (!ok) return
+  for (const h of targetHits) {
+    if (h.exists) continue
+    await doApplyOne(h)
+  }
+  await loadScopeStatus()
+}
+
+// 作用域 chip 行:点击行为 — 单点
+async function handleScopeChipClick(target) {
+  if (!current.value) return
+  if (target.existsCount > 0) {
+    // 已生效 → 停用该 (scope, project) 下所有命中工具
+    const hits = target.hits.filter((h) => h.exists)
+    if (!hits.length) return
+    const toolNames = hits.map((h) => toolDisplay.value[h.tool_id] || h.tool_id).join(', ')
+    const ok = await openConfirm({
+      title: t('skills.list.unapplyConfirmTitle'),
+      message: t('skills.list.unapplyConfirmMessage', {
+        name: current.value.name,
+        tool: toolNames,
+        scope: target.project_label,
+      }),
+      confirmText: t('common.delete'),
+      variant: 'danger',
+    })
+    if (!ok) return
+    for (const h of hits) {
+      busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+      try {
+        await unapplySkill({
+          name: current.value.name,
+          tool_id: h.tool_id,
+          scope: h.scope,
+          project_id: h.project_id || 0,
+        })
+      } catch (e) {
+        scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
+      } finally {
+        busyKey.value = ''
+      }
+    }
+    await loadScopeStatus()
+    return
+  }
+  // 未生效 → 启用该 (scope, project) 下所有工具
+  const hits = target.hits
+  if (!hits.length) return
+  const ok = await openConfirm({
+    title: t('skills.list.applyConfirmTitle'),
+    message: t('skills.list.applyConfirmMessage', {
+      name: current.value.name,
+      tool: t('skills.list.scopeToolsRow'),
+      scope: target.project_label,
+    }),
+    confirmText: t('common.confirm'),
+  })
+  if (!ok) return
+  for (const h of hits) {
+    if (h.exists) continue
+    await doApplyOne(h)
+  }
+  await loadScopeStatus()
+}
+
+// doApplyOne 启用单个 (tool, scope, project) 组合;同名已存在时弹覆盖确认。
+async function doApplyOne(h) {
+  busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+  try {
+    await applySkill({
+      name: current.value.name,
+      tool_id: h.tool_id,
+      scope: h.scope,
+      project_id: h.project_id || 0,
+      force: false,
+    })
+  } catch (e) {
+    // 409 同名存在 → 弹覆盖确认
+    if (e?.status === 409 || e?.code === 409 || /exists|同名|409/i.test(e?.message || '')) {
+      const ok = await openConfirm({
+        title: t('skills.list.applyOverwriteTitle'),
+        message: t('skills.list.applyOverwriteMessage'),
+        confirmText: t('common.confirm'),
+        variant: 'danger',
+      })
+      if (!ok) { busyKey.value = ''; return }
+      try {
+        await applySkill({
+          name: current.value.name,
+          tool_id: h.tool_id,
+          scope: h.scope,
+          project_id: h.project_id || 0,
+          force: true,
+        })
+      } catch (e2) {
+        scopeError.value = t('skills.list.applyFailed', { msg: e2?.message || String(e2) })
+      }
+    } else {
+      scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
+    }
+  } finally {
+    busyKey.value = ''
   }
 }
 
@@ -804,39 +976,52 @@ onMounted(() => {
           </p>
 
           <template v-else>
-            <!-- 第一行:工具(5 个) — 命中数 = 徽章 -->
+            <!-- 第一行:工具(5 个) — 命中数 = 徽章;未生效点击=批量启用,已生效点击=批量停用 -->
             <div class="scope-row">
               <span class="scope-row-label">{{ t('skills.list.scopeToolsRow') }}</span>
               <div class="chip-row">
-                <span
+                <button
                   v-for="t in scopeToolSummary"
                   :key="t.tool_id"
-                  :class="['chip', 'chip-tool', t.hasHit ? 'chip-active' : 'chip-muted']"
+                  type="button"
+                  :class="['chip', 'chip-tool', t.hasHit ? 'chip-active' : 'chip-muted', isBusy(t.tool_id, 'global', 0) || scopeHits.some((h) => h.tool_id === t.tool_id && isBusy(h.tool_id, h.scope, h.project_id)) ? 'chip-busy' : '']"
                   :title="t.hasHit
-                    ? `${t.display}: ${t.hitCount} 处生效`
-                    : `${t.display}: 0 处生效`"
+                    ? `${t.display}: ${t.hitCount} 处生效(点击批量停用)`
+                    : `${t.display}: 0 处生效(点击批量启用)`"
+                  @click="handleToolChipClick(t)"
                 >
-                  <Icon :icon="t.icon" width="12" height="12" />
+                  <span
+                    v-if="scopeHits.some((h) => h.tool_id === t.tool_id && isBusy(h.tool_id, h.scope, h.project_id))"
+                    class="spinner spinner-sm chip-spinner"
+                  ></span>
+                  <Icon v-else :icon="t.icon" width="12" height="12" />
                   <span>{{ toolShort(t.tool_id) }}</span>
                   <span v-if="t.hitCount > 0" class="chip-count">{{ t.hitCount }}</span>
-                </span>
+                </button>
               </div>
             </div>
 
-            <!-- 第二行:作用域(全局 + 各项目) — 命中工具列表 = 角标 -->
+            <!-- 第二行:作用域(全局 + 各项目) — 未生效点击=启用,已生效点击=停用 -->
             <div class="scope-row">
               <span class="scope-row-label">{{ t('skills.list.scopeTargetsRow') }}</span>
               <div class="chip-row">
-                <span
+                <button
                   v-for="tg in scopeTargets"
                   :key="tg.key"
-                  :class="['chip', 'chip-scope-target', tg.existsCount > 0 ? 'chip-active' : 'chip-muted']"
+                  type="button"
+                  :class="['chip', 'chip-scope-target', tg.existsCount > 0 ? 'chip-active' : 'chip-muted', tg.hits.some((h) => isBusy(h.tool_id, h.scope, h.project_id)) ? 'chip-busy' : '']"
                   :title="tg.hits
                     .filter((h) => h.exists)
                     .map((h) => `${toolDisplay[h.tool_id] || h.tool_id} · ${h.resolved}`)
-                    .join('\n') || '未生效'"
+                    .join('\n') || (tg.existsCount > 0 ? '点击停用' : '点击启用')"
+                  @click="handleScopeChipClick(tg)"
                 >
+                  <span
+                    v-if="tg.hits.some((h) => isBusy(h.tool_id, h.scope, h.project_id))"
+                    class="spinner spinner-sm chip-spinner"
+                  ></span>
                   <Icon
+                    v-else
                     :icon="tg.scope === 'global' ? 'mdi:earth' : 'mdi:folder-outline'"
                     width="12"
                     height="12"
@@ -852,7 +1037,7 @@ onMounted(() => {
                       class="chip-mini-icon"
                     />
                   </span>
-                </span>
+                </button>
                 <span v-if="!scopeTargets.length" class="chip-empty muted">
                   {{ t('skills.list.scopeEmpty') }}
                 </span>
@@ -1687,14 +1872,15 @@ onMounted(() => {
 
 /* 工具行 chip:active 用主色(黑),未命中用 muted */
 .chip-tool {
-  cursor: default;
+  cursor: pointer;
   background: var(--bg-card);
   color: var(--text-faint);
   border-color: var(--border);
   border-style: dashed; /* 未命中虚线边框,有命中时 active 覆盖回 solid */
   opacity: 0.7;
+  font-family: inherit;
 }
-.chip-tool.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); opacity: 0.85; }
+.chip-tool.chip-muted:hover { background: var(--bg-hover); color: var(--text-dim); opacity: 0.9; }
 .chip-tool.chip-active {
   background: var(--text);
   color: var(--bg-card);
@@ -1702,7 +1888,7 @@ onMounted(() => {
   border-style: solid;
   opacity: 1;
 }
-.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); opacity: 1; }
+.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); opacity: 0.9; }
 
 .chip-count {
   display: inline-flex;
@@ -1725,7 +1911,8 @@ onMounted(() => {
 
 /* 作用域行 chip:active 蓝色,未命中 muted */
 .chip-scope-target {
-  cursor: default;
+  cursor: pointer;
+  font-family: inherit;
 }
 .chip-scope-target.chip-muted {
   background: var(--bg-card);
@@ -1734,7 +1921,7 @@ onMounted(() => {
   border-style: dashed;
   opacity: 0.7;
 }
-.chip-scope-target.chip-muted:hover { background: var(--bg-card); color: var(--text-dim); opacity: 0.85; }
+.chip-scope-target.chip-muted:hover { background: var(--bg-hover); color: var(--text-dim); opacity: 0.9; }
 .chip-scope-target.chip-active {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
@@ -1745,7 +1932,19 @@ onMounted(() => {
 .chip-scope-target.chip-active:hover {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
-  opacity: 1;
+  opacity: 0.9;
+}
+
+/* busy 状态 — 操作中,弱化视觉,显示 spinner */
+.chip-busy {
+  cursor: wait !important;
+  opacity: 0.6 !important;
+  pointer-events: none;
+}
+.chip-spinner {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
 }
 
 .chip-mini-list {

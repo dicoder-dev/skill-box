@@ -28,6 +28,24 @@ export function getSkillScopeStatus(params) {
   return http.get('/api/skillbox/skills/scope-status', params)
 }
 
+/**
+ * 把 skillbox 库里的 skill 复制到目标 (tool, scope, project_id) 位置。
+ * force=true 覆盖已有同名。后端 409 + exists=true 时表示同名存在需确认。
+ * 响应: { name, tool_id, scope, project_id, path, overwrote }
+ */
+export function applySkill(payload) {
+  return http.post('/api/skillbox/skills/apply', payload)
+}
+
+/**
+ * 从目标 (tool, scope, project_id) 位置物理删除该 skill 目录。
+ * 路径安全由后端校验(必须落在 adapter 声明的合法根下)。
+ * 响应: { name, tool_id, scope, project_id, path, removed }
+ */
+export function unapplySkill(payload) {
+  return http.post('/api/skillbox/skills/unapply', payload)
+}
+
 export function createSkill(payload) {
   return http.post('/api/skillbox/skills/create', payload)
 }
