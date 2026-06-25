@@ -211,14 +211,7 @@ const scopeToolSummary = computed(() => {
   return out
 })
 
-// 作用域 chip 在"选中工具"视角下的状态(2026-06-25 新增)
-// - disabled:未选工具 → chip 置灰不可点
-// - targetExists:选中工具在该 (scope, project) 下是否有命中
-function isScopeTargetDisabled(target) {
-  if (!selectedToolID.value) return true
-  // 若后端没返回 (scope, project, tool) 占位记录,也允许启用 — 走 fakeHit 构造
-  return false
-}
+// 2026-06-25 删:isScopeTargetDisabled 不再用,未选工具时点 chip 改弹 toast 提示。
 function selectedToolHitExists(target) {
   if (!selectedToolID.value) return false
   const h = target.hits.find((x) => x.tool_id === selectedToolID.value)
@@ -314,7 +307,11 @@ async function handleToolChipClick(toolSummary) {
 // 这里不再重复刷新。
 async function handleScopeChipClick(target) {
   if (!current.value) return
-  if (!selectedToolID.value) return // 防御:未选工具直接忽略
+  if (!selectedToolID.value) {
+    // 2026-06-25 改:不再 return,给用户一个明确提示,告诉他要点上面工具行。
+    toast.info(t('skills.list.scopeSelectToolFirst'))
+    return
+  }
   const targetTool = selectedToolID.value
   const targetHit = target.hits.find((h) => h.tool_id === targetTool)
   const toolLabel = toolDisplay.value[targetTool] || targetTool
@@ -898,8 +895,16 @@ onMounted(() => {
               <span class="skill-item-version">@{{ p.version }}</span>
             </div>
             <div class="skill-item-meta">
-              <span :class="['badge', p.source === 'market' ? 'blue' : 'gray']">{{ p.source || 'local' }}</span>
-              <span v-if="p.scope === 'project'" class="badge violet">{{ p.project_id }}</span>
+              <!-- 2026-06-25 改:LOCAL 标签换成"已全局应用工具"列表(来自 list 接口的 applied_tools) -->
+              <span
+                v-for="tid in (p.applied_tools || [])"
+                :key="tid"
+                class="skill-item-tool-chip"
+                :title="t('skills.list.appliedGlobal', { tool: toolDisplay[tid] || tid })"
+              >
+                <Icon :icon="toolIcon(tid)" width="11" height="11" />
+                <span>{{ toolShort(tid) }}</span>
+              </span>
             </div>
           </div>
         </li>
@@ -1081,10 +1086,10 @@ onMounted(() => {
                   v-for="tg in scopeTargets"
                   :key="tg.key"
                   type="button"
-                  :disabled="isScopeTargetDisabled(tg)"
                   :class="[
                     'chip', 'chip-scope-target',
                     selectedToolHitExists(tg) ? 'chip-active' : 'chip-muted',
+                    !selectedToolID ? 'chip-target-no-tool' : '',
                     selectedToolBusy(tg) ? 'chip-busy' : '',
                     flashTargetKey === tg.key ? 'chip-flash' : '',
                   ]"
@@ -1620,6 +1625,23 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.skill-item-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1;
+}
+.skill-item-tool-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .badge.gray {
   background: var(--bg-subtle);
   color: var(--text-dim);
@@ -1948,26 +1970,24 @@ onMounted(() => {
   letter-spacing: 0.3px;
 }
 
-/* 工具行 chip:active 用主色(黑),未命中用 muted */
+/* 工具行 chip:active 用主色(黑),未命中用 muted(2026-06-25 改:不降透明度,正常显示就好) */
 .chip-tool {
   cursor: pointer;
   background: var(--bg-card);
-  color: var(--text-faint);
+  color: var(--text);
   border-color: var(--border);
   border-style: dashed; /* 未命中虚线边框,有命中时 active 覆盖回 solid */
-  opacity: 0.7;
   font-family: inherit;
   position: relative;
 }
-.chip-tool.chip-muted:hover { background: var(--bg-hover); color: var(--text-dim); opacity: 0.9; }
+.chip-tool.chip-muted:hover { background: var(--bg-hover); color: var(--text); }
 .chip-tool.chip-active {
   background: var(--text);
   color: var(--bg-card);
   border-color: var(--text);
   border-style: solid;
-  opacity: 1;
 }
-.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); opacity: 0.9; }
+.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); }
 
 /* 2026-06-25 新增:工具 chip "已选中"(单选切换器)态
    - 蓝色加粗边框
@@ -2025,41 +2045,36 @@ onMounted(() => {
   color: var(--text);
 }
 
-/* 作用域行 chip:active 蓝色,未命中 muted */
+/* 作用域行 chip:active 蓝色,未命中 muted(2026-06-25 改:不降透明度,正常显示) */
 .chip-scope-target {
   cursor: pointer;
   font-family: inherit;
 }
 .chip-scope-target.chip-muted {
   background: var(--bg-card);
-  color: var(--text-faint);
+  color: var(--text);
   border-color: var(--border);
   border-style: dashed;
-  opacity: 0.7;
 }
-.chip-scope-target.chip-muted:hover { background: var(--bg-hover); color: var(--text-dim); opacity: 0.9; }
+.chip-scope-target.chip-muted:hover { background: var(--bg-hover); color: var(--text); }
 .chip-scope-target.chip-active {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
   border-color: var(--accent-blue-border);
   border-style: solid;
-  opacity: 1;
 }
 .chip-scope-target.chip-active:hover {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
-  opacity: 0.9;
 }
 
-/* 2026-06-25 新增:作用域 chip disabled(未选工具时) */
-.chip-scope-target:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+/* 2026-06-25 改:未选工具时生效位置 chip 不再 disabled,只是视觉稍弱以提示用户"先选工具" */
+.chip-scope-target.chip-target-no-tool {
+  opacity: 0.85;
 }
-.chip-scope-target:disabled:hover {
-  background: var(--bg-card);
-  color: var(--text-faint);
-  opacity: 0.45;
+.chip-scope-target.chip-target-no-tool:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 /* busy 状态 — 操作中,弱化视觉,显示 spinner */

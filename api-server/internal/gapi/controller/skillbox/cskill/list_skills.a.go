@@ -49,8 +49,27 @@ func ListSkills(c *ginp.ContextPlus, req *RequestListSkills) {
 	if end > total {
 		end = total
 	}
+	// 2026-06-25:给每个 item 注入 applied_tools(global scope 命中的 tool_id 列表),
+	// 前端列表项直接展示"哪些工具已全局应用",避免 N+1 调 scope-status。
+	enriched := make([]map[string]any, 0, end-start)
+	for _, it := range items[start:end] {
+		row := map[string]any{
+			"name":        it.Name,
+			"version":     it.Version,
+			"description": it.Description,
+			"triggers":    it.Triggers,
+		}
+		if it.Author != "" {
+			row["author"] = it.Author
+		}
+		if it.UpdatedAt != "" {
+			row["updated_at"] = it.UpdatedAt
+		}
+		row["applied_tools"] = GlobalAppliedTools(it.Name)
+		enriched = append(enriched, row)
+	}
 	c.JSON(200, gin.H{
-		"items": items[start:end],
+		"items": enriched,
 		"total": total,
 		"page":  page,
 		"size":  size,

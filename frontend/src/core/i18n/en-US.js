@@ -184,6 +184,7 @@ export default {
       unapplyConfirmMessage: 'Delete skill "{name}" from {tool} · {scope} (via apply/undo + PreSnapshot restore). Continue?',
       unapplySuccess: 'Disabled: {path}',
       unapplyFailed: 'Failed to disable: {msg}',
+      appliedGlobal: '{tool} applied globally',
       applying: 'Enabling…',
       unapplying: 'Disabling…',
       tagsEmpty: 'No tags yet, click the icon above to create one',

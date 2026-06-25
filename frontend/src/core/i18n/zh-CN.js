@@ -187,6 +187,7 @@ export default {
       unapplyConfirmMessage: '将从 {tool} · {scope} 删除 skill "{name}"(走 apply/undo 还原 PreSnapshot),继续?',
       unapplySuccess: '已停用:{path}',
       unapplyFailed: '停用失败:{msg}',
+      appliedGlobal: '{tool} 已全局应用',
       applying: '启用中…',
       unapplying: '停用中…',
       tagsEmpty: '还没有标签,点右上角打一个',

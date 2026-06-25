@@ -186,6 +186,33 @@ func skillDirExists(resolved string) bool {
 	return false
 }
 
+// GlobalAppliedTools 给出 name 在 global scope 下、命中(SKILL.md 存在)的 tool_id 列表。
+//
+// 用途:list 接口注入每个 item 的 "applied_tools" 字段,前端不用再 N+1 调 scope-status。
+// 实现:对每个 adapter 拿 DiscoverPaths(global),逐个 stat <path>/<name>/SKILL.md,
+// 命中就 append。失败/warn 跟 GetSkillScopeStatus 行为一致。
+func GlobalAppliedTools(name string) []string {
+	if name == "" {
+		return nil
+	}
+	adapters := skilladapter.All()
+	out := make([]string, 0, len(adapters))
+	for _, a := range adapters {
+		paths, err := a.DiscoverPaths(skilladapter.ScopeGlobal)
+		if err != nil {
+			logger.Warn("global-applied: %s DiscoverPaths(global) failed: %v", a.ToolID(), err)
+			continue
+		}
+		for _, p := range paths {
+			if skillDirExists(filepath.Join(p, name)) {
+				out = append(out, a.ToolID())
+				break // 一个 adapter 多个 global 路径只算一次
+			}
+		}
+	}
+	return out
+}
+
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           "/api/skillbox/skills/scope-status",
