@@ -371,6 +371,8 @@ async function doApplyOne(h) {
       tools: [h.tool_id],
     })
     await loadScopeStatus()
+    // 2026-06-25 增:同步更新左侧列表项的 applied_tools,避免右侧已启用但左侧仍显示旧状态
+    syncLocalAppliedTools()
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)
     const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
@@ -415,6 +417,8 @@ async function doUnapplyOne(h) {
     await undoApply({ apply_id: last.id })
     // 注:后端 SkillApply entity 主键 json tag 是 "id",不是 "apply_id"
     await loadScopeStatus()
+    // 2026-06-25 增:同步更新左侧列表项的 applied_tools(停用时反向操作)
+    syncLocalAppliedTools()
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)
     const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
@@ -434,6 +438,27 @@ const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
 
 function skillKey(p) { return `${p.scope}|${p.project_id || 0}|${p.name}|${p.version}` }
+
+// 2026-06-25 增:从当前 scopeHits 推算 global scope 命中的 tool_id 列表,
+// 用于本地更新 items 里当前 skill 的 applied_tools 字段(右侧 apply/unapply 后
+// 左侧列表要立刻看到新的"已应用工具",不重拉整个列表)。
+function localGlobalAppliedTools() {
+  const set = new Set()
+  for (const h of scopeHits.value) {
+    if (h.scope === 'global' && h.exists) set.add(h.tool_id)
+  }
+  return Array.from(set)
+}
+function syncLocalAppliedTools() {
+  if (!current.value) return
+  const next = localGlobalAppliedTools()
+  const idx = items.value.findIndex((x) => skillKey(x) === skillKey(current.value))
+  if (idx >= 0) {
+    const cur = items.value[idx]
+    // 浅拷 + 替换字段,避免直接改原对象触发不可预期的引用问题
+    items.value.splice(idx, 1, { ...cur, applied_tools: next })
+  }
+}
 
 // AI 输入的上下文 = 当前 skill 的 body
 const currentSkillMd = computed(() => currentBody.value || '')
@@ -484,6 +509,9 @@ async function loadCurrent(row) {
   if (!row) return
   currentLoading.value = true
   currentError.value = ''
+  // 2026-06-25 增:切换前先把旧 current(还在 items 里)的 applied_tools 用旧 scopeHits 同步,
+  // 避免"在 A 上启用/停用后立刻切到 B,A 的列表项没刷新"。
+  syncLocalAppliedTools()
   // 2026-06-25:切 skill 时清掉"工具选中"和 scope 状态,避免把旧 skill 的选择带过来
   selectedToolID.value = null
   scopeHits.value = []
@@ -512,7 +540,9 @@ async function loadCurrent(row) {
       currentTagList.value = out?.items || []
     } catch (_) { currentTagList.value = [] }
     // 拉 scope 实时状态(工具/作用域两级展示)
-    loadScopeStatus()
+    await loadScopeStatus()
+    // 2026-06-25 增:新 skill 的 scopeHits 落库后,同步列表项的 applied_tools
+    syncLocalAppliedTools()
   } catch (e) {
     currentError.value = e?.message || String(e)
     current.value = { ...row }
