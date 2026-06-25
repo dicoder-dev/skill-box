@@ -1696,17 +1696,17 @@ onMounted(() => {
   border-color: var(--accent-blue);
 }
 
-/* 左侧色条:选中时变蓝色,未选中时为细灰条 */
+/* 2026-06-25 四改:未选中时色条透明不显示,选中时用主色(不用蓝色) */
 .skill-item-bar {
   flex-shrink: 0;
   width: 3px;
   align-self: stretch;
-  background: var(--border);
+  background: transparent;
   margin-right: 0;
   transition: background-color 0.15s ease;
 }
 
-.skill-item-active .skill-item-bar { background: var(--accent-blue); }
+.skill-item-active .skill-item-bar { background: var(--primary); }
 
 .skill-item-main {
   flex: 1;
