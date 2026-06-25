@@ -165,6 +165,42 @@ func TestApplyOne_RejectsUnknownTool(t *testing.T) {
 	}
 }
 
+// TestApplyOne_NilRegistry_FallsBackToDefault 验证 2026-06-25 修复:
+// NewApplier(nil) 不能 panic,要在 resolveRegistry() 处退化到 skilladapter.DefaultRegistry。
+//
+// 修复前:传 nil 后 a.registry 是 nil,a.registry.Get() 直接 nil pointer panic。
+// 修复后:resolveRegistry 内部判 nil,返回 defaultRegistry,Get 正常工作。
+func TestApplyOne_NilRegistry_FallsBackToDefault(t *testing.T) {
+	// 注册到 defaultRegistry(全进程共享,可能有别的测试残留,清理时加锁)
+	toolID := "test-fallback-tool"
+	t.Cleanup(func() {
+		// 没暴露 unregister,所以让 defaultRegistry 留着这个 id — 不影响其他测试。
+		// 只要 toolID 唯一,不会跟其他 fake 冲突。
+	})
+	// 注册一个 stub adapter 到默认 registry
+	defaultReg := skilladapter.DefaultRegistry()
+	// 防御:如果 toolID 已经被注册(比如其他测试用同一个 id),跳过
+	if _, exists := defaultReg.Get(toolID); !exists {
+		root := t.TempDir()
+		fa := &fakeAdapter{id: toolID, root: root}
+		defaultReg.Register(fa)
+	}
+
+	// 关键:NewApplier(nil) — 旧版会 panic
+	ap := skillapp.NewApplier(nil)
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{toolID},
+		Canonical: ptrCanon(sampleCanon("fallback-skill")),
+	})
+	if err != nil {
+		t.Fatalf("apply with nil registry: %v (want success via default fallback)", err)
+	}
+	if res == nil || res.Status != skillapp.StatusApplied {
+		t.Errorf("res = %+v, want applied", res)
+	}
+}
+
 func TestApplyOne_RejectsEmptyFiles(t *testing.T) {
 	root := t.TempDir()
 	fa := &fakeAdapter{id: "fake", root: root}

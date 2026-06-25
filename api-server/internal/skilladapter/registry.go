@@ -17,6 +17,11 @@ type Registry struct {
 
 var defaultRegistry = &Registry{m: make(map[string]Adapter)}
 
+// DefaultRegistry 返回全局默认 registry 指针(供 Applier 等"忘了注入"的场景兜底)。
+// 不要在 adapter 业务代码里使用 — 业务侧应通过 Service.WithAdapterRegistry 注入;
+// 这里只暴露给那些"生产路径就是用默认"的初始化器,避免 nil panic。
+func DefaultRegistry() *Registry { return defaultRegistry }
+
 // Register 把 adapter 注册到默认 registry。同名重复注册会 panic(早期暴露重复实现)。
 func Register(a Adapter) { defaultRegistry.Register(a) }
 

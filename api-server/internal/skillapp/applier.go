@@ -36,6 +36,18 @@ func NewApplierWithClock(registry *skilladapter.Registry, now func() time.Time) 
 	return a
 }
 
+// resolveRegistry 取出实际使用的 registry;nil 时退化到全局默认。
+//
+// 2026-06-25 修复:之前 NewApplier(nil) 会把 nil 存进 a.registry,
+// 后面 a.registry.Get() 直接 nil 指针 panic。
+// 这里统一兜底,让"没注入就用默认"的注释承诺兑现,避免每个 controller 都得记着 WithAdapterRegistry。
+func (a *Applier) resolveRegistry() *skilladapter.Registry {
+	if a.registry != nil {
+		return a.registry
+	}
+	return skilladapter.DefaultRegistry()
+}
+
 // ApplyResult 单 tool 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
 type ApplyResult struct {
 	Tool        string       `json:"tool"`
@@ -70,7 +82,7 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 		return nil, fmt.Errorf("skillapp: invalid scope %q", in.Scope)
 	}
 	toolID := in.Tools[0]
-	ad, ok := a.registry.Get(toolID)
+	ad, ok := a.resolveRegistry().Get(toolID)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, toolID)
 	}
