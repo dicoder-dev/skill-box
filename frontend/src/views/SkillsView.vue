@@ -42,16 +42,18 @@ const currentTagList = ref([])    // 当前 skill 的 tag 列表
 const currentLoading = ref(false)
 const currentError = ref('')
 
-// 内联编辑
-const editing = ref(false)        // 是否处于内联编辑态
-const editBody = ref('')          // 编辑器内的 body 文本
-const editTriggersText = ref('')  // 编辑器内的触发词(逗号/换行分隔)
-const editError = ref('')         // 校验错误
-const editSaving = ref(false)     // 保存中
+// 内联编辑(2026-06-25 三改:同时编辑 description + 触发词 + 正文)
+const editing = ref(false)            // 是否处于内联编辑态
+const editBody = ref('')              // 编辑器内的 body 文本
+const editDescription = ref('')       // 编辑器内的 description 文本
+const editTriggersText = ref('')      // 编辑器内的触发词(换行/逗号分隔)
+const editError = ref('')             // 校验错误
+const editSaving = ref(false)         // 保存中
 
 function startInlineEdit() {
   if (!current.value) return
   editBody.value = currentBody.value || ''
+  editDescription.value = currentMeta.description || ''
   // 触发词编辑态:把数组转成"换行分隔"的纯文本,用户改完再 split 回去
   editTriggersText.value = (currentMeta.triggers || []).join('\n')
   editError.value = ''
@@ -60,23 +62,26 @@ function startInlineEdit() {
 function cancelInlineEdit() {
   editing.value = false
   editBody.value = ''
+  editDescription.value = ''
   editTriggersText.value = ''
   editError.value = ''
 }
 async function saveInlineEdit() {
   if (!current.value) return
   editError.value = ''
-  // 触发词:从文本 split 成数组,过滤空字符串 + 去重
+  // 触发词:从文本 split 成数组,过滤空字符串
   const newTriggers = (editTriggersText.value || '')
     .split(/[\n,]/)
     .map((s) => s.trim())
     .filter(Boolean)
+  const newDescription = (editDescription.value || '').trim()
   editSaving.value = true
   try {
-    // 先同步触发词到 currentMeta(用户视角的"立刻反馈")
+    // 先同步到 currentMeta(用户视角的"立刻反馈")
+    currentMeta.description = newDescription
     currentMeta.triggers = newTriggers
-    // 重新拼 SKILL.md(保留 frontmatter,只换 body)
-    const newMd = rebuildSkillMd(editBody.value, newTriggers)
+    // 重新拼 SKILL.md(保留 frontmatter,替换 description/triggers/body)
+    const newMd = rebuildSkillMd(editBody.value, newTriggers, newDescription)
     await updateSkill({
       scope: current.value.scope,
       project_id: current.value.project_id,
@@ -86,7 +91,7 @@ async function saveInlineEdit() {
       manifest: {
         name: current.value.name,
         version: current.value.version,
-        description: currentMeta.description || '',
+        description: newDescription,
         triggers: newTriggers,
       },
       files: [{ path: 'SKILL.md', content: newMd }],
@@ -101,12 +106,15 @@ async function saveInlineEdit() {
   }
 }
 
-// 用现有 frontmatter 重新拼一份 SKILL.md(只替换 body + 可选替换触发词)
-function rebuildSkillMd(newBody, newTriggers) {
+// 用现有 frontmatter 重新拼一份 SKILL.md
+// newBody: 必填,新正文
+// newTriggers: 可选,不传则保留 currentMeta.triggers
+// newDescription: 可选,不传则保留 currentMeta.description
+function rebuildSkillMd(newBody, newTriggers, newDescription) {
   const fm = {
     name: current.value?.name || '',
     version: current.value?.version || '',
-    description: currentMeta.description || '',
+    description: newDescription !== undefined ? newDescription : (currentMeta.description || ''),
     triggers: newTriggers !== undefined ? newTriggers : (currentMeta.triggers || []),
   }
   const yaml = Object.entries(fm)
@@ -1038,8 +1046,47 @@ onMounted(() => {
                 @keyup.enter="openTagDialog"
               >@{{ current.version }}</code>
               <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']">{{ current.source || 'local' }}</span>
+              <!-- 2026-06-25 改:编辑按钮从 detail-body 顶部搬到 detail-title-row 右侧(在 LOCAL 徽章之后) -->
+              <div v-if="!editing" class="detail-title-actions">
+                <button
+                  class="ghost-link"
+                  :title="t('common.edit')"
+                  @click="startInlineEdit"
+                >
+                  <Icon icon="mdi:pencil" width="12" height="12" />
+                  {{ t('common.edit') }}
+                </button>
+              </div>
             </div>
-            <p v-if="currentMeta.description" class="detail-desc">{{ currentMeta.description }}</p>
+
+            <!-- 2026-06-25 改:description 下方接触发词行内展示 -->
+            <p v-if="!editing && currentMeta.description" class="detail-desc">{{ currentMeta.description }}</p>
+            <textarea
+              v-else-if="editing"
+              v-model="editDescription"
+              class="desc-editor"
+              rows="2"
+              spellcheck="false"
+              :placeholder="t('skills.editor.descriptionHint')"
+              :disabled="editSaving"
+            ></textarea>
+
+            <!-- 2026-06-25 改:触发词行内展示,在 description 下方;编辑态变 textarea -->
+            <div v-if="!editing && (currentMeta.triggers || []).length" class="detail-triggers-row">
+              <span class="triggers-label">{{ t('skills.editor.triggers') }}</span>
+              <span class="meta-text">{{ (currentMeta.triggers || []).join('、') }}</span>
+            </div>
+            <div v-else-if="editing" class="detail-triggers-row editing">
+              <span class="triggers-label">{{ t('skills.editor.triggers') }}</span>
+              <textarea
+                v-model="editTriggersText"
+                class="triggers-editor"
+                rows="2"
+                spellcheck="false"
+                :placeholder="t('skills.editor.triggersHint')"
+                :disabled="editSaving"
+              ></textarea>
+            </div>
           </div>
 
           <div class="detail-actions">
@@ -1220,30 +1267,8 @@ onMounted(() => {
              section 本身保留,只显示一行说明 + "管理"按钮占位也行,但用户只要求"不打 tag 部分显示"。
              直接整段删掉,标签入口只剩顶栏的 tag-outline 按钮和 detail-version 点击。 -->
 
-        <!-- 触发词 + 更新时间 -->
-        <section v-if="currentMeta.triggers?.length || current.updated_at || editing" class="detail-section detail-meta-row">
-          <div v-if="currentMeta.triggers?.length || editing" class="meta-block">
-            <span class="meta-label">{{ t('skills.editor.triggers') }}</span>
-            <!-- 查看态:触发词改纯文本一行(逗号分隔),2026-06-25 不再做 chip 列表 -->
-            <div v-if="!editing" class="meta-text">
-              {{ (currentMeta.triggers || []).join('、') }}
-            </div>
-            <!-- 编辑态:触发词变成 textarea,可以同步编辑 -->
-            <textarea
-              v-else
-              v-model="editTriggersText"
-              class="triggers-editor"
-              rows="2"
-              spellcheck="false"
-              :placeholder="t('skills.editor.triggersHint')"
-              :disabled="editSaving"
-            ></textarea>
-          </div>
-          <div v-if="current.updated_at" class="meta-block meta-block-time">
-            <span class="meta-label">{{ t('skills.list.colUpdated') }}</span>
-            <span class="meta-value">{{ (current.updated_at || '').slice(0, 19) }}</span>
-          </div>
-        </section>
+        <!-- 2026-06-25 改:触发词已搬到 description 下方行内展示,触发词 + 更新时间 独立 section 删除。
+             更新时间挪到 detail-toolbar 标题行右侧,作为次要信息展示。 -->
 
         <!-- 正文 -->
         <section class="detail-section detail-body">
@@ -1252,13 +1277,9 @@ onMounted(() => {
               <Icon :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
               {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
             </h3>
-            <div v-if="!editing" class="body-actions">
-              <button class="ghost-link" :title="t('common.edit')" @click="startInlineEdit">
-                <Icon icon="mdi:pencil" width="12" height="12" />
-                {{ t('common.edit') }}
-              </button>
-            </div>
-            <div v-else class="body-actions">
+            <!-- 2026-06-25 改:查看态的"编辑"按钮已搬到 detail-title-row 右侧(标题 LOCAL 徽章之后),
+                 这里只保留编辑态的"取消/保存"操作 -->
+            <div v-if="editing" class="body-actions">
               <button class="ghost-link" :disabled="editSaving" @click="cancelInlineEdit">
                 <Icon icon="mdi:close" width="12" height="12" />
                 {{ t('common.cancel') }}
@@ -1630,12 +1651,16 @@ onMounted(() => {
 .skill-list {
   list-style: none;
   margin: 0;
-  padding: 4px 0;
+  padding: 10px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* 卡片之间留间距 */
 }
 
+/* 2026-06-25 改:列表项改卡片样式(圆角 + hover 浮起 + 选中蓝色边框) */
 .skill-item {
   position: relative;
   display: flex;
@@ -1643,29 +1668,51 @@ onMounted(() => {
   gap: 0;
   padding: 0;
   cursor: pointer;
-  transition: background-color 0.12s ease;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   outline: none;
+  overflow: hidden;
 }
 
-.skill-item:hover { background: var(--bg-hover); }
-.skill-item:focus-visible { background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--text-faint); }
-.skill-item-active { background: var(--bg-subtle); }
-.skill-item-active:hover { background: var(--bg-subtle); }
+.skill-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.skill-item:focus-visible {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--accent-blue-bg);
+}
+.skill-item-active {
+  background: var(--bg-subtle);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+.skill-item-active:hover {
+  background: var(--bg-subtle);
+  border-color: var(--accent-blue);
+}
 
+/* 左侧色条:选中时变蓝色,未选中时为细灰条 */
 .skill-item-bar {
   flex-shrink: 0;
   width: 3px;
   align-self: stretch;
-  background: transparent;
-  margin-right: 8px;
+  background: var(--border);
+  margin-right: 0;
+  transition: background-color 0.15s ease;
 }
 
-.skill-item-active .skill-item-bar { background: var(--primary); }
+.skill-item-active .skill-item-bar { background: var(--accent-blue); }
 
 .skill-item-main {
   flex: 1;
   min-width: 0;
-  padding: 8px 12px 8px 0;
+  padding: 10px 12px 10px 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1826,6 +1873,14 @@ onMounted(() => {
   min-width: 0;
 }
 
+/* 2026-06-25 新增:标题行右侧"编辑"按钮容器 */
+.detail-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto; /* 顶到最右 */
+}
+
 .detail-name {
   font-size: 18px;
   font-weight: 700;
@@ -1866,6 +1921,53 @@ onMounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* 2026-06-25 新增:编辑态的 description 编辑框 */
+.desc-editor {
+  margin: 6px 0 0;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.desc-editor:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.desc-editor:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 2026-06-25 新增:触发词行内展示 — 在 description 下方 */
+.detail-triggers-row {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.detail-triggers-row.editing {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+}
+.triggers-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding-top: 3px;
 }
 
 .detail-actions {
@@ -2220,14 +2322,14 @@ onMounted(() => {
 .meta-block-time { min-width: 180px; }
 .meta-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.3px; }
 .meta-value { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
-/* 2026-06-25 改:触发词从 chip 列表改成纯文本一行,顿号分隔 */
+/* 2026-06-25 改:触发词从独立 section 改到 description 下方行内展示,纯文本一行,顿号分隔 */
 .meta-text {
   font-size: 13px;
   color: var(--text);
   line-height: 1.5;
   word-break: break-word;
 }
-/* 2026-06-25 改:编辑态触发词变成 textarea,可同步编辑 */
+/* 2026-06-25 改:编辑态触发词变成 textarea(行内),可同步编辑 */
 .triggers-editor {
   width: 100%;
   min-height: 56px;
