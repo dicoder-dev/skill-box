@@ -363,16 +363,20 @@ async function handleScopeChipClick(target) {
 // 这样 toast/flash 出现时 chip 已经处于"已生效"选中态,语义对齐。
 async function doApplyOne(h) {
   busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+  // 2026-06-25 二改:锁住 apply 时的 skill 元数据,避免 await 期间用户切到别的 skill
+  // 导致后续 patch 找错列表项。
+  const targetSkill = current.value ? { ...current.value } : null
   try {
     await applySkill({
-      name: current.value.name,
+      name: targetSkill.name,
       scope: h.scope,
       project_id: h.project_id || 0,
       tools: [h.tool_id],
     })
     await loadScopeStatus()
-    // 2026-06-25 增:同步更新左侧列表项的 applied_tools,避免右侧已启用但左侧仍显示旧状态
-    syncLocalAppliedTools()
+    // 2026-06-25 三改:用确定性增量 patch(锁定 targetSkill + 显式 toolId/scope/op),
+    // 不依赖 scopeHits 推算,避免 await 期间 current 变化或 scopeHits 被污染。
+    patchAppliedTools(targetSkill, h.tool_id, h.scope, 'add')
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)
     const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
@@ -398,10 +402,12 @@ async function doApplyOne(h) {
 // 保证 flash 那 2s 内 chip 已经是"已停用"态(从 chip-active → chip-muted)。
 async function doUnapplyOne(h) {
   busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
+  // 2026-06-25 二改:锁住 undo 时的 skill 元数据(同上,避免 await 期间 current 被切走)
+  const targetSkill = current.value ? { ...current.value } : null
   try {
     const list = await listApplies({
       scope: h.scope,
-      name: current.value.name,
+      name: targetSkill.name,
       tool: h.tool_id,
       status: 'applied',
       page: 1,
@@ -417,8 +423,8 @@ async function doUnapplyOne(h) {
     await undoApply({ apply_id: last.id })
     // 注:后端 SkillApply entity 主键 json tag 是 "id",不是 "apply_id"
     await loadScopeStatus()
-    // 2026-06-25 增:同步更新左侧列表项的 applied_tools(停用时反向操作)
-    syncLocalAppliedTools()
+    // 2026-06-25 三改:用确定性增量 patch(锁定 targetSkill + 显式 toolId/scope/op)
+    patchAppliedTools(targetSkill, h.tool_id, h.scope, 'remove')
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)
     const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
@@ -437,27 +443,37 @@ async function doUnapplyOne(h) {
 const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
 
-function skillKey(p) { return `${p.scope}|${p.project_id || 0}|${p.name}|${p.version}` }
-
-// 2026-06-25 增:从当前 scopeHits 推算 global scope 命中的 tool_id 列表,
-// 用于本地更新 items 里当前 skill 的 applied_tools 字段(右侧 apply/unapply 后
-// 左侧列表要立刻看到新的"已应用工具",不重拉整个列表)。
-function localGlobalAppliedTools() {
-  const set = new Set()
-  for (const h of scopeHits.value) {
-    if (h.scope === 'global' && h.exists) set.add(h.tool_id)
-  }
-  return Array.from(set)
+// 2026-06-25 二改:skillKey 改为只取 name(后端 listSkills 不返回 scope/project_id,
+// 之前用 scope|project_id|name|version 会因为 scope/project_id 都是 undefined,
+// 所有 item 的 key 都一样,导致 findIndex 总是命中 idx=0,splice 时把第一行
+// 列表项错误覆盖)。
+// store layout 是 <StoreRoot>/<name>/SKILL.md,name 在 storeRoot 里唯一,version 只
+// 是 SKILL.md frontmatter metadata,不影响列表项定位。
+function skillKey(p) {
+  if (!p) return ''
+  return p.name || ''
 }
-function syncLocalAppliedTools() {
-  if (!current.value) return
-  const next = localGlobalAppliedTools()
-  const idx = items.value.findIndex((x) => skillKey(x) === skillKey(current.value))
-  if (idx >= 0) {
-    const cur = items.value[idx]
-    // 浅拷 + 替换字段,避免直接改原对象触发不可预期的引用问题
-    items.value.splice(idx, 1, { ...cur, applied_tools: next })
-  }
+
+// 2026-06-25 增 + 二改:apply/unapply 成功后,用锁定的 toolId + scope 局部更新
+// items 里指定 skill 的 applied_tools 字段。
+//
+// 设计: 不依赖 scopeHits 推算(避免 await 期间 scopeHits 被 loadCurrent 切走
+// 污染后,推算成别的 skill 的 applied_tools 写到目标列表项)。改用确定性增量:
+//   - apply  global: add toolId 到 applied_tools(去重)
+//   - apply  非 global: 不动
+//   - unapply global: remove toolId
+//   - unapply 非 global: 不动
+// 2026-06-25 三改:接受显式 targetSkill / toolId / scope 参数(由 caller 锁定),
+// 避免在 await 期间 current 变化导致找错列表项。
+function patchAppliedTools(targetSkill, toolId, scope, op) {
+  if (!targetSkill || !toolId || scope !== 'global') return // 只 global 改列表项
+  const idx = items.value.findIndex((x) => skillKey(x) === skillKey(targetSkill))
+  if (idx < 0) return
+  const cur = items.value[idx]
+  const curSet = new Set(cur.applied_tools || [])
+  if (op === 'add') curSet.add(toolId)
+  else if (op === 'remove') curSet.delete(toolId)
+  items.value.splice(idx, 1, { ...cur, applied_tools: Array.from(curSet) })
 }
 
 // AI 输入的上下文 = 当前 skill 的 body
@@ -509,9 +525,9 @@ async function loadCurrent(row) {
   if (!row) return
   currentLoading.value = true
   currentError.value = ''
-  // 2026-06-25 增:切换前先把旧 current(还在 items 里)的 applied_tools 用旧 scopeHits 同步,
-  // 避免"在 A 上启用/停用后立刻切到 B,A 的列表项没刷新"。
-  syncLocalAppliedTools()
+  // 2026-06-25 二改:去掉切走前的 syncLocalAppliedTools。
+  // 旧版用旧 scopeHits 推算旧 current 的 applied_tools,但旧 scopeHits 可能是 []
+  // (loadScopeStatus 还没跑完),会把列表项清空。改用"只在 mutation 路径 sync"。
   // 2026-06-25:切 skill 时清掉"工具选中"和 scope 状态,避免把旧 skill 的选择带过来
   selectedToolID.value = null
   scopeHits.value = []
@@ -541,15 +557,16 @@ async function loadCurrent(row) {
     } catch (_) { currentTagList.value = [] }
     // 拉 scope 实时状态(工具/作用域两级展示)
     await loadScopeStatus()
-    // 2026-06-25 增:新 skill 的 scopeHits 落库后,同步列表项的 applied_tools
-    syncLocalAppliedTools()
+    // 2026-06-25 二改:去掉切到后的 syncLocalAppliedTools(同上,新 scopeHits 推算的
+    // 新 current 列表项值和后端 reload 时注入的值应一致;切到新 skill 也会在
+    // 该 skill 上的 doApplyOne/doUnapplyOne 路径 sync,不会漏同步)。
   } catch (e) {
     currentError.value = e?.message || String(e)
     current.value = { ...row }
     currentMd.value = ''
     currentBody.value = ''
   } finally {
-    currentLoading.value = false
+    currentLoading.value = ''
   }
 }
 
@@ -909,7 +926,7 @@ onMounted(() => {
       <ul class="skill-list" role="listbox" :aria-label="t('skills.title')">
         <li
           v-for="(p, i) in filteredItems"
-          :key="`${p.scope}-${p.project_id || 0}-${p.name}-${p.version}`"
+          :key="p.name"
           :ref="(el) => { if (el) listRefs[i] = el }"
           tabindex="0"
           role="option"
