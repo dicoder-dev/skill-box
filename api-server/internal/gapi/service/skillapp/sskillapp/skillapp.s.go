@@ -117,6 +117,46 @@ type ApplyResult struct {
 	AllOK    bool                    `json:"all_ok"`
 }
 
+// recordApply 写一条 SkillApply 行。
+//
+// 2026-06-25 修:之前每次 apply 都 Create,同名同 scope 重复 apply 会撞
+// skill_applies 的 (scope, project_id, name) uniqueIndex。现在改 upsert:
+// 存在同键行 → Update(applied_at/pre_snapshot/target_path/tool/status),
+// 不存在 → Create。这样 redo / 重新启用 都安全。
+func (s *Service) recordApply(scope string, projectID uint, name, tool string, res *skillapp.ApplyResult) {
+	if res == nil {
+		return
+	}
+	pre := res.PreSnapshot.Marshal()
+	existing, _ := s.applyModel().FindLatestByKey(scope, projectID, name)
+	if existing != nil {
+		existing.Tool = tool
+		existing.Status = res.Status
+		existing.TargetPath = res.TargetPath
+		existing.PreSnapshot = pre
+		existing.AppliedAt = res.FinishedAt
+		existing.RolledBackAt = nil // 重新启用时清掉回滚时间
+		if err := s.applyModel().Update(where.New(mskillapply.FieldID, "=", existing.ID).Conditions(), existing); err == nil {
+			res.ApplyID = existing.ID
+		}
+		return
+	}
+	row := &entity.SkillApply{
+		Scope:       scope,
+		ProjectID:   projectID,
+		Name:        name,
+		Tool:        tool,
+		Status:      res.Status,
+		TargetPath:  res.TargetPath,
+		PreSnapshot: pre,
+		AppliedAt:   res.FinishedAt,
+	}
+	created, _ := s.applyModel().Create(row)
+	if created != nil {
+		res.ApplyID = created.ID
+	}
+}
+
 // Apply 跑一次 apply:从 sskill 拿 canonical,逐 tool apply。
 func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 	if in == nil {
@@ -163,28 +203,15 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 			})
 		}
 		if res != nil {
-			row := &entity.SkillApply{
-				Scope:       scope,
-				ProjectID:   in.ProjectID,
-				Name:        full.Manifest.Name,
-				Tool:        tool,
-				Status:      res.Status,
-				TargetPath:  res.TargetPath,
-				PreSnapshot: res.PreSnapshot.Marshal(),
-				AppliedAt:   res.FinishedAt,
-			}
-			created, _ := s.applyModel().Create(row)
-			if created != nil {
-				res.ApplyID = created.ID
-				if res.Status == skillapp.StatusApplied {
-					s.audit(0, full.Manifest.Name, map[string]any{
-						"action":     "apply",
-						"tool":       tool,
-						"scope":      scope,
-						"target_path": res.TargetPath,
-						"apply_id":   created.ID,
-					})
-				}
+			s.recordApply(scope, in.ProjectID, full.Manifest.Name, tool, res)
+			if res.ApplyID > 0 && res.Status == skillapp.StatusApplied {
+				s.audit(0, full.Manifest.Name, map[string]any{
+					"action":     "apply",
+					"tool":       tool,
+					"scope":      scope,
+					"target_path": res.TargetPath,
+					"apply_id":   res.ApplyID,
+				})
 			}
 			res.PreSnapshot = nil
 		}
@@ -232,26 +259,15 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		if bir.Result == nil {
 			continue
 		}
-		row := &entity.SkillApply{
-			Scope:       bir.Scope,
-			ProjectID:   bir.ProjectID,
-			Name:        bir.SkillName,
-			Tool:        bir.Tool,
-			Status:      bir.Result.Status,
-			TargetPath:  bir.Result.TargetPath,
-			PreSnapshot: bir.Result.PreSnapshot.Marshal(),
-			AppliedAt:   bir.Result.FinishedAt,
-		}
-		created, _ := s.applyModel().Create(row)
-		if created != nil {
-			bir.Result.ApplyID = created.ID
+		s.recordApply(bir.Scope, bir.ProjectID, bir.SkillName, bir.Tool, bir.Result)
+		if bir.Result.ApplyID > 0 {
 			if bir.Result.Status == skillapp.StatusApplied {
 				s.audit(0, bir.SkillName, map[string]any{
 					"action":      "apply",
 					"tool":        bir.Tool,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
-					"apply_id":    created.ID,
+					"apply_id":    bir.Result.ApplyID,
 					"batch":       true,
 				})
 			} else if bir.Result.Status == skillapp.StatusFailed {

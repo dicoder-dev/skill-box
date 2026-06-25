@@ -2,6 +2,8 @@ package mskillapply
 
 import (
 	"fmt"
+	"strings"
+
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/pkg/dbops"
 	"ginp-api/pkg/where"
@@ -53,6 +55,31 @@ func (s *Model) FindOne(wheres []*where.Condition) (*entity.SkillApply, error) {
 // FindOneById 按主键查。
 func (s *Model) FindOneById(id uint) (*entity.SkillApply, error) {
 	return s.FindOne(where.New(FieldID, "=", id).Conditions())
+}
+
+// FindLatestByKey 按 (scope, project_id, name) 找最近一条(applied_at desc)。
+// uniqueIndex 约束下,同一键只可能有一行,函数名仍叫 Latest 是为将来扩 tool 列预留。
+func (s *Model) FindLatestByKey(scope string, projectID uint, name string) (*entity.SkillApply, error) {
+	conds := []*where.Condition{}
+	if sc := strings.TrimSpace(scope); sc != "" {
+		conds = append(conds, where.New(FieldScope, "=", sc).Conditions()...)
+	}
+	if name = strings.TrimSpace(name); name == "" {
+		return nil, fmt.Errorf("findlatest skill_apply: empty name")
+	}
+	conds = append(conds, where.New(FieldProjectID, "=", projectID).Conditions()...)
+	conds = append(conds, where.New(FieldName, "=", name).Conditions()...)
+	items, _, err := s.FindList(conds, &where.Extra{
+		PageNum: 1, PageSize: 1,
+		OrderByColumn: FieldAppliedAt, OrderByDesc: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil // 不存在不算错
+	}
+	return items[0], nil
 }
 
 // FindList 查询列表。

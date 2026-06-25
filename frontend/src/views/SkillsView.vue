@@ -415,7 +415,8 @@ async function doUnapplyOne(h) {
       scopeError.value = msg
       return
     }
-    await undoApply({ apply_id: last.apply_id })
+    await undoApply({ apply_id: last.id })
+    // 注:后端 SkillApply entity 主键 json tag 是 "id",不是 "apply_id"
     await loadScopeStatus()
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)

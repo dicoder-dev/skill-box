@@ -40,9 +40,10 @@ export function applySkill(payload) {
 }
 
 /**
- * 列出 skill 的 apply 历史,用于在 unapply 时找到最近一条未撤销的 apply_id。
+ * 列出 skill 的 apply 历史,用于在 unapply 时找到最近一条未撤销的 apply 行。
  * 入参: { scope, name, tool, status(可选 'applied'/'rolled_back'), page, size }
- * 响应: { items: [{apply_id, tool, scope, project_id, name, target_path, status, ...}], total, ... }
+ * 响应: { items: [{id, tool, scope, project_id, name, target_path, status, ...}], total, ... }
+ * 注:行主键 json 字段是 "id"(不是 "apply_id"),前端用 last.id 取出来再调 undoApply。
  */
 export function listApplies(params) {
   return http.get('/api/skillbox/skills/apply/list', params)
