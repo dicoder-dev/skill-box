@@ -2294,13 +2294,22 @@ onMounted(() => {
   position: relative;
 }
 .chip-tool.chip-muted:hover { background: var(--bg-hover); color: var(--text); }
+/* 2026-06-26 改:工具行 chip 命中态改用蓝色(var(--accent-blue)),不再用黑色,
+   与作用域行 chip-active 保持一致,整体配色更协调 */
 .chip-tool.chip-active {
-  background: var(--text);
-  color: var(--bg-card);
-  border-color: var(--text);
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
   border-style: solid;
 }
-.chip-tool.chip-active:hover { background: var(--text); color: var(--bg-card); }
+.chip-tool.chip-active:hover { background: var(--accent-blue); color: #fff; }
+
+/* 2026-06-26 改:工具 chip 命中 + 选中叠加态 — 蓝色背景 + 蓝色边框(与作用域行一致) */
+.chip-tool.chip-active.chip-tool-selected {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
 
 /* 2026-06-25 新增:工具 chip "已选中"(单选切换器)态
    - 蓝色加粗边框
@@ -2313,18 +2322,13 @@ onMounted(() => {
   border-style: solid;
   box-shadow: 0 0 0 1px var(--accent-blue);
 }
-.chip-tool.chip-active.chip-tool-selected {
-  background: var(--text);
-  color: var(--bg-card);
-  border-color: var(--accent-blue);
-}
 .chip-tool.chip-tool-selected .chip-count {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
 }
 .chip-tool.chip-active.chip-tool-selected .chip-count {
-  background: var(--accent-blue-bg);
-  color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 /* 工具行尾部提示:当前已选工具 */
