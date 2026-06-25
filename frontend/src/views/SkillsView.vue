@@ -45,27 +45,38 @@ const currentError = ref('')
 // 内联编辑
 const editing = ref(false)        // 是否处于内联编辑态
 const editBody = ref('')          // 编辑器内的 body 文本
+const editTriggersText = ref('')  // 编辑器内的触发词(逗号/换行分隔)
 const editError = ref('')         // 校验错误
 const editSaving = ref(false)     // 保存中
 
 function startInlineEdit() {
   if (!current.value) return
   editBody.value = currentBody.value || ''
+  // 触发词编辑态:把数组转成"换行分隔"的纯文本,用户改完再 split 回去
+  editTriggersText.value = (currentMeta.triggers || []).join('\n')
   editError.value = ''
   editing.value = true
 }
 function cancelInlineEdit() {
   editing.value = false
   editBody.value = ''
+  editTriggersText.value = ''
   editError.value = ''
 }
 async function saveInlineEdit() {
   if (!current.value) return
   editError.value = ''
+  // 触发词:从文本 split 成数组,过滤空字符串 + 去重
+  const newTriggers = (editTriggersText.value || '')
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
   editSaving.value = true
   try {
+    // 先同步触发词到 currentMeta(用户视角的"立刻反馈")
+    currentMeta.triggers = newTriggers
     // 重新拼 SKILL.md(保留 frontmatter,只换 body)
-    const newMd = rebuildSkillMd(editBody.value)
+    const newMd = rebuildSkillMd(editBody.value, newTriggers)
     await updateSkill({
       scope: current.value.scope,
       project_id: current.value.project_id,
@@ -76,7 +87,7 @@ async function saveInlineEdit() {
         name: current.value.name,
         version: current.value.version,
         description: currentMeta.description || '',
-        triggers: currentMeta.triggers || [],
+        triggers: newTriggers,
       },
       files: [{ path: 'SKILL.md', content: newMd }],
     })
@@ -90,13 +101,13 @@ async function saveInlineEdit() {
   }
 }
 
-// 用现有 frontmatter 重新拼一份 SKILL.md(只替换 body)
-function rebuildSkillMd(newBody) {
+// 用现有 frontmatter 重新拼一份 SKILL.md(只替换 body + 可选替换触发词)
+function rebuildSkillMd(newBody, newTriggers) {
   const fm = {
     name: current.value?.name || '',
     version: current.value?.version || '',
     description: currentMeta.description || '',
-    triggers: currentMeta.triggers || [],
+    triggers: newTriggers !== undefined ? newTriggers : (currentMeta.triggers || []),
   }
   const yaml = Object.entries(fm)
     .map(([k, v]) => Array.isArray(v)
@@ -1210,15 +1221,23 @@ onMounted(() => {
              直接整段删掉,标签入口只剩顶栏的 tag-outline 按钮和 detail-version 点击。 -->
 
         <!-- 触发词 + 更新时间 -->
-        <section v-if="currentMeta.triggers?.length || current.updated_at" class="detail-section detail-meta-row">
-          <div v-if="currentMeta.triggers?.length" class="meta-block">
+        <section v-if="currentMeta.triggers?.length || current.updated_at || editing" class="detail-section detail-meta-row">
+          <div v-if="currentMeta.triggers?.length || editing" class="meta-block">
             <span class="meta-label">{{ t('skills.editor.triggers') }}</span>
-            <div class="chip-row">
-              <span v-for="t in currentMeta.triggers" :key="t" class="chip chip-trigger">
-                <Icon icon="mdi:lightning-bolt-outline" width="12" height="12" />
-                {{ t }}
-              </span>
+            <!-- 查看态:触发词改纯文本一行(逗号分隔),2026-06-25 不再做 chip 列表 -->
+            <div v-if="!editing" class="meta-text">
+              {{ (currentMeta.triggers || []).join('、') }}
             </div>
+            <!-- 编辑态:触发词变成 textarea,可以同步编辑 -->
+            <textarea
+              v-else
+              v-model="editTriggersText"
+              class="triggers-editor"
+              rows="2"
+              spellcheck="false"
+              :placeholder="t('skills.editor.triggersHint')"
+              :disabled="editSaving"
+            ></textarea>
           </div>
           <div v-if="current.updated_at" class="meta-block meta-block-time">
             <span class="meta-label">{{ t('skills.list.colUpdated') }}</span>
@@ -2201,6 +2220,34 @@ onMounted(() => {
 .meta-block-time { min-width: 180px; }
 .meta-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.3px; }
 .meta-value { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+/* 2026-06-25 改:触发词从 chip 列表改成纯文本一行,顿号分隔 */
+.meta-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+/* 2026-06-25 改:编辑态触发词变成 textarea,可同步编辑 */
+.triggers-editor {
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.triggers-editor:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.triggers-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .detail-body {
   padding-bottom: 24px;
