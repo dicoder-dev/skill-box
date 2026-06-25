@@ -19,6 +19,7 @@ import Modal from '@/components/Modal.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
+import { useToastStore } from '@/core/store/toast'
 
 const { t } = useI18n()
 
@@ -120,6 +121,19 @@ const scopeError = ref('')
 // 2026-06-25 改:工具行 chip 改成"单选切换器",作用域 chip 只对当前选中工具生效。
 // 未选中工具时,作用域 chip 置灰不可点,提示"先选工具"。
 const selectedToolID = ref(null)  // 当前选中的 tool_id;null = 未选
+
+// 2026-06-25 增:成功启用/停用后,被操作的 (scope, project_id) 短暂高亮 2s
+// 用于让用户眼睛锁定刚操作的 chip。值是 key('global' | 'p:<id>')。
+const flashTargetKey = ref(null)
+let _flashTimer = null
+function flashTarget(key) {
+  flashTargetKey.value = key
+  if (_flashTimer) clearTimeout(_flashTimer)
+  _flashTimer = setTimeout(() => { flashTargetKey.value = null }, 2000)
+}
+
+// 全局 toast
+const toast = useToastStore()
 
 // 工具名 → 显示名(优先用后端 tools 数组;缺省时退化到 tool_id 本身)
 const toolDisplay = computed(() => {
@@ -270,6 +284,9 @@ function handleToolChipClick(toolSummary) {
 // - 未选工具:直接 return(模板已 disabled,这里再做防御)
 // - 选中工具在该 (scope, project) 下不存在命中 → 启用
 // - 选中工具在该 (scope, project) 下已存在命中 → 停用
+// doApplyOne / doUnapplyOne 内部已经包含 loadScopeStatus + toast + flash,
+//
+// 这里不再重复刷新。
 async function handleScopeChipClick(target) {
   if (!current.value) return
   if (!selectedToolID.value) return // 防御:未选工具直接忽略
@@ -290,7 +307,6 @@ async function handleScopeChipClick(target) {
     })
     if (!ok) return
     await doUnapplyOne(targetHit)
-    await loadScopeStatus()
     return
   }
   // 未生效 → 启用单条
@@ -313,13 +329,16 @@ async function handleScopeChipClick(target) {
   })
   if (!ok) return
   await doApplyOne(fakeHit)
-  await loadScopeStatus()
 }
 
 // doApplyOne 启用单个 (tool, scope, project) 组合。
 //
 // 后端是 cskillapply.ApplySkill:入参 { scope, project_id, name, tools: [toolID] },
 // 同名已存在时由 skillapp 内部走 PreSnapshot + 原子覆盖,所以前端不用单独弹覆盖确认。
+//
+// 2026-06-25 改:成功后弹 toast + 闪 chip,失败弹 error toast。
+// 顺序:先 await apply → await loadScopeStatus 刷新磁盘状态 → 再 toast + flash,
+// 这样 toast/flash 出现时 chip 已经处于"已生效"选中态,语义对齐。
 async function doApplyOne(h) {
   busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
   try {
@@ -329,7 +348,15 @@ async function doApplyOne(h) {
       project_id: h.project_id || 0,
       tools: [h.tool_id],
     })
+    await loadScopeStatus()
+    const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
+    flashTarget(targetKey)
+    const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
+    toast.success(t('skills.list.applySuccess', {
+      path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
+    }))
   } catch (e) {
+    toast.error(t('skills.list.applyFailed', { msg: e?.message || String(e) }))
     scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
   } finally {
     busyKey.value = ''
@@ -341,6 +368,10 @@ async function doApplyOne(h) {
 // 后端用 skillapp 的 apply/undo 机制(走 PreSnapshot 还原或删目标文件),
 // 但 undo 是按 apply_id 撤销,所以前端先 listApplies 找最近一条未撤销的 apply_id。
 // 没找到就报错(用户应该是从外部把目录删了,不走 skillbox undo)。
+//
+// 2026-06-25 改:成功/失败都用 toast 反馈。toast/flash 在 loadScopeStatus 之后,
+//
+// 保证 flash 那 2s 内 chip 已经是"已停用"态(从 chip-active → chip-muted)。
 async function doUnapplyOne(h) {
   busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
   try {
@@ -354,11 +385,21 @@ async function doUnapplyOne(h) {
     })
     const last = list?.items?.[0]
     if (!last) {
-      scopeError.value = t('skills.list.unapplyFailed', { msg: 'no active apply record found' })
+      const msg = t('skills.list.unapplyFailed', { msg: 'no active apply record found' })
+      toast.error(msg)
+      scopeError.value = msg
       return
     }
     await undoApply({ apply_id: last.apply_id })
+    await loadScopeStatus()
+    const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
+    flashTarget(targetKey)
+    const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
+    toast.success(t('skills.list.unapplySuccess', {
+      path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
+    }))
   } catch (e) {
+    toast.error(t('skills.list.unapplyFailed', { msg: e?.message || String(e) }))
     scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
   } finally {
     busyKey.value = ''
@@ -1014,6 +1055,7 @@ onMounted(() => {
                     'chip', 'chip-scope-target',
                     selectedToolHitExists(tg) ? 'chip-active' : 'chip-muted',
                     selectedToolBusy(tg) ? 'chip-busy' : '',
+                    flashTargetKey === tg.key ? 'chip-flash' : '',
                   ]"
                   :title="!selectedToolID
                     ? t('skills.list.scopeSelectToolFirst')
@@ -1993,6 +2035,16 @@ onMounted(() => {
   width: 10px;
   height: 10px;
   border-width: 1.5px;
+}
+
+/* 2026-06-25 新增:操作成功后的脉冲高亮,2s 内让用户眼睛锁定刚操作的 chip */
+@keyframes chipFlash {
+  0%   { box-shadow: 0 0 0 3px var(--accent-blue); transform: scale(1); }
+  20%  { box-shadow: 0 0 0 4px var(--accent-blue); transform: scale(1.04); }
+  100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
+}
+.chip-flash {
+  animation: chipFlash 1.6s ease-out;
 }
 
 .chip-mini-list {

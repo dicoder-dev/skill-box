@@ -7,6 +7,7 @@ import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
 import AuditView from './views/AuditView.vue'
 import SettingsView from './views/SettingsView.vue'
+import ToastContainer from './components/ToastContainer.vue'
 import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { getOnboardingStatus } from '@/api/skillbox/onboarding'
@@ -338,6 +339,9 @@ onUnmounted(() => {
         <SettingsView v-else-if="tab === 'settings'" />
       </div>
     </main>
+
+    <!-- 全局 toast 浮层(右上角) -->
+    <ToastContainer />
   </div>
 </template>
 
