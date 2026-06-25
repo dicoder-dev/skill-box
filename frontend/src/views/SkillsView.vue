@@ -656,7 +656,7 @@ async function loadTagList() {
   tagLoading.value = true
   tagError.value = ''
   try {
-    const out = await listTags({ skill_id: current.value.id })
+    const out = await listTags({ scope: current.value.scope, name: current.value.name })
     tagList.value = out?.items || []
     currentTagList.value = tagList.value
   } catch (e) { tagError.value = e?.message || String(e) }
@@ -668,7 +668,13 @@ async function doCreateTag() {
   tagLoading.value = true
   tagError.value = ''
   try {
-    await createTag({ skill_id: current.value.id, tag: newTagName.value.trim(), message: newTagMessage.value })
+    await createTag({
+      scope: current.value.scope,
+      project_id: current.value.project_id,
+      name: current.value.name,
+      tag: newTagName.value.trim(),
+      message: newTagMessage.value,
+    })
     newTagName.value = ''
     newTagMessage.value = ''
     tagMessage.value = t('skills.tag.msgCreated')
@@ -693,7 +699,7 @@ async function doDeleteTag(tagID) {
 async function doDiff(leftID, rightID) {
   if (!current.value) { tagError.value = t('skills.tag.selectFirst'); return }
   try {
-    const out = await diffTag({ skill_id: current.value.id, left_tag_id: leftID || 0, right_tag_id: rightID || 0 })
+    const out = await diffTag({ scope: current.value.scope, name: current.value.name, left_tag_id: leftID || 0, right_tag_id: rightID || 0 })
     diffResult.value = out
     diffLeftTagID.value = leftID
     diffRightTagID.value = rightID
