@@ -12,6 +12,7 @@ import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
+import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
@@ -820,17 +821,57 @@ const editorOpen = ref(false)
 const draft = reactive({
   scope: 'global', project_id: 0, name: '', version: '0.1.0',
   description: '', triggersText: '', body: '',
+  applyTools: [], // 2026-06-26:新建时勾选的"适用工具"列表
 })
 const editingKey = ref(null)
+// 2026-06-26:弹窗内需要的项目列表(用于"项目作用域"下拉)
+const editorProjects = ref([])
+const editorProjectsLoading = ref(false)
+
 function startNew() {
   Object.assign(draft, {
     scope: 'global', project_id: 0, name: '', version: '0.1.0',
     description: '', triggersText: '', body: '',
+    applyTools: [],
   })
   editingKey.value = null
   error.value = ''
   editorOpen.value = true
+  // 弹窗打开时拉一次项目列表(scope=project 才需要,但提前拉好)
+  loadEditorProjects()
 }
+
+// 拉弹窗内需要的项目列表(全量,简单场景;支持搜索过滤)
+async function loadEditorProjects(keyword = '') {
+  editorProjectsLoading.value = true
+  try {
+    const out = await listProjects({ keyword: keyword || undefined, page: 1, size: 200 })
+    editorProjects.value = out?.items || []
+    // 默认选中第一个项目(若 draft.project_id == 0)
+    if (draft.project_id === 0 && editorProjects.value.length) {
+      draft.project_id = editorProjects.value[0].id || 0
+    }
+  } catch (_) { editorProjects.value = [] }
+  finally { editorProjectsLoading.value = false }
+}
+
+// 工具列表(写死 5 个,跟 scope-status 工具行保持一致;不查后端)
+const APPLY_TOOLS = [
+  { tool_id: 'codex', display: 'Codex' },
+  { tool_id: 'claude', display: 'Claude' },
+  { tool_id: 'opencode', display: 'OpenCode' },
+  { tool_id: 'cursor', display: 'Cursor' },
+  { tool_id: 'trae', display: 'Trae' },
+]
+function toggleApplyTool(toolID) {
+  const i = draft.applyTools.indexOf(toolID)
+  if (i >= 0) draft.applyTools.splice(i, 1)
+  else draft.applyTools.push(toolID)
+}
+function isApplyToolChecked(toolID) {
+  return draft.applyTools.includes(toolID)
+}
+
 function buildSkillMd() {
   const triggers = draft.triggersText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
   const m = {
@@ -848,6 +889,11 @@ async function submit() {
   if (draft.description.trim().length < 10) { error.value = t('skills.editor.errDescShort'); return }
   const triggers = draft.triggersText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
   if (triggers.length === 0) { error.value = t('skills.editor.errTriggersEmpty'); return }
+  // 2026-06-26 增:作用域=project 时必须选具体项目
+  if (draft.scope === 'project' && !draft.project_id) {
+    error.value = t('skills.editor.errProjectRequired')
+    return
+  }
   const payload = {
     scope: draft.scope, project_id: draft.project_id,
     name: draft.name, version: draft.version,
@@ -858,6 +904,30 @@ async function submit() {
   try {
     if (editingKey.value) await updateSkill(payload)
     else await createSkill(payload)
+    // 2026-06-26 增:创建/更新后,遍历勾选的工具调 apply 让 skill 在目标工具生效
+    // 失败不阻断保存(apply 是"额外"动作),但要弹 toast 提示
+    if (draft.applyTools.length) {
+      const failList = []
+      for (const tid of draft.applyTools) {
+        try {
+          await applySkill({
+            name: draft.name,
+            scope: draft.scope,
+            project_id: draft.project_id || 0,
+            tools: [tid],
+          })
+        } catch (e) { failList.push({ tool: tid, msg: e?.message || String(e) }) }
+      }
+      if (failList.length) {
+        toast.error(t('skills.editor.applyPartialFailed', {
+          ok: draft.applyTools.length - failList.length,
+          total: draft.applyTools.length,
+          fails: failList.map((f) => f.tool).join(', '),
+        }))
+      } else {
+        toast.success(t('skills.editor.applyAllSuccess', { n: draft.applyTools.length }))
+      }
+    }
     editorOpen.value = false
     await reload()
     // 选回刚保存的
@@ -1463,7 +1533,8 @@ onMounted(() => {
         <div v-if="editingKey" class="editor-hint-bar">
           <code>{{ editingKey.name }}@{{ editingKey.version }}</code>
         </div>
-        <div class="editor-grid">
+        <!-- 2026-06-26 改:基础元数据两列(名称 / 版本) -->
+        <div class="editor-grid editor-grid-2">
           <div class="editor-field">
             <label>{{ t('skills.editor.name') }}</label>
             <input v-model="draft.name" :placeholder="t('skills.editor.nameHint')" :disabled="!!editingKey" />
@@ -1472,16 +1543,68 @@ onMounted(() => {
             <label>{{ t('skills.editor.version') }}</label>
             <input v-model="draft.version" :placeholder="t('skills.editor.versionHint')" :disabled="!!editingKey" />
           </div>
-          <div class="editor-field">
-            <label>{{ t('skills.editor.scope') }}</label>
-            <select v-model="draft.scope" :disabled="!!editingKey">
-              <option value="global">global</option>
-              <option value="project">project</option>
+        </div>
+
+        <!-- 2026-06-26 改:作用域区改为开关式(全局/项目)+ 项目下拉,更直观 -->
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.scope') }}</label>
+          <div class="scope-toggle-row">
+            <div class="segmented">
+              <button
+                type="button"
+                :class="['seg-btn', draft.scope === 'global' ? 'seg-active' : '']"
+                :disabled="!!editingKey"
+                @click="draft.scope = 'global'"
+              >
+                <Icon icon="mdi:earth" width="13" height="13" />
+                {{ t('skills.editor.scopeGlobal') }}
+              </button>
+              <button
+                type="button"
+                :class="['seg-btn', draft.scope === 'project' ? 'seg-active' : '']"
+                :disabled="!!editingKey"
+                @click="draft.scope = 'project'"
+              >
+                <Icon icon="mdi:folder-outline" width="13" height="13" />
+                {{ t('skills.editor.scopeProject') }}
+              </button>
+            </div>
+            <select
+              v-if="draft.scope === 'project'"
+              v-model.number="draft.project_id"
+              class="project-select"
+              :disabled="!!editingKey"
+            >
+              <option :value="0" disabled>{{ t('skills.editor.projectPick') }}</option>
+              <option v-for="p in editorProjects" :key="p.id" :value="p.id">
+                {{ p.alias || p.name }}<span v-if="p.alias && p.name"> · {{ p.name }}</span>
+              </option>
             </select>
+            <span v-else class="muted small-hint">{{ t('skills.editor.scopeGlobalHint') }}</span>
           </div>
-          <div class="editor-field" v-if="draft.scope === 'project'">
-            <label>{{ t('skills.editor.projectId') }}</label>
-            <input v-model.number="draft.project_id" type="number" min="0" :disabled="!!editingKey" />
+        </div>
+
+        <!-- 2026-06-26 新增:适用工具多选 — 提交后自动在勾选的工具上 enable -->
+        <div class="editor-field-full">
+          <label>{{ t('skills.editor.applyTools') }} <small>({{ t('skills.editor.applyToolsHint') }})</small></label>
+          <div class="chip-row apply-tools-row">
+            <button
+              v-for="tool in APPLY_TOOLS"
+              :key="tool.tool_id"
+              type="button"
+              :class="['chip', 'chip-tool-pick', isApplyToolChecked(tool.tool_id) ? 'chip-active' : '']"
+              :title="tool.display"
+              @click="toggleApplyTool(tool.tool_id)"
+            >
+              <Icon :icon="toolIcon(tool.tool_id)" width="12" height="12" />
+              <span>{{ tool.display }}</span>
+            </button>
+            <span v-if="!draft.applyTools.length" class="chip-empty muted">
+              {{ t('skills.editor.applyToolsNone') }}
+            </span>
+            <span v-else class="chip-tool-selected-hint muted">
+              {{ t('skills.editor.applyToolsSelected', { n: draft.applyTools.length }) }}
+            </span>
           </div>
         </div>
 
@@ -2581,10 +2704,101 @@ onMounted(() => {
 .editor-form { display: flex; flex-direction: column; gap: 14px; }
 .editor-hint-bar { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--text-dim); }
 .editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+/* 2026-06-26 改:弹窗内的元数据两列(name / version)固定 2 列布局 */
+.editor-grid-2 { grid-template-columns: 1fr 1fr; }
 .editor-field, .editor-field-full { display: flex; flex-direction: column; gap: 6px; }
 .editor-field-full small { color: var(--text-faint); }
 .editor-field label, .editor-field-full label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
 .editor-field-full textarea { min-height: 100px; }
+
+/* 2026-06-26 新增:作用域开关(全局/项目) */
+.scope-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.seg-btn:hover:not(:disabled) { color: var(--text); }
+.seg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.seg-btn.seg-active {
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.seg-btn.seg-active:hover { color: var(--text); }
+
+.project-select {
+  flex: 1;
+  min-width: 180px;
+  max-width: 360px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.project-select:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.project-select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 2026-06-26 新增:适用工具多选 chip(借用 scope chip-tool 风格,差异化在 active 色) */
+.apply-tools-row {
+  padding: 4px 0;
+}
+.chip-tool-pick {
+  cursor: pointer;
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--border);
+  border-style: solid;
+  font-family: inherit;
+}
+.chip-tool-pick.chip-active {
+  background: var(--text);
+  color: var(--bg-card);
+  border-color: var(--text);
+  border-style: solid;
+}
+.chip-tool-pick.chip-active:hover {
+  background: var(--text);
+  color: var(--bg-card);
+}
+.chip-tool-pick:not(.chip-active):hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
 
 .confirm-message { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text); white-space: pre-line; }
 
