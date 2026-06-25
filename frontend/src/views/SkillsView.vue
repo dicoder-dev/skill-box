@@ -1671,29 +1671,28 @@ onMounted(() => {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   outline: none;
   overflow: hidden;
 }
 
+/* 2026-06-25 三改:hover 不要灰色背景,只浮起 + 边框变深 */
 .skill-item:hover {
-  background: var(--bg-hover);
   border-color: var(--text-faint);
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 .skill-item:focus-visible {
-  background: var(--bg-hover);
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px var(--accent-blue-bg);
 }
+/* 2026-06-25 三改:选中态简约 — 只留蓝色边框,去掉 box-shadow 和浅灰背景 */
 .skill-item-active {
-  background: var(--bg-subtle);
+  background: var(--bg-card);
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue);
 }
 .skill-item-active:hover {
-  background: var(--bg-subtle);
+  background: var(--bg-card);
   border-color: var(--accent-blue);
 }
 
