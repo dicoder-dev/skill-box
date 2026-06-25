@@ -213,6 +213,61 @@ func GlobalAppliedTools(name string) []string {
 	return out
 }
 
+// ResolveHit 给出 (name, scope, projectID, tool) 在 scope-status 扫描中命中的
+// resolved 绝对路径(若 SKILL.md 存在);不存在返 ""。
+//
+// 2026-06-25 增:force-undo 路径(用户手动 cp / 外部安装)需要它来定位删哪。
+// 不存在返空串 + nil,跟其它 helper 风格一致。
+func ResolveHit(name, scope string, projectID uint, tool string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	a, ok := skilladapter.DefaultRegistry().Get(tool)
+	if !ok {
+		return "", nil // 工具不存在 → 视作未命中
+	}
+	paths, err := a.DiscoverPaths(scope)
+	if err != nil {
+		return "", err
+	}
+	if scope == skilladapter.ScopeProject {
+		if projectID == 0 {
+			return "", nil
+		}
+		// project scope 路径是相对的,需要拼项目 root_path
+		svc := sproject.New(dbs.GetWriteDb(), dbs.GetReadDb())
+		list, perr := svc.List(sproject.ListQuery{Page: 1, Size: 500})
+		if perr != nil || list == nil {
+			return "", perr
+		}
+		for _, p := range list.Items {
+			if p == nil || uint(p.ID) != projectID {
+				continue
+			}
+			root := p.RootPath
+			if root == "" {
+				continue
+			}
+			for _, rel := range paths {
+				abs := filepath.Join(root, rel)
+				resolved := filepath.Join(abs, name)
+				if skillDirExists(resolved) {
+					return resolved, nil
+				}
+			}
+		}
+		return "", nil
+	}
+	// global scope
+	for _, p := range paths {
+		resolved := filepath.Join(p, name)
+		if skillDirExists(resolved) {
+			return resolved, nil
+		}
+	}
+	return "", nil
+}
+
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           "/api/skillbox/skills/scope-status",

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ginp-api/internal/gapi/entity"
+	"ginp-api/internal/gapi/controller/skillbox/cskill"
 	"ginp-api/internal/gapi/service/audit/saudit"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
@@ -330,6 +331,103 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 		"target_path": row.TargetPath,
 	})
 	return &UndoResult{ApplyID: applyID, NewStatus: row.Status, RolledBackAt: now}, nil
+}
+
+// ForceUndoInput 强制按 (scope, project_id, name, tool) 撤销,不走 apply_id 流程。
+//
+// 2026-06-25 增:用于"scope-status 命中但 DB 没 apply 记录"场景(用户手动 cp /
+// 外部安装)。逻辑:
+//   1) 先在 DB 按 (scope, project_id, name, tool) 找最近一条 status=applied
+//      记录,找到就走标准 Undo(走 pre-snapshot 还原)。
+//   2) 没记录:用 scope-status 扫,找该 (tool, scope, project_id) 命中
+//      (exists=true) 的 resolved 路径,直接调 ForceRemoveFromPath 删整个目录。
+//   3) DB 插一条占位 status=rolled_back 记录,applied_at/rolled_back_at 都
+//      用 now(),target_path 记录实际删的路径,tool/scope/project_id/name
+//      按入参填。
+type ForceUndoInput struct {
+	Scope     string
+	ProjectID uint
+	Name      string
+	Tool      string
+}
+
+func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
+	if in == nil {
+		return nil, skillapp.ErrApplyNotFound
+	}
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Tool) == "" {
+		return nil, fmt.Errorf("skillapp: force undo: name/tool required")
+	}
+	scope := strings.ToLower(strings.TrimSpace(in.Scope))
+	if scope == "" {
+		scope = skilladapter.ScopeGlobal
+	}
+
+	// 1) 优先按 DB 记录走标准 Undo
+	var conds []*where.Condition
+	conds = append(conds, where.New(mskillapply.FieldScope, "=", scope).Conditions()...)
+	conds = append(conds, where.New(mskillapply.FieldProjectID, "=", in.ProjectID).Conditions()...)
+	conds = append(conds, where.New(mskillapply.FieldName, "=", in.Name).Conditions()...)
+	conds = append(conds, where.New(mskillapply.FieldTool, "=", in.Tool).Conditions()...)
+	conds = append(conds, where.New(mskillapply.FieldStatus, "=", skillapp.StatusApplied).Conditions()...)
+	rows, _, err := s.applyModel().FindList(conds, &where.Extra{
+		PageNum: 1, PageSize: 1,
+		OrderByColumn: mskillapply.FieldAppliedAt, OrderByDesc: true,
+	})
+	if err == nil && len(rows) > 0 {
+		return s.Undo(rows[0].ID)
+	}
+
+	// 2) DB 没记录 → 走 scope-status 强制删磁盘
+	resolved, err := s.resolveByScopeStatus(in.Name, scope, in.ProjectID, in.Tool)
+	if err != nil {
+		return nil, err
+	}
+	if resolved == "" {
+		return nil, fmt.Errorf("skillapp: force undo: no active hit for %s/%s/%s/%d",
+			scope, in.Name, in.Tool, in.ProjectID)
+	}
+	if err := skillapp.ForceRemoveFromPath(resolved); err != nil {
+		return nil, fmt.Errorf("skillapp: force undo: %w", err)
+	}
+
+	// 3) DB 写占位 rolled_back 记录
+	now := time.Now()
+	placeholder := &entity.SkillApply{
+		Scope:       scope,
+		ProjectID:   in.ProjectID,
+		Name:        in.Name,
+		Tool:        in.Tool,
+		Status:      skillapp.StatusRolledBack,
+		TargetPath:  resolved,
+		PreSnapshot: "",
+		AppliedAt:   now,
+		RolledBackAt: &now,
+	}
+	created, _ := s.applyModel().Create(placeholder)
+	if created != nil {
+		s.audit(0, in.Name, map[string]any{
+			"action":     "force_undo",
+			"tool":       in.Tool,
+			"scope":      scope,
+			"target_path": resolved,
+			"apply_id":   created.ID,
+		})
+		return &UndoResult{ApplyID: created.ID, NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
+	}
+	s.audit(0, in.Name, map[string]any{
+		"action":     "force_undo",
+		"tool":       in.Tool,
+		"scope":      scope,
+		"target_path": resolved,
+	})
+	return &UndoResult{NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
+}
+
+// resolveByScopeStatus 通过 scope-status 扫描找 (tool, scope, project_id) 命中
+// 的 resolved 路径。复用 cskill.ResolveHit。
+func (s *Service) resolveByScopeStatus(name, scope string, projectID uint, tool string) (string, error) {
+	return cskill.ResolveHit(name, scope, projectID, tool)
 }
 
 // ListInput 列表过滤(2026-06-24:按 scope+name 过滤)。

@@ -11,7 +11,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
@@ -415,9 +415,25 @@ async function doUnapplyOne(h) {
     })
     const last = list?.items?.[0]
     if (!last) {
-      const msg = t('skills.list.unapplyFailed', { msg: 'no active apply record found' })
-      toast.error(msg)
-      scopeError.value = msg
+      // 2026-06-25 增:DB 没记录(用户手动 cp / 外部安装,scope-status 命中但
+      // skill_applies 表里没行)→ 走 force-undo 走 scope-status 删磁盘 +
+      // 插占位 rolled_back 行。project_id 这里 h 可能没带(0),后端会从
+      // h.scope=project 时从项目列表里按 id 定位,project_id=0 + scope=project
+      // 找不到会返 404。
+      await forceUndoApply({
+        scope: h.scope,
+        project_id: h.project_id || 0,
+        name: targetSkill.name,
+        tool: h.tool_id,
+      })
+      await loadScopeStatus()
+      patchAppliedTools(targetSkill, h.tool_id, h.scope, 'remove')
+      const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
+      flashTarget(targetKey)
+      const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
+      toast.success(t('skills.list.unapplySuccess', {
+        path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
+      }))
       return
     }
     await undoApply({ apply_id: last.id })

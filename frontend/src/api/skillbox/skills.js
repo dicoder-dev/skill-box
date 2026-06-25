@@ -58,6 +58,20 @@ export function undoApply(payload) {
   return http.post('/api/skillbox/skills/apply/undo', payload)
 }
 
+/**
+ * 强制按 (scope, project_id, name, tool) 撤销。
+ * 用于"scope-status 命中但 DB 没 apply 记录"场景(用户手动 cp / 外部安装)。
+ * 后端会:
+ *   1) 先按 (scope, project_id, name, tool) 找最近 applied 记录,找到走标准 undo;
+ *   2) 没记录:用 scope-status 扫,定位到磁盘 resolved 路径,直接删整个目录;
+ *   3) DB 插一条占位 status=rolled_back 记录。
+ * 入参: { scope, project_id, name, tool }
+ * 来源:api-server/internal/gapi/controller/skillbox/cskillapply/force_undo_skill.a.go
+ */
+export function forceUndoApply(payload) {
+  return http.post('/api/skillbox/skills/apply/force-undo', payload)
+}
+
 export function createSkill(payload) {
   return http.post('/api/skillbox/skills/create', payload)
 }

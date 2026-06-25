@@ -6,3 +6,4 @@
 * 跨 module 共享代码不能放在 `ginp-api/internal/`(被 Go internal 规则拒),要用 root module 的 `pkg/` 平面(如 `pkg/fsutil`)。-20260624
 * Onboarding 入口在 phase2 直接展示扫描结果,跳过 phase1 status 步骤。状态信息改由 App.vue 顶栏 toolsReady/total 徽章提供,不要再回退到 phase1 表格。-20260624
 * Onboarding 重复检测分两层:① 客户端 store 已存在(name 匹配,不分 version)→ 置灰 + "已存在"标签;② 跨工具同名互斥(同 name + version 不同 tool_id)→ 选一个后另一个自动取消。selectExclusiveByName 集中处理。-20260624
+* 用户可能手动 cp skill 到 adapter 期望目录(不走 skillbox apply),scope-status 实时扫盘会命中,但 `skill_applies` 表里没记录。停用时必须走 `POST /api/skillbox/skills/apply/force-undo`(DB 有记录走标准 undo;无记录走 scope-status 删磁盘 + 插占位 rolled_back 行)。前端 `doUnapplyOne` 在 `listApplies` 返空时 fallback 调 `forceUndoApply`,不要直接 toast 失败。-20260625
