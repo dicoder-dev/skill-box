@@ -1018,7 +1018,14 @@ onMounted(() => {
           <div class="detail-title-block">
             <div class="detail-title-row">
               <h1 class="detail-name">{{ current.name }}</h1>
-              <code class="detail-version">@{{ current.version }}</code>
+              <code
+                class="detail-version"
+                role="button"
+                tabindex="0"
+                :title="t('skills.tag.titlePrefix')"
+                @click="openTagDialog"
+                @keyup.enter="openTagDialog"
+              >@{{ current.version }}</code>
               <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']">{{ current.source || 'local' }}</span>
             </div>
             <p v-if="currentMeta.description" class="detail-desc">{{ currentMeta.description }}</p>
@@ -1198,26 +1205,9 @@ onMounted(() => {
           </template>
         </section>
 
-        <!-- 标签列表 -->
-        <section class="detail-section">
-          <header class="section-header">
-            <h3>
-              <Icon icon="mdi:tag-outline" width="14" height="14" />
-              {{ t('skills.tag.titlePrefix') }}
-            </h3>
-            <button class="ghost-link" @click="openTagDialog">
-              <Icon icon="mdi:plus" width="12" height="12" />
-              {{ t('skills.tag.btnCreate') }}
-            </button>
-          </header>
-          <div v-if="currentTags.length" class="chip-row">
-            <span v-for="tg in currentTags" :key="tg.tag || tg" class="chip chip-tag">
-              <Icon icon="mdi:tag" width="12" height="12" />
-              {{ tg.tag || tg }}
-            </span>
-          </div>
-          <p v-else class="section-empty">{{ t('skills.list.tagsEmpty') }}</p>
-        </section>
+        <!-- 标签 section:2026-06-25 改 — 不再展示 chip 列表,改为点击版本号弹出标签弹窗。
+             section 本身保留,只显示一行说明 + "管理"按钮占位也行,但用户只要求"不打 tag 部分显示"。
+             直接整段删掉,标签入口只剩顶栏的 tag-outline 按钮和 detail-version 点击。 -->
 
         <!-- 触发词 + 更新时间 -->
         <section v-if="currentMeta.triggers?.length || current.updated_at" class="detail-section detail-meta-row">
@@ -1835,6 +1825,17 @@ onMounted(() => {
   background: var(--primary-dim);
   padding: 2px 6px;
   border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+/* 2026-06-25 改:点击版本号弹出 tag 弹窗,所以 .detail-version 视觉上是可点的 */
+.detail-version:hover {
+  background: var(--primary);
+  color: var(--bg-card);
+}
+.detail-version:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
 }
 
 .detail-desc {
