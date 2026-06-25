@@ -122,6 +122,10 @@ const scopeError = ref('')
 // 未选中工具时,作用域 chip 置灰不可点,提示"先选工具"。
 const selectedToolID = ref(null)  // 当前选中的 tool_id;null = 未选
 
+// 2026-06-25 二改:工具 chip 点击后,后端正在重拉 scopeStatus 时,
+// 在工具 chip 上显示 spinner 反馈用户"我正在同步磁盘状态"。
+const syncingToolID = ref(null)   // 同步中的 tool_id;null = 未同步
+
 // 2026-06-25 增:成功启用/停用后,被操作的 (scope, project_id) 短暂高亮 2s
 // 用于让用户眼睛锁定刚操作的 chip。值是 key('global' | 'p:<id>')。
 const flashTargetKey = ref(null)
@@ -225,9 +229,16 @@ function selectedToolBusy(target) {
   return target.hits.some((h) => h.tool_id === selectedToolID.value && isBusy(h.tool_id, h.scope, h.project_id))
 }
 
-async function loadScopeStatus() {
+// 2026-06-25 二改:加 silent 选项。
+//   - silent=false(默认):切换 scopeLoading,模板 v-if 会让整段 scope 区替换成 spinner;
+//     适合"切 skill / 首次加载",需要先展示骨架再填数据。
+//   - silent=true:不切 scopeLoading,保留旧 chip 视觉只更新 scopeHits;
+//     适合"选工具时重拉同步",用户已能看到 chip,只是要后台刷新。
+// silent 模式失败:不弹全屏 error 段(避免盖住 chip),把错误塞进 scopeError 静默记录
+// (tool-level scope 本身就是只读镜像,失败不会阻断操作)。
+async function loadScopeStatus({ silent = false } = {}) {
   if (!current.value) return
-  scopeLoading.value = true
+  if (!silent) scopeLoading.value = true
   scopeError.value = ''
   try {
     const resp = await getSkillScopeStatus({
@@ -243,12 +254,14 @@ async function loadScopeStatus() {
     }
   } catch (e) {
     scopeError.value = e?.message || String(e)
-    scopeTools.value = []
-    scopeProjects.value = []
-    scopeHits.value = []
+    if (!silent) {
+      scopeTools.value = []
+      scopeProjects.value = []
+      scopeHits.value = []
+    }
     selectedToolID.value = null
   } finally {
-    scopeLoading.value = false
+    if (!silent) scopeLoading.value = false
   }
 }
 
@@ -270,12 +283,24 @@ function isBusy(toolID, scope, projectID) {
 // 工具 chip 行:点击行为 — 切换"选中工具"(单选)
 // 2026-06-25 改:不再触发批量启用/停用,仅做"工具选择器";后续作用域 chip 的
 // 启用/停用都基于 selectedToolID 做单条操作。
-function handleToolChipClick(toolSummary) {
+// 2026-06-25 二改:切到某工具时,调一次 getSkillScopeStatus 完整重拉,
+// 把该工具在所有 (全局 + 各项目) 路径的 SKILL.md 存在状态同步到 UI;
+// 这样用户从外部 cp 文件后,选工具就能立刻看到状态变化。
+async function handleToolChipClick(toolSummary) {
   // 单选切换:同一工具再点 = 取消;不同工具 = 切换
   if (selectedToolID.value === toolSummary.tool_id) {
     selectedToolID.value = null
-  } else {
-    selectedToolID.value = toolSummary.tool_id
+    return
+  }
+  selectedToolID.value = toolSummary.tool_id
+  // 同步重拉 scopeStatus,把磁盘最新状态反映到 scopeHits
+  // 全量重扫后,selectedToolHitExists(tg) 会基于新数据重新计算 chip 态
+  // 用 silent:不切 scopeLoading,保留旧 chip 视觉,只静默更新 scopeHits
+  syncingToolID.value = toolSummary.tool_id
+  try {
+    await loadScopeStatus({ silent: true })
+  } finally {
+    syncingToolID.value = null
   }
 }
 
@@ -1022,13 +1047,18 @@ onMounted(() => {
                     'chip', 'chip-tool',
                     t.hasHit ? 'chip-active' : 'chip-muted',
                     selectedToolID === t.tool_id ? 'chip-tool-selected' : '',
+                    syncingToolID === t.tool_id ? 'chip-tool-syncing' : '',
                   ]"
                   :title="t.hasHit
                     ? `${t.display}: ${t.hitCount} 处生效`
                     : `${t.display}: 0 处生效`"
                   @click="handleToolChipClick(t)"
                 >
-                  <Icon :icon="t.icon" width="12" height="12" />
+                  <span
+                    v-if="syncingToolID === t.tool_id"
+                    class="spinner spinner-sm chip-spinner"
+                  ></span>
+                  <Icon v-else :icon="t.icon" width="12" height="12" />
                   <span>{{ toolShort(t.tool_id) }}</span>
                   <span v-if="t.hitCount > 0" class="chip-count">{{ t.hitCount }}</span>
                 </button>
@@ -1967,6 +1997,12 @@ onMounted(() => {
 .chip-tool-selected-hint {
   font-size: 11px;
   padding-left: 4px;
+}
+
+/* 2026-06-25 二改:工具 chip 正在同步磁盘(后端重拉 scopeStatus) */
+.chip-tool-syncing {
+  cursor: wait;
+  opacity: 0.85;
 }
 
 .chip-count {
