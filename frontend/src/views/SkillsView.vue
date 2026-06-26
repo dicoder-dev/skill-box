@@ -1289,8 +1289,8 @@ onMounted(() => {
           {{ openError }}
         </p>
 
-        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果) -->
-        <section class="detail-section">
+        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果;2026-06-26 改:编辑态隐藏) -->
+        <section v-if="!editing" class="detail-section">
           <header class="section-header">
             <h3>
               <Icon icon="mdi:earth" width="14" height="14" />
