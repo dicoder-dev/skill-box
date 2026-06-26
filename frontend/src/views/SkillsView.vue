@@ -2089,9 +2089,12 @@ onMounted(() => {
   overflow: hidden;
 }
 
-/* 2026-06-25 新增:编辑态的 description 编辑框 */
+/* 2026-06-25 新增:编辑态的 description 编辑框
+   2026-06-26 改:边框变细(默认 1px 淡边 + 焦点 1px 实线 + 主色 box-shadow,去掉 3px 厚光晕),
+   不固定 width,跟父容器(.detail-title-block,flex:1)自适应占满整页宽度 */
 .desc-editor {
   margin: 6px 0 0;
+  display: block;
   width: 100%;
   min-height: 56px;
   padding: 8px 10px;
@@ -2106,9 +2109,10 @@ onMounted(() => {
   resize: vertical;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
+.desc-editor:hover { border-color: var(--text-faint); }
 .desc-editor:focus {
-  border-color: var(--text);
-  box-shadow: 0 0 0 3px var(--primary-dim);
+  border-color: var(--text-faint);
+  box-shadow: 0 0 0 1px var(--text-faint);
 }
 .desc-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -2501,8 +2505,11 @@ onMounted(() => {
   line-height: 1.5;
   word-break: break-word;
 }
-/* 2026-06-25 改:编辑态触发词变成 textarea(行内),可同步编辑 */
+/* 2026-06-25 改:编辑态触发词变成 textarea(行内),可同步编辑
+   2026-06-26 改:边框变细(去掉 3px 厚光晕,改用 1px 淡边 + 焦点 1px 主色细线),
+   不固定 width,跟父容器占满 */
 .triggers-editor {
+  display: block;
   width: 100%;
   min-height: 56px;
   padding: 8px 10px;
@@ -2517,9 +2524,10 @@ onMounted(() => {
   resize: vertical;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
+.triggers-editor:hover { border-color: var(--text-faint); }
 .triggers-editor:focus {
-  border-color: var(--text);
-  box-shadow: 0 0 0 3px var(--primary-dim);
+  border-color: var(--text-faint);
+  box-shadow: 0 0 0 1px var(--text-faint);
 }
 .triggers-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
