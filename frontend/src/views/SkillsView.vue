@@ -1278,12 +1278,11 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 第二行:作用域(全局 + 各项目)— 仅对当前选中工具生效(2026-06-25 改)
+            <!-- 第二行:作用域(全局 + 各项目)— 仅当选中工具后才显示(2026-06-26 改)
                  视觉态:
-                   - 未选工具 → 全部置灰 + disabled
                    - 选中工具在该 chip 内已生效 → 蓝色 active
                    - 选中工具在该 chip 内未生效 → muted(虚线) -->
-            <div class="scope-row">
+            <div v-if="selectedToolID" class="scope-row">
               <span class="scope-row-label">{{ t('skills.list.scopeTargetsRow') }}</span>
               <div class="chip-row">
                 <button
@@ -1297,9 +1296,7 @@ onMounted(() => {
                     selectedToolBusy(tg) ? 'chip-busy' : '',
                     flashTargetKey === tg.key ? 'chip-flash' : '',
                   ]"
-                  :title="!selectedToolID
-                    ? t('skills.list.scopeSelectToolFirst')
-                    : (selectedToolHitExists(tg) ? t('skills.list.unapplyConfirmTitle') : t('skills.list.applyConfirmTitle'))"
+                  :title="selectedToolHitExists(tg) ? t('skills.list.unapplyConfirmTitle') : t('skills.list.applyConfirmTitle')"
                   @click="handleScopeChipClick(tg)"
                 >
                   <span
@@ -1324,9 +1321,6 @@ onMounted(() => {
                 </button>
                 <span v-if="!scopeTargets.length" class="chip-empty muted">
                   {{ t('skills.list.scopeEmpty') }}
-                </span>
-                <span v-else-if="!selectedToolID" class="chip-empty muted">
-                  {{ t('skills.list.scopeSelectToolFirst') }}
                 </span>
               </div>
             </div>
@@ -2312,19 +2306,18 @@ onMounted(() => {
 }
 
 /* 2026-06-25 新增:工具 chip "已选中"(单选切换器)态
-   - 蓝色加粗边框
-   - 与 chip-active 共存时,边框是蓝色而不是默认的实心
-   - 与 chip-muted 共存时,边框变蓝色实线,文字变深 */
+   - 2026-06-26 改:用主色(黑)边框区分"操作选中",不再用蓝色,
+     避免与"已启用"色(蓝填充)混淆,用户一眼能区分"我正在为哪个工具操作" */
 .chip-tool.chip-tool-selected {
-  border-color: var(--accent-blue);
+  border-color: var(--text);
   border-width: 2px;
   /* border-width 变化会导致尺寸跳动,用 box-shadow 模拟双层边框 */
   border-style: solid;
-  box-shadow: 0 0 0 1px var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--text);
 }
 .chip-tool.chip-tool-selected .chip-count {
-  background: var(--accent-blue-bg);
-  color: var(--accent-blue);
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 .chip-tool.chip-active.chip-tool-selected .chip-count {
   background: rgba(255, 255, 255, 0.18);
