@@ -1116,9 +1116,11 @@ onMounted(() => {
                 @keyup.enter="openTagDialog"
               >@{{ current.version }}</code>
               <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']">{{ current.source || 'local' }}</span>
-              <!-- 2026-06-25 改:编辑按钮从 detail-body 顶部搬到 detail-title-row 右侧(在 LOCAL 徽章之后) -->
-              <div v-if="!editing" class="detail-title-actions">
+              <!-- 2026-06-25 改:编辑按钮从 detail-body 顶部搬到 detail-title-row 右侧(在 LOCAL 徽章之后)
+                   2026-06-26 二改:编辑态时,同位置显示"取消/保存"实心按钮(替换 ghost-link) -->
+              <div class="detail-title-actions">
                 <button
+                  v-if="!editing"
                   class="ghost-link"
                   :title="t('common.edit')"
                   @click="startInlineEdit"
@@ -1126,6 +1128,26 @@ onMounted(() => {
                   <Icon icon="mdi:pencil" width="12" height="12" />
                   {{ t('common.edit') }}
                 </button>
+                <!-- 编辑态:同位置显示 取消 / 保存 实心按钮 -->
+                <template v-else>
+                  <button
+                    class="title-action-btn title-action-cancel"
+                    :disabled="editSaving"
+                    @click="cancelInlineEdit"
+                  >
+                    <Icon icon="mdi:close" width="13" height="13" />
+                    {{ t('common.cancel') }}
+                  </button>
+                  <button
+                    class="title-action-btn title-action-save"
+                    :disabled="editSaving"
+                    @click="saveInlineEdit"
+                  >
+                    <span v-if="editSaving" class="spinner spinner-sm"></span>
+                    <Icon v-else icon="mdi:content-save" width="13" height="13" />
+                    {{ editSaving ? t('common.processing') : t('common.save') }}
+                  </button>
+                </template>
               </div>
             </div>
 
@@ -1341,19 +1363,8 @@ onMounted(() => {
               <Icon :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
               {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
             </h3>
-            <!-- 2026-06-25 改:查看态的"编辑"按钮已搬到 detail-title-row 右侧(标题 LOCAL 徽章之后),
-                 这里只保留编辑态的"取消/保存"操作 -->
-            <div v-if="editing" class="body-actions">
-              <button class="ghost-link" :disabled="editSaving" @click="cancelInlineEdit">
-                <Icon icon="mdi:close" width="12" height="12" />
-                {{ t('common.cancel') }}
-              </button>
-              <button class="ghost-link primary-link" :disabled="editSaving" @click="saveInlineEdit">
-                <span v-if="editSaving" class="spinner spinner-sm"></span>
-                <Icon v-else icon="mdi:content-save" width="12" height="12" />
-                {{ editSaving ? t('common.processing') : t('common.save') }}
-              </button>
-            </div>
+            <!-- 2026-06-26 改:"取消/保存"已搬到 detail-title-row 右侧(替换"编辑"按钮位置),
+                 这里不再放操作按钮,保持 section-header 干净 -->
           </header>
 
           <p v-if="editError" class="message message-error">
@@ -1989,12 +2000,51 @@ onMounted(() => {
   min-width: 0;
 }
 
-/* 2026-06-25 新增:标题行右侧"编辑"按钮容器 */
+/* 2026-06-25 新增:标题行右侧"编辑"按钮容器
+   2026-06-26 改:编辑态时,容器内显示"取消/保存"实心按钮(替换 ghost-link) */
 .detail-title-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto; /* 顶到最右 */
+}
+
+/* 2026-06-26 新增:标题行右侧的"取消/保存"实心按钮 */
+.title-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  border: 1px solid transparent;
+}
+.title-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.title-action-cancel {
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.title-action-cancel:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.title-action-save {
+  background: var(--text);
+  color: var(--bg-card);
+  border-color: var(--text);
+}
+.title-action-save:hover:not(:disabled) {
+  background: var(--primary-dim);
+  color: var(--text);
+  border-color: var(--text);
 }
 
 .detail-name {
