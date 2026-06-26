@@ -2307,17 +2307,20 @@ onMounted(() => {
 
 /* 2026-06-25 新增:工具 chip "已选中"(单选切换器)态
    - 2026-06-26 改:用主色(黑)边框区分"操作选中",不再用蓝色,
-     避免与"已启用"色(蓝填充)混淆,用户一眼能区分"我正在为哪个工具操作" */
+     避免与"已启用"色(蓝填充)混淆,用户一眼能区分"我正在为哪个工具操作"
+   - 2026-06-26 二改:边框从 2px+1px shadow 收成 1px(双层用 box-shadow 模拟),
+     不再显粗;颜色从黑改紫色(var(--accent-violet)),与已启用蓝 / 未选灰 三色清晰区分 */
 .chip-tool.chip-tool-selected {
-  border-color: var(--text);
-  border-width: 2px;
-  /* border-width 变化会导致尺寸跳动,用 box-shadow 模拟双层边框 */
+  border-color: var(--accent-violet);
+  border-width: 1px;
+  /* 1px 双层边框:外层 inset 1px,内层 outset 0.5px 累加视觉为 1.5px,
+     避免 border-width 切换导致尺寸跳动 */
   border-style: solid;
-  box-shadow: 0 0 0 1px var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent-violet);
 }
 .chip-tool.chip-tool-selected .chip-count {
-  background: var(--bg-subtle);
-  color: var(--text);
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
 }
 .chip-tool.chip-active.chip-tool-selected .chip-count {
   background: rgba(255, 255, 255, 0.18);
