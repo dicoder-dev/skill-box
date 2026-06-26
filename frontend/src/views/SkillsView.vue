@@ -2572,7 +2572,9 @@ onMounted(() => {
 .triggers-editor {
   display: block;
   width: 100%;
-  min-height: 56px;
+  /* 2026-06-26 改:1 行 + padding 16 = 36px。旧值 56px 把 1 行内容撑成 ~2.8 行,
+     与"默认 1 行高度"不符 */
+  min-height: 36px;
   padding: 8px 10px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px;
