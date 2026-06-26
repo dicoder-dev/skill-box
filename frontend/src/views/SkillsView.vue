@@ -1199,9 +1199,11 @@ onMounted(() => {
           </div>
 
           <div class="detail-actions">
+            <!-- 2026-06-26 改:把原生 :title 换成 :data-tip,触发全局 CSS 自定义 tooltip(0 延迟),
+                 否则浏览器原生 title 会有 ~1s 延迟,体感很慢 -->
             <button
               class="icon-btn"
-              :title="t('skills.list.tooltipTest')"
+              :data-tip="t('skills.list.tooltipTest')"
               :aria-label="t('skills.list.tooltipTest')"
               :disabled="testing"
               @click="triggerTest"
@@ -1211,7 +1213,7 @@ onMounted(() => {
             </button>
             <button
               class="icon-btn"
-              :title="t('skills.list.tooltipTag')"
+              :data-tip="t('skills.list.tooltipTag')"
               :aria-label="t('skills.list.tooltipTag')"
               @click="openTagDialog"
             >
@@ -1219,7 +1221,7 @@ onMounted(() => {
             </button>
             <button
               class="icon-btn"
-              :title="t('skills.list.tooltipOpenFolder')"
+              :data-tip="t('skills.list.tooltipOpenFolder')"
               :aria-label="t('skills.list.tooltipOpenFolder')"
               @click="openInFolder"
             >
@@ -1227,7 +1229,7 @@ onMounted(() => {
             </button>
             <button
               class="icon-btn"
-              :title="t('skills.list.copyPath')"
+              :data-tip="t('skills.list.copyPath')"
               :aria-label="t('skills.list.copyPath')"
               @click="copySourcePath"
             >
@@ -1235,7 +1237,7 @@ onMounted(() => {
             </button>
             <button
               class="icon-btn"
-              :title="t('skills.list.tooltipDelete')"
+              :data-tip="t('skills.list.tooltipDelete')"
               :aria-label="t('skills.list.tooltipDelete')"
               @click="removeCurrent"
             >
@@ -1243,7 +1245,7 @@ onMounted(() => {
             </button>
             <button
               class="icon-btn ai-btn"
-              :title="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
+              :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
               :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
               @click="toggleAI"
             >

@@ -465,6 +465,40 @@ table.grid tbody tr:hover {
 }
 
 /* ============================================
+   自定义 tooltip(替代浏览器原生 title)
+   - 任意元素加 data-tip="文字" 即可,hover/focus 即显(0 延迟)
+   - 浅色:黑底白字;暗黑:白底黑字(由 --text / --bg-card 反色实现)
+   - z-index 1000 兜底,父容器有 overflow 时可能被裁切,先在 toolbar 内用没问题
+   ============================================ */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--bg-card);
+  background: var(--text);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 1000;
+}
+[data-tip]:hover:not(:disabled)::after,
+[data-tip]:focus-visible:not(:disabled)::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+[data-tip]:disabled::after { display: none; }
+
+/* ============================================
    动画过渡
    ============================================ */
 .fade-enter-active,
