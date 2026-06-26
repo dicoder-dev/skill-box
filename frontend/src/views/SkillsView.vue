@@ -2145,7 +2145,10 @@ onMounted(() => {
   margin: 6px 0 0;
   display: block;
   width: 100%;
-  min-height: 56px;
+  /* 2026-06-26 改:精确锁 2 行高(13 × 1.5 × 2 + 16 padding + 2 border = 57),
+     与 rows="2" 对齐;min-height 留作下限保护,内容多了自动扩 */
+  height: 57px;
+  min-height: 57px;
   padding: 8px 10px;
   font-family: inherit;
   font-size: 13px;
@@ -2572,9 +2575,10 @@ onMounted(() => {
 .triggers-editor {
   display: block;
   width: 100%;
-  /* 2026-06-26 改:1 行 + padding 16 = 36px。旧值 56px 把 1 行内容撑成 ~2.8 行,
-     与"默认 1 行高度"不符 */
-  min-height: 36px;
+  /* 2026-06-26 改:用 height 精确锁初始 1 行高(行高 20 + padding 16 + border 2 = 38),
+     内容多了浏览器自动扩(配合 box-sizing:border-box)。min-height 留作下限保护 */
+  height: 38px;
+  min-height: 38px;
   padding: 8px 10px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px;
