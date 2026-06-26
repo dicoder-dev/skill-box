@@ -80,20 +80,27 @@ async function saveInlineEdit() {
   const newDescription = (editDescription.value || '').trim()
   editSaving.value = true
   try {
+    // 2026-06-26 改:在 updateSkill 之前先快照已启用的 (tool, scope, project_id) 组合,
+    // 因为 updateSkill 成功后要遍历它们调 apply,把新内容同步拷贝到磁盘。
+    // 快照必须在 updateSkill 之前,避免 apply 链路重入(虽然 updateSkill 不会改 scopeHits)
+    const targetSkill = { ...current.value }
+    const existingApplies = scopeHits.value
+      .filter((h) => h.exists)
+      .map((h) => ({ tool_id: h.tool_id, scope: h.scope, project_id: h.project_id || 0 }))
     // 先同步到 currentMeta(用户视角的"立刻反馈")
     currentMeta.description = newDescription
     currentMeta.triggers = newTriggers
     // 重新拼 SKILL.md(保留 frontmatter,替换 description/triggers/body)
     const newMd = rebuildSkillMd(editBody.value, newTriggers, newDescription)
     await updateSkill({
-      scope: current.value.scope,
-      project_id: current.value.project_id,
-      name: current.value.name,
-      version: current.value.version,
-      source: current.value.source || 'local',
+      scope: targetSkill.scope,
+      project_id: targetSkill.project_id,
+      name: targetSkill.name,
+      version: targetSkill.version,
+      source: targetSkill.source || 'local',
       manifest: {
-        name: current.value.name,
-        version: current.value.version,
+        name: targetSkill.name,
+        version: targetSkill.version,
         description: newDescription,
         triggers: newTriggers,
       },
@@ -102,6 +109,34 @@ async function saveInlineEdit() {
     currentMd.value = newMd
     currentBody.value = extractBody(newMd)
     editing.value = false
+    // 2026-06-26 改:遍历已启用的 (tool, scope, project) 组合,逐个调 apply 让磁盘上的
+    // 副本同步到新内容。后端 apply 本身就是"覆盖"语义(走 PreSnapshot + 原子写),
+    // 所以前端只要"再调一次 apply"就完成同步。
+    // 失败不阻断(主保存已成功),统一在末尾弹 toast 汇总。
+    if (existingApplies.length) {
+      const failList = []
+      for (const a of existingApplies) {
+        try {
+          await applySkill({
+            name: targetSkill.name,
+            scope: a.scope,
+            project_id: a.project_id,
+            tools: [a.tool_id],
+          })
+        } catch (e) { failList.push({ tool: a.tool_id, scope: a.scope, project_id: a.project_id, msg: e?.message || String(e) }) }
+      }
+      if (failList.length) {
+        toast.error(t('skills.editor.syncPartialFailed', {
+          ok: existingApplies.length - failList.length,
+          total: existingApplies.length,
+        }))
+      } else {
+        toast.success(t('skills.editor.syncAllSuccess', { n: existingApplies.length }))
+      }
+    } else {
+      // 没在已启用命中 → 提示"未同步到任何工具/项目",用户知道主保存成功但磁盘上还没生效
+      toast.info(t('skills.editor.syncNone', { name: targetSkill.name }))
+    }
   } catch (e) {
     editError.value = e?.message || String(e)
   } finally {

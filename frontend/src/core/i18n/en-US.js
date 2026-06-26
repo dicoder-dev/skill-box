@@ -97,6 +97,10 @@ export default {
       errProjectRequired: 'please select a project first',
       applyAllSuccess: 'auto-enabled on {n} tools',
       applyPartialFailed: '{ok}/{total} tools enabled, failed: {fails}',
+      // 2026-06-26 new: edit save sync to enabled locations
+      syncAllSuccess: 'synced to {n} active locations',
+      syncPartialFailed: '{ok}/{total} active locations synced',
+      syncNone: '"{name}" saved, but not enabled anywhere yet — enable it from the scope section if needed',
       errNameEmpty: 'name is required',
       errDescShort: 'description must be at least 10 chars',
       errTriggersEmpty: 'at least one trigger is required',

@@ -100,6 +100,10 @@ export default {
       errProjectRequired: '请先选择项目',
       applyAllSuccess: '已在 {n} 个工具上自动启用',
       applyPartialFailed: '{ok}/{total} 个工具启用成功,失败: {fails}',
+      // 2026-06-26 新增:编辑保存后同步拷贝到已启用命中的提示
+      syncAllSuccess: '已同步到 {n} 个生效位置',
+      syncPartialFailed: '{ok}/{total} 个生效位置同步成功',
+      syncNone: '「{name}」已保存,但还没在任何工具/项目上启用,需要时去作用域区启用',
       errNameEmpty: '名称不能为空',
       errDescShort: '描述至少 10 个字符',
       errTriggersEmpty: '触发词至少填一个',
