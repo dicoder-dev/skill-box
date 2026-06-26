@@ -82,7 +82,8 @@ export default {
       description: 'Description',
       descriptionHint: 'min 10 chars',
       triggers: 'Triggers',
-      triggersHint: 'one per line, or comma-separated',
+      triggersHint: 'comma-separated',
+      triggersHintPlaceholder: 'review pr, code review',
       body: 'Body (Markdown, frontmatter auto-merged)',
       // 2026-06-26 new: scope refactor + apply tools
       scopeGlobal: 'Global',

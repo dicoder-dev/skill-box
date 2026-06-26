@@ -85,7 +85,8 @@ export default {
       description: '描述',
       descriptionHint: '≥ 10 字符',
       triggers: '触发词',
-      triggersHint: '每行一个,或逗号分隔',
+      triggersHint: '用逗号分隔',
+      triggersHintPlaceholder: 'review pr, code review',
       body: '正文 (Markdown,frontmatter 会自动拼)',
       // 2026-06-26 新增:作用域区改造 + 适用工具
       scopeGlobal: '全局',

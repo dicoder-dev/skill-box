@@ -47,7 +47,7 @@ const currentError = ref('')
 const editing = ref(false)            // 是否处于内联编辑态
 const editBody = ref('')              // 编辑器内的 body 文本
 const editDescription = ref('')       // 编辑器内的 description 文本
-const editTriggersText = ref('')      // 编辑器内的触发词(换行/逗号分隔)
+const editTriggersText = ref('')      // 编辑器内的触发词(逗号分隔,2026-06-26 改:默认逗号)
 const editError = ref('')             // 校验错误
 const editSaving = ref(false)         // 保存中
 
@@ -55,8 +55,9 @@ function startInlineEdit() {
   if (!current.value) return
   editBody.value = currentBody.value || ''
   editDescription.value = currentMeta.description || ''
-  // 触发词编辑态:把数组转成"换行分隔"的纯文本,用户改完再 split 回去
-  editTriggersText.value = (currentMeta.triggers || []).join('\n')
+  // 触发词编辑态:把数组转成"逗号分隔"的纯文本,用户改完再 split 回去
+  // 2026-06-26 改:默认用逗号作为分隔符(换行作为兜底也支持)
+  editTriggersText.value = (currentMeta.triggers || []).join(', ')
   editError.value = ''
   editing.value = true
 }
@@ -71,8 +72,9 @@ async function saveInlineEdit() {
   if (!current.value) return
   editError.value = ''
   // 触发词:从文本 split 成数组,过滤空字符串
+  // 2026-06-26 改:默认以逗号分隔(换行也支持作为兜底,用户复制粘贴多行也能用)
   const newTriggers = (editTriggersText.value || '')
-    .split(/[\n,]/)
+    .split(/[,\n]/)
     .map((s) => s.trim())
     .filter(Boolean)
   const newDescription = (editDescription.value || '').trim()
@@ -1235,9 +1237,9 @@ onMounted(() => {
             <textarea
               v-model="editTriggersText"
               class="triggers-editor"
-              rows="2"
+              rows="1"
               spellcheck="false"
-              :placeholder="t('skills.editor.triggersHint')"
+              :placeholder="t('skills.editor.triggersHintPlaceholder')"
               :disabled="editSaving"
             ></textarea>
           </div>
@@ -1632,7 +1634,7 @@ onMounted(() => {
 
         <div class="editor-field-full">
           <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
-          <textarea v-model="draft.triggersText" rows="2" placeholder="review pr&#10;code review"></textarea>
+          <textarea v-model="draft.triggersText" rows="1" :placeholder="t('skills.editor.triggersHintPlaceholder')"></textarea>
         </div>
 
         <div class="editor-field-full">
