@@ -1151,33 +1151,13 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 2026-06-25 改:description 下方接触发词行内展示 -->
+            <!-- 2026-06-25 改:description 下方接触发词行内展示(查看态保留在 title-block 紧凑展示) -->
             <p v-if="!editing && currentMeta.description" class="detail-desc">{{ currentMeta.description }}</p>
-            <textarea
-              v-else-if="editing"
-              v-model="editDescription"
-              class="desc-editor"
-              rows="2"
-              spellcheck="false"
-              :placeholder="t('skills.editor.descriptionHint')"
-              :disabled="editSaving"
-            ></textarea>
 
-            <!-- 2026-06-25 改:触发词行内展示,在 description 下方;编辑态变 textarea -->
+            <!-- 2026-06-25 改:触发词行内展示,在 description 下方(查看态) -->
             <div v-if="!editing && (currentMeta.triggers || []).length" class="detail-triggers-row">
               <span class="triggers-label">{{ t('skills.editor.triggers') }}</span>
               <span class="meta-text">{{ (currentMeta.triggers || []).join('、') }}</span>
-            </div>
-            <div v-else-if="editing" class="detail-triggers-row editing">
-              <span class="triggers-label">{{ t('skills.editor.triggers') }}</span>
-              <textarea
-                v-model="editTriggersText"
-                class="triggers-editor"
-                rows="2"
-                spellcheck="false"
-                :placeholder="t('skills.editor.triggersHint')"
-                :disabled="editSaving"
-              ></textarea>
             </div>
           </div>
 
@@ -1234,6 +1214,38 @@ onMounted(() => {
             </button>
           </div>
         </header>
+
+        <!-- 2026-06-26 新增:编辑态的描述/触发词 编辑区移到 toolbar 外,
+             变成 detail-pane 下的独立 section,跟其他 detail-section 一样占满整页宽度
+             (放在 toolbar 内会被 detail-actions(右侧 6 个图标按钮)挤掉 35% 宽度) -->
+        <section v-if="editing" class="detail-section detail-edit-fields">
+          <div class="editor-field-full">
+            <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
+            <textarea
+              v-model="editDescription"
+              class="desc-editor"
+              rows="2"
+              spellcheck="false"
+              :placeholder="t('skills.editor.descriptionHint')"
+              :disabled="editSaving"
+            ></textarea>
+          </div>
+          <div class="editor-field-full">
+            <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
+            <textarea
+              v-model="editTriggersText"
+              class="triggers-editor"
+              rows="2"
+              spellcheck="false"
+              :placeholder="t('skills.editor.triggersHint')"
+              :disabled="editSaving"
+            ></textarea>
+          </div>
+          <p v-if="editError" class="message message-error">
+            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            {{ editError }}
+          </p>
+        </section>
 
         <p v-if="openError" class="message message-error">
           <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
@@ -2115,6 +2127,18 @@ onMounted(() => {
   box-shadow: 0 0 0 1px var(--text-faint);
 }
 .desc-editor:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 2026-06-26 新增:编辑态的描述/触发词 编辑区独立 section
+   跟其他 detail-section 一样 padding,内部 editor-field-full 占满 */
+.detail-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-subtle); /* 跟 toolbar 区分,提示"这块在编辑" */
+}
+.detail-edit-fields .editor-field-full {
+  gap: 6px;
+}
 
 /* 2026-06-25 新增:触发词行内展示 — 在 description 下方 */
 .detail-triggers-row {
