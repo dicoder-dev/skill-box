@@ -2836,7 +2836,10 @@ onMounted(() => {
 .editor-field, .editor-field-full { display: flex; flex-direction: column; gap: 6px; }
 .editor-field-full small { color: var(--text-faint); }
 .editor-field label, .editor-field-full label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
-.editor-field-full textarea { min-height: 100px; }
+/* 2026-06-26 改:.editor-field-full textarea 默认 100px 最小高度只对"正文"等大段内容生效,
+   描述/触发词的 textarea(.desc-editor / .triggers-editor)已经用 height 精确锁了
+   1/2 行行高,这条全局 min-height 不能再把它们拉高 */
+.editor-field-full > textarea:not(.desc-editor):not(.triggers-editor) { min-height: 100px; }
 
 /* 2026-06-26 新增:作用域开关(全局/项目) */
 .scope-toggle-row {
