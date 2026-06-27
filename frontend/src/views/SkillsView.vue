@@ -18,7 +18,10 @@ import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skil
 import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
-import { renderMarkdown } from '@/core/utils/markdown.js'
+// 2026-06-27 改:详情预览区改用 markdown-it + highlight.js 渲染(支持 GFM / 代码高亮)。
+// 编辑态给 Tiptap 喂 HTML 那条路仍用自研 renderMarkdown,在 RichTextEditor 内部独立 import。
+import { renderMarkdownView } from '@/core/utils/markdown_view.js'
+import 'highlight.js/styles/github.css'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 import { useToastStore } from '@/core/store/toast'
@@ -685,7 +688,7 @@ const filteredItems = computed(() => {
 })
 
 // ====== 渲染后的 markdown HTML ======
-const renderedHtml = computed(() => renderMarkdown(currentBody.value))
+const renderedHtml = computed(() => renderMarkdownView(currentBody.value))
 
 // ====== Tag 弹窗 ======
 const tagOpen = ref(false)
@@ -2674,57 +2677,192 @@ onMounted(() => {
 
 .md-body {
   font-size: 13.5px;
-  line-height: 1.7;
+  line-height: 1.75;
   color: var(--text);
   word-wrap: break-word;
 }
 
+/* 标题 — 主色 + 左侧色条 */
 .md-body :deep(h1),
 .md-body :deep(h2),
-.md-body :deep(h3) {
-  margin: 16px 0 8px;
+.md-body :deep(h3),
+.md-body :deep(h4) {
+  margin: 22px 0 10px;
   font-weight: 600;
   color: var(--text);
+  line-height: 1.4;
 }
-.md-body :deep(h1) { font-size: 18px; }
-.md-body :deep(h2) { font-size: 16px; }
-.md-body :deep(h3) { font-size: 14px; }
+.md-body :deep(h1) {
+  font-size: 20px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.md-body :deep(h2) { font-size: 17px; }
+.md-body :deep(h3) { font-size: 15px; }
+.md-body :deep(h4) { font-size: 14px; color: var(--text-muted, #6b7280); }
 
+/* 段落 */
 .md-body :deep(p) { margin: 8px 0; }
-.md-body :deep(ul),
-.md-body :deep(ol) { margin: 8px 0 8px 20px; padding: 0; }
-.md-body :deep(li) { margin: 2px 0; }
 
-.md-body :deep(code) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.9em;
-  background: var(--primary-dim);
-  padding: 1px 5px;
-  border-radius: 4px;
+/* 列表 */
+.md-body :deep(ul),
+.md-body :deep(ol) {
+  margin: 10px 0 10px 4px;
+  padding-left: 22px;
+}
+.md-body :deep(li) {
+  margin: 4px 0;
+  padding-left: 4px;
+}
+.md-body :deep(li > p) { margin: 4px 0; }
+
+/* 引用 — 左侧色条 + 浅底 */
+.md-body :deep(blockquote) {
+  margin: 12px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent-blue);
+  background: var(--bg-subtle, rgba(59, 130, 246, 0.06));
+  color: var(--text-muted, #4b5563);
+  border-radius: 0 4px 4px 0;
+}
+.md-body :deep(blockquote p) { margin: 4px 0; }
+
+/* 链接 */
+.md-body :deep(a) {
+  color: var(--accent-blue);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.12s, color 0.12s;
+}
+.md-body :deep(a:hover) {
+  border-bottom-color: var(--accent-blue);
 }
 
-.md-body :deep(pre) {
-  margin: 10px 0;
-  padding: 12px 14px;
-  background: var(--bg-subtle);
+/* 水平线 */
+.md-body :deep(hr) {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 20px 0;
+}
+
+/* 行内 code — 浅色徽章 */
+.md-body :deep(code) {
+  font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 0.88em;
+  background: var(--bg-subtle, rgba(110, 118, 129, 0.12));
+  color: var(--accent-blue);
+  padding: 1px 6px;
+  border-radius: 4px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+}
+
+/* 代码块(highlight.js 输出 <pre class="hljs"><code class="hljs language-xxx">)
+   深色底 + 顶部语言徽章(用 ::before 在 pre 上展示语言标签) */
+.md-body :deep(pre.hljs) {
+  position: relative;
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: #f6f8fa;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
   overflow-x: auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
   font-size: 12.5px;
-  line-height: 1.6;
+  line-height: 1.65;
+  color: #24292f;
+}
+/* 语言徽章 */
+.md-body :deep(pre.hljs code[class*="language-"])::before {
+  content: attr(class);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #6b7280);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  pointer-events: none;
+}
+/* 提取语言名(从 class 里) */
+.md-body :deep(pre.hljs code.language-javascript)::before,
+.md-body :deep(pre.hljs code.language-js)::before { content: 'JS'; }
+.md-body :deep(pre.hljs code.language-typescript)::before,
+.md-body :deep(pre.hljs code.language-ts)::before { content: 'TS'; }
+.md-body :deep(pre.hljs code.language-python)::before,
+.md-body :deep(pre.hljs code.language-py)::before { content: 'PY'; }
+.md-body :deep(pre.hljs code.language-go)::before { content: 'GO'; }
+.md-body :deep(pre.hljs code.language-bash)::before,
+.md-body :deep(pre.hljs code.language-sh)::before,
+.md-body :deep(pre.hljs code.language-shell)::before { content: 'SH'; }
+.md-body :deep(pre.hljs code.language-json)::before { content: 'JSON'; }
+.md-body :deep(pre.hljs code.language-yaml)::before,
+.md-body :deep(pre.hljs code.language-yml)::before { content: 'YAML'; }
+.md-body :deep(pre.hljs code.language-sql)::before { content: 'SQL'; }
+.md-body :deep(pre.hljs code.language-html)::before,
+.md-body :deep(pre.hljs code.language-xml)::before { content: 'HTML'; }
+.md-body :deep(pre.hljs code.language-css)::before { content: 'CSS'; }
+.md-body :deep(pre.hljs code.language-markdown)::before,
+.md-body :deep(pre.hljs code.language-md)::before { content: 'MD'; }
+/* 检测到但未列入上方的语言(比如 hljs 自动识别) */
+.md-body :deep(pre.hljs code:not([class*="language-"]))::before {
+  content: 'TXT';
 }
 
 .md-body :deep(pre code) {
   background: transparent;
   padding: 0;
+  border: none;
+  border-radius: 0;
+  color: inherit;
   font-size: inherit;
 }
 
-.md-body :deep(a) {
-  color: var(--accent-blue);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* 表格 — 带边框 + 表头底色 + 斑马纹 */
+.md-body :deep(table) {
+  border-collapse: collapse;
+  margin: 14px 0;
+  width: 100%;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.md-body :deep(thead) { background: var(--bg-subtle, #f6f8fa); }
+.md-body :deep(th) {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border);
+  color: var(--text);
+}
+.md-body :deep(td) {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  border-top: none;
+}
+.md-body :deep(tbody tr:last-child td) { border-bottom: none; }
+.md-body :deep(tbody tr:nth-child(even)) { background: var(--bg-subtle, rgba(0, 0, 0, 0.02)); }
+
+/* 任务列表(GFM) */
+.md-body :deep(input[type="checkbox"]) {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* 图片 */
+.md-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 10px 0;
+  border: 1px solid var(--border);
 }
 
 .md-body :deep(blockquote) {
