@@ -216,6 +216,19 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 			// 桌面端和 Web 端读文件/reveal 行为完全一致。
 			FsReadText: fsutil.ReadText,
 			FsReveal:   fsutil.Reveal,
+			// FsPickFolder 弹系统文件夹选择对话框,走 wails v3 的 OpenFileDialog +
+			// CanChooseDirectories(true)。从 wails dialog 派生的结果是一个
+			// 字符串,取消选择时为空串,与 Web 端降级协议一致。
+			FsPickFolder: func() (string, error) {
+				if app == nil {
+					return "", fmt.Errorf("wails app not initialized")
+				}
+				return app.Dialog.OpenFile().
+					CanChooseDirectories(true).
+					CanChooseFiles(false).
+					CanCreateDirectories(true).
+					PromptForSingleSelection()
+			},
 			WindowShow:              showPrimary,
 			WindowToggleAlwaysOnTop: windowMgr.ToggleAlwaysOnTop,
 			WindowToggleMaximise:    windowMgr.ToggleMaximise,

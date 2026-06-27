@@ -82,6 +82,10 @@ type BootstrapHooks struct {
 	// 在 macOS 走 `open -R` / Windows 走 `explorer /select` / Linux 走 xdg-open
 	// 父目录)。Web 端无桌面,hook 不会注入,前端走到降级(打开父目录 file://)。
 	FsReveal func(path string) error
+	// FsPickFolder 弹出系统文件夹选择对话框,用户选择后返回绝对路径;
+	// 取消选择时返回空字符串且 error 为 nil。Web 端无桌面,hook 不会注入,
+	// 前端需要降级到 input[type=file] webkitdirectory 等价方案。
+	FsPickFolder func() (string, error)
 	WindowShow                 func()
 	WindowToggleAlwaysOnTop    func() bool
 	WindowToggleMaximise       func()
