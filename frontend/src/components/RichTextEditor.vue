@@ -441,18 +441,20 @@ function isBtn(name, attrs = undefined) {
 }
 
 .rte-content {
-  /* 不限 max-height:让编辑器随内容自然增高;只在内容为空时保持 min-height
-     (之前用 max-height:70vh 在长文档下会裁掉最后一行,光标定到末尾时
-      用户看不到最底部那几行,体感"内容不全") */
+  /* 保留 max-height 让长文档在编辑器内独立滚(opcbase / 一般 markdown 编辑器都这么做),
+     而不是把页面拉爆;max-height 给一个合理的上限,留出工具栏 + 底栏的视口空间 */
   min-height: var(--rte-min-h, 320px);
+  max-height: 60vh;
+  overflow-y: auto;
   background: var(--bg-card);
 }
 
 /* Tiptap ProseMirror 基础样式 — 颜色用项目变量,排版贴近自研 markdown 渲染 */
 .rte-content :deep(.ProseMirror) {
   /* 不在 ProseMirror 上叠 min-height:它会被 .rte-content 的 min-height 撑开,
-     再叠一份会让高度算法错位;padding-bottom 留出底部呼吸空间避免光标贴边 */
-  padding: 12px 16px 24px;
+     再叠一份会让高度算法错位;padding-bottom 给一大块空白,避免光标
+     定到末尾时被父容器 padding 挡住"看起来少一行" */
+  padding: 12px 16px 80px;
   outline: none;
   color: var(--text);
   font-size: 13px;
