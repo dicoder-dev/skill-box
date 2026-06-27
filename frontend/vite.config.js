@@ -85,6 +85,9 @@ export default defineConfig({
     },
   },
   server: {
+    // 显式绑 IPv4 loopback,避免 macOS 上 Vite 默认绑到 [::1](IPv6 localhost)
+    // 而 Wails Webview 用 127.0.0.1(IPv4)连接,出现 "Could not connect to the server"。
+    host: "127.0.0.1",
     // Web 模式下,resolveBaseURL() 返回 "" 走同源,这里把 /api/* 转发到后端,
     // 避免浏览器请求打到 vite dev server 自己(否则要么 404,要么被 SPA 兑底返回 index.html)。
     proxy: {
