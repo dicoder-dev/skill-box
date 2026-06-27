@@ -243,10 +243,14 @@ export default {
   projects: {
     title: 'Projects',
     subtitle: 'Register project roots; later you can bind skills to a project scope to override global ones.',
-    btnNew: '+ New Project',
+    btnImport: 'Import Project',
+    btnImportTitle: 'Import a project from a local folder',
+    btnPickAgain: 'Pick a different folder',
     btnCancel: 'Cancel',
     searchPlaceholder: 'Filter by name',
-    formTitle: 'New project',
+    formTitle: 'Import Project',
+    formHint: 'Name and alias are auto-resolved from the selected folder. You can override them.',
+    inspecting: 'Resolving…',
     name: 'Name',
     nameHint: 'display name, e.g. My App',
     alias: 'Alias',
@@ -264,7 +268,8 @@ export default {
     colDescription: 'Description',
     colActions: 'Actions',
     confirmDelete: 'Delete project #{id} ?',
-    empty: 'No projects registered yet. Click "+ New Project" to start',
+    empty: 'No projects registered yet.',
+    emptyHint: 'Click "Import Project" at the top right to start from a local folder',
   },
 
   market: {

@@ -109,6 +109,25 @@ function createWebPlatform() {
           throw new Error(`reveal(${path}) failed: ${e?.message || e}`)
         }
       },
+      // pickFolder 弹系统文件夹选择对话框,用户取消时返空串(不抛错)。
+      // Web 端无桌面 hook,后端返 501 → 这里降级抛错给调用方处理。
+      async pickFolder() {
+        try {
+          const r = await http.post('/api/desktop/fs/pick-folder', {})
+          return r?.path || ''
+        } catch (e) {
+          throw new Error(`pickFolder failed: ${e?.message || e}`)
+        }
+      },
+      // inspectProject 从目录路径推断 name / alias,供"导入项目"预填表单。
+      async inspectProject(path) {
+        try {
+          const r = await http.post('/api/desktop/fs/inspect-project', { path })
+          return { name: r?.name || '', alias: r?.alias || '' }
+        } catch (e) {
+          throw new Error(`inspectProject(${path}) failed: ${e?.message || e}`)
+        }
+      },
     },
     notify: {
       async hasPermission() { return false },
@@ -187,6 +206,14 @@ function createDesktopPlatform() {
           if (fb) return { ok: false, fallbackUrl: fb }
           throw e
         }
+      },
+      async pickFolder() {
+        const r = await http.post('/api/desktop/fs/pick-folder', {})
+        return r?.path || ''
+      },
+      async inspectProject(path) {
+        const r = await http.post('/api/desktop/fs/inspect-project', { path })
+        return { name: r?.name || '', alias: r?.alias || '' }
       },
     },
     notify: {

@@ -246,10 +246,14 @@ export default {
   projects: {
     title: '项目',
     subtitle: '登记项目根目录,后续技能可绑定到项目作用域,走项目级覆盖。',
-    btnNew: '+ 新建项目',
+    btnImport: '导入项目',
+    btnImportTitle: '从本地文件夹导入一个项目',
+    btnPickAgain: '重新选择目录',
     btnCancel: '取消',
     searchPlaceholder: '按名称过滤',
-    formTitle: '新建项目',
+    formTitle: '导入项目',
+    formHint: '已根据所选目录自动解析名称与别名,可按需修改。',
+    inspecting: '解析中…',
     name: '名称',
     nameHint: '显示名,如 My App',
     alias: '别名',
@@ -267,7 +271,8 @@ export default {
     colDescription: '描述',
     colActions: '操作',
     confirmDelete: '确定删除项目 #{id} ?',
-    empty: '还没有登记项目。点右上角"+ 新建项目"开始',
+    empty: '还没有登记项目。',
+    emptyHint: '点右上角"导入项目",从本地选一个目录开始',
   },
 
   market: {

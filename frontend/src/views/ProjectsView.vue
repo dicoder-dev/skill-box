@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listProjects, createProject, deleteProject } from '@/api/skillbox/projects'
+import { platform } from '@/platform'
 import Modal from '@/components/Modal.vue'
 
 const { t } = useI18n()
@@ -11,9 +12,16 @@ const items = ref([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
-const showForm = ref(false)
 
+// 表单可见性:showImport 控制"导入项目"弹窗
+const showImport = ref(false)
+// 导入中 / 解析中 状态
+const importing = ref(false)
+const inspecting = ref(false)
+
+// 表单数据:导入项目时 name/alias/root_path 三个核心字段都是必填
 const form = reactive({ name: '', alias: '', root_path: '', description: '' })
+
 const filter = reactive({ keyword: '', page: 1, size: 10 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / filter.size)))
@@ -36,21 +44,72 @@ async function reload() {
   }
 }
 
-async function submit() {
+// 点击"导入项目"按钮:先让用户选目录,再弹"导入"弹窗预填
+async function startImport() {
+  error.value = ''
+  let path = ''
+  try {
+    path = await platform.fs.pickFolder()
+  } catch (e) {
+    error.value = e?.message || String(e)
+    return
+  }
+  // 用户取消选择(空串)→ 不弹弹窗,保持原状
+  if (!path) return
+  // 重置表单
+  Object.assign(form, { name: '', alias: '', root_path: path, description: '' })
+  showImport.value = true
+  // 后台异步从路径推断 name/alias,不阻塞弹窗打开
+  await inspectFromPath(path)
+}
+
+// 从 root_path 推断 name / alias 候选。失败时表单允许用户手工填。
+async function inspectFromPath(path) {
+  if (!path) return
+  inspecting.value = true
+  try {
+    const hint = await platform.fs.inspectProject(path)
+    if (hint?.name) form.name = hint.name
+    if (hint?.alias) form.alias = hint.alias
+  } catch (e) {
+    // 解析失败不致命,用户可以手工填;只在控制台留个 warning
+    console.warn('[projects] inspectProject failed:', e?.message || e)
+  } finally {
+    inspecting.value = false
+  }
+}
+
+// 让用户手工改 root_path 时也再解析一次
+async function onRootPathBlur() {
+  const p = form.root_path.trim()
+  if (!p) return
+  // 只在 name / alias 仍为空(或跟提示同名)时才覆盖,避免覆盖用户已编辑的内容
+  await inspectFromPath(p)
+}
+
+async function submitImport() {
   error.value = ''
   if (!form.name.trim() || !form.alias.trim() || !form.root_path.trim()) {
     error.value = t('projects.errRequired')
     return
   }
+  importing.value = true
   try {
     await createProject({ ...form })
-    showForm.value = false
+    showImport.value = false
     Object.assign(form, { name: '', alias: '', root_path: '', description: '' })
     filter.page = 1
     await reload()
   } catch (e) {
     error.value = e?.message || String(e)
+  } finally {
+    importing.value = false
   }
+}
+
+function cancelImport() {
+  if (importing.value) return
+  showImport.value = false
 }
 
 async function remove(id) {
@@ -128,9 +187,9 @@ onMounted(reload)
           @keyup.enter="() => { filter.page = 1; reload() }"
         />
       </div>
-      <button class="primary" @click="showForm = true">
-        <Icon icon="mdi:plus" width="16" height="16" />
-        {{ t('projects.btnNew') }}
+      <button class="primary" :title="t('projects.btnImportTitle')" @click="startImport">
+        <Icon icon="mdi:folder-upload-outline" width="16" height="16" />
+        <span>{{ t('projects.btnImport') }}</span>
       </button>
     </div>
 
@@ -139,43 +198,87 @@ onMounted(reload)
       {{ error }}
     </p>
 
-    <!-- 创建项目弹窗 -->
+    <!-- 导入项目弹窗 -->
     <Modal
-      v-model="showForm"
+      v-model="showImport"
       size="md"
       :title="t('projects.formTitle')"
+      :close-on-mask="!importing"
     >
       <template #title-icon>
-        <Icon icon="mdi:folder-plus" width="18" height="18" />
+        <Icon icon="mdi:folder-upload-outline" width="18" height="18" />
       </template>
-      <form class="form" @submit.prevent="submit">
+      <form class="form" @submit.prevent="submitImport">
+        <p class="form-hint">
+          <Icon icon="mdi:information-outline" width="14" height="14" />
+          {{ t('projects.formHint') }}
+        </p>
         <div class="form-grid">
+          <div class="form-field form-field-full">
+            <label>{{ t('projects.rootPath') }}</label>
+            <div class="input-with-action">
+              <input
+                v-model="form.root_path"
+                :placeholder="t('projects.rootPathHint')"
+                :disabled="importing"
+                @blur="onRootPathBlur"
+              />
+              <button
+                type="button"
+                class="ghost icon-btn"
+                :disabled="importing"
+                :title="t('projects.btnPickAgain')"
+                @click="async () => {
+                  let p = ''
+                  try { p = await platform.fs.pickFolder() } catch (e) { error.value = e?.message || String(e); return }
+                  if (p) { form.root_path = p; await inspectFromPath(p) }
+                }"
+              >
+                <Icon icon="mdi:folder-search-outline" width="14" height="14" />
+              </button>
+            </div>
+          </div>
           <div class="form-field">
-            <label>{{ t('projects.name') }}</label>
-            <input v-model="form.name" :placeholder="t('projects.nameHint')" />
+            <label>
+              {{ t('projects.name') }}
+              <span v-if="inspecting" class="inspecting-tag">
+                <Icon icon="mdi:loading" width="10" height="10" class="spin" />
+                {{ t('projects.inspecting') }}
+              </span>
+            </label>
+            <input
+              v-model="form.name"
+              :placeholder="t('projects.nameHint')"
+              :disabled="importing"
+            />
           </div>
           <div class="form-field">
             <label>{{ t('projects.alias') }}</label>
-            <input v-model="form.alias" :placeholder="t('projects.aliasHint')" />
-          </div>
-          <div class="form-field form-field-full">
-            <label>{{ t('projects.rootPath') }}</label>
-            <input v-model="form.root_path" :placeholder="t('projects.rootPathHint')" />
+            <input
+              v-model="form.alias"
+              :placeholder="t('projects.aliasHint')"
+              :disabled="importing"
+            />
           </div>
           <div class="form-field form-field-full">
             <label>{{ t('projects.description') }}</label>
-            <input v-model="form.description" :placeholder="t('projects.descriptionHint')" />
+            <input
+              v-model="form.description"
+              :placeholder="t('projects.descriptionHint')"
+              :disabled="importing"
+            />
           </div>
         </div>
       </form>
       <template #footer>
-        <button type="button" class="ghost" @click="showForm = false">
+        <button type="button" class="ghost" :disabled="importing" @click="cancelImport">
           <Icon icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
-        <button type="button" class="primary" @click="submit">
-          <Icon icon="mdi:check" width="14" height="14" />
-          {{ t('common.create') }}
+        <button type="button" class="primary" :disabled="importing" @click="submitImport">
+          <Icon v-if="importing" icon="mdi:loading" width="14" height="14" class="spin" />
+          <Icon v-else icon="mdi:check" width="14" height="14" />
+          {{ importing ? t('common.processing') : t('projects.btnImport') }}
         </button>
       </template>
     </Modal>
@@ -223,6 +326,7 @@ onMounted(reload)
         <div v-else-if="!loading" class="empty-state">
           <Icon icon="mdi:folder-open-outline" width="48" height="48" />
           <p class="empty-title">{{ t('projects.empty') }}</p>
+          <p class="empty-hint">{{ t('projects.emptyHint') }}</p>
         </div>
       </div>
 
@@ -397,6 +501,19 @@ onMounted(reload)
   gap: 14px;
 }
 
+.form-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -414,9 +531,49 @@ onMounted(reload)
 }
 
 .form-field label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-dim);
+}
+
+.inspecting-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--primary);
+  font-weight: 400;
+}
+
+/* 路径输入 + 重新选择按钮 */
+.input-with-action {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.input-with-action input {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 表格 */
@@ -513,6 +670,12 @@ onMounted(reload)
   color: var(--danger);
 }
 
+.action-btn:disabled,
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* 分页器 */
 .pager {
   display: flex;
@@ -560,6 +723,12 @@ onMounted(reload)
   font-weight: 500;
   color: var(--text);
   margin: 12px 0 0;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 6px 0 0;
 }
 
 /* 响应式 */
