@@ -159,7 +159,9 @@ func init() {
 	})
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/fs/pick-folder", HttpType: ginp.HttpPost,
-		Handler: ginp.BindParamsHandler(PostFsPickFolder, &struct{}{}),
+		// pick-folder 不需要解析 body,直接用 BindHandler 简单包一层,避免
+		// BindParamsHandler 传多余参数导致 reflect.Call panic。
+		Handler: ginp.BindHandler(PostFsPickFolder),
 		Swagger: &ginp.SwaggerInfo{
 			Title:       "desktop.fs.pickFolder",
 			Description: "弹系统文件夹选择对话框;取消时返 { path: \"\" }。Web 端返 501,前端降级。",
