@@ -7,3 +7,5 @@
 * Onboarding 入口在 phase2 直接展示扫描结果,跳过 phase1 status 步骤。状态信息改由 App.vue 顶栏 toolsReady/total 徽章提供,不要再回退到 phase1 表格。-20260624
 * Onboarding 重复检测分两层:① 客户端 store 已存在(name 匹配,不分 version)→ 置灰 + "已存在"标签;② 跨工具同名互斥(同 name + version 不同 tool_id)→ 选一个后另一个自动取消。selectExclusiveByName 集中处理。-20260624
 * 用户可能手动 cp skill 到 adapter 期望目录(不走 skillbox apply),scope-status 实时扫盘会命中,但 `skill_applies` 表里没记录。停用时必须走 `POST /api/skillbox/skills/apply/force-undo`(DB 有记录走标准 undo;无记录走 scope-status 删磁盘 + 插占位 rolled_back 行)。前端 `doUnapplyOne` 在 `listApplies` 返空时 fallback 调 `forceUndoApply`,不要直接 toast 失败。-20260625
+* textarea 锁定行高要同时锁 `min-height` 和 `height`:单写 `height: 57px` 会被外层/全局 `min-height: 100px` 拉高(因为 min-height 优先级高于 height)。命名上用具体语义类(.desc-editor/.triggers-editor),在外层通用规则上用 `:not(.具体类)` 排除,不要图省事写 !important。-20260627
+* Vue scoped CSS 编译时只给当前 SFC 模板里的元素加 `[data-v-xxx]`,**子组件根类透传上来的 DOM 不会被加 attribute**,所以全局/父级同名类规则能覆盖子组件 scoped 规则。排查 CSS 冲突不能只看 scoped 内部,也要看全局 style.css 和父级 .editor-field-full 等通用类。-20260627
