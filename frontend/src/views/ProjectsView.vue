@@ -307,14 +307,14 @@ onMounted(reload)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in items" :key="p.ID">
-              <td class="td-id">{{ p.ID }}</td>
-              <td><strong class="project-name">{{ p.Name }}</strong></td>
-              <td><code class="project-alias">{{ p.Alias }}</code></td>
-              <td class="td-path">{{ p.RootPath }}</td>
-              <td class="td-desc">{{ p.Description || t('common.dash') }}</td>
+            <tr v-for="p in items" :key="p.id">
+              <td class="td-id">{{ p.id }}</td>
+              <td><strong class="project-name">{{ p.name }}</strong></td>
+              <td><code class="project-alias">{{ p.alias }}</code></td>
+              <td class="td-path">{{ p.root_path }}</td>
+              <td class="td-desc">{{ p.description || t('common.dash') }}</td>
               <td>
-                <button class="action-btn action-btn-danger" @click="remove(p.ID)">
+                <button class="action-btn action-btn-danger" @click="remove(p.id)">
                   <Icon icon="mdi:delete" width="12" height="12" />
                   {{ t('common.delete') }}
                 </button>
