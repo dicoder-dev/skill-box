@@ -10,6 +10,7 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
+import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { htmlToMarkdown } from '@/core/utils/html_to_markdown.js'
@@ -52,6 +53,7 @@ const editor = useEditor({
 })
 
 // 外部 modelValue 变化时同步进编辑器(避免循环写)
+// immediate: true 保证初始内容(可能比 editor 创建晚)也能刷进去
 watch(
   () => props.modelValue,
   (newMd) => {
@@ -62,6 +64,7 @@ watch(
       editor.value.commands.setContent(renderMarkdown(newMd || ''), false)
     }
   },
+  { immediate: true },
 )
 
 // disabled 切换
