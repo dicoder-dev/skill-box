@@ -17,6 +17,7 @@ import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
+import RichTextEditor from '@/components/RichTextEditor.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
@@ -1423,14 +1424,16 @@ onMounted(() => {
             {{ editError }}
           </p>
 
-          <!-- 编辑态:内联 textarea(Markdown 原文) -->
-          <textarea
+          <!-- 2026-06-27 改:内联编辑态从 textarea 升级为 Tiptap 所见即所得编辑器
+               (RichTextEditor 输入输出都是 markdown 字符串,与 editBody 类型保持一致) -->
+          <RichTextEditor
             v-if="editing"
             v-model="editBody"
             class="md-editor"
-            spellcheck="false"
             :placeholder="t('skills.list.bodyEmpty')"
-          ></textarea>
+            :disabled="editSaving"
+            min-height="320px"
+          />
 
           <!-- 查看态:渲染 -->
           <template v-else>
@@ -1676,7 +1679,12 @@ onMounted(() => {
 
         <div class="editor-field-full">
           <label>{{ t('skills.editor.body') }}</label>
-          <textarea v-model="draft.body" rows="14" class="code"></textarea>
+          <!-- 2026-06-27 改:新建/编辑弹窗 body 也用 Tiptap 所见即所得编辑器(与首页保持一致) -->
+          <RichTextEditor
+            v-model="draft.body"
+            :placeholder="t('skills.list.bodyEmpty')"
+            min-height="280px"
+          />
         </div>
 
         <p v-if="error" class="message message-error" style="margin: 0 0 12px">
