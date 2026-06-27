@@ -1189,8 +1189,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 2026-06-25 改:description 下方接触发词行内展示(查看态保留在 title-block 紧凑展示) -->
-            <p v-if="!editing && currentMeta.description" class="detail-desc">{{ currentMeta.description }}</p>
+            <!-- 2026-06-25 改:description 下方接触发词行内展示(查看态保留在 title-block 紧凑展示);
+             2026-06-27 改:description 前面加 desc-label(与 triggers-label 风格一致) -->
+            <div v-if="!editing && currentMeta.description" class="detail-desc-row">
+              <span class="triggers-label desc-label">{{ t('skills.editor.descShort') }}</span>
+              <p class="detail-desc">{{ currentMeta.description }}</p>
+            </div>
 
             <!-- 2026-06-25 改:触发词行内展示,在 description 下方(查看态) -->
             <div v-if="!editing && (currentMeta.triggers || []).length" class="detail-triggers-row">
@@ -1292,8 +1296,9 @@ onMounted(() => {
           {{ openError }}
         </p>
 
-        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果;2026-06-26 改:编辑态隐藏) -->
-        <section v-if="!editing" class="detail-section">
+        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果;2026-06-26 改:编辑态隐藏;
+             2026-06-27 改:做成独立卡片样式,与上下 toolbar/编辑器 视觉隔离) -->
+        <section v-if="!editing" class="detail-section scope-card">
           <header class="section-header">
             <h3>
               <Icon icon="mdi:earth" width="14" height="14" />
@@ -2137,15 +2142,39 @@ onMounted(() => {
   outline-offset: 1px;
 }
 
-.detail-desc {
-  margin: 6px 0 0;
+/* 2026-06-27 改:从 toolbar 内部搬到 info-card 后,占满整个 detail-pane 宽度(约 100%),
+   不再限 2 行,长描述自然多行展示(原本在 toolbar 内被右边 6 个图标按钮挤压到约 60%) */
+/* 2026-06-27 改:description 行 — 与 triggers-row 同样结构,前面加 desc-label */
+.detail-desc-row {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  width: 100%;
+}
+.detail-desc-row .detail-desc {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-dim);
   line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  word-break: break-word;
+}
+/* 2026-06-27 改:把 description 文本改成更"内容"色,跟 triggers 的内容同款 var(--text),
+   避免 description 用 --text-dim 显得次要(用户反馈需要明显展示) */
+.detail-desc-row .detail-desc { color: var(--text); }
+
+/* 兼容旧位置单独使用 .detail-desc(若有其他组件依赖) */
+.detail-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 /* 2026-06-25 新增:编辑态的 description 编辑框
@@ -2190,20 +2219,28 @@ onMounted(() => {
   gap: 6px;
 }
 
-/* 2026-06-25 新增:触发词行内展示 — 在 description 下方 */
+/* 2026-06-25 新增:触发词行内展示 — 在 description 下方
+   2026-06-27 改:从 toolbar 内部搬到 info-card 后,占满整页宽度;
+   .meta-text 用 flex:1 占满触发词标签右侧所有空间 */
 .detail-triggers-row {
-  margin: 8px 0 0;
+  margin: 0;
   display: flex;
   align-items: flex-start;
   gap: 8px;
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
+  width: 100%;
 }
 .detail-triggers-row.editing {
   align-items: flex-start;
   flex-direction: column;
   gap: 4px;
+}
+/* 2026-06-27 改:触发词文本占满标签右侧所有空间,长内容自然多行 */
+.detail-triggers-row .meta-text {
+  flex: 1;
+  min-width: 0;
 }
 .triggers-label {
   flex-shrink: 0;
@@ -2267,6 +2304,20 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
 }
+
+/* 2026-06-27 改:作用域区做成独立卡片 — 白底 + 圆角 + 上下 margin,
+   与上下 toolbar(白)/ 编辑器(白) 通过 border + margin 形成视觉边界。
+   卡片四边完整 border(包括 bottom),detail-body 自己加 border-top 形成
+   "▢ 卡片 → 12px 空白 → ━ 分隔线 → 正文" 清晰分段,避免卡片看起来被截断 */
+.detail-section.scope-card {
+  margin: 12px 20px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  gap: 10px;
+}
+.detail-section.scope-card .section-header h3 { color: var(--text); }
 
 .detail-section.detail-meta-row {
   flex-direction: row;
@@ -2608,8 +2659,12 @@ onMounted(() => {
 }
 .triggers-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* 2026-06-27 改:detail-body 顶部加 border-top,
+   与上方 scope-card 之间形成"▢ 卡片 → 12px → ━ 分隔线 → 正文"的两段层次,
+   避免 scope-card 看起来底部边框"消失" */
 .detail-body {
-  padding-bottom: 24px;
+  padding: 20px 20px 24px;
+  border-top: 1px solid var(--border);
   /* 占满 .detail-pane 剩余高度,让 .md-editor 能 flex:1 自适应填满 */
   flex: 1;
   min-height: 0;

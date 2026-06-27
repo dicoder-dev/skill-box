@@ -81,6 +81,8 @@ export default {
       projectId: 'Project ID',
       description: 'Description',
       descriptionHint: 'min 10 chars',
+      // 2026-06-27 new: small label before description on detail page (same style as triggers-label)
+      descShort: 'Desc',
       triggers: 'Triggers',
       triggersHint: 'comma-separated',
       triggersHintPlaceholder: 'review pr, code review',

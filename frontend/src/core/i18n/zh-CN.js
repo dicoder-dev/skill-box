@@ -84,6 +84,8 @@ export default {
       projectId: '项目 ID',
       description: '描述',
       descriptionHint: '≥ 10 字符',
+      // 2026-06-27 新增:详情页 description 前的小 label(与 triggers-label 风格一致)
+      descShort: '描述',
       triggers: '触发词',
       triggersHint: '用逗号分隔',
       triggersHintPlaceholder: 'review pr, code review',
