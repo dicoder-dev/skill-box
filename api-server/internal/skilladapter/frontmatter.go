@@ -130,6 +130,81 @@ func NormalizeName(s string) string {
 	return out
 }
 
+// NormalizeGroupName 把任意分组名折叠成 "a/b/c" 形式的相对路径。
+//
+// 2026-06-29 增:为支持"分组即子目录"的多级分组,skill 名仍走 NormalizeName
+// (不允许 '/'),分组名独立规约,允许 '/',但仍拒绝 .. / 绝对路径 / 空段。
+//
+// 规则:
+//   - '/': 路径分隔符保留,折叠连续 '/' 为单个
+//   - 段内允许 [a-z0-9-_](其它字符与 '.' / ' ' 等折叠为 '-')
+//   - 拒绝以 '/' 开头或结尾
+//   - 拒绝出现 '..' 段
+//   - 拒绝空字符串 / 仅含分隔符
+//
+// 注意:返回的 path 仍需走 skillstore.safeRelPath 二次校验(防非法字符漏过)。
+func NormalizeGroupName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, "/")
+	var out []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		var b strings.Builder
+		lastDash := false
+		for _, r := range p {
+			switch {
+			case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+				b.WriteRune(r)
+				lastDash = false
+			case r == '-', r == '_':
+				if !lastDash && b.Len() > 0 {
+					b.WriteByte('-')
+					lastDash = true
+				}
+			default:
+				// ' ' / '.' / 其它字符 → 折叠为 '-'
+				if !lastDash && b.Len() > 0 {
+					b.WriteByte('-')
+					lastDash = true
+				}
+			}
+		}
+		seg := strings.TrimRight(b.String(), "-")
+		if seg == "" {
+			continue
+		}
+		if len(seg) > 64 {
+			seg = seg[:64]
+			seg = strings.TrimRight(seg, "-")
+			if seg == "" {
+				continue
+			}
+		}
+		// 数字开头段:补 'g-' 前缀(与 NormalizeName 的 's-' 对齐)
+		if seg[0] >= '0' && seg[0] <= '9' {
+			seg = "g-" + seg
+			if len(seg) > 64 {
+				seg = seg[:64]
+			}
+		}
+		// 显式拒绝 '..' 段(虽然 '.' 不在白名单已被折叠成 '-',但留一道防线)
+		if seg == "." || seg == ".." {
+			continue
+		}
+		out = append(out, seg)
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return strings.Join(out, "/")
+}
+
 // RenderSkillMD 把 Canonical{Manifest, Files} 序列化成 SKILL.md 文本。
 // 替换现有 frontmatter(若有);body 优先取第一个 file(通常是 SKILL.md)
 // 的内容去掉 frontmatter 后的部分;无 file 时给一个最小 body 兜底

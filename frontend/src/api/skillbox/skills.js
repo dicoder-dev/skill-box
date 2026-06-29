@@ -16,7 +16,9 @@ export function listSkills(params = {}) {
 }
 
 export function getSkill(params) {
-  return http.get('/api/skillbox/skills/get', { ...params, full: params.full ? 1 : undefined })
+  // 2026-06-29 改:支持多级分组,优先用 path(完整相对路径),空时退化到 name
+  const { name, path, full, ...rest } = params || {}
+  return http.get('/api/skillbox/skills/get', { ...rest, name, path, full: full ? 1 : undefined })
 }
 
 /**
@@ -82,4 +84,35 @@ export function updateSkill(payload) {
 
 export function deleteSkill(payload) {
   return http.post('/api/skillbox/skills/delete', payload)
+}
+
+// 分组 / 移动相关接口 — 2026-06-29 增,为支持多级分组树形 UI。
+// 树形数据来源:GET /api/skillbox/skills 响应的 `tree` 字段(嵌套 TreeNode 数组)。
+
+/**
+ * 新建分组(可多级,用 '/' 分隔如 "frontend/react")。
+ * 入参: { group_path: string }
+ * 响应: { ok: true, group_path: string(规范化后) }
+ */
+export function createGroup(payload) {
+  return http.post('/api/skillbox/skills/group/create', payload)
+}
+
+/**
+ * 删分组(可级联)。
+ * 入参: { group_path: string, cascade: bool }
+ * 响应(成功): { ok: true, deleted_skill_paths: string[] }
+ * 响应(分组非空 + cascade=false → 409): { error, deleted_skill_paths, need_cascade: true }
+ */
+export function deleteGroup(payload) {
+  return http.post('/api/skillbox/skills/group/delete', payload)
+}
+
+/**
+ * 移动 skill 到另一分组(叶子名不变)。
+ * 入参: { src_group_path, dst_group_path, name }
+ * 响应: { ok: true } 或 409(target 已存在)
+ */
+export function moveSkill(payload) {
+  return http.post('/api/skillbox/skills/move', payload)
 }

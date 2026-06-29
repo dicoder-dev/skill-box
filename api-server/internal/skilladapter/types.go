@@ -19,6 +19,11 @@ type Manifest struct {
 	License     string   `yaml:"license,omitempty" json:"license,omitempty"`
 	DependsOn   []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 	TargetTools []string `yaml:"target_tools,omitempty" json:"target_tools,omitempty"`
+	// 2026-06-29 增:GroupPath 是该 skill 在 skillbox 库内的分组相对路径
+	// (如 "frontend/react"),不含叶子 name。允许空(根下未分组)。
+	// 不参与 SKILL.md frontmatter 序列化(走 SkillboxSection 单独管理,避免污染
+	// 外部工具读取的 frontmatter)。
+	GroupPath string `yaml:"-" json:"group_path,omitempty"`
 	// Source/SourceRef 用于标记"这条 skill 是从哪儿来的"(2026-06-24:从 mskill 行迁到 frontmatter)。
 	// 不参与 SKILL.md 文件落盘(写盘时通过 skillstore.SkillboxSection 单独处理,避免污染 frontmatter)。
 	Source    string `yaml:"-" json:"source,omitempty"`

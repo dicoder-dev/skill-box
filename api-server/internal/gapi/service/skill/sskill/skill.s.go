@@ -12,6 +12,7 @@ package sskill
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -223,4 +224,165 @@ func stableOrder(files []skilladapter.File) []skilladapter.File {
 	copy(out, files)
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
+}
+
+// ErrInvalidGroupPath 分组路径非法(空 / 含 .. / 含绝对路径前缀 / 规范化后空字符串)。
+var ErrInvalidGroupPath = errors.New("skill: invalid group path")
+
+// normalizeGroupPath 把 caller 传入的分组路径规范化,拒绝一切不安全形态。
+//
+// 2026-06-29 增:复用 skilladapter.NormalizeGroupName + 二次校验双重防线。
+func (s *Service) normalizeGroupPath(p string) (string, error) {
+	p = skilladapter.NormalizeGroupName(p)
+	if p == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(p, "/") {
+		return "", fmt.Errorf("%w: leading slash", ErrInvalidGroupPath)
+	}
+	if strings.Contains(p, "..") {
+		return "", fmt.Errorf("%w: contains ..", ErrInvalidGroupPath)
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return "", fmt.Errorf("%w: bad segment %q", ErrInvalidGroupPath, seg)
+		}
+	}
+	return p, nil
+}
+
+// CreateGroup 新建一个空分组目录。groupPath 可多级(用 '/' 分隔)。
+// 已存在时不报错(幂等);空字符串返回 nil(根目录)。
+//
+// 2026-06-29 增:为支持多级分组。
+func (s *Service) CreateGroup(groupPath string) error {
+	cleaned, err := s.normalizeGroupPath(groupPath)
+	if err != nil {
+		return err
+	}
+	return s.store.CreateGroupDir(cleaned)
+}
+
+// DeleteGroup 删分组目录及其子树。
+//
+// cascade=false 时,若分组非空,返回 (deleted_skill_paths, error) — 让 caller
+// 决定是否强删。cascade=true 时直接递归删,返回 (deleted_skill_paths, nil)。
+// 返回的 deleted_skill_paths 是该分组下所有 skill 叶子的相对路径(用 '/' 分隔),
+// 供前端在 cascade_tools=true 时同步清理各工具目录。
+//
+// 2026-06-29 增:为支持多级分组。
+func (s *Service) DeleteGroup(groupPath string, cascade bool) ([]string, error) {
+	cleaned, err := s.normalizeGroupPath(groupPath)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.DeleteGroupDir(cleaned, cascade)
+}
+
+// MoveSkill 把 skill 从 srcGroupPath 移动到 dstGroupPath 下(叶子 name 不变)。
+//
+// 2026-06-29 增:为支持多级分组拖拽。
+func (s *Service) MoveSkill(srcGroupPath string, name string, dstGroupPath string) error {
+	name = skilladapter.NormalizeName(name)
+	if name == "" {
+		return ErrEmptyName
+	}
+	src, err := s.normalizeGroupPath(srcGroupPath)
+	if err != nil {
+		return err
+	}
+	dst, err := s.normalizeGroupPath(dstGroupPath)
+	if err != nil {
+		return err
+	}
+	return s.store.MoveGroupPath(src, name, dst)
+}
+
+// MoveGroup 把整个分组从 srcGroupPath 移动到 dstGroupPath 下。
+// src 不能为空;dst 可为空(表示挪到根下)。
+//
+// 2026-06-29 增:为支持"分组嵌套到另一分组"。
+func (s *Service) MoveGroup(srcGroupPath string, dstGroupPath string) error {
+	src, err := s.normalizeGroupPath(srcGroupPath)
+	if err != nil || src == "" {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: src is empty", ErrInvalidGroupPath)
+	}
+	dst, err := s.normalizeGroupPath(dstGroupPath)
+	if err != nil {
+		return err
+	}
+	return s.store.MoveGroupDir(src, dst)
+}
+
+// ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
+//
+// 2026-06-29 增:keyword 非空时做 skill name 子串匹配,分组(即使不含匹配项)
+// 保留(便于展示"匹配项所在的路径")。
+func (s *Service) ListTree(keyword string) ([]skillstore.TreeNode, error) {
+	return s.store.ListTree(keyword)
+}
+
+// GetByPath 按分组路径读 skill 详情。
+//
+// 2026-06-29 增:为支持多级分组的 detail 加载。
+func (s *Service) GetByPath(groupPath string, name string) (*skilladapter.Canonical, error) {
+	name = skilladapter.NormalizeName(name)
+	if name == "" {
+		return nil, ErrEmptyName
+	}
+	gp, err := s.normalizeGroupPath(groupPath)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.LoadByPath(gp, name)
+}
+
+// DeleteByPath 按分组路径删 skill(供 cskill.delete_skill 用)。
+// 返回 (deleted_skill_path, error) — deleted_skill_path 用于前端在
+// cascade_tools=true 时同步清理工具目录。
+//
+// 2026-06-29 增:为支持多级分组的删除。
+func (s *Service) DeleteByPath(groupPath string, name string) (string, error) {
+	name = skilladapter.NormalizeName(name)
+	if name == "" {
+		return "", ErrEmptyName
+	}
+	gp, err := s.normalizeGroupPath(groupPath)
+	if err != nil {
+		return "", err
+	}
+	fullPath := gp
+	if fullPath != "" {
+		fullPath = fullPath + "/" + name
+	} else {
+		fullPath = name
+	}
+	if err := s.store.DeleteByPath(gp, name); err != nil {
+		return fullPath, err
+	}
+	return fullPath, nil
+}
+
+// SplitPath 把 "frontend/react/use-cache" 拆成 ("frontend/react", "use-cache")。
+// 不可拆(无 '/' 或 '/')返回 ("", "use-cache")。
+//
+// 2026-06-29 增:helper,供 cskill 控制器解析前端传入的"完整相对路径"。
+func SplitPath(fullPath string) (groupPath string, name string) {
+	fullPath = strings.TrimSpace(fullPath)
+	if fullPath == "" {
+		return "", ""
+	}
+	cleaned := filepath.ToSlash(filepath.Clean("/" + fullPath))
+	if cleaned == "/" {
+		return "", ""
+	}
+	cleaned = cleaned[1:]
+	idx := strings.LastIndex(cleaned, "/")
+	if idx < 0 {
+		return "", cleaned
+	}
+	return cleaned[:idx], cleaned[idx+1:]
 }

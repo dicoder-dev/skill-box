@@ -39,6 +39,10 @@ type Store struct {
 	root string
 }
 
+// maxScanDepth 递归扫描的最大深度(2026-06-29 增,与 skilladapter.BaseAdapter
+// 的同名常量保持一致,防止分组嵌套过深导致扫描死循环)。
+const maxScanDepth = 8
+
 // New 根据配置构造 Store;StoreRoot 为空时使用 ~/.skill-box/skills 兜底。
 func New() (*Store, error) {
 	if root := strings.TrimSpace(configs.Skillbox.StoreRoot); root != "" {
@@ -87,11 +91,18 @@ func HashFile(content string) string {
 //
 // 无 version 目录:直接把整个 Canonical.Files 写进 root/<name>/。
 // SKILL.md 是必填(由 WriteSkillDir 强校验),其它附属文件照原样铺平。
+//
+// 2026-06-29 改:支持 groupPath;当 c.Manifest.GroupPath 非空时,skill 写到
+// root/<groupPath>/<name>/。name 走 NormalizeName 规约(不含 '/'),
+// groupPath 由 caller 走 NormalizeGroupName 规约(允许 '/')。
 func (s *Store) Save(c skilladapter.Canonical) error {
 	if strings.TrimSpace(c.Manifest.Name) == "" {
 		return fmt.Errorf("skillstore: name is empty")
 	}
-	dir := s.skillDir(c.Manifest.Name)
+	dir, err := s.resolveSkillDir(c.Manifest.GroupPath, c.Manifest.Name)
+	if err != nil {
+		return err
+	}
 
 	unlock, err := s.lockScope(dir)
 	if err != nil {
@@ -140,8 +151,29 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 
 // Load 读取 canonical skill;不存在返回 (nil, ErrNotFound)。
 // 单一来源是 SKILL.md 的 frontmatter + 同目录附属文件。
+//
+// 2026-06-29 改:仍按 name 查"根下直接子目录";多级分组请用 LoadByPath。
 func (s *Store) Load(name string) (*skilladapter.Canonical, error) {
-	dir := s.skillDir(name)
+	dir, err := s.skillDir(name)
+	if err != nil {
+		return nil, err
+	}
+	return s.loadFromDir(dir)
+}
+
+// LoadByPath 读取指定分组路径下的 canonical skill;不存在返回 (nil, ErrNotFound)。
+//
+// 2026-06-29 增:支持多级分组,groupPath 为空时等价于 Load(name)。
+func (s *Store) LoadByPath(groupPath string, name string) (*skilladapter.Canonical, error) {
+	dir, err := s.resolveSkillDir(groupPath, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.loadFromDir(dir)
+}
+
+// loadFromDir 是 Load / LoadByPath 共用的"读目录"实现。
+func (s *Store) loadFromDir(dir string) (*skilladapter.Canonical, error) {
 	skillMD := filepath.Join(dir, "SKILL.md")
 	content, err := os.ReadFile(skillMD)
 	if err != nil {
@@ -154,8 +186,24 @@ func (s *Store) Load(name string) (*skilladapter.Canonical, error) {
 	if err != nil {
 		return nil, fmt.Errorf("skillstore: parse SKILL.md: %w", err)
 	}
-	// 强制把 name 锚定到目录(避免外部 SKILL.md 改 name 漂移)
-	c.Manifest.Name = name
+	// 用目录最后一层名作为 name(避免外部 SKILL.md 改 name 漂移);
+	// 同时把 GroupPath 也回填(由目录相对 root 的路径反推)。
+	rel, relErr := filepath.Rel(s.root, dir)
+	if relErr != nil {
+		rel = ""
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		c.Manifest.GroupPath = ""
+		c.Manifest.Name = filepath.Base(dir)
+	} else {
+		// 多级:GroupPath = rel 的父路径;Name = rel 的最后一层
+		c.Manifest.GroupPath = filepath.Dir(rel)
+		if c.Manifest.GroupPath == "." {
+			c.Manifest.GroupPath = ""
+		}
+		c.Manifest.Name = filepath.Base(rel)
+	}
 	// 把同名文件塞回去(已含 SKILL.md);其它附属文件一并加载
 	c.Files, err = walkFiles(dir)
 	if err != nil {
@@ -176,8 +224,29 @@ func (s *Store) Load(name string) (*skilladapter.Canonical, error) {
 }
 
 // Delete 删除 skill(整个目录)。缺失时返回 nil(幂等)。
+//
+// 2026-06-29 改:旧 API 仍按 name 删"根下直接子目录";多级分组请用 DeleteByPath。
 func (s *Store) Delete(name string) error {
-	dir := s.skillDir(name)
+	dir, err := s.skillDir(name)
+	if err != nil {
+		return err
+	}
+	return s.deleteDir(dir)
+}
+
+// DeleteByPath 删除指定分组路径下的 skill 目录。缺失时返回 nil(幂等)。
+//
+// 2026-06-29 增:支持多级分组。
+func (s *Store) DeleteByPath(groupPath string, name string) error {
+	dir, err := s.resolveSkillDir(groupPath, name)
+	if err != nil {
+		return err
+	}
+	return s.deleteDir(dir)
+}
+
+// deleteDir 是 Delete / DeleteByPath 共用的"删目录"实现。
+func (s *Store) deleteDir(dir string) error {
 	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -187,14 +256,234 @@ func (s *Store) Delete(name string) error {
 }
 
 // Exists 判断指定 skill 是否存在(有 SKILL.md 就算存在)。
+//
+// 2026-06-29 改:旧 API 仍按 name 查"根下直接子目录";多级分组请用 ExistsByPath。
 func (s *Store) Exists(name string) bool {
-	dir := s.skillDir(name)
+	dir, err := s.skillDir(name)
+	if err != nil {
+		return false
+	}
 	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
 	return err == nil && !info.IsDir()
 }
 
+// ExistsByPath 判断指定分组路径下的 skill 是否存在。
+//
+// 2026-06-29 增:支持多级分组。
+func (s *Store) ExistsByPath(groupPath string, name string) bool {
+	dir, err := s.resolveSkillDir(groupPath, name)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !info.IsDir()
+}
+
+// MoveGroupPath 把 skill 从 srcGroupPath 移动到 dstGroupPath 下(叶子 name 不变)。
+//
+// 2026-06-29 增:支持多级分组,实现策略 —
+//   - 若 source 不存在,返回 ErrNotFound
+//   - 若 dstGroupPath 已存在同名 skill,返回 error(避免覆盖)
+//   - 内部走 os.Rename(同设备下原子),跨设备降级为 copy+delete
+//
+// 注意:本函数只移动单个 skill 叶子目录;移动整个分组请用 MoveGroupDir。
+func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath string) error {
+	srcDir, err := s.resolveSkillDir(srcGroupPath, name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(srcDir, "SKILL.md")); err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotFound
+		}
+		return err
+	}
+	dstDir, err := s.resolveSkillDir(dstGroupPath, name)
+	if err != nil {
+		return err
+	}
+	// 目标已存在 → 拒覆盖(让 caller 决定是否先删)
+	if _, err := os.Stat(filepath.Join(dstDir, "SKILL.md")); err == nil {
+		return fmt.Errorf("skillstore: target %q already exists", dstDir)
+	}
+	// 确保目标父目录存在
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return fmt.Errorf("skillstore: mkdir dst %s: %w", dstDir, err)
+	}
+	// 跨目录 rename(同一文件系统下是原子的;跨设备会退化为 copy+delete)
+	if err := os.Rename(srcDir, dstDir); err != nil {
+		if cerr := copyDirRecursive(srcDir, dstDir); cerr != nil {
+			return fmt.Errorf("skillstore: move failed (rename=%v, copy=%v)", err, cerr)
+		}
+		if rerr := os.RemoveAll(srcDir); rerr != nil {
+			return fmt.Errorf("skillstore: move source cleanup failed: %w", rerr)
+		}
+	}
+	// 清理 source 空父目录链
+	srcParent := filepath.Dir(srcDir)
+	_ = removeIfEmpty(srcParent)
+	return nil
+}
+
+// MoveGroupDir 把整个分组目录从 srcGroupPath 移动到 dstGroupPath 下。
+// dstGroupPath 可以为空(=把分组挪到根下);name 不变(取 src 的最后一段)。
+//
+// 2026-06-29 增:复用 MoveGroupPath 思路,作用对象是整个分组目录子树。
+func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
+	if srcGroupPath == "" {
+		return fmt.Errorf("skillstore: empty src group path")
+	}
+	srcRel, err := safeRelPath(srcGroupPath)
+	if err != nil {
+		return err
+	}
+	srcAbs := filepath.Join(s.root, filepath.FromSlash(srcRel))
+	if _, err := os.Stat(srcAbs); err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotFound
+		}
+		return err
+	}
+	srcBase := filepath.Base(srcRel)
+	dstAbs := filepath.Join(s.root, filepath.FromSlash(dstGroupPath), srcBase)
+	// 目标已存在 → 拒覆盖
+	if _, err := os.Stat(dstAbs); err == nil {
+		return fmt.Errorf("skillstore: target group %q already exists", dstAbs)
+	}
+	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(srcAbs, dstAbs); err != nil {
+		if cerr := copyDirRecursive(srcAbs, dstAbs); cerr != nil {
+			return fmt.Errorf("skillstore: move group failed (rename=%v, copy=%v)", err, cerr)
+		}
+		if rerr := os.RemoveAll(srcAbs); rerr != nil {
+			return fmt.Errorf("skillstore: move group source cleanup failed: %w", rerr)
+		}
+	}
+	_ = removeIfEmpty(filepath.Dir(srcAbs))
+	return nil
+}
+
+// CreateGroupDir 创建分组目录(groupPath 可多级,如 "frontend/react")。
+// 已存在不报错(幂等)。
+//
+// 2026-06-29 增:供 cskill.create_group 用。
+func (s *Store) CreateGroupDir(groupPath string) error {
+	if groupPath == "" {
+		return nil
+	}
+	rel, err := safeRelPath(groupPath)
+	if err != nil {
+		return fmt.Errorf("skillstore: invalid group path %q: %w", groupPath, err)
+	}
+	abs := filepath.Join(s.root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return fmt.Errorf("skillstore: mkdir group %s: %w", abs, err)
+	}
+	return nil
+}
+
+// DeleteGroupDir 删分组目录及其子树。groupPath 为空时返回 nil。
+// recursive=false 时,若分组非空,返回 (deleted_paths, error)(不递归删子项,
+// 让 caller 决定是否强删)。
+//
+// 2026-06-29 增:供 cskill.delete_group 用。
+// deleted 数组是"该分组下所有 skill 叶子的相对路径"(供前端在 cascade=true 时
+// 同步工具目录),即使删除失败也尽量填好让 caller 做部分回滚。
+func (s *Store) DeleteGroupDir(groupPath string, recursive bool) ([]string, error) {
+	if groupPath == "" {
+		return nil, nil
+	}
+	rel, err := safeRelPath(groupPath)
+	if err != nil {
+		return nil, fmt.Errorf("skillstore: invalid group path %q: %w", groupPath, err)
+	}
+	abs := filepath.Join(s.root, filepath.FromSlash(rel))
+	info, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("skillstore: group path %s is not a dir", abs)
+	}
+	var deleted []string
+	s.collectSkillLeafPaths(abs, rel, &deleted)
+	if !recursive && len(deleted) > 0 {
+		return deleted, fmt.Errorf("skillstore: group %s is not empty (contains %d skills)", groupPath, len(deleted))
+	}
+	if err := os.RemoveAll(abs); err != nil {
+		return deleted, fmt.Errorf("skillstore: remove group %s: %w", abs, err)
+	}
+	_ = removeIfEmpty(filepath.Dir(abs))
+	return deleted, nil
+}
+
+// collectSkillLeafPaths 递归收集 group abs 目录下的所有 skill 叶子路径(相对 root),
+// 结果用 '/' 分隔,append 到 out。
+func (s *Store) collectSkillLeafPaths(abs, relGroup string, out *[]string) {
+	if _, err := os.Stat(filepath.Join(abs, "SKILL.md")); err == nil {
+		*out = append(*out, filepath.ToSlash(filepath.Join(relGroup, filepath.Base(abs))))
+		return
+	}
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		s.collectSkillLeafPaths(filepath.Join(abs, e.Name()), filepath.ToSlash(filepath.Join(relGroup, e.Name())), out)
+	}
+}
+
+// copyDirRecursive 递归复制 src 目录到 dst(覆盖式);用于跨设备 MoveGroupPath 兜底。
+func copyDirRecursive(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("copyDirRecursive: %s is not a dir", src)
+	}
+	if err := os.MkdirAll(dst, info.Mode()); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		srcPath := filepath.Join(src, e.Name())
+		dstPath := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			if err := copyDirRecursive(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			content, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := writeFileAtomic(dstPath, string(content), 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // List 列出全部 skill 的 Canonical(目录扫描 + frontmatter 解析)。
 // 损坏的 skill 跳过,不阻塞整体;keyword 非空时做 name 子串匹配(不区分大小写)。
+//
+// 2026-06-29 改:支持分组子目录 — 递归扫 root(深度 maxScanDepth,继承自
+// skilladapter.BaseAdapter 的常量),叶子 = 有 SKILL.md 的目录。返回的每个
+// Canonical.Manifest.GroupPath 都已自动回填(由目录相对 root 的路径反推),
+// Manifest.Name 是叶子目录名。
 func (s *Store) List(keyword string) ([]skilladapter.Canonical, error) {
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
@@ -206,6 +495,7 @@ func (s *Store) List(keyword string) ([]skilladapter.Canonical, error) {
 	var out []skilladapter.Canonical
 	kw := strings.ToLower(strings.TrimSpace(keyword))
 	for _, e := range entries {
+		// 顶层入口:每个 entry 既可能是 skill 叶子,也可能是分组目录
 		if !e.IsDir() {
 			continue
 		}
@@ -214,28 +504,243 @@ func (s *Store) List(keyword string) ([]skilladapter.Canonical, error) {
 			// 隐藏目录视为非 skill(避免 .system / .curated 这类系统子目录混入)
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(s.root, name, "SKILL.md")); err != nil {
-			continue
+		// 用 walkSkills 风格的递归:遇到 SKILL.md 即停止,否则继续下钻
+		s.collectSkillsRecursive(filepath.Join(s.root, name), "", kw, 0, &out)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Manifest.GroupPath != out[j].Manifest.GroupPath {
+			return out[i].Manifest.GroupPath < out[j].Manifest.GroupPath
 		}
-		c, err := s.Load(name)
+		return out[i].Manifest.Name < out[j].Manifest.Name
+	})
+	return out, nil
+}
+
+// collectSkillsRecursive 递归找叶子 skill 目录。
+//
+// 设计要点(2026-06-29):与 skilladapter.BaseAdapter.Scan 类似,但去掉
+// system-path skip(库内不区分 system / user)+ 去掉 LocalName normalize
+// (库内的 name 已经是规约过的叶子名)。
+//
+// 参数 groupPath 是当前递归层级相对 root 的路径(用 '/' 分隔),
+// 用于回填 Manifest.GroupPath。
+func (s *Store) collectSkillsRecursive(absDir, groupPath string, kw string, depth int, out *[]skilladapter.Canonical) {
+	if depth > maxScanDepth {
+		return
+	}
+	info, err := os.Stat(absDir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	// 自身有 SKILL.md → 视为 skill 叶子,停止下钻
+	if _, err := os.Stat(filepath.Join(absDir, "SKILL.md")); err == nil {
+		c, err := s.loadFromDir(absDir)
 		if err != nil {
-			// 损坏的 skill 跳过,不让一个坏文件搞挂全表
-			continue
+			return // 损坏的 skill 跳过
 		}
 		if kw != "" && !strings.Contains(strings.ToLower(c.Manifest.Name), kw) {
+			return
+		}
+		*out = append(*out, *c)
+		return
+	}
+	// 否则继续下钻(分组中间层)
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		out = append(out, *c)
+		if !e.IsDir() {
+			// 跳过文件,只看目录
+			continue
+		}
+		childAbs := filepath.Join(absDir, name)
+		childGroup := name
+		if groupPath != "" {
+			childGroup = groupPath + "/" + name
+		}
+		s.collectSkillsRecursive(childAbs, childGroup, kw, depth+1, out)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Manifest.Name < out[j].Manifest.Name })
-	return out, nil
+}
+
+// TreeNode 树形节点,供 ListTree 返回。Group 节点 = 中间目录;Skill 节点 = 叶子 skill。
+//
+// 2026-06-29 增:JSON tag 用 snake_case,便于前端直接消费。
+type TreeNode struct {
+	// Name 是节点名(不含父路径;Skill = 叶子 name;Group = 该段目录名)
+	Name string `json:"name"`
+	// Path 是节点相对 root 的完整路径(Group = "frontend/react";Skill = "frontend/react/use-cache")
+	Path string `json:"path"`
+	// IsGroup 区分是分组还是 skill;true = 分组(可能含子树),false = skill 叶子
+	IsGroup bool `json:"is_group"`
+	// Children 仅 IsGroup=true 时有效;按字典序排序(Skill 排在 Group 后面或混排都可,
+	// 前端可按需重排)。叶子 skill 时为空数组。
+	Children []TreeNode `json:"children"`
+	// SkillMeta 仅 IsGroup=false 时有效;包含 skill 的轻量元数据
+	// (前端列表项展示用,避免再发一次 list 请求)。
+	SkillMeta *SkillTreeMeta `json:"skill_meta,omitempty"`
+}
+
+// SkillTreeMeta 树节点中携带的 skill 轻量元数据。
+type SkillTreeMeta struct {
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Description string   `json:"description"`
+	Triggers    []string `json:"triggers"`
+	UpdatedAt   string   `json:"updated_at,omitempty"`
+}
+
+// ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
+//
+// 2026-06-29 增:返回嵌套 TreeNode 数组,root 节点的 IsGroup=true + Children 列出
+// 顶层项;keyword 非空时,对 skill 叶子做 name 子串匹配(分组即使不含匹配项也保留,
+// 便于前端展示"匹配项所在的分组链")。
+func (s *Store) ListTree(keyword string) ([]TreeNode, error) {
+	entries, err := os.ReadDir(s.root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	kw := strings.ToLower(strings.TrimSpace(keyword))
+	var roots []TreeNode
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		node := s.buildTreeNode(filepath.Join(s.root, name), name, "", kw, 0)
+		if node == nil {
+			continue
+		}
+		roots = append(roots, *node)
+	}
+	sortTreeNodes(roots)
+	return roots, nil
+}
+
+// buildTreeNode 递归构造 TreeNode。
+//
+// 返回 nil 表示该子树在 keyword 过滤后无任何匹配,前端可以隐藏。
+// 否则:
+//   - 若自身是 skill 叶子 → IsGroup=false,Children=[]
+//   - 否则 IsGroup=true,Children 含子树
+func (s *Store) buildTreeNode(absDir, name, groupPath, kw string, depth int) *TreeNode {
+	if depth > maxScanDepth {
+		return nil
+	}
+	// 自身是 skill 叶子
+	if _, err := os.Stat(filepath.Join(absDir, "SKILL.md")); err == nil {
+		c, err := s.loadFromDir(absDir)
+		if err != nil {
+			return nil
+		}
+		// keyword 过滤:不匹配直接丢掉(分组会因而被折叠)
+		if kw != "" && !strings.Contains(strings.ToLower(c.Manifest.Name), kw) {
+			return nil
+		}
+		fi := dirModTime(absDir)
+		return &TreeNode{
+			Name:    c.Manifest.Name,
+			Path:    joinGroupPath(groupPath, c.Manifest.Name),
+			IsGroup: false,
+			SkillMeta: &SkillTreeMeta{
+				Name:        c.Manifest.Name,
+				Version:     c.Manifest.Version,
+				Description: c.Manifest.Description,
+				Triggers:    c.Manifest.Triggers,
+				UpdatedAt:   fi,
+			},
+		}
+	}
+	// 否则是分组中间层:递归收集子树
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return nil
+	}
+	var children []TreeNode
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		childAbs := filepath.Join(absDir, e.Name())
+		childGroup := joinGroupPath(groupPath, name)
+		child := s.buildTreeNode(childAbs, e.Name(), childGroup, kw, depth+1)
+		if child == nil {
+			continue
+		}
+		children = append(children, *child)
+	}
+	if len(children) == 0 {
+		// 空分组:如果 keyword 为空(默认列出全部)就保留,让用户能看到空目录;否则隐藏
+		if kw != "" {
+			return nil
+		}
+	}
+	return &TreeNode{
+		Name:     name,
+		Path:     joinGroupPath(groupPath, name),
+		IsGroup:  true,
+		Children: children,
+	}
+}
+
+// joinGroupPath 安全拼接分组路径(空段跳过)。
+func joinGroupPath(parent, child string) string {
+	if parent == "" {
+		return child
+	}
+	return parent + "/" + child
+}
+
+// sortTreeNodes 对树节点按 (IsGroup desc, Name asc) 排序 — 分组在前,叶子在后,
+// 各自按字典序。
+func sortTreeNodes(nodes []TreeNode) {
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].IsGroup != nodes[j].IsGroup {
+			return nodes[i].IsGroup
+		}
+		return nodes[i].Name < nodes[j].Name
+	})
+	for i := range nodes {
+		if nodes[i].IsGroup && len(nodes[i].Children) > 0 {
+			sortTreeNodes(nodes[i].Children)
+		}
+	}
 }
 
 // --- internals ---
 
-// skillDir 计算某个 skill 的实际目录。无 version 层。
-func (s *Store) skillDir(name string) string {
-	return filepath.Join(s.root, name)
+// skillDir 计算某个 skill 的实际目录(无 groupPath,等价于"根下直接子目录")。
+//
+// 2026-06-29 改:为支持多级分组,旧 API 走"根下直接子目录"的语义保持不变;
+// 新代码请用 resolveSkillDir(groupPath, name) 取分组路径下的目录。
+func (s *Store) skillDir(name string) (string, error) {
+	return s.resolveSkillDir("", name)
+}
+
+// resolveSkillDir 把 (groupPath, name) 解析到 root 下的绝对目录,支持多级分组。
+//
+// groupPath 允许 '/',内部走 safeRelPath 防穿越;name 仍走 NormalizeName 规约
+// (不含 '/')。返回绝对路径,出错返回 (零值, error)。
+func (s *Store) resolveSkillDir(groupPath string, name string) (string, error) {
+	rel := name
+	if groupPath != "" {
+		rel = filepath.ToSlash(filepath.Join(groupPath, name))
+	}
+	cleaned, err := safeRelPath(rel)
+	if err != nil {
+		return "", fmt.Errorf("skillstore: invalid skill path %q: %w", rel, err)
+	}
+	return filepath.Join(s.root, filepath.FromSlash(cleaned)), nil
 }
 
 // writeFileAtomic 先写临时文件再 rename,避免半截文件。
@@ -262,6 +767,17 @@ func writeFileAtomic(path, content string, mode os.FileMode) error {
 		return fmt.Errorf("skillstore: rename temp file: %w", err)
 	}
 	return nil
+}
+
+// dirModTime 读 dir 下 SKILL.md 的 mtime(给 list 提供"最近修改"字段)。
+// 不可读时返回空串(原 fileModTime 在 sskill 包是同名同语义,这里 store 内
+// 自带一份避免反向依赖)。
+func dirModTime(dir string) string {
+	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		return ""
+	}
+	return info.ModTime().UTC().Format("2006-01-02T15:04:05Z")
 }
 
 // walkFiles 递归扫目录里所有文件(用于 Load 时取附属文件)。

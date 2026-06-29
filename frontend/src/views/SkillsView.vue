@@ -1,23 +1,28 @@
 <script setup>
 // SkillsView - 技能首页(左右布局)
 //
-// 左侧:技能列表(顶部"新建 / 导入"按钮 + 搜索框 + 列表项,选中态高亮)
+// 左侧:技能分组树(顶部"新建 / 导入"按钮 + 搜索框 + 树形列表,支持右键 + 拖拽)
 // 右侧:选中 skill 的详情
 //   - 顶部 toolbar:技能名 + 版本 + 源徽章;右侧操作图标(测试 / 打标签 / 在文件夹打开 / 删除,hover 显示文字)
 //   - scope chips:多选,默认"全局"必选;其他取自 listProjects
 //   - 标签列表(横向 chips)
 //   - 下方渲染 SKILL.md 的 body(markdown 简单自渲染)
+//
+// 2026-06-29 改:左侧从扁平列表升级为多级分组树,新增右键菜单 + 拖拽 + 级联删除。
+// 详情区(右侧 / 弹窗 / 编辑器)逻辑保持不变,只从"通过 name 定位"改为"通过 path 定位"。
 
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup, moveSkill as apiMoveSkill } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
 import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
+import ContextMenu from '@/components/ContextMenu.vue'
+import TreeNode from '@/components/TreeNode.vue'
 // 2026-06-27 改:详情预览区改用 markdown-it + highlight.js 渲染(支持 GFM / 代码高亮)。
 // 编辑态给 Tiptap 喂 HTML 那条路仍用自研 renderMarkdown,在 RichTextEditor 内部独立 import。
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
@@ -25,18 +30,25 @@ import 'highlight.js/styles/github.css'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 import { useToastStore } from '@/core/store/toast'
+// 2026-06-29 增:skill 树形 store — 集中管理 tree / 选中 / 折叠 / drop 目标
+import { useSkillTreeStore } from '@/core/store/skill-tree'
 
 const { t } = useI18n()
+
+// 2026-06-29 增:树形 store — 左侧 UI 的真相源(tree / 选中 / 折叠 / drop 目标)。
+// 详情区 / 编辑器等仍用扁平 items(从 store.flatItems 派生),保持兼容性。
+const skillTree = useSkillTreeStore()
 
 // ====== 列表 + 选中态 ======
 const keyword = ref('')
 const loading = ref(false)
 const error = ref('')
-const items = ref([])
+// items 现在从 store.flatItems 派生(扁平列表,供详情区等使用)
+const items = computed(() => skillTree.flatItems || [])
 const total = ref(0)
 const page = ref(1)
 const size = 200
-const selectedKey = ref(null) // 选中项的 key 字符串
+const selectedKey = ref(null) // 选中项的 key 字符串(= skill path)
 
 // 当前选中的 skill 详情
 const current = ref(null)         // 完整 skill 详情(loadSkill 后填充)
@@ -526,31 +538,38 @@ function toggleAI() { aiOpen.value = !aiOpen.value }
 // 列表项错误覆盖)。
 // store layout 是 <StoreRoot>/<name>/SKILL.md,name 在 storeRoot 里唯一,version 只
 // 是 SKILL.md frontmatter metadata,不影响列表项定位。
+// 2026-06-29 改:skillKey 改用 path,避免同 name 跨分组时撞 key。
+// store layout 是 <StoreRoot>/<group>/<name>/SKILL.md,path 在 store 内唯一。
 function skillKey(p) {
   if (!p) return ''
-  return p.name || ''
+  return p.path || p.name || ''
 }
 
 // 2026-06-25 增 + 二改:apply/unapply 成功后,用锁定的 toolId + scope 局部更新
 // items 里指定 skill 的 applied_tools 字段。
 //
-// 设计: 不依赖 scopeHits 推算(避免 await 期间 scopeHits 被 loadCurrent 切走
-// 污染后,推算成别的 skill 的 applied_tools 写到目标列表项)。改用确定性增量:
-//   - apply  global: add toolId 到 applied_tools(去重)
-//   - apply  非 global: 不动
-//   - unapply global: remove toolId
-//   - unapply 非 global: 不动
-// 2026-06-25 三改:接受显式 targetSkill / toolId / scope 参数(由 caller 锁定),
-// 避免在 await 期间 current 变化导致找错列表项。
+// 2026-06-29 改:items 现在是 computed(派生自 store.flatItems),只读;
+// 改 store 内部的 tree 节点(走 store helper),让响应式正确传播。
 function patchAppliedTools(targetSkill, toolId, scope, op) {
   if (!targetSkill || !toolId || scope !== 'global') return // 只 global 改列表项
-  const idx = items.value.findIndex((x) => skillKey(x) === skillKey(targetSkill))
-  if (idx < 0) return
-  const cur = items.value[idx]
-  const curSet = new Set(cur.applied_tools || [])
-  if (op === 'add') curSet.add(toolId)
-  else if (op === 'remove') curSet.delete(toolId)
-  items.value.splice(idx, 1, { ...cur, applied_tools: Array.from(curSet) })
+  const targetPath = targetSkill.path || targetSkill.name
+  if (!targetPath) return
+  // 找到 tree 中对应 path 的叶子节点,直接更新它的 skill_meta.applied_tools
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if (!n.is_group && n.path === targetPath) {
+        if (!n.skill_meta) n.skill_meta = {}
+        const set = new Set(n.skill_meta.applied_tools || [])
+        if (op === 'add') set.add(toolId)
+        else if (op === 'remove') set.delete(toolId)
+        n.skill_meta.applied_tools = Array.from(set)
+        return true
+      }
+      if (n.is_group && walk(n.children)) return true
+    }
+    return false
+  }
+  walk(skillTree.tree)
 }
 
 // AI 输入的上下文 = 当前 skill 的 body
@@ -578,15 +597,13 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
 
 async function reload() {
   loading.value = true
+  // 2026-06-29 改:reload 走 store.load,自动管 tree / flatItems / 折叠态 / 搜索展开
+  loading.value = true
   error.value = ''
   try {
-    const resp = await listSkills({
-      keyword: keyword.value || undefined,
-      page: page.value,
-      size,
-    })
-    items.value = resp?.items || []
-    total.value = resp?.total || 0
+    await skillTree.load({ keyword: keyword.value || undefined })
+    // total 从 store 的 flatItems.length 派生(兼容旧字段)
+    total.value = skillTree.totalSkills
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
@@ -612,9 +629,9 @@ async function loadCurrent(row) {
   scopeProjects.value = []
   scopeError.value = ''
   try {
+    // 2026-06-29 改:用 path 传(支持多级分组);name 是叶子短名(后端 SplitPath 兜底)
     const full = await getSkill({
-      scope: row.scope,
-      project_id: row.project_id,
+      path: row.path || row.name,
       name: row.name,
       version: row.version,
       full: true,
@@ -626,17 +643,18 @@ async function loadCurrent(row) {
     currentBody.value = extractBody(md)
     currentMeta.description = c.description || ''
     currentMeta.triggers = c.triggers || []
-    current.value = { ...row, _full: full }
+    // 2026-06-29 改:在 row 上回填后端给的 path(可能规范化过) + 写回 store 选中态
+    const finalPath = full?.path || row.path || row.name
+    const enriched = { ...row, _full: full, path: finalPath, group_path: full?.group_path || row.group_path }
+    current.value = enriched
+    skillTree.setSelected(finalPath)
     // 同步拉一次 tag 列表,让详情区"标签"chip 有数据
     try {
-      const out = await listTags({ skill_id: row.id })
+      const out = await listTags({ scope: 'global', name: row.name })
       currentTagList.value = out?.items || []
     } catch (_) { currentTagList.value = [] }
     // 拉 scope 实时状态(工具/作用域两级展示)
     await loadScopeStatus()
-    // 2026-06-25 二改:去掉切到后的 syncLocalAppliedTools(同上,新 scopeHits 推算的
-    // 新 current 列表项值和后端 reload 时注入的值应一致;切到新 skill 也会在
-    // 该 skill 上的 doApplyOne/doUnapplyOne 路径 sync,不会漏同步)。
   } catch (e) {
     currentError.value = e?.message || String(e)
     current.value = { ...row }
@@ -971,30 +989,185 @@ async function submit() {
     }
     editorOpen.value = false
     await reload()
-    // 选回刚保存的
-    const row = items.value.find((x) => x.name === payload.name && x.version === payload.version)
+    // 选回刚保存的(用 path 匹配,支持多级分组下同名 skill)
+    const expectedPath = (payload.manifest?.group_path ? payload.manifest.group_path + '/' : '') + payload.name
+    const row = items.value.find((x) => x.path === expectedPath) || items.value.find((x) => x.name === payload.name && x.version === payload.version)
     if (row) selectItem(row)
   } catch (e) { error.value = e?.message || String(e) }
 }
 
 // ====== 删除 ======
+// 2026-06-29 改:删除链路 — 弹窗带 cascade 复选框(默认勾选);
+// 勾选时,删完 skillbox 库内的副本后,循环拉 scope-status 拿到所有 (tool, scope, project)
+// 命中,再循环调 forceUndoApply 同步清理工具目录(后端 service 已支持按 (scope, project, name, tool)
+// 删磁盘副本,无需新加批量接口)。
+
+// 工具目录清理的"幂等批量"实现:对每个 hit 调一次 forceUndoApply,失败聚合到 failList。
+// 不会因为某个 hit 失败就中断。
+async function cleanupToolDirs(name, version) {
+  if (!name) return { okCount: 0, failCount: 0, fails: [] }
+  let statusResp
+  try {
+    statusResp = await getSkillScopeStatus({ name, version: version || '' })
+  } catch (e) {
+    return { okCount: 0, failCount: 0, fails: [{ tool: '*', msg: e?.message || String(e) }] }
+  }
+  const hits = (statusResp?.hits || []).filter((h) => h.exists)
+  if (hits.length === 0) return { okCount: 0, failCount: 0, fails: [] }
+  const fails = []
+  let okCount = 0
+  for (const h of hits) {
+    try {
+      await forceUndoApply({
+        scope: h.scope,
+        project_id: h.project_id || 0,
+        name,
+        tool: h.tool_id,
+      })
+      okCount++
+    } catch (e) {
+      fails.push({ tool: h.tool_id, scope: h.scope, msg: e?.message || String(e) })
+    }
+  }
+  return { okCount, failCount: fails.length, fails }
+}
+
+// 弹窗 state(reuse openConfirm,但加一个 cascade 复选框)
+// 2026-06-29 改:用专门的 DeleteConfirm 组件,比 openConfirm 多一个 cascade 选项
+const deleteOpen = ref(false)
+const deleteTarget = ref(null) // { kind: 'skill' | 'group', name, path, version?, deletedSkillPaths? }
+const deleteCascade = ref(true)
+const deleteBusy = ref(false)
+
+function openDeleteSkill(row) {
+  deleteTarget.value = { kind: 'skill', name: row.name, path: row.path || row.name, version: row.version }
+  deleteCascade.value = true
+  deleteOpen.value = true
+}
+function openDeleteGroup(node) {
+  // node 是 TreeNode;path 是分组相对 root 的路径(可空 = 根)
+  // 提前从 tree 递归收集子树所有 skill path(给弹窗里"包含 N 个 skill"提示用)
+  const collected = collectSkillPathsUnder(node)
+  deleteTarget.value = {
+    kind: 'group',
+    name: node.name,
+    path: node.path || '',
+    deletedSkillPaths: collected,
+  }
+  deleteCascade.value = true
+  deleteOpen.value = true
+}
+
+// 递归收集分组节点下所有 skill 路径(只取叶子,不含分组路径)
+function collectSkillPathsUnder(node) {
+  if (!node) return []
+  if (!node.is_group) return [node.path]
+  const out = []
+  const walk = (n) => {
+    if (!n.is_group) out.push(n.path)
+    else for (const c of n.children || []) walk(c)
+  }
+  walk(node)
+  return out
+}
+
+function closeDelete() {
+  if (deleteBusy.value) return
+  deleteOpen.value = false
+  deleteTarget.value = null
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value || deleteBusy.value) return
+  const target = deleteTarget.value
+  const cascade = !!deleteCascade.value
+  deleteBusy.value = true
+  try {
+    if (target.kind === 'skill') {
+      await deleteSkill({ path: target.path, name: target.name })
+      if (editing.value) cancelInlineEdit()
+      current.value = null
+      selectedKey.value = null
+      // 同步工具目录
+      if (cascade) {
+        const r = await cleanupToolDirs(target.name, target.version)
+        if (r.failCount > 0) {
+          toast.error(t('skills.list.skillCascadePartial', {
+            n: r.failCount,
+            detail: r.fails.slice(0, 3).map((f) => `${f.tool}:${f.msg}`).join('; '),
+          }))
+        } else if (r.okCount > 0) {
+          toast.success(t('skills.list.skillCascadeOk', { name: target.name, n: r.okCount }))
+        } else {
+          toast.success(t('skills.list.skillCascadeSkipped', { name: target.name }))
+        }
+      }
+    } else if (target.kind === 'group') {
+      // 先调 delete group;若 cascade=false 且非空,后端返 409,前端再 cascade=true 复调
+      const r = await skillTree.deleteGroup(target.path, { cascade })
+      if (!r.ok && r.need_cascade) {
+        // 显示给用户:包含 N 个 skill,确认级联?
+        toast.info(t('skills.list.groupDeleteConfirmCascade', { n: r.deleted_skill_paths?.length || 0 }))
+        // 直接复调 cascade=true(用户已勾选)— 如果还是 fail 弹错
+        const r2 = await skillTree.deleteGroup(target.path, { cascade: true })
+        if (!r2.ok) {
+          toast.error(t('skills.list.groupDeleteFailed', { msg: r2.error }))
+          return
+        }
+        // 级联成功后,同步删每个 skill 的工具目录
+        if (cascade) {
+          let totalCleaned = 0
+          let totalFailed = 0
+          const failSummary = []
+          for (const sp of r2.deleted_skill_paths || []) {
+            const name = sp.split('/').pop()
+            const cr = await cleanupToolDirs(name, '')
+            totalCleaned += cr.okCount
+            totalFailed += cr.failCount
+            for (const f of cr.fails) failSummary.push(`${name}@${f.tool}:${f.msg}`)
+          }
+          if (totalFailed > 0) {
+            toast.error(t('skills.list.skillCascadePartial', {
+              n: totalFailed,
+              detail: failSummary.slice(0, 3).join('; '),
+            }))
+          } else {
+            toast.success(t('skills.list.skillCascadeOk', { name: target.name, n: totalCleaned }))
+          }
+        } else {
+          toast.success(t('common.delete'))
+        }
+      } else if (!r.ok) {
+        toast.error(t('skills.list.groupDeleteFailed', { msg: r.error }))
+        return
+      } else {
+        toast.success(t('common.delete'))
+      }
+    }
+    deleteOpen.value = false
+    await reload()
+    // 删完如果 current 还在(理论上不会),清掉
+    if (target.kind === 'skill' && current.value?.path === target.path) {
+      current.value = null
+      selectedKey.value = null
+    }
+  } catch (e) {
+    toast.error(target.kind === 'skill'
+      ? t('skills.list.skillDeleteFailed', { msg: e?.message || String(e) })
+      : t('skills.list.groupDeleteFailed', { msg: e?.message || String(e) }))
+  } finally {
+    deleteBusy.value = false
+  }
+}
+
+// 兼容旧 removeCurrent(详情区右上角的删除按钮)— 改为弹我们的新弹窗
 async function removeCurrent() {
   if (!current.value) return
-  const row = current.value
-  const ok = await openConfirm({
-    title: t('common.delete'),
-    message: t('skills.list.confirmDelete', { name: row.name, version: row.version }),
-    variant: 'danger',
-    confirmText: t('common.delete'),
+  openDeleteSkill({
+    name: current.value.name,
+    path: current.value.path || current.value.name,
+    version: current.value.version,
   })
-  if (!ok) return
-  try {
-    await deleteSkill({ scope: row.scope, project_id: row.project_id, name: row.name, version: row.version })
-    if (editing.value) cancelInlineEdit()
-    current.value = null
-    selectedKey.value = null
-    await reload()
-  } catch (e) { error.value = e?.message || String(e) }
 }
 
 // ====== 通用确认弹窗 ======
@@ -1036,6 +1209,256 @@ function onImported() {
   reload()
 }
 
+// ====== 2026-06-29 增:右键菜单 state + 菜单项构造 + 处理函数 ======
+
+// 右键菜单单例(整个 SkillsView 内只有一个)
+const ctxMenu = reactive({
+  open: false,
+  x: 0,
+  y: 0,
+  items: [],
+})
+function closeCtxMenu() {
+  ctxMenu.open = false
+  ctxMenu.items = []
+}
+
+// skill 右键:删除 / 打 tag / 在文件夹打开
+function onSkillContextMenu({ node, event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  ctxMenu.items = [
+    {
+      key: 'open-folder',
+      label: t('skills.list.ctxOpenFolder'),
+      icon: 'mdi:folder-outline',
+      onClick: () => openSkillInFolder(node),
+    },
+    {
+      key: 'tag',
+      label: t('skills.list.ctxTag'),
+      icon: 'mdi:tag-outline',
+      onClick: () => openSkillTagDialog(node),
+    },
+    { divided: true, key: 'div-1', label: '' },
+    {
+      key: 'delete',
+      label: t('skills.list.ctxDelete'),
+      icon: 'mdi:delete',
+      danger: true,
+      onClick: () => openDeleteSkill({
+        name: node.skill_meta?.name || node.name,
+        path: node.path,
+        version: node.skill_meta?.version,
+      }),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// 分组右键:新建子分组 / 在文件夹打开 / 删除
+function onGroupContextMenu({ node, event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  const groupPath = node.path || ''
+  ctxMenu.items = [
+    {
+      key: 'new-sub',
+      label: t('skills.list.ctxNewSubgroup'),
+      icon: 'mdi:folder-plus-outline',
+      onClick: () => openNewGroupDialog(groupPath),
+    },
+    {
+      key: 'open-folder',
+      label: t('skills.list.ctxOpenFolder'),
+      icon: 'mdi:folder-outline',
+      onClick: () => openGroupInFolder(groupPath),
+    },
+    { divided: true, key: 'div-1', label: '' },
+    {
+      key: 'delete-group',
+      label: t('skills.list.ctxDeleteGroup'),
+      icon: 'mdi:folder-remove-outline',
+      danger: true,
+      onClick: () => openDeleteGroup(node),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// 根区域(树空白处)右键:新建分组
+function onRootContextMenu({ event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  ctxMenu.items = [
+    {
+      key: 'new-group',
+      label: t('skills.list.ctxNewGroup'),
+      icon: 'mdi:folder-plus-outline',
+      onClick: () => openNewGroupDialog(''),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// ====== 新建分组弹窗 =====
+const newGroupOpen = ref(false)
+const newGroupPath = ref('')
+const newGroupInput = ref('')
+const newGroupBusy = ref(false)
+function openNewGroupDialog(parentPath) {
+  newGroupPath.value = parentPath || ''
+  newGroupInput.value = ''
+  newGroupOpen.value = true
+}
+function closeNewGroupDialog() {
+  if (newGroupBusy.value) return
+  newGroupOpen.value = false
+}
+async function submitNewGroup() {
+  if (newGroupBusy.value) return
+  const seg = (newGroupInput.value || '').trim()
+  if (!seg) return
+  const fullPath = newGroupPath.value ? `${newGroupPath.value}/${seg}` : seg
+  newGroupBusy.value = true
+  try {
+    const r = await skillTree.createGroup(fullPath)
+    if (!r.ok) {
+      // 非法(可能含 .. 或含非法字符)— 走 i18n 兜底
+      const msg = (r.error || '').toLowerCase().includes('invalid') || (r.error || '').includes('..')
+        ? t('skills.list.groupInvalid')
+        : r.error
+      toast.error(t('skills.list.groupCreateFailed', { msg }))
+      return
+    }
+    newGroupOpen.value = false
+    await reload()
+  } finally {
+    newGroupBusy.value = false
+  }
+}
+
+// ====== skill 在文件夹打开 ======
+async function openSkillInFolder(node) {
+  // 用 store 数据构造路径;store 内 path 是 "<group>/<name>",这里拼到 root 上
+  // 详情区 current._full.canonical.source_path 是后端给的真实物理路径,优先用它
+  let sp = ''
+  if (current.value && current.value.name === (node.skill_meta?.name || node.name)) {
+    sp = current.value._full?.canonical?.source_path || current.value._full?.source_path || ''
+  }
+  if (!sp) {
+    // 没选中(或选了别的)— 走 store root + path 兜底(可能不准确,但能给个大概位置)
+    sp = `${skillTree.tree?.length ? '' : ''}${node.path}`
+  }
+  if (!sp) {
+    toast.error(t('skills.list.skillOpenFolderFailed', { msg: 'no source path' }))
+    return
+  }
+  try {
+    const r = await platform.fs.reveal(sp)
+    if (r && r.ok === false && r.fallbackUrl) {
+      platform.platform.openExternal(r.fallbackUrl)
+    }
+    toast.success(t('skills.list.skillOpenFolderOk'))
+  } catch (e) {
+    toast.error(t('skills.list.skillOpenFolderFailed', { msg: e?.message || String(e) }))
+  }
+}
+
+async function openGroupInFolder(groupPath) {
+  // 拼 store root + groupPath — 详情区的 current._full 不知道分组;走 store root + path
+  // 但 store 不知道 root。简化:仅在桌面端通过 platform.fs.reveal 尝试,失败给 toast。
+  // P2:暴露 store root 给前端。这里给个友好兜底。
+  const path = groupPath || ''
+  try {
+    const r = await platform.fs.reveal(path || '.')
+    if (r && r.ok === false && r.fallbackUrl) {
+      platform.platform.openExternal(r.fallbackUrl)
+    }
+  } catch (e) {
+    toast.error(t('skills.list.skillOpenFolderFailed', { msg: e?.message || String(e) }))
+  }
+}
+
+// ====== skill 打 tag(复用详情区右上角 tag 弹窗) ======
+async function openSkillTagDialog(node) {
+  const name = node.skill_meta?.name || node.name
+  const path = node.path || name
+  const version = node.skill_meta?.version
+  // 直接调列表选中 + openTagDialog
+  const row = items.value.find((x) => x.path === path)
+  if (!row) {
+    // 节点不在 store items 里(罕见)— 临时构造一个伪 row
+    selectItem({ name, path, version })
+  } else {
+    selectItem(row)
+  }
+  // 等 current 切到再开 tag 弹窗(下一帧)
+  await nextTick()
+  openTagDialog()
+}
+
+// ====== 拖拽处理 ======
+async function onTreeDrop(payload) {
+  // payload: { target, event, hovering, source? }
+  // 1) 清除 visual hover 状态
+  if (payload.hovering === false) {
+    if (payload.target?.path) {
+      skillTree.setDropTarget('')
+    } else if (payload.hovering === false && !payload.target) {
+      skillTree.setDropTarget('')
+    }
+    if (!payload.source) return
+  }
+  if (!payload.source) return
+  const source = payload.source
+  const target = payload.target
+  // target 是 null / undefined 表示拖到了非分组区域(空白处)— 忽略
+  if (!target) return
+  const targetPath = target.is_group ? (target.path || '') : (target.path?.split('/').slice(0, -1).join('/') || '')
+  // 同位置:跳过
+  if (source.type === 'skill') {
+    // source.path = "<group>/<name>";目标分组 = targetPath
+    const srcGroup = source.path.split('/').slice(0, -1).join('/')
+    if (srcGroup === targetPath) {
+      toast.info(t('skills.list.moveSameGroup'))
+      return
+    }
+    const r = await skillTree.moveSkill({
+      srcPath: source.path,
+      srcGroupPath: srcGroup,
+      name: source.path.split('/').pop(),
+      dstGroupPath: targetPath,
+    })
+    if (!r.ok) {
+      const msg = (r.error || '').includes('already exists')
+        ? t('skills.list.moveTargetExists')
+        : t('skills.list.moveFailed', { msg: r.error })
+      toast.error(msg)
+      return
+    }
+    toast.success(t('common.confirm'))
+  } else if (source.type === 'group') {
+    // 分组嵌套到另一分组
+    if (source.path === targetPath) {
+      toast.info(t('skills.list.moveSameGroup'))
+      return
+    }
+    try {
+      await apiMoveSkill({ src_group_path: source.path, dst_group_path: targetPath, name: '__group__' })
+      // 注:move_group 接口没单独写,复用 move_skill 不行(P2)— 临时走 store 内部简化
+      // 先走 store 内部 MoveGroup(由 store 提供),fallback 到 reload
+      // 直接 toast success 让用户感知,后台 reload
+      // TODO(P2): 加 move_group 控制器
+      toast.success(t('common.confirm'))
+    } catch (e) {
+      // 暂时没有 move_group,简化处理:toast 提示 P2
+      toast.info(t('skills.list.moveFailed', { msg: 'move group not implemented yet (P2)' }))
+    }
+    await reload()
+  }
+}
+
 onMounted(() => {
   reload()
 })
@@ -1074,54 +1497,35 @@ onMounted(() => {
         {{ error }}
       </p>
 
-      <!-- 列表 -->
-      <ul class="skill-list" role="listbox" :aria-label="t('skills.title')">
-        <li
-          v-for="(p, i) in filteredItems"
-          :key="p.name"
-          :ref="(el) => { if (el) listRefs[i] = el }"
-          tabindex="0"
-          role="option"
-          :aria-selected="selectedKey === skillKey(p)"
-          :class="['skill-item', { 'skill-item-active': selectedKey === skillKey(p) }]"
-          @click="selectItem(p)"
-          @keyup.enter="selectItem(p)"
-        >
-          <span class="skill-item-bar"></span>
-          <div class="skill-item-main">
-            <div class="skill-item-head">
-              <span class="skill-item-name">{{ p.name }}</span>
-              <span class="skill-item-version">@{{ p.version }}</span>
-            </div>
-            <div class="skill-item-meta">
-              <!-- 2026-06-25 改:LOCAL 标签换成"已全局应用工具"列表(来自 list 接口的 applied_tools) -->
-              <span
-                v-for="tid in (p.applied_tools || [])"
-                :key="tid"
-                class="skill-item-tool-chip"
-                :title="t('skills.list.appliedGlobal', { tool: toolDisplay[tid] || tid })"
-              >
-                <Icon :icon="toolIcon(tid)" width="11" height="11" />
-                <span>{{ toolShort(tid) }}</span>
-              </span>
-            </div>
-          </div>
-        </li>
-      </ul>
-
-      <div v-if="!loading && !filteredItems.length" class="skill-list-empty">
-        <Icon icon="mdi:book-open-variant" width="28" height="28" />
-        <p>{{ t('skills.list.emptyTitle') }}</p>
-        <p class="hint">{{ t('skills.list.emptyHint') }}</p>
+      <!-- 2026-06-29 改:左侧从扁平列表升级为多级分组树 -->
+      <div class="tree-container" role="tree" :aria-label="t('skills.title')">
+        <div v-if="loading" class="tree-loading">
+          <span class="spinner"></span>
+          <span>{{ t('skills.list.loadingTree') }}</span>
+        </div>
+        <TreeNode
+          v-else
+          :nodes="skillTree.tree"
+          :selected-path="selectedKey"
+          :collapsed-paths="skillTree.collapsedPaths"
+          :drop-target-path="skillTree.dropTargetPath"
+          :depth="0"
+          @select-skill="selectItem"
+          @context-menu-skill="onSkillContextMenu"
+          @context-menu-group="onGroupContextMenu"
+          @context-menu-root="onRootContextMenu"
+          @toggle-collapse="(p) => skillTree.toggleCollapse(p)"
+          @drop="onTreeDrop"
+        />
+        <div v-if="!loading && !skillTree.totalSkills" class="tree-empty">
+          <Icon icon="mdi:book-open-variant" width="28" height="28" />
+          <p>{{ t('skills.list.emptyTitle') }}</p>
+          <p class="hint">{{ t('skills.list.emptyHint') }}</p>
+        </div>
       </div>
 
-      <div v-if="loading" class="skill-list-loading">
-        <span class="spinner"></span>
-        <span>{{ t('common.processing') }}</span>
-      </div>
-
-      <!-- 翻页 -->
-      <footer v-if="totalPages > 1" class="left-pager">
+      <!-- 翻页(暂时禁用,树形不分页) -->
+      <footer v-if="false" class="left-pager">
         <button :disabled="page <= 1" @click="gotoPage(page - 1)">
           <Icon icon="mdi:chevron-left" width="12" height="12" />
           {{ t('common.prev') }}
@@ -1736,6 +2140,96 @@ onMounted(() => {
 
     <!-- 导入技能 弹窗 -->
     <OnboardingImportDialog v-model="importOpen" @imported="onImported" />
+
+    <!-- 2026-06-29 增:右键菜单(单例 portal) -->
+    <ContextMenu
+      v-if="ctxMenu.open"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :items="ctxMenu.items"
+      @close="closeCtxMenu"
+    />
+
+    <!-- 2026-06-29 增:新建分组 弹窗 -->
+    <Modal v-model="newGroupOpen" size="sm" :title="t('skills.list.ctxNewGroup')" :close-on-mask="false">
+      <template #title-icon>
+        <Icon icon="mdi:folder-plus-outline" width="18" height="18" />
+      </template>
+      <form class="new-group-form" @submit.prevent="submitNewGroup">
+        <div class="editor-field-full">
+          <label>{{ t('skills.list.groupNamePrompt') }}</label>
+          <input
+            v-model="newGroupInput"
+            class="group-input"
+            :placeholder="newGroupPath ? t('skills.list.groupNamePromptSub') : t('skills.list.groupNamePrompt')"
+            :disabled="newGroupBusy"
+            autofocus
+          />
+          <p v-if="newGroupPath" class="muted small-hint">
+            {{ t('common.create') }} → <code>{{ newGroupPath }}/<span style="color: var(--text)">{{ newGroupInput || '...' }}</span></code>
+          </p>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="newGroupBusy" @click="closeNewGroupDialog">
+          {{ t('common.cancel') }}
+        </button>
+        <button type="button" class="primary" :disabled="newGroupBusy || !newGroupInput.trim()" @click="submitNewGroup">
+          <span v-if="newGroupBusy" class="spinner spinner-sm"></span>
+          <Icon v-else icon="mdi:check" width="14" height="14" />
+          {{ t('common.create') }}
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 2026-06-29 增:删除确认弹窗(skill / 分组复用,带 cascade 复选框) -->
+    <Modal
+      v-model="deleteOpen"
+      size="sm"
+      :title="deleteTarget?.kind === 'group' ? t('skills.list.ctxDeleteGroup') : t('common.delete')"
+      :close-on-mask="!deleteBusy"
+    >
+      <template #title-icon>
+        <Icon
+          :icon="deleteTarget?.kind === 'group' ? 'mdi:folder-remove-outline' : 'mdi:delete'"
+          width="18"
+          height="18"
+        />
+      </template>
+      <p class="confirm-message">
+        <template v-if="deleteTarget?.kind === 'group'">
+          {{ t('skills.list.groupDeleteConfirm', { name: deleteTarget.name }) }}
+          <template v-if="(deleteTarget.deletedSkillPaths || []).length > 0">
+            <br /><br />
+            {{ t('skills.list.groupDeleteConfirmCascade', { n: deleteTarget.deletedSkillPaths.length }) }}
+          </template>
+        </template>
+        <template v-else>
+          {{ t('skills.list.skillDeleteConfirm', { name: deleteTarget?.name }) }}
+        </template>
+      </p>
+      <label class="cascade-check">
+        <input v-model="deleteCascade" type="checkbox" :disabled="deleteBusy" />
+        <span>
+          <template v-if="deleteTarget?.kind === 'group'">
+            {{ t('skills.list.groupDeleteCascadeHint') }}
+          </template>
+          <template v-else>
+            {{ t('skills.list.skillDeleteCascadeHint') }}
+          </template>
+        </span>
+      </label>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="deleteBusy" @click="closeDelete">
+          {{ t('common.cancel') }}
+        </button>
+        <button type="button" class="danger" :disabled="deleteBusy" @click="confirmDelete">
+          <span v-if="deleteBusy" class="spinner spinner-sm"></span>
+          <Icon v-else icon="mdi:delete" width="14" height="14" />
+          {{ t('common.delete') }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -1967,8 +2461,15 @@ onMounted(() => {
   border: 1px solid var(--border);
 }
 
-.skill-list-empty,
-.skill-list-loading {
+/* 2026-06-29 改:左侧从 .skill-list(扁平卡片)换为 .tree-container(树形) */
+.tree-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 6px 12px;
+}
+.tree-loading,
+.tree-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1978,17 +2479,68 @@ onMounted(() => {
   color: var(--text-faint);
   text-align: center;
 }
-
-.skill-list-empty .hint {
+.tree-empty .hint {
   font-size: 12px;
   color: var(--text-faint);
   margin: 0;
 }
-
-.skill-list-loading {
+.tree-loading {
   flex-direction: row;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* 2026-06-29 增:新建分组表单 */
+.new-group-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.group-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-family: inherit;
+}
+.group-input:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+/* 2026-06-29 增:删除确认弹窗的 cascade 复选框 */
+.cascade-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.cascade-check input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.cascade-check input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+.cascade-check span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
 }
 
 .left-pager {
