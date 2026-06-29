@@ -348,3 +348,36 @@ func maxDepthUnder(root string) int {
 	})
 	return maxD
 }
+
+// TestMoveGroupDir_ToRoot 2026-06-29 增:把分组挪到根目录是合法操作,必须放行。
+// 回归测试:之前 isDescendantOrSame 把"挪到根"误判为"挪到自己子目录"
+// (src=aa,dst=""→dstAbs=root/aa=srcAbs,被 isDescendantOrSame 拦下),特加此测试。
+func TestMoveGroupDir_ToRoot(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "skillstore-movegroup-toroot-*")
+	defer os.RemoveAll(tmpDir)
+	store, _ := NewAt(tmpDir)
+
+	store.CreateGroupDir("aa")
+	store.CreateGroupDir("aa/sub")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa/sub"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+
+	// 把 aa/sub 挪到根下 → 目标 = root/sub,合法
+	if err := store.MoveGroupDir("aa/sub", ""); err != nil {
+		t.Fatalf("MoveGroupDir to root: should succeed, got %v", err)
+	}
+	// 旧位置没了
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "sub")); !os.IsNotExist(err) {
+		t.Fatalf("MoveGroupDir to root: old aa/sub should be gone, got err=%v", err)
+	}
+	// 新位置在根
+	if _, err := os.Stat(filepath.Join(tmpDir, "sub", "x", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupDir to root: sub/x/SKILL.md should exist, got %v", err)
+	}
+	// 树深度不能超 3
+	if deep := maxDepthUnder(tmpDir); deep > 4 {
+		t.Fatalf("MoveGroupDir to root: tree depth %d — looks like a runaway loop", deep)
+	}
+}

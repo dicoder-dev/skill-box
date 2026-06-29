@@ -336,9 +336,15 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 // dstGroupPath 可以为空(=把分组挪到根下);name 不变(取 src 的最后一段)。
 //
 // 2026-06-29 增:复用 MoveGroupPath 思路,作用对象是整个分组目录子树。
-// 2026-06-29 改:加 ancestor check — 若 dstAbs 在 srcAbs 内部,直接 400 拒掉
-// (防死循环:os.Rename 失败降级 copyDirRecursive 后,会在 src 内建 dst 子目录,
-// 立刻 ReadDir 扫到,无限递归到路径长度上限)。
+// 2026-06-29 改:加 ancestor check — 若 dstGroupPath 是 srcGroupPath 的祖先/自身
+// (或反过来,src 在 dst 内部),直接 400 拒掉,防死循环(见 copyDirRecursive 注释)。
+//
+// 用 group path 判 ancestor,不用 abs path,这样:
+//   - src=aa,dst=""     → 合法(挪到根,目标 = root/aa)
+//   - src=aa,dst=aa/yy  → 非法(目标 = root/aa/yy/aa,在 src 内部,会死循环)
+//   - src=aa,dst=aa     → noop 幂等返 OK(不算非法)
+//   - src=aa/bb,dst=aa  → 非法(把 bb 挪到 aa 下,目标 = root/aa/bb,等于 src,no-op
+//     但会引发 copyDirRecursive 自己 copy 自己)
 func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
 	if srcGroupPath == "" {
 		return fmt.Errorf("skillstore: empty src group path")
@@ -356,9 +362,15 @@ func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
 	}
 	srcBase := filepath.Base(srcRel)
 	dstAbs := filepath.Join(s.root, filepath.FromSlash(dstGroupPath), srcBase)
-	// 2026-06-29 增:防御性 ancestor check。dstAbs 在 srcAbs 内部 = 把 src 挪到
-	// 自己的子目录下,os.Rename 必失败,降级 copyDirRecursive 必死循环。
-	if isDescendantOrSame(dstAbs, srcAbs) {
+	// 2026-06-29 增:防御性 ancestor check。用 group path 判(src=aa/yy → noop
+	// 时 dstAbs=aa/yy,等于 src;src=aa/yy → dst=aa/zz 时 dstAbs=aa/zz/yy,在
+	// src 外;src=aa → dst=aa/yy 时 dstAbs=aa/yy/aa,在 src 内 — 这才是真正
+	// 会死循环的情况)。
+	// 用 isDescendantOrSame 判 abs 关系能精准捕获"src 在 dst 内部"或"dst 在
+	// src 内部",但挪到根(src=aa,dst=""→dstAbs=root/aa=srcAbs)会被误判为
+	// "挪到自己"。所以挪到根特例先放行。
+	// (root 这个特例也走 copyDirRecursive 兜底,真出问题也会被拦下)
+	if dstGroupPath != "" && isDescendantOrSame(dstAbs, srcAbs) {
 		return fmt.Errorf("skillstore: cannot move group %q into its own descendant %q", srcGroupPath, dstGroupPath)
 	}
 	// 目标已存在 → 拒覆盖
