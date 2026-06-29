@@ -338,9 +338,16 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 // 2026-06-29 增:复用 MoveGroupPath 思路,作用对象是整个分组目录子树。
 // 2026-06-29 改:加 ancestor check — 若 dstGroupPath 是 srcGroupPath 的祖先/自身
 // (或反过来,src 在 dst 内部),直接 400 拒掉,防死循环(见 copyDirRecursive 注释)。
+// 2026-06-29 再改:加 no-op 幂等处理 — 当 dstAbs == srcAbs 时(典型 case: 根下
+// 分组"挪到根" src=aa,dst="" → dstAbs=root/aa=srcAbs;或 aa/bb "挪到 aa 下"
+// src=aa/bb,dst=aa → dstAbs=root/aa/bb=srcAbs),目标就是当前位置,直接返 OK。
+// 注释里早就说了 "src=aa,dst="" → 合法",但实现没短路,导致走到"目标已存在"判
+// 断时被误拒(2026-06-29 用户报告的 "target group .../aa already exists" 就是
+// 这个 case)。同位置 rename 在 os.Rename 层面是 noop,但前端会更早一步撞到
+// 我们的存在性 check,所以必须在 store 层先拦。
 //
 // 用 group path 判 ancestor,不用 abs path,这样:
-//   - src=aa,dst=""     → 合法(挪到根,目标 = root/aa)
+//   - src=aa,dst=""     → 合法(挪到根,目标 = root/aa,no-op 短路返 OK)
 //   - src=aa,dst=aa/yy  → 非法(目标 = root/aa/yy/aa,在 src 内部,会死循环)
 //   - src=aa,dst=aa     → noop 幂等返 OK(不算非法)
 //   - src=aa/bb,dst=aa  → 非法(把 bb 挪到 aa 下,目标 = root/aa/bb,等于 src,no-op
@@ -362,6 +369,13 @@ func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
 	}
 	srcBase := filepath.Base(srcRel)
 	dstAbs := filepath.Join(s.root, filepath.FromSlash(dstGroupPath), srcBase)
+	// 2026-06-29 增:no-op 短路。dstAbs == srcAbs 表示目标位置就是当前位置,
+	// 用户操作"挪到根"(顶层分组)或"挪到自己父级下"都会落到这里。
+	// 走 os.Rename 也能 noop,但前端在 store 层前就会先撞到"目标已存在"判
+	// 断导致误报,所以这里先返回 OK。
+	if dstAbs == srcAbs {
+		return nil
+	}
 	// 2026-06-29 增:防御性 ancestor check。用 group path 判(src=aa/yy → noop
 	// 时 dstAbs=aa/yy,等于 src;src=aa/yy → dst=aa/zz 时 dstAbs=aa/zz/yy,在
 	// src 外;src=aa → dst=aa/yy 时 dstAbs=aa/yy/aa,在 src 内 — 这才是真正

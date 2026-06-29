@@ -381,3 +381,48 @@ func TestMoveGroupDir_ToRoot(t *testing.T) {
 		t.Fatalf("MoveGroupDir to root: tree depth %d — looks like a runaway loop", deep)
 	}
 }
+
+// TestMoveGroupDir_NoOp_ToRoot 2026-06-29 增:根下分组"挪到根" 是 no-op,必须返 OK。
+// 回归测试:之前 dstAbs 算成 root/<srcBase>,在 srcGroupPath 是顶层分组(如 "aa")
+// 时 = srcAbs,撞到"目标已存在"判断误报 409,前端 toast "target group .../aa
+// already exists"(用户实测就是这个 case)。修复后加 no-op 短路,直接返 nil。
+func TestMoveGroupDir_NoOp_ToRoot(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "skillstore-movegroup-noop-toroot-*")
+	defer os.RemoveAll(tmpDir)
+	store, _ := NewAt(tmpDir)
+
+	store.CreateGroupDir("aa")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+
+	// 1) 顶层分组"挪到根" → 必须 no-op 成功
+	if err := store.MoveGroupDir("aa", ""); err != nil {
+		t.Fatalf("MoveGroupDir no-op to root: should succeed, got %v", err)
+	}
+	// 目录结构无变化
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "x", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupDir no-op to root: aa/x/SKILL.md should still exist, got %v", err)
+	}
+	// 树深度不能超(防止 noop 误触发死循环)
+	if deep := maxDepthUnder(tmpDir); deep > 4 {
+		t.Fatalf("MoveGroupDir no-op to root: tree depth %d — looks like a runaway loop", deep)
+	}
+
+	// 2) 嵌套分组挪到其父级下(如 aa/bb → aa)也是 no-op
+	store.CreateGroupDir("aa/bb")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "y", Version: "0.1.0", GroupPath: "aa/bb"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: y\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+	if err := store.MoveGroupDir("aa/bb", "aa"); err != nil {
+		t.Fatalf("MoveGroupDir no-op to parent: should succeed, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "bb", "y", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupDir no-op to parent: aa/bb/y/SKILL.md should still exist, got %v", err)
+	}
+	if deep := maxDepthUnder(tmpDir); deep > 5 {
+		t.Fatalf("MoveGroupDir no-op to parent: tree depth %d — looks like a runaway loop", deep)
+	}
+}
