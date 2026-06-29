@@ -378,16 +378,16 @@ onMounted(reload)
                 icon="mdi:folder-outline"
                 class="action-icon action-icon-finder"
                 :title="t('projects.openInFinder')"
-                width="16"
-                height="16"
+                width="14"
+                height="14"
                 @click.stop="openInFinder(p)"
               />
               <Icon
                 icon="mdi:delete-outline"
                 class="action-icon action-icon-danger"
                 :title="t('common.delete')"
-                width="16"
-                height="16"
+                width="14"
+                height="14"
                 @click.stop="remove(p.id)"
               />
             </div>
@@ -768,8 +768,8 @@ onMounted(reload)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
