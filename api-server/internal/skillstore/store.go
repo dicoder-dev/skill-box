@@ -586,12 +586,18 @@ type TreeNode struct {
 }
 
 // SkillTreeMeta 树节点中携带的 skill 轻量元数据。
+//
+// 2026-06-29 增:AppliedTools 是该 skill 被全局启用的工具 ID 列表(从
+// cskillapply 的 scope-status 反推),供前端卡片"被这些工具全局调用了"显示。
+// 复用了 cskill 包里的 GlobalAppliedTools helper(同进程),避免在 store 层
+// 重复实现 scope-status 扫描逻辑。
 type SkillTreeMeta struct {
-	Name        string   `json:"name"`
-	Version     string   `json:"version"`
-	Description string   `json:"description"`
-	Triggers    []string `json:"triggers"`
-	UpdatedAt   string   `json:"updated_at,omitempty"`
+	Name         string   `json:"name"`
+	Version      string   `json:"version"`
+	Description  string   `json:"description"`
+	Triggers     []string `json:"triggers"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
+	AppliedTools []string `json:"applied_tools,omitempty"`
 }
 
 // ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
