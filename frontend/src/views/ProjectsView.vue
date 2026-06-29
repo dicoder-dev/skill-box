@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listProjects, createProject, deleteProject, scanProject } from '@/api/skillbox/projects'
+import { listProjects, createProject, updateProject, deleteProject, scanProject } from '@/api/skillbox/projects'
 import { platform } from '@/platform'
 import { formatRelative } from '@/core/utils/time.js'
 import { useToastStore } from '@/core/store/toast'
@@ -43,6 +43,12 @@ const skillsModal = reactive({
   tool: '',
   skills: [],
 })
+
+// 编辑弹窗:editingId > 0 表示正在编辑某个项目
+const showEdit = ref(false)
+const editingId = ref(0)
+const updating = ref(false)
+const editForm = reactive({ name: '', alias: '', root_path: '', description: '' })
 
 async function reload() {
   loading.value = true
@@ -175,6 +181,41 @@ async function submitImport() {
 function cancelImport() {
   if (importing.value) return
   showImport.value = false
+}
+
+// startEdit 打开编辑弹窗,用项目当前字段预填表单
+function startEdit(p) {
+  editingId.value = p.id
+  Object.assign(editForm, {
+    name: p.name || '',
+    alias: p.alias || '',
+    root_path: p.root_path || '',
+    description: p.description || '',
+  })
+  showEdit.value = true
+}
+
+async function submitEdit() {
+  error.value = ''
+  if (!editForm.name.trim() || !editForm.alias.trim() || !editForm.root_path.trim()) {
+    error.value = t('projects.errRequired')
+    return
+  }
+  updating.value = true
+  try {
+    await updateProject({ id: editingId.value, ...editForm })
+    showEdit.value = false
+    await reload()
+  } catch (e) {
+    error.value = e?.message || String(e)
+  } finally {
+    updating.value = false
+  }
+}
+
+function cancelEdit() {
+  if (updating.value) return
+  showEdit.value = false
 }
 
 async function remove(id) {
@@ -348,6 +389,80 @@ onMounted(reload)
       </template>
     </Modal>
 
+    <!-- 编辑项目弹窗(2026-06-29 加:点击卡片铅笔图标触发) -->
+    <Modal
+      v-model="showEdit"
+      size="md"
+      :title="t('projects.editFormTitle')"
+      :close-on-mask="!updating"
+    >
+      <template #title-icon>
+        <Icon icon="mdi:pencil-outline" width="18" height="18" />
+      </template>
+      <form class="form" @submit.prevent="submitEdit">
+        <div class="form-grid">
+          <div class="form-field form-field-full">
+            <label>{{ t('projects.rootPath') }}</label>
+            <div class="input-with-action">
+              <input
+                v-model="editForm.root_path"
+                :placeholder="t('projects.rootPathHint')"
+                :disabled="updating"
+              />
+              <button
+                type="button"
+                class="ghost icon-btn"
+                :disabled="updating"
+                :title="t('projects.btnPickAgain')"
+                @click="async () => {
+                  let p = ''
+                  try { p = await platform.fs.pickFolder() } catch (e) { error.value = e?.message || String(e); return }
+                  if (p) editForm.root_path = p
+                }"
+              >
+                <Icon icon="mdi:folder-search-outline" width="14" height="14" />
+              </button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>{{ t('projects.name') }}</label>
+            <input
+              v-model="editForm.name"
+              :placeholder="t('projects.nameHint')"
+              :disabled="updating"
+            />
+          </div>
+          <div class="form-field">
+            <label>{{ t('projects.alias') }}</label>
+            <input
+              v-model="editForm.alias"
+              :placeholder="t('projects.aliasHint')"
+              :disabled="updating"
+            />
+          </div>
+          <div class="form-field form-field-full">
+            <label>{{ t('projects.description') }}</label>
+            <input
+              v-model="editForm.description"
+              :placeholder="t('projects.descriptionHint')"
+              :disabled="updating"
+            />
+          </div>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="updating" @click="cancelEdit">
+          <Icon icon="mdi:close" width="14" height="14" />
+          {{ t('common.cancel') }}
+        </button>
+        <button type="button" class="primary" :disabled="updating" @click="submitEdit">
+          <span v-if="updating" class="spinner spinner-sm btn-spinner"></span>
+          <Icon v-else icon="mdi:content-save" width="14" height="14" />
+          {{ updating ? t('common.processing') : t('projects.btnEdit') }}
+        </button>
+      </template>
+    </Modal>
+
     <!-- 列表卡片(2026-06-29 改:表格 → 卡片网格) -->
     <div class="card">
       <header class="card-header">
@@ -381,6 +496,14 @@ onMounted(reload)
                 width="14"
                 height="14"
                 @click.stop="openInFinder(p)"
+              />
+              <Icon
+                icon="mdi:pencil-outline"
+                class="action-icon action-icon-edit"
+                :title="t('projects.btnEdit')"
+                width="14"
+                height="14"
+                @click.stop="startEdit(p)"
               />
               <Icon
                 icon="mdi:delete-outline"
@@ -786,6 +909,11 @@ onMounted(reload)
 .action-icon-finder:hover {
   background: var(--primary-dim);
   color: var(--primary);
+}
+/* 编辑图标:hover 用中性底色 */
+.action-icon-edit:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 /* 删除图标:hover 显警示色 */
 .action-icon-danger:hover {
