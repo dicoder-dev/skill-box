@@ -179,3 +179,73 @@ func TestMoveGroupDir(t *testing.T) {
 		t.Fatalf("LoadByPath after move: name mismatch = %s", c.Manifest.Name)
 	}
 }
+
+// TestRenameGroupDir 2026-06-29 增:分组重命名(只改最后一段,父路径不变)。
+func TestRenameGroupDir(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "skillstore-renamegroup-*")
+	defer os.RemoveAll(tmpDir)
+	store, _ := NewAt(tmpDir)
+
+	// 准备:frontend/react/use-cache + frontend/react/other
+	store.CreateGroupDir("frontend/react")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "use-cache", Version: "0.1.0", GroupPath: "frontend/react"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: use-cache\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "other", Version: "0.1.0", GroupPath: "frontend/react"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: other\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+
+	// 1) 改"react"为"react-x" → 整个子树挪过去
+	newPath, err := store.RenameGroupDir("frontend/react", "react-x")
+	if err != nil {
+		t.Fatalf("RenameGroupDir: %v", err)
+	}
+	if newPath != "frontend/react-x" {
+		t.Fatalf("RenameGroupDir: new path = %q, want %q", newPath, "frontend/react-x")
+	}
+	// 旧位置没了
+	if _, err := os.Stat(filepath.Join(tmpDir, "frontend", "react")); !os.IsNotExist(err) {
+		t.Fatalf("RenameGroupDir: old path frontend/react should be gone")
+	}
+	// 子树整组搬过去
+	if _, err := os.Stat(filepath.Join(tmpDir, "frontend", "react-x", "use-cache", "SKILL.md")); err != nil {
+		t.Fatalf("RenameGroupDir: use-cache should be at new path: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "frontend", "react-x", "other", "SKILL.md")); err != nil {
+		t.Fatalf("RenameGroupDir: other should be at new path: %v", err)
+	}
+	// LoadByPath 走新 path
+	if _, err := store.LoadByPath("frontend/react-x", "use-cache"); err != nil {
+		t.Fatalf("LoadByPath after rename: %v", err)
+	}
+
+	// 2) 同名冲突 → 报错
+	store.CreateGroupDir("frontend/existing")
+	if _, err := store.RenameGroupDir("frontend/react-x", "existing"); err == nil {
+		t.Fatalf("RenameGroupDir: should fail when target name exists")
+	}
+
+	// 3) 同名(无变化)→ 幂等返 OK
+	idemPath, err := store.RenameGroupDir("frontend/react-x", "react-x")
+	if err != nil {
+		t.Fatalf("RenameGroupDir: same name should be idempotent: %v", err)
+	}
+	if idemPath != "frontend/react-x" {
+		t.Fatalf("RenameGroupDir: idempotent path mismatch = %q", idemPath)
+	}
+
+	// 4) 空 src → 错
+	if _, err := store.RenameGroupDir("", "x"); err == nil {
+		t.Fatalf("RenameGroupDir: empty src should fail")
+	}
+	// 5) newName 含 '/' → 错
+	if _, err := store.RenameGroupDir("frontend/react-x", "a/b"); err == nil {
+		t.Fatalf("RenameGroupDir: newName with / should fail")
+	}
+	// 6) 源不存在 → ErrNotFound
+	if _, err := store.RenameGroupDir("frontend/nonexistent", "x"); err == nil {
+		t.Fatalf("RenameGroupDir: nonexistent src should fail")
+	}
+}

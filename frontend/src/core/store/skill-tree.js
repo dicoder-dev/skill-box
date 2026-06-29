@@ -24,6 +24,7 @@ import {
   createGroup as apiCreateGroup,
   deleteGroup as apiDeleteGroup,
   moveSkill as apiMoveSkill,
+  renameGroup as apiRenameGroup,
 } from '@/api/skillbox/skills'
 
 // 一个 TreeNode 的最小形态(对应后端 skillstore.TreeNode)
@@ -225,6 +226,123 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     }
   }
 
+  // renameGroup 重命名分组(只改最后一段,父路径不变)。
+  // 后端返回 new_group_path;前端用乐观更新改 tree 内对应节点的 path/name + 子树所有 path 前缀,
+  // 失败时整体 reload 回滚。
+  async function renameGroup({ srcGroupPath, newName }) {
+    if (!srcGroupPath || !newName) return { ok: false, error: 'empty params' }
+    const oldBase = srcGroupPath.split('/').pop()
+    if (oldBase === newName) {
+      // 同名,后端会幂等返 OK;前端不动 state
+      return { ok: true, new_group_path: srcGroupPath }
+    }
+    // 乐观更新:把 srcGroupPath 在 tree 内所有出现的位置改掉(节点自身 + 子树所有 path)
+    // 失败时会 reload 回滚,先快照 oldPaths 用于回滚
+    const oldPaths = collectAllPathsUnderGroup(tree.value, srcGroupPath)
+    applyGroupRenameInTree(srcGroupPath, newName)
+    try {
+      const resp = await apiRenameGroup({ src_group_path: srcGroupPath, new_name: newName })
+      const norm = resp?.new_group_path || `${pathDirname(srcGroupPath)}/${newName}`
+      // 同步把 state 里的 selectedPath / collapsedPaths / dropTargetPath 里的旧前缀换新
+      rewriteGroupPathRefs(srcGroupPath, norm)
+      return { ok: true, new_group_path: norm }
+    } catch (e) {
+      // 回滚:把乐观更新改回去
+      revertGroupRenameInTree(oldPaths)
+      const status = e?.response?.status
+      const data = e?.response?.data || e?.data
+      const code = data?.code
+      if (status === 409 || code === 'target_exists') {
+        return { ok: false, code: 'target_exists', error: data?.error || 'target already exists' }
+      }
+      if (status === 404) {
+        return { ok: false, code: 'not_found', error: data?.error || 'source not found' }
+      }
+      return { ok: false, error: e?.message || String(e) }
+    }
+  }
+
+  // 工具:收集 srcGroupPath 分组子树里所有旧 path(供回滚用)
+  function collectAllPathsUnderGroup(nodes, groupPath) {
+    const out = []
+    const walk = (ns, parentPath) => {
+      for (const n of ns || []) {
+        const full = parentPath ? `${parentPath}/${n.name}` : n.name
+        if (n.path === groupPath) {
+          // 命中目标分组 → 整子树 dump
+          dumpSubtree(n, full, out)
+          continue
+        }
+        if (n.is_group) walk(n.children, full)
+      }
+    }
+    walk(nodes, '')
+    return out
+  }
+  function dumpSubtree(n, parentPath, out) {
+    out.push({ oldPath: n.path, oldName: n.name, parentPath })
+    for (const c of n.children || []) {
+      dumpSubtree(c, `${parentPath}/${c.name}`, out)
+    }
+  }
+
+  // 工具:把 srcGroupPath → newName 的整组子树 path/name 在 tree 内重写
+  function applyGroupRenameInTree(srcGroupPath, newName) {
+    const walk = (nodes, parentPath) => {
+      for (const n of nodes || []) {
+        const full = parentPath ? `${parentPath}/${n.name}` : n.name
+        if (n.path === srcGroupPath) {
+          // 改自身
+          n.name = newName
+          n.path = parentPath ? `${parentPath}/${newName}` : newName
+          // 改子树所有 path
+          rewriteSubtreePaths(n, n.path)
+          return true
+        }
+        if (n.is_group) {
+          if (walk(n.children, full)) return true
+        }
+      }
+      return false
+    }
+    walk(tree.value, '')
+  }
+  function rewriteSubtreePaths(n, newParentPath) {
+    if (!n.children) return
+    for (const c of n.children) {
+      c.path = `${newParentPath}/${c.name}`
+      if (c.is_group) rewriteSubtreePaths(c, c.path)
+    }
+  }
+
+  // 工具:把 rollback 用的旧 path/name 写回 tree
+  function revertGroupRenameInTree(oldPaths) {
+    // 找到目标分组(原 srcGroupPath 所在位置)用新 path 找,然后把子树恢复
+    // 简单策略:重新 load(避免复杂的 tree 重写)
+    load({ keyword: keyword.value }).catch(() => {})
+  }
+
+  // 工具:把 selectedPath / collapsedPaths / dropTargetPath 里的旧分组前缀换成新
+  function rewriteGroupPathRefs(oldGroupPath, newGroupPath) {
+    const replace = (p) => {
+      if (!p) return p
+      if (p === oldGroupPath) return newGroupPath
+      if (p.startsWith(oldGroupPath + '/')) return newGroupPath + p.slice(oldGroupPath.length)
+      return p
+    }
+    if (selectedPath.value) selectedPath.value = replace(selectedPath.value)
+    if (dropTargetPath.value) dropTargetPath.value = replace(dropTargetPath.value)
+    const newCollapsed = new Set()
+    for (const p of collapsedPaths.value) newCollapsed.add(replace(p))
+    collapsedPaths.value = newCollapsed
+  }
+
+  function pathDirname(p) {
+    if (!p) return ''
+    const i = p.lastIndexOf('/')
+    return i < 0 ? '' : p.slice(0, i)
+  }
+
   // ====== 折叠 / 选中 ======
 
   function toggleCollapse(path) {
@@ -251,7 +369,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     // getters
     flatItems, totalSkills,
     // actions
-    load, createGroup, deleteGroup, moveSkill,
+    load, createGroup, deleteGroup, moveSkill, renameGroup,
     toggleCollapse, setSelected, setDropTarget,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,

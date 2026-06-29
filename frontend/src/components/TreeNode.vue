@@ -203,14 +203,14 @@ function isDropTarget(node) {
       >
         <Icon
           :icon="isCollapsed(node) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
-          width="14"
-          height="14"
+          width="16"
+          height="16"
           class="tree-caret"
         />
         <Icon
           :icon="isCollapsed(node) ? 'mdi:folder-outline' : 'mdi:folder-open-outline'"
-          width="14"
-          height="14"
+          width="18"
+          height="18"
           class="tree-group-icon"
         />
         <span class="tree-name tree-name-group">{{ node.name }}</span>
@@ -294,6 +294,11 @@ function isDropTarget(node) {
   min-height: 26px;
   border: 1px solid transparent;
 }
+/* 2026-06-29 改:分组行加大,容纳更大的 icon(18px) + 加粗 name */
+.tree-row-group {
+  min-height: 32px;
+  padding: 5px 8px;
+}
 .tree-row:hover {
   background: var(--bg-hover);
 }
@@ -319,7 +324,12 @@ function isDropTarget(node) {
   white-space: nowrap;
   font-size: 13px;
 }
-.tree-name-group { color: var(--text); font-weight: 500; }
+.tree-name-group {
+  /* 2026-06-29 改:分组名加大到 14px + 加粗 600,与 skill 卡片视觉对等 */
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
 .tree-name-skill { color: var(--text); font-weight: 500; }
 
 .tree-count {

@@ -1256,7 +1256,7 @@ function onSkillContextMenu({ node, event }) {
   ctxMenu.open = true
 }
 
-// 分组右键:新建子分组 / 在文件夹打开 / 删除
+// 分组右键:新建子分组 / 重命名 / 在文件夹打开 / 删除
 function onGroupContextMenu({ node, event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
@@ -1267,6 +1267,12 @@ function onGroupContextMenu({ node, event }) {
       label: t('skills.list.ctxNewSubgroup'),
       icon: 'mdi:folder-plus-outline',
       onClick: () => openNewGroupDialog(groupPath),
+    },
+    {
+      key: 'rename',
+      label: t('skills.list.ctxRename'),
+      icon: 'mdi:rename-outline',
+      onClick: () => openRenameGroupDialog(node),
     },
     {
       key: 'open-folder',
@@ -1335,6 +1341,78 @@ async function submitNewGroup() {
     await reload()
   } finally {
     newGroupBusy.value = false
+  }
+}
+
+// ====== 2026-06-29 增:重命名分组弹窗 ======
+const renameGroupOpen = ref(false)
+const renameGroupOldPath = ref('')
+const renameGroupOldName = ref('')
+const renameGroupInput = ref('')
+const renameGroupBusy = ref(false)
+const renameGroupError = ref('')
+
+// 取路径的父段(供弹窗预览 "frontend/<input>")
+function pathDirname(p) {
+  if (!p) return ''
+  const i = p.lastIndexOf('/')
+  return i < 0 ? '' : p.slice(0, i)
+}
+
+function openRenameGroupDialog(node) {
+  // 根目录(空 path)不允许重命名 — 它没有 "最后一段"
+  if (!node || !node.path) {
+    toast.error(t('skills.list.groupRenameNotFound'))
+    return
+  }
+  renameGroupOldPath.value = node.path
+  renameGroupOldName.value = node.name
+  renameGroupInput.value = node.name
+  renameGroupError.value = ''
+  renameGroupOpen.value = true
+}
+function closeRenameGroupDialog() {
+  if (renameGroupBusy.value) return
+  renameGroupOpen.value = false
+}
+async function submitRenameGroup() {
+  if (renameGroupBusy.value) return
+  const seg = (renameGroupInput.value || '').trim()
+  if (!seg) {
+    renameGroupError.value = t('skills.list.groupInvalid')
+    return
+  }
+  // 本地预校验:只允许 a-z0-9-_,避免送后端再被拒
+  if (!/^[a-z0-9_-]+$/.test(seg)) {
+    renameGroupError.value = t('skills.list.groupInvalid')
+    return
+  }
+  renameGroupBusy.value = true
+  renameGroupError.value = ''
+  try {
+    const r = await skillTree.renameGroup({
+      srcGroupPath: renameGroupOldPath.value,
+      newName: seg,
+    })
+    if (!r.ok) {
+      if (r.code === 'target_exists') {
+        renameGroupError.value = t('skills.list.groupRenameConflict')
+      } else if (r.code === 'not_found') {
+        renameGroupError.value = t('skills.list.groupRenameNotFound')
+      } else {
+        const msg = (r.error || '').toLowerCase().includes('invalid') || (r.error || '').includes('..')
+          ? t('skills.list.groupInvalid')
+          : r.error
+        renameGroupError.value = msg
+      }
+      return
+    }
+    renameGroupOpen.value = false
+    const newName = r.new_group_path?.split('/').pop() || seg
+    toast.success(t('skills.list.groupRenameOk', { name: newName }))
+    // 乐观更新已经改过 tree,这里不强制 reload(避免选中态被刷掉)
+  } finally {
+    renameGroupBusy.value = false
   }
 }
 
@@ -2185,6 +2263,53 @@ onMounted(() => {
           <span v-if="newGroupBusy" class="spinner spinner-sm"></span>
           <Icon v-else icon="mdi:check" width="14" height="14" />
           {{ t('common.create') }}
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 2026-06-29 增:重命名分组 弹窗 -->
+    <Modal v-model="renameGroupOpen" size="sm" :close-on-mask="!renameGroupBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <Icon icon="mdi:rename-outline" width="18" height="18" />
+          {{ t('skills.list.groupRenamePrompt', { name: renameGroupOldName }) }}
+        </h3>
+      </template>
+      <form class="new-group-form" @submit.prevent="submitRenameGroup">
+        <div class="editor-field-full">
+          <input
+            v-model="renameGroupInput"
+            class="group-input"
+            :placeholder="renameGroupOldName"
+            :disabled="renameGroupBusy"
+            autofocus
+            @keyup.enter="submitRenameGroup"
+          />
+          <p class="muted small-hint">
+            {{ t('skills.list.groupRenameHint') }}
+          </p>
+          <p v-if="renameGroupOldPath" class="muted small-hint">
+            <code>{{ pathDirname(renameGroupOldPath) || '/' }}/<span style="color: var(--text)">{{ renameGroupInput || '...' }}</span></code>
+          </p>
+          <p v-if="renameGroupError" class="message message-error" style="margin: 8px 0 0">
+            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            {{ renameGroupError }}
+          </p>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="renameGroupBusy" @click="closeRenameGroupDialog">
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="renameGroupBusy || !renameGroupInput.trim() || renameGroupInput.trim() === renameGroupOldName"
+          @click="submitRenameGroup"
+        >
+          <span v-if="renameGroupBusy" class="spinner spinner-sm"></span>
+          <Icon v-else icon="mdi:check" width="14" height="14" />
+          {{ t('common.save') }}
         </button>
       </template>
     </Modal>

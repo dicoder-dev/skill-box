@@ -317,6 +317,32 @@ func (s *Service) MoveGroup(srcGroupPath string, dstGroupPath string) error {
 	return s.store.MoveGroupDir(src, dst)
 }
 
+// RenameGroup 重命名分组的最后一段(父路径不变)。
+// srcGroupPath 可多级,newName 是单段名(不含 '/',走 NormalizeName 规约)。
+// 返回 (newGroupPath, error) — newGroupPath 是规范化后的新相对路径。
+//
+// 2026-06-29 增:为支持"分组右键重命名"。
+func (s *Service) RenameGroup(srcGroupPath string, newName string) (string, error) {
+	src, err := s.normalizeGroupPath(srcGroupPath)
+	if err != nil {
+		return "", err
+	}
+	if src == "" {
+		return "", fmt.Errorf("%w: src is empty", ErrInvalidGroupPath)
+	}
+	// newName 走 NormalizeName(单段,不允许 '/',内部会被折叠为 '-')。
+	// 若用户输入含 '/',我们先剥掉 → 视为只取最后一段(更友好,严拒反而突兀)。
+	cleaned := strings.TrimSpace(newName)
+	if i := strings.LastIndexAny(cleaned, "/\\"); i >= 0 {
+		cleaned = cleaned[i+1:]
+	}
+	cleaned = skilladapter.NormalizeName(cleaned)
+	if cleaned == "" {
+		return "", fmt.Errorf("%w: new name is empty", ErrInvalidGroupPath)
+	}
+	return s.store.RenameGroupDir(src, cleaned)
+}
+
 // ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
 //
 // 2026-06-29 增:keyword 非空时做 skill name 子串匹配,分组(即使不含匹配项)

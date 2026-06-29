@@ -422,6 +422,52 @@ func (s *Store) DeleteGroupDir(groupPath string, recursive bool) ([]string, erro
 	return deleted, nil
 }
 
+// RenameGroupDir 重命名分组的最后一段(不挪父级,父路径保持不变)。
+// srcGroupPath 可多级(如 "frontend/react"),newName 是单段名(不含 '/')。
+// 同层同名目录已存在 → 返回 error(避免覆盖)。newName 与旧 base 相同 → 幂等返回 nil。
+//
+// 2026-06-29 增:为支持"分组右键重命名"。
+// 实现策略:整个目录用 os.Rename,跨设备降级 copy+delete(同 MoveGroupPath)。
+func (s *Store) RenameGroupDir(srcGroupPath string, newName string) (string, error) {
+	if srcGroupPath == "" {
+		return "", fmt.Errorf("skillstore: rename group: empty src group path")
+	}
+	if newName == "" || strings.ContainsAny(newName, "/\\") {
+		return "", fmt.Errorf("skillstore: rename group: invalid new name %q (must be a single segment)", newName)
+	}
+	srcRel, err := safeRelPath(srcGroupPath)
+	if err != nil {
+		return "", fmt.Errorf("skillstore: rename group: bad src path %q: %w", srcGroupPath, err)
+	}
+	srcAbs := filepath.Join(s.root, filepath.FromSlash(srcRel))
+	if _, err := os.Stat(srcAbs); err != nil {
+		if os.IsNotExist(err) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	srcBase := filepath.Base(srcRel)
+	if srcBase == newName {
+		// 名字未变 → 幂等返回
+		return srcRel, nil
+	}
+	dstAbs := filepath.Join(filepath.Dir(srcAbs), newName)
+	if _, err := os.Stat(dstAbs); err == nil {
+		return "", fmt.Errorf("skillstore: rename group: target %q already exists", newName)
+	}
+	if err := os.Rename(srcAbs, dstAbs); err != nil {
+		if cerr := copyDirRecursive(srcAbs, dstAbs); cerr != nil {
+			return "", fmt.Errorf("skillstore: rename group failed (rename=%v, copy=%v)", err, cerr)
+		}
+		if rerr := os.RemoveAll(srcAbs); rerr != nil {
+			return "", fmt.Errorf("skillstore: rename group: source cleanup failed: %w", rerr)
+		}
+	}
+	// 返回新相对路径(用 '/' 分隔,前端直接消费)
+	newRel, _ := filepath.Rel(s.root, dstAbs)
+	return filepath.ToSlash(newRel), nil
+}
+
 // collectSkillLeafPaths 递归收集 group abs 目录下的所有 skill 叶子路径(相对 root),
 // 结果用 '/' 分隔,append 到 out。
 func (s *Store) collectSkillLeafPaths(abs, relGroup string, out *[]string) {

@@ -116,3 +116,16 @@ export function deleteGroup(payload) {
 export function moveSkill(payload) {
   return http.post('/api/skillbox/skills/move', payload)
 }
+
+/**
+ * 重命名分组的最后一段(父路径不变)。
+ * 入参: { src_group_path, new_name } — src_group_path 可多级,new_name 是单段名(走 NormalizeName 规约)
+ * 响应(成功): { ok: true, new_group_path: string }
+ * 响应(非法名): 400
+ * 响应(源不存在): 404
+ * 响应(同层同名冲突): 409 { code: 'target_exists' }
+ * 来源: api-server/internal/gapi/controller/skillbox/cskill/rename_group.a.go
+ */
+export function renameGroup(payload) {
+  return http.post('/api/skillbox/skills/group/rename', payload)
+}
