@@ -5,6 +5,9 @@
 // 与 Claude / Codex 对齐,避免 MkdirAll 破坏用户 symlink 布局,同时让三个工具能共享
 // 同一份 skill。
 //
+// 项目级则用 <project>/.trae/skills/(跟全局入口 ~/.trae/skills 命名一致)——
+// 项目级不像全局有 symlink 兜底,必须直接落到工具自身目录,Trae 才能读到。
+//
 // 全部按 BaseAdapter 通用逻辑处理(目录 + SKILL.md + YAML frontmatter)。
 package trae
 
@@ -42,7 +45,7 @@ func Register() {
 			IconEmoji: "", // 已废弃:项目规范禁止 emoji 作为图标,前端按 tool_id 映射 mdi 图标。
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
-				skilladapter.ScopeProject: []string{".agents/skills"},
+				skilladapter.ScopeProject: []string{".trae/skills"},
 			},
 		}
 		skilladapter.Register(Adapter)

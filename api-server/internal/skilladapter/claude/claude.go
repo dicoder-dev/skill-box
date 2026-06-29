@@ -5,19 +5,17 @@
 //                                            用户日常把 ~/.claude/skills/<name> 用 symlink 指向这里
 //   2) ~/.claude/plugins/marketplaces/*/plugins/<plugin>/skills/<name>/SKILL.md
 //                                            ← plugin 自带的 skill(深度 ~6 层)
+//   3) <project>/.claude/skills/<name>      ← 项目级(Claude Code 官方文档明确这条)
 //
 // 分档:
 //   - user   : ~/.agents/skills 下的 skill(默认勾选,可取消)
 //   - system : ~/.claude/plugins/marketplaces 下的 plugin skill(只读参考,不可勾选)
 //
-// 写盘根 = ~/.agents/skills:Agent Skills 标准个人级路径。Claude / Codex / Trae 三工具
-// 共享这一目录,通过各自 symlink 入口(用户日常的 ~/.claude/skills、~/.codex/skills、
-// ~/.trae/skills)互相可见。这样 apply 写入后,三个工具都能读取,且不会破坏用户的
-// symlink 布局(MkdirAll 写的是真实根,不是 symlink 链上的目录)。
-//
-// 扫描根 = ~/.agents/skills(写盘根即扫描根,避免 chip 重复):BaseAdapter.Scan 会
-// 跟随 symlink,如果用户在 ~/.claude/skills/find-skills 这种 symlink 入口创建了独立
-// 真实目录,也会被 Scan 走到(只要该目录最终含 SKILL.md)。
+// 写盘根:
+//   - global  = ~/.agents/skills(Agent Skills 标准个人级路径;~/.claude/skills 是 symlink
+//     入口,写入真实根避免 MkdirAll 破坏 symlink,且三工具 Claude/Codex/Trae 共享同一目录)
+//   - project = <project>/.claude/skills(Claude Code 官方文档要求,跟 Codex 的
+//     .agents/skills 不同 — 不要因为"个人级统一"就盲目推广到项目级)
 //
 // 全部按 BaseAdapter 通用逻辑处理(目录 + SKILL.md + YAML frontmatter)。
 package claude
@@ -60,7 +58,7 @@ func Register() {
 			IconEmoji: "", // 已废弃:项目规范禁止 emoji 作为图标,前端按 tool_id 映射 mdi 图标。
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
-				skilladapter.ScopeProject: []string{".agents/skills"},
+				skilladapter.ScopeProject: []string{".claude/skills"},
 			},
 			SystemPaths: map[string][]string{
 				skilladapter.ScopeGlobal: system,
