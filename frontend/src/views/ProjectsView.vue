@@ -2,11 +2,14 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listProjects, createProject, deleteProject } from '@/api/skillbox/projects'
+import { listProjects, createProject, deleteProject, scanProject } from '@/api/skillbox/projects'
 import { platform } from '@/platform'
+import { formatRelative } from '@/core/utils/time.js'
+import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
 
 const { t } = useI18n()
+const toast = useToastStore()
 
 const items = ref([])
 const total = ref(0)
@@ -22,9 +25,24 @@ const inspecting = ref(false)
 // 表单数据:导入项目时 name/alias/root_path 三个核心字段都是必填
 const form = reactive({ name: '', alias: '', root_path: '', description: '' })
 
-const filter = reactive({ keyword: '', page: 1, size: 10 })
+const filter = reactive({ keyword: '', page: 1, size: 12 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / filter.size)))
+
+// 扫描结果缓存:按 project_id 缓存,避免重复请求(2026-06-29 卡片化新增)
+//   scans[id] = { scanned_at, tools: [{ tool_id, display_name, icon, count, skills: [...] }] }
+//   scans[id].error = "xxx" 表示本次扫描失败
+const scans = reactive({})
+const scanLoading = reactive({})
+
+// 工具 skill 列表 Modal(点击 chip 触发)
+const skillsModal = reactive({
+  open: false,
+  title: '',
+  project: '',
+  tool: '',
+  skills: [],
+})
 
 async function reload() {
   loading.value = true
@@ -37,11 +55,58 @@ async function reload() {
     })
     items.value = resp?.items || []
     total.value = resp?.total || 0
+    // 拿到 items 后,为每个项目触发懒加载扫描(每个项目只发一次)
+    items.value.forEach((p) => ensureScanned(p))
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
     loading.value = false
   }
+}
+
+// ensureScanned 对单个项目跑"工具 / skill 扫描",并把结果缓存到 scans[p.id]。
+//
+// 触发时机:卡片 mouseenter(避免一进页面就 N 个并发请求炸后端)
+// + reload 后兜底(items.value 整体重拉一遍时一次性补齐)。
+// 守门:已有结果或在加载中 → 不重发。
+async function ensureScanned(p) {
+  if (!p || !p.id) return
+  if (scans[p.id] || scanLoading[p.id]) return
+  scanLoading[p.id] = true
+  try {
+    const r = await scanProject(p.id)
+    scans[p.id] = r
+  } catch (e) {
+    // 扫描失败时也写入占位,这样 hover 时不会一直转圈
+    scans[p.id] = { scanned_at: null, tools: [], error: e?.message || String(e) }
+    console.warn('[projects] scanProject failed:', p.id, e?.message || e)
+  } finally {
+    scanLoading[p.id] = false
+  }
+}
+
+// openInFinder 在系统文件管理器中打开项目根(桌面端走 platform.fs.reveal,
+// 在 Finder 中显示该路径;Web 端 fs.reveal 内部会兜底到 file:// 链接)。
+async function openInFinder(p) {
+  if (!p?.root_path) return
+  try {
+    await platform.fs.reveal(p.root_path)
+  } catch (e) {
+    toast.push({ type: 'error', message: t('projects.openFailed', { msg: e?.message || String(e) }) })
+  }
+}
+
+// openToolSkills 弹出 Modal,展示该项目在该工具下的所有 skill。
+function openToolSkills(p, tool) {
+  skillsModal.open = true
+  skillsModal.project = p.name || p.alias || `#${p.id}`
+  skillsModal.tool = tool.display_name || tool.tool_id
+  skillsModal.title = t('projects.toolSkillsTitle', {
+    project: skillsModal.project,
+    tool: skillsModal.tool,
+    count: tool.count,
+  })
+  skillsModal.skills = tool.skills || []
 }
 
 // 点击"导入项目"按钮:先让用户选目录,再弹"导入"弹窗预填
@@ -283,7 +348,7 @@ onMounted(reload)
       </template>
     </Modal>
 
-    <!-- 列表卡片 -->
+    <!-- 列表卡片(2026-06-29 改:表格 → 卡片网格) -->
     <div class="card">
       <header class="card-header">
         <h3>
@@ -294,40 +359,81 @@ onMounted(reload)
         <span v-if="loading" class="spinner"></span>
       </header>
 
-      <div class="table-container">
-        <table v-if="items.length" class="grid">
-          <thead>
-            <tr>
-              <th style="width: 60px">{{ t('projects.colId') }}</th>
-              <th>{{ t('projects.colName') }}</th>
-              <th>{{ t('projects.colAlias') }}</th>
-              <th>{{ t('projects.colRootPath') }}</th>
-              <th>{{ t('projects.colDescription') }}</th>
-              <th style="width: 100px">{{ t('projects.colActions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in items" :key="p.id">
-              <td class="td-id">{{ p.id }}</td>
-              <td><strong class="project-name">{{ p.name }}</strong></td>
-              <td><code class="project-alias">{{ p.alias }}</code></td>
-              <td class="td-path">{{ p.root_path }}</td>
-              <td class="td-desc">{{ p.description || t('common.dash') }}</td>
-              <td>
-                <button class="action-btn action-btn-danger" @click="remove(p.id)">
-                  <Icon icon="mdi:delete" width="12" height="12" />
-                  {{ t('common.delete') }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-if="items.length" class="projects-grid">
+        <article
+          v-for="p in items"
+          :key="p.id"
+          class="project-card"
+          @mouseenter="ensureScanned(p)"
+        >
+          <!-- 顶部:项目名 + alias 徽章 + 文件夹图标 + 删除 -->
+          <header class="project-card-top">
+            <div class="project-card-titles">
+              <h3 class="project-card-name">{{ p.name }}</h3>
+              <code class="project-card-alias">{{ p.alias }}</code>
+            </div>
+            <div class="project-card-actions">
+              <button
+                class="icon-only"
+                :title="t('projects.openInFinder')"
+                @click.stop="openInFinder(p)"
+              >
+                <Icon icon="mdi:folder-open-outline" width="16" height="16" />
+              </button>
+              <button
+                class="icon-only icon-only-danger"
+                :title="t('common.delete')"
+                @click.stop="remove(p.id)"
+              >
+                <Icon icon="mdi:trash-can-outline" width="16" height="16" />
+              </button>
+            </div>
+          </header>
 
-        <div v-else-if="!loading" class="empty-state">
-          <Icon icon="mdi:folder-open-outline" width="48" height="48" />
-          <p class="empty-title">{{ t('projects.empty') }}</p>
-          <p class="empty-hint">{{ t('projects.emptyHint') }}</p>
-        </div>
+          <!-- 中间:描述 -->
+          <p class="project-card-desc" :title="p.description || ''">
+            {{ p.description || t('common.dash') }}
+          </p>
+          <p class="project-card-path" :title="p.root_path">{{ p.root_path }}</p>
+
+          <!-- 底部:工具 chips(数量 + 弹 Modal 列 skill) -->
+          <div class="project-card-tools">
+            <span v-if="scanLoading[p.id]" class="tools-loading">
+              <Icon icon="mdi:loading" width="12" height="12" class="spin" />
+            </span>
+            <button
+              v-for="tool in (scans[p.id]?.tools || [])"
+              :key="tool.tool_id"
+              class="tool-chip"
+              :title="tool.display_name"
+              @click.stop="openToolSkills(p, tool)"
+            >
+              <span class="chip-label">{{ tool.tool_id }}</span>
+              <span class="chip-count">{{ tool.count }}</span>
+            </button>
+            <span
+              v-if="!scanLoading[p.id] && (scans[p.id]?.tools || []).length === 0 && !scans[p.id]?.error"
+              class="tools-empty"
+            >
+              {{ t('projects.noTools') }}
+            </span>
+            <span v-if="scans[p.id]?.error" class="tools-error">
+              <Icon icon="mdi:alert-circle-outline" width="11" height="11" />
+              {{ t('projects.scanFailed') }}
+            </span>
+          </div>
+
+          <!-- hover 才显示的扫描时间 -->
+          <footer v-if="scans[p.id]?.scanned_at" class="project-card-meta">
+            {{ t('projects.scannedAt', { time: formatRelative(scans[p.id].scanned_at) }) }}
+          </footer>
+        </article>
+      </div>
+
+      <div v-else-if="!loading" class="empty-state">
+        <Icon icon="mdi:folder-open-outline" width="48" height="48" />
+        <p class="empty-title">{{ t('projects.empty') }}</p>
+        <p class="empty-hint">{{ t('projects.emptyHint') }}</p>
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
@@ -342,6 +448,17 @@ onMounted(reload)
         </button>
       </footer>
     </div>
+
+    <!-- 工具 skill 列表 Modal(点击 chip 触发) -->
+    <Modal v-model="skillsModal.open" :title="skillsModal.title" size="md">
+      <ul v-if="skillsModal.skills.length" class="skill-list">
+        <li v-for="s in skillsModal.skills" :key="s.source_path || s.name" class="skill-list-item">
+          <code class="skill-list-name">{{ s.name }}</code>
+          <span class="skill-list-path" :title="s.source_path">{{ s.source_path }}</span>
+        </li>
+      </ul>
+      <p v-else class="empty-title">{{ t('common.dash') }}</p>
+    </Modal>
 
     <!-- 通用确认弹窗 -->
     <Modal
@@ -576,104 +693,240 @@ onMounted(reload)
   to { transform: rotate(360deg); }
 }
 
-/* 表格 */
-.table-container {
-  overflow-x: auto;
-  margin: 0 -20px;
-  padding: 0 20px;
+/* 项目卡片网格(2026-06-29 改:表格 → 卡片) */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin: 0 -4px;
+  padding: 0 4px;
 }
 
-.grid {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.grid th, .grid td {
-  text-align: left;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  transition: background-color 0.3s ease;
+.project-card:hover {
+  border-color: var(--text-faint);
+  box-shadow: var(--shadow-card);
 }
 
-.grid th {
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.project-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.grid tbody tr {
-  transition: background-color 0.15s ease;
+.project-card-titles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
-.grid tbody tr:hover {
-  background: var(--bg-hover);
-}
-
-.td-id {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-faint);
-}
-
-.project-name {
+.project-card-name {
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
-}
-
-.project-alias {
-  background: var(--primary-dim);
-  color: var(--primary);
-}
-
-.td-path {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-dim);
-  font-size: 12px;
-}
-
-.td-desc {
-  color: var(--text-dim);
-  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 操作按钮 */
-.action-btn {
+.project-card-alias {
+  font-size: 11px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.project-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.icon-only {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-dim);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.action-btn:hover:not(:disabled) {
+.icon-only:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--text-faint);
   color: var(--text);
+  border-color: var(--border);
 }
 
-.action-btn-danger:hover:not(:disabled) {
+.icon-only-danger:hover:not(:disabled) {
   background: var(--danger-dim);
+  color: var(--danger);
   border-color: var(--danger);
+}
+
+.icon-only:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-card-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.project-card-path {
+  margin: 0;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-card-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 26px;
+  align-items: center;
+}
+
+.tools-loading {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.tools-empty {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.tools-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
   color: var(--danger);
 }
 
-.action-btn:disabled,
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+/* 工具 chip:claude5 风格(小写工具名 + 角标数字) */
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--primary-dim);
+  color: var(--primary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tool-chip:hover {
+  border-color: var(--primary);
+}
+
+.chip-label {
+  letter-spacing: 0.2px;
+}
+
+.chip-count {
+  background: var(--primary);
+  color: var(--bg-card);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+
+.project-card-meta {
+  position: absolute;
+  right: 10px;
+  bottom: 4px;
+  font-size: 10px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.project-card:hover .project-card-meta {
+  opacity: 1;
+}
+
+/* 工具 skill 列表 Modal 内部样式 */
+.skill-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.skill-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.skill-list-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.skill-list-path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 分页器 */
@@ -746,13 +999,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .table-container {
-    margin: 0 -16px;
-    padding: 0 16px;
-  }
-
-  .grid th, .grid td {
-    padding: 10px 8px;
+  /* 移动端:卡片网格降到 1 列 */
+  .projects-grid {
+    grid-template-columns: 1fr;
+    margin: 0;
+    padding: 0;
   }
 }
 </style>
