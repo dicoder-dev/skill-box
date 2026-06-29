@@ -257,6 +257,8 @@ export default {
       moveFailed: 'Move failed: {msg}',
       moveTargetExists: 'Target already has a skill with the same name',
       moveSameGroup: 'Source and target are the same group, nothing to move',
+      // 2026-06-29 new: dragging a group into its own descendant
+      moveIntoDescendant: 'Cannot move a group into its own descendant',
       loadingTree: 'Loading skills…',
     },
 

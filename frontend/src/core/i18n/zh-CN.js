@@ -260,6 +260,8 @@ export default {
       moveFailed: '移动失败: {msg}',
       moveTargetExists: '目标位置已存在同名 skill',
       moveSameGroup: '源和目标分组相同,无需移动',
+      // 2026-06-29 增:把分组拖到自己的子分组下(物理上无法执行,会死循环)
+      moveIntoDescendant: '不能把分组挪到自己的子分组下',
       loadingTree: '加载技能树…',
     },
 

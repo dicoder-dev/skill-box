@@ -1538,8 +1538,17 @@ async function onTreeDrop(payload) {
   } else if (source.type === 'group') {
     // 分组嵌套到另一分组(2026-06-29 改:走独立 move_group 接口,
     // 之前用 move_skill + name='__group__' sentinel 临时绕过,后端会返 not found)
+
+    // 2026-06-29 改:本地先拦 ancestor check,不发无意义请求。
+    // 后端也会拒,但本层拦下能给用户一个清晰 toast,
+    // 比"target already exists"或"cannot move into own descendant"友好得多。
     if (source.path === targetPath) {
       toast.info(t('skills.list.moveSameGroup'))
+      return
+    }
+    if (isGroupDescendant(targetPath, source.path)) {
+      // 目标分组在源分组内部(把 aa 拖到 aa/bb 等)
+      toast.error(t('skills.list.moveIntoDescendant'))
       return
     }
     const r = await skillTree.moveGroup({
@@ -1552,6 +1561,16 @@ async function onTreeDrop(payload) {
     }
     toast.success(t('common.confirm'))
   }
+}
+
+// isGroupDescendant 2026-06-29 增:判断 child 是不是 parent 的子孙分组。
+// 例:("aa/bb", "aa") = true,("aa", "aa/bb") = false,("aa", "aa") = false(同层不算)。
+// 用 / 分隔段比较,避免 "aa-x" 被误判为 "aa" 的子孙。
+function isGroupDescendant(child, parent) {
+  if (!child || !parent) return false
+  if (child === parent) return false
+  // child 必须以 "parent/" 开头(必须是 parent 的严格子孙)
+  return child.startsWith(parent + '/')
 }
 
 onMounted(() => {
