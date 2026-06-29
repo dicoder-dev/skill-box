@@ -339,7 +339,8 @@ function isDropTarget(node) {
 .tree-row-skill {
   /* 比 .tree-row 更厚的内边距 + 圆角 + 边框,体现"卡片"感 */
   padding: 8px 10px;
-  margin: 2px 4px;
+  /* 2026-06-29 改:卡片之间上下留更多空间(原 2px 4px 太挤) */
+  margin: 10px 4px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
