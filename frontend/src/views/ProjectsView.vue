@@ -307,7 +307,7 @@ onMounted(reload)
             <label>
               {{ t('projects.name') }}
               <span v-if="inspecting" class="inspecting-tag">
-                <Icon icon="mdi:loading" width="10" height="10" class="spin" />
+                <span class="spinner spinner-sm"></span>
                 {{ t('projects.inspecting') }}
               </span>
             </label>
@@ -341,7 +341,7 @@ onMounted(reload)
           {{ t('common.cancel') }}
         </button>
         <button type="button" class="primary" :disabled="importing" @click="submitImport">
-          <Icon v-if="importing" icon="mdi:loading" width="14" height="14" class="spin" />
+          <span v-if="importing" class="spinner spinner-sm btn-spinner"></span>
           <Icon v-else icon="mdi:check" width="14" height="14" />
           {{ importing ? t('common.processing') : t('projects.btnImport') }}
         </button>
@@ -373,20 +373,23 @@ onMounted(reload)
               <code class="project-card-alias">{{ p.alias }}</code>
             </div>
             <div class="project-card-actions">
-              <button
-                class="icon-only"
+              <!-- 直接用 Icon 标签,@click 绑逻辑,不用 button 包裹 -->
+              <Icon
+                icon="mdi:folder-open-outline"
+                class="action-icon action-icon-finder"
                 :title="t('projects.openInFinder')"
+                width="20"
+                height="20"
                 @click.stop="openInFinder(p)"
-              >
-                <Icon icon="mdi:folder-open-outline" width="16" height="16" />
-              </button>
-              <button
-                class="icon-only icon-only-danger"
+              />
+              <Icon
+                icon="mdi:delete"
+                class="action-icon action-icon-danger"
                 :title="t('common.delete')"
+                width="20"
+                height="20"
                 @click.stop="remove(p.id)"
-              >
-                <Icon icon="mdi:trash-can-outline" width="16" height="16" />
-              </button>
+              />
             </div>
           </header>
 
@@ -399,7 +402,7 @@ onMounted(reload)
           <!-- 底部:工具 chips(数量 + 弹 Modal 列 skill) -->
           <div class="project-card-tools">
             <span v-if="scanLoading[p.id]" class="tools-loading">
-              <Icon icon="mdi:loading" width="12" height="12" class="spin" />
+              <span class="spinner spinner-sm"></span>
             </span>
             <button
               v-for="tool in (scans[p.id]?.tools || [])"
@@ -760,35 +763,49 @@ onMounted(reload)
   flex-shrink: 0;
 }
 
-.icon-only {
+/* 卡片右侧操作图标:直接用 Icon 标签,@click 绑逻辑 */
+.action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+  /* Icon 组件默认会渲染 svg,这里用 font-size / color 控颜色 */
+  font-size: 18px;
+  color: var(--text-dim);
 }
-
-.icon-only:hover:not(:disabled) {
+.action-icon:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: var(--border);
 }
-
-.icon-only-danger:hover:not(:disabled) {
+/* Finder 图标:hover 显主题色 */
+.action-icon-finder {
+  color: var(--primary);
+}
+.action-icon-finder:hover {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+/* 删除图标:hover 显警示色 */
+.action-icon-danger:hover {
   background: var(--danger-dim);
   color: var(--danger);
-  border-color: var(--danger);
 }
 
-.icon-only:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* 按钮内 spinner 跟文字留点间距 */
+.btn-spinner {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* 小号 spinner(给 inspecting 标签、扫描中、按钮内用) */
+.spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
 }
 
 .project-card-desc {
