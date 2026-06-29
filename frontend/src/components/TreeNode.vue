@@ -431,11 +431,48 @@ function isDropTarget(node) {
 }
 .tree-node-selected > .tree-row .tree-name { color: var(--accent-blue); }
 
-/* 拖入目标高亮 */
+/* 拖入目标高亮(2026-06-29 改:从 1px 虚线升级到 2px + 强底色 + 文字 + 外发光,
+   让用户拖动时一眼能看出"会落在这里") */
 .tree-node-drop-target > .tree-row {
   background: var(--accent-blue-bg);
   border-color: var(--accent-blue);
   border-style: dashed;
-  border-width: 1px;
+  border-width: 2px;
+  /* 外发光(蓝色光晕),让目标在视觉上"浮"出来 */
+  box-shadow: 0 0 0 3px var(--accent-blue-bg);
+  position: relative;
+}
+
+/* 拖入目标右侧追加"→ 放到此处"文字提示。
+   父级是相对定位,after 绝对定位钉在行尾。 */
+.tree-node-drop-target > .tree-row::after {
+  content: '放到此处';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: var(--bg-card);
+  border: 1px solid var(--accent-blue);
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+  /* 不挤压原有内容:让原本的子项计数自然隐藏 */
+  z-index: 1;
+}
+
+/* 分组行特别强调:再加深一档(外发光更亮 + 微放大) */
+.tree-node-group.tree-node-drop-target > .tree-row-group {
+  background: var(--accent-blue-bg);
+  box-shadow: 0 0 0 4px var(--accent-blue-bg), 0 0 12px var(--accent-blue-bg);
+}
+
+/* 拖入目标内的 count 徽章在提示文字背后时,默认让位给 after(隐藏避免重叠)。
+   skill 叶子行没有"放到此处"文字的问题,但统一处理更稳妥 */
+.tree-node-drop-target > .tree-row .tree-count {
+  opacity: 0;
 }
 </style>

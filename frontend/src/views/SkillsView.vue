@@ -1477,15 +1477,34 @@ async function openSkillTagDialog(node) {
 }
 
 // ====== 拖拽处理 ======
+// 2026-06-29 改:补 setDropTarget 调用,让拖入目标在拖动时高亮。
+// 之前只有 hovering=false 的清除路径,hovering=true 时只 return 啥也不干,
+// 导致 .tree-node-drop-target 类永远不挂上,用户拖动时看不到反馈。
+//
+// 关键决策:把 drop target path 统一规范成"目标分组 path"。
+//   - target 是 group:        → target.path
+//   - target 是 skill 叶子:   → 父分组 path(target.path 去掉最后一段)
+// 这样高亮永远落在分组行上(用户视觉上知道"会落到这个组里"),
+// 而不是落在 skill 卡片上造成误导。
+function resolveDropGroupPath(target) {
+  if (!target) return ''
+  if (target.is_group) return target.path || ''
+  // skill 叶子 → 取其父路径
+  const parts = (target.path || '').split('/')
+  if (parts.length <= 1) return ''
+  return parts.slice(0, -1).join('/')
+}
+
 async function onTreeDrop(payload) {
   // payload: { target, event, hovering, source? }
-  // 1) 清除 visual hover 状态
+  if (payload.hovering === true) {
+    // 拖入中:把 dropTarget 设到目标分组,触发 .tree-node-drop-target 高亮
+    skillTree.setDropTarget(resolveDropGroupPath(payload.target))
+    return
+  }
+  // hovering=false 路径:清掉视觉态
   if (payload.hovering === false) {
-    if (payload.target?.path) {
-      skillTree.setDropTarget('')
-    } else if (payload.hovering === false && !payload.target) {
-      skillTree.setDropTarget('')
-    }
+    skillTree.setDropTarget('')
     if (!payload.source) return
   }
   if (!payload.source) return
@@ -1493,7 +1512,7 @@ async function onTreeDrop(payload) {
   const target = payload.target
   // target 是 null / undefined 表示拖到了非分组区域(空白处)— 忽略
   if (!target) return
-  const targetPath = target.is_group ? (target.path || '') : (target.path?.split('/').slice(0, -1).join('/') || '')
+  const targetPath = resolveDropGroupPath(target)
   // 同位置:跳过
   if (source.type === 'skill') {
     // source.path = "<group>/<name>";目标分组 = targetPath
