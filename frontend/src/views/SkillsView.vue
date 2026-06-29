@@ -1509,9 +1509,14 @@ async function onTreeDrop(payload) {
   }
   if (!payload.source) return
   const source = payload.source
-  const target = payload.target
-  // target 是 null / undefined 表示拖到了非分组区域(空白处)— 忽略
-  if (!target) return
+  let target = payload.target
+  // 2026-06-29 改:target 为 null 时(=.tree-container 拖到根场景)用合成 target,
+  // 让 resolveDropGroupPath 返 '' (= 根)。之前 `if (!target) return` 静默拦下,
+  // 用户拖 skill 到根后"没反应、没请求、没 toast"就是这个 bug。
+  // 合成 target 的 path='' + is_group=false 走 skill 分支,parts=[''],length=1 → return ''
+  if (!target) {
+    target = { is_group: false, path: '', name: '', _isRoot: true }
+  }
   const targetPath = resolveDropGroupPath(target)
   // 同位置:跳过
   if (source.type === 'skill') {
