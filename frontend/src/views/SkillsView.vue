@@ -1551,6 +1551,13 @@ async function onTreeDrop(payload) {
       toast.error(t('skills.list.moveIntoDescendant'))
       return
     }
+    // 2026-06-29 增:本地拦 no-op。把顶层分组(无 '/')拖到根(= targetPath='')
+    // 是 no-op,后端 no-op 短路返 200 OK,前端看到 "成功" 但目录结构无变化,
+    // 用户会困惑。这里在 UI 层就拦下,给清晰 toast,不发请求。
+    if (targetPath === '' && !source.path.includes('/')) {
+      toast.info(t('skills.list.alreadyAtRoot'))
+      return
+    }
     const r = await skillTree.moveGroup({
       srcGroupPath: source.path,
       dstGroupPath: targetPath,
@@ -1571,6 +1578,52 @@ function isGroupDescendant(child, parent) {
   if (child === parent) return false
   // child 必须以 "parent/" 开头(必须是 parent 的严格子孙)
   return child.startsWith(parent + '/')
+}
+
+// ====== 拖到根区域(.tree-container 空白处) ======
+// 2026-06-29 增:TreeNode 内部的 @drop 只在拖到具体节点时触发,落到容器空白处不会
+// 触发任何 drop 事件。让 .tree-container 接管这部分:从 dataTransfer 解析 source,
+// 用 target=null(让 resolveDropGroupPath 返 '')统一走 onTreeDrop。
+//
+// 视觉反馈用 rootDropHover 控制 .tree-container-drag-over 类,拖动时高亮"放
+// 到根"提示,离开时清除。
+const rootDropHover = ref(false)
+const rootDragCounter = ref(0) // 防止子元素 dragenter/leave 抖动
+
+function onTreeContainerDragOver(e) {
+  // 已经在 template 上 .prevent 了,这里只设 dropEffect 提示用户
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+}
+
+function onTreeContainerDragEnter(e) {
+  // 只在拖的是 skillbox 节点时进入"根拖入"态(避免普通文件拖入时误高亮)
+  if (!e.dataTransfer?.types.includes('application/x-skillbox-node')) return
+  rootDragCounter.value++
+  rootDropHover.value = true
+}
+
+function onTreeContainerDragLeave(e) {
+  rootDragCounter.value = Math.max(0, rootDragCounter.value - 1)
+  if (rootDragCounter.value === 0) {
+    rootDropHover.value = false
+  }
+}
+
+function onTreeContainerDrop(e) {
+  e.preventDefault()
+  e.stopPropagation()
+  rootDragCounter.value = 0
+  rootDropHover.value = false
+  const raw = e.dataTransfer?.getData('application/x-skillbox-node')
+  if (!raw) return
+  let source
+  try {
+    source = JSON.parse(raw)
+  } catch (_) {
+    return
+  }
+  // 复用 onTreeDrop,target=null → resolveDropGroupPath 返 '' (= 根)
+  onTreeDrop({ target: null, event: e, hovering: false, source })
 }
 
 onMounted(() => {
@@ -1614,12 +1667,21 @@ onMounted(() => {
       <!-- 2026-06-29 改:左侧从扁平列表升级为多级分组树。
            关键:把根区域右键绑在 .tree-container 上(而不是 TreeNode 内部的 li),
            这样无论树有没有节点 / 折叠状态如何,整个左侧空白处都能右键弹"新建分组"。
-           节点(skill / 分组)自身的右键在 TreeNode 内 stopPropagation,不会冒泡到这里。 -->
+           节点(skill / 分组)自身的右键在 TreeNode 内 stopPropagation,不会冒泡到这里。
+           2026-06-29 再改:把根区域也变成"可拖入目标" — 用户拖 skill/group 到空白
+           处 = 拖到根(= 无父分组 / 顶层)。TreeNode 内部的 @drop 命中具体节点;
+           落到空白处时(目标不在 TreeNode 内)就由 .tree-container 的 @drop 接管。 -->
       <div
         class="tree-container"
+        :class="{ 'tree-container-drag-over': rootDropHover }"
+        :data-drop-text="t('skills.list.dropToRoot')"
         role="tree"
         :aria-label="t('skills.title')"
         @contextmenu.prevent="onRootContextMenu({ event: $event })"
+        @drop="onTreeContainerDrop"
+        @dragover.prevent="onTreeContainerDragOver"
+        @dragenter="onTreeContainerDragEnter"
+        @dragleave="onTreeContainerDragLeave"
       >
         <div v-if="loading" class="tree-loading">
           <span class="spinner"></span>
@@ -2637,6 +2699,38 @@ onMounted(() => {
   padding: 8px 6px 12px;
   /* 2026-06-29 增:容器空白处可右键,给个 cursor 提示 */
   cursor: default;
+  /* 2026-06-29 增:根拖入高亮 — 容器整体变蓝底色 + 虚线边框 + 文字"放到根"。
+     触发条件:用户拖动 skillbox 节点(.tree-container-drag-over 类)。
+     用 position:relative 让 ::after 文字能绝对定位。 */
+  position: relative;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+  border: 1px dashed transparent;
+  border-radius: var(--radius);
+}
+/* 2026-06-29 增:拖入根区域时高亮整个容器 + 显示"放到根"文字 */
+.tree-container-drag-over {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue);
+}
+.tree-container-drag-over::before {
+  /* 2026-06-29 改:用 attr(data-drop-text) 拿 i18n 文案,支持中英文切换。
+     content 用 attr() 在主流浏览器都支持。 */
+  content: attr(data-drop-text);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: var(--bg-card);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px var(--accent-blue-bg);
 }
 /* 2026-06-29 增:树底部留白 + 微弱提示文字,告诉用户"这里能右键新建分组"。
    只在树为空时显示(避免常态视觉噪音) */

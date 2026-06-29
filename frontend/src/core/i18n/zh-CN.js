@@ -262,6 +262,9 @@ export default {
       moveSameGroup: '源和目标分组相同,无需移动',
       // 2026-06-29 增:把分组拖到自己的子分组下(物理上无法执行,会死循环)
       moveIntoDescendant: '不能把分组挪到自己的子分组下',
+      // 2026-06-29 增:根目录拖入视觉提示 + no-op 提示
+      dropToRoot: '放到根',
+      alreadyAtRoot: '目标已在根,无需移动',
       loadingTree: '加载技能树…',
     },
 

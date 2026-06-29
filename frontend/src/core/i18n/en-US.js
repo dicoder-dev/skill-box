@@ -259,6 +259,9 @@ export default {
       moveSameGroup: 'Source and target are the same group, nothing to move',
       // 2026-06-29 new: dragging a group into its own descendant
       moveIntoDescendant: 'Cannot move a group into its own descendant',
+      // 2026-06-29 new: drop-to-root visual hint + no-op toast
+      dropToRoot: 'Drop to root',
+      alreadyAtRoot: 'Already at root, nothing to move',
       loadingTree: 'Loading skills…',
     },
 
