@@ -314,7 +314,14 @@ func (s *Service) MoveGroup(srcGroupPath string, dstGroupPath string) error {
 	if err != nil {
 		return err
 	}
-	return s.store.MoveGroupDir(src, dst)
+	if err := s.store.MoveGroupDir(src, dst); err != nil {
+		// 源分组不存在 → 包成 sskill.ErrNotFound,controller 走 404
+		if errors.Is(err, skillstore.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // RenameGroup 重命名分组的最后一段(父路径不变)。

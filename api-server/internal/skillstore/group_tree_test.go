@@ -178,6 +178,17 @@ func TestMoveGroupDir(t *testing.T) {
 	if c.Manifest.Name != "x" {
 		t.Fatalf("LoadByPath after move: name mismatch = %s", c.Manifest.Name)
 	}
+
+	// 把 b/a 挪到根下(dst = "")
+	if err := store.MoveGroupDir("b/a", ""); err != nil {
+		t.Fatalf("MoveGroupDir to root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "a", "x", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupDir to root: a/x/SKILL.md should exist after move-to-root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "b")); !os.IsNotExist(err) {
+		t.Fatalf("MoveGroupDir to root: old 'b/a' path should be gone")
+	}
 }
 
 // TestRenameGroupDir 2026-06-29 增:分组重命名(只改最后一段,父路径不变)。

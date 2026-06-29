@@ -14,7 +14,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup, moveSkill as apiMoveSkill } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
@@ -1536,23 +1536,21 @@ async function onTreeDrop(payload) {
     }
     toast.success(t('common.confirm'))
   } else if (source.type === 'group') {
-    // 分组嵌套到另一分组
+    // 分组嵌套到另一分组(2026-06-29 改:走独立 move_group 接口,
+    // 之前用 move_skill + name='__group__' sentinel 临时绕过,后端会返 not found)
     if (source.path === targetPath) {
       toast.info(t('skills.list.moveSameGroup'))
       return
     }
-    try {
-      await apiMoveSkill({ src_group_path: source.path, dst_group_path: targetPath, name: '__group__' })
-      // 注:move_group 接口没单独写,复用 move_skill 不行(P2)— 临时走 store 内部简化
-      // 先走 store 内部 MoveGroup(由 store 提供),fallback 到 reload
-      // 直接 toast success 让用户感知,后台 reload
-      // TODO(P2): 加 move_group 控制器
-      toast.success(t('common.confirm'))
-    } catch (e) {
-      // 暂时没有 move_group,简化处理:toast 提示 P2
-      toast.info(t('skills.list.moveFailed', { msg: 'move group not implemented yet (P2)' }))
+    const r = await skillTree.moveGroup({
+      srcGroupPath: source.path,
+      dstGroupPath: targetPath,
+    })
+    if (!r.ok) {
+      toast.error(t('skills.list.moveFailed', { msg: r.error }))
+      return
     }
-    await reload()
+    toast.success(t('common.confirm'))
   }
 }
 

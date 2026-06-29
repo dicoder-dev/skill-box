@@ -118,6 +118,19 @@ export function moveSkill(payload) {
 }
 
 /**
+ * 移动整个分组到另一分组下(name 保持 src 的最后一段不变)。
+ * 入参: { src_group_path, dst_group_path } — src 非空,dst 可空(挪到根下)
+ * 响应: { ok: true } 或 404(源不存在) / 409(同名冲突)
+ * 来源: api-server/internal/gapi/controller/skillbox/cskill/move_group.a.go
+ *
+ * 2026-06-29 增:之前用 move_skill + name='__group__' sentinel 临时绕过,
+ * 后端会把它当 skill 找并返 not found 409。现在走独立接口。
+ */
+export function moveGroup(payload) {
+  return http.post('/api/skillbox/skills/group/move', payload)
+}
+
+/**
  * 重命名分组的最后一段(父路径不变)。
  * 入参: { src_group_path, new_name } — src_group_path 可多级,new_name 是单段名(走 NormalizeName 规约)
  * 响应(成功): { ok: true, new_group_path: string }

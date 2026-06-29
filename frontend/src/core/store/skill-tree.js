@@ -24,6 +24,7 @@ import {
   createGroup as apiCreateGroup,
   deleteGroup as apiDeleteGroup,
   moveSkill as apiMoveSkill,
+  moveGroup as apiMoveGroup,
   renameGroup as apiRenameGroup,
 } from '@/api/skillbox/skills'
 
@@ -226,6 +227,23 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     }
   }
 
+  // 移动整个分组到另一分组下(子路径)。
+  // 2026-06-29 增:之前用 moveSkill + name='__group__' sentinel 临时绕过,
+  // 后端会返 not found 409;现在走独立 moveGroup 接口。
+  async function moveGroup({ srcGroupPath, dstGroupPath }) {
+    if (!srcGroupPath) return { ok: false, error: 'src group path is empty' }
+    try {
+      await apiMoveGroup({
+        src_group_path: srcGroupPath,
+        dst_group_path: dstGroupPath,
+      })
+      await load({ keyword: keyword.value })
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
+    }
+  }
+
   // renameGroup 重命名分组(只改最后一段,父路径不变)。
   // 后端返回 new_group_path;前端用乐观更新改 tree 内对应节点的 path/name + 子树所有 path 前缀,
   // 失败时整体 reload 回滚。
@@ -369,7 +387,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     // getters
     flatItems, totalSkills,
     // actions
-    load, createGroup, deleteGroup, moveSkill, renameGroup,
+    load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup,
     toggleCollapse, setSelected, setDropTarget,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,
