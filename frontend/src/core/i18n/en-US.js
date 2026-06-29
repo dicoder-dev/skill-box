@@ -251,9 +251,6 @@ export default {
       moveTargetExists: 'Target already has a skill with the same name',
       moveSameGroup: 'Source and target are the same group, nothing to move',
       loadingTree: 'Loading skills…',
-      // 2026-06-29: skill card "used by these tools (global)" sub-header
-      skillToolsTitle: 'Used by these tools (global)',
-      skillToolsNone: 'Not enabled in any tool yet',
     },
 
     ai: {

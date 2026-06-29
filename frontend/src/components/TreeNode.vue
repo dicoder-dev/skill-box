@@ -28,9 +28,6 @@
  */
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
 
 const props = defineProps({
   // 当前节点的 children 列表(从树根传入)
@@ -152,19 +149,9 @@ function onDropGroup(node, e) {
 }
 
 // 应用工具 chip 列表(给 skill 叶子用)
-const TOOL_DISPLAY = {
-  codex: 'Codex',
-  claude: 'Claude',
-  opencode: 'OpenCode',
-  cursor: 'Cursor',
-  trae: 'Trae',
-}
 function toolShort(toolID) {
   if (!toolID) return '?'
-  return TOOL_DISPLAY[toolID] || (toolID.charAt(0).toUpperCase() + toolID.slice(1))
-}
-function toolDisplay(toolID) {
-  return TOOL_DISPLAY[toolID] || toolID
+  return toolID.charAt(0).toUpperCase() + toolID.slice(1)
 }
 const TOOL_ICON_MAP = {
   codex: 'mdi:console',
@@ -232,7 +219,7 @@ function isDropTarget(node) {
         </span>
       </div>
 
-      <!-- skill 行:卡片样式 — 头部(name + @version + description)+ 尾部(工具调用区) -->
+      <!-- skill 行:卡片样式 — 点击选中;卡片下方显示已被哪些工具全局启用 -->
       <div
         v-else
         class="tree-row tree-row-skill"
@@ -243,39 +230,23 @@ function isDropTarget(node) {
         @dragover="onDragOverGroup($event)"
         @drop="onDropGroup(node, $event)"
       >
-        <!-- 卡片头:图标 + name + version(对齐左侧,占一行) -->
-        <header class="tree-card-header">
-          <Icon icon="mdi:bookmark-multiple-outline" width="14" height="14" class="tree-skill-icon" />
-          <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
-          <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
-        </header>
-        <!-- 卡片体:description(单行省略,鼠标 hover 显示完整) -->
-        <p
-          v-if="node.skill_meta?.description"
-          class="tree-card-desc"
-          :title="node.skill_meta.description"
-        >
-          {{ node.skill_meta.description }}
-        </p>
-        <!-- 卡片尾:工具调用小标题 + 工具 chip 列表(global 命中) -->
-        <footer class="tree-card-footer">
-          <span class="tree-card-footer-label">
-            <Icon icon="mdi:earth" width="10" height="10" class="tree-card-footer-icon" />
-            {{ t('skills.list.skillToolsTitle') }}
-          </span>
+        <div class="tree-skill-main">
+          <div class="tree-skill-head">
+            <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
+            <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
+          </div>
           <div v-if="(node.skill_meta?.applied_tools || []).length" class="tree-skill-tools">
             <span
               v-for="tid in (node.skill_meta.applied_tools || [])"
               :key="tid"
               class="tree-tool-chip"
-              :title="t('skills.list.appliedGlobal', { tool: toolDisplay[tid] || tid })"
+              :title="tid"
             >
-              <Icon :icon="toolIcon(tid)" width="11" height="11" />
+              <Icon :icon="toolIcon(tid)" width="10" height="10" />
               <span>{{ toolShort(tid) }}</span>
             </span>
           </div>
-          <span v-else class="tree-tools-empty">{{ t('skills.list.skillToolsNone') }}</span>
-        </footer>
+        </div>
       </div>
 
       <!-- 递归子节点(仅分组,展开时) -->
@@ -362,22 +333,16 @@ function isDropTarget(node) {
 
 /* =====================================================
    skill 卡片样式(2026-06-29 改:从"行"强化为"卡片")
-   - 显著圆角 + 边框 + 内边距
-   - 悬停浮起(translate + shadow)
-   - 选中蓝色边框
-   - 卡片内部分三块:header(标题) / desc / footer(工具调用)
+   保留改动前的内容(icon + name + @version + 工具 chip 列表),
+   仅加强容器视觉(圆角 / 边框 / 阴影 / 内边距),不改字段。
    ===================================================== */
 .tree-row-skill {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   /* 比 .tree-row 更厚的内边距 + 圆角 + 边框,体现"卡片"感 */
   padding: 8px 10px;
   margin: 2px 4px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  /* 卡片整体有微弱阴影;悬停 / 选中时加强 */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
   cursor: pointer;
@@ -392,64 +357,33 @@ function isDropTarget(node) {
   outline-offset: 1px;
 }
 
-.tree-card-header {
+.tree-skill-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tree-skill-head {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
-.tree-card-header .tree-skill-icon {
+.tree-skill-head .tree-skill-icon {
   color: var(--text-dim);
   flex-shrink: 0;
 }
-.tree-card-header .tree-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tree-skill-head .tree-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
-.tree-card-header .tree-version {
+.tree-version {
   font-size: 10px;
   color: var(--text-faint);
   font-family: 'JetBrains Mono', monospace;
   flex-shrink: 0;
-}
-
-.tree-card-desc {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text-dim);
-  /* 单行省略,hover 由 title 属性显示完整 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-card-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 6px;
-  margin-top: 2px;
-  border-top: 1px dashed var(--border);
-}
-.tree-card-footer-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  font-weight: 500;
-}
-.tree-card-footer-icon {
-  color: var(--text-faint);
 }
 .tree-skill-tools {
   display: flex;
@@ -460,33 +394,22 @@ function isDropTarget(node) {
 .tree-tool-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
+  gap: 2px;
+  padding: 1px 5px;
   border-radius: 999px;
   background: var(--bg-subtle);
-  color: var(--text);
+  color: var(--text-dim);
   border: 1px solid var(--border);
-  font-size: 11px;
-  line-height: 1.2;
-  font-weight: 500;
-}
-.tree-tool-chip:hover {
-  background: var(--bg-hover);
-  border-color: var(--text-faint);
-}
-.tree-tools-empty {
-  font-size: 11px;
-  color: var(--text-faint);
-  font-style: italic;
+  font-size: 10px;
+  line-height: 1;
 }
 
-/* 选中态(skill 卡片):蓝色边框 + 浅色名 */
+/* 选中态(skill 卡片):蓝色边框 */
 .tree-node-selected > .tree-row-skill {
   border-color: var(--accent-blue);
   background: var(--bg-card);
   box-shadow: 0 0 0 1px var(--accent-blue);
 }
-.tree-node-selected > .tree-row-skill .tree-name { color: var(--accent-blue); }
 .tree-node-selected > .tree-row-skill:hover {
   border-color: var(--accent-blue);
 }
