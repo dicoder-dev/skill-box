@@ -2,14 +2,19 @@
 //
 // Codex 在本机(2026-06 探测)的 skill 目录:
 //
-//	~/.codex/skills/                          ← user 级 skill
-//	~/.codex/skills/.system/<name>/SKILL.md   ← system 级 skill
+//	~/.agents/skills/<name>/SKILL.md                  ← Agent Skills 标准个人级路径(Anthropic 推行)
+//	~/.codex/skills/<name>/SKILL.md                  ← 用户日常 symlink 入口(指向 ~/.agents/skills)
+//	~/.codex/skills/.system/<name>/SKILL.md          ← system 级 skill
 //	~/.codex/vendor_imports/skills/skills/.curated/<name>/SKILL.md ← system 级(vendor curated)
-//	<project>/.codex/skills/<name>/SKILL.md   ← 项目级
+//	<project>/.agents/skills/<name>/SKILL.md         ← 项目级(Agent Skills 标准)
 //
 // 分档:
-//   - user   : ~/.codex/skills(默认勾选,可取消)
+//   - user   : ~/.agents/skills(默认勾选,可取消)
 //   - system : .system / vendor_imports/.curated(只读参考,不可勾选)
+//
+// 写盘根 = ~/.agents/skills(个人级)/ <project>/.agents/skills(项目级):
+// 与 Claude / Trae 共享同一标准目录,通过 symlink 互相可见。Codex 读取这些 skill 时
+// 走 ~/.agents/skills,所以写入这个根后工具才能真正加载。
 //
 // 全部按 BaseAdapter 通用逻辑处理(目录 + SKILL.md + YAML frontmatter)。
 package codex
@@ -40,7 +45,9 @@ func Register() {
 		var global []string
 		var system []string
 		if home != "" {
-			global = append(global, filepath.Join(home, ".codex", "skills"))
+			// 写盘 + 扫描根 = ~/.agents/skills(Agent Skills 标准个人级)。
+			global = append(global, filepath.Join(home, ".agents", "skills"))
+			// system 根:.system 是 Codex 自带;vendor_imports/.curated 是 vendor curated
 			system = append(system,
 				filepath.Join(home, ".codex", "skills", ".system"),
 				filepath.Join(home, ".codex", "vendor_imports", "skills", "skills", ".curated"),
@@ -54,7 +61,7 @@ func Register() {
 			IconEmoji: "",
 			Tools: map[string][]string{
 				skilladapter.ScopeGlobal:  global,
-				skilladapter.ScopeProject: {".codex/skills"},
+				skilladapter.ScopeProject: {".agents/skills"},
 			},
 			SystemPaths: map[string][]string{
 				skilladapter.ScopeGlobal: system,
