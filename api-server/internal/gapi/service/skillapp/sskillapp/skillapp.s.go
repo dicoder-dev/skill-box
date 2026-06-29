@@ -2,6 +2,10 @@
 //
 // 2026-06-24 改造:skill 不再用 entity.Skill 表示,改用 (scope, name) 作为唯一键;
 // ApplyInput 不再需要 SkillID(从 store 直接 Load 即可)。
+// 2026-06-29 增:Service 可选注入 projectService;scope=project 时,Apply / BatchApply
+// 会通过它把 project_id 查成 entity.Project.RootPath 传给 skillapp.Applier,
+// 让 apply 写到真实项目根(<project>/.agents/skills),而不是 home/.skillbox/projects/<id>/
+// 占位路径(占位实现已废,production 必须有 projectService 注入)。
 package sskillapp
 
 import (
@@ -15,6 +19,7 @@ import (
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/controller/skillbox/cskill"
 	"ginp-api/internal/gapi/service/audit/saudit"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillapp"
@@ -40,6 +45,7 @@ type Service struct {
 	skillSvcFactory func() (*sskill.Service, error)
 	adapterRegistry *skilladapter.Registry
 	updater         *skillapp.Updater
+	projectSvc      *sproject.Service // 2026-06-29 增:scope=project 时把 project_id 查成 root_path
 }
 
 // New 构造 service。
@@ -55,6 +61,14 @@ func New(dbWrite, dbRead *gorm.DB, skillSvcFactory func() (*sskill.Service, erro
 // WithAdapterRegistry 替换 adapter registry(测试用)。
 func (s *Service) WithAdapterRegistry(reg *skilladapter.Registry) *Service {
 	s.adapterRegistry = reg
+	return s
+}
+
+// WithProjectService 注入 project service(2026-06-29):scope=project 时,
+// Apply / BatchApply 需要查 entity.Project.RootPath 传给 skillapp.Applier。
+// 未注入时 scope=project 的 apply 走 fallback 占位路径(向后兼容,但 production 必须注入)。
+func (s *Service) WithProjectService(ps *sproject.Service) *Service {
+	s.projectSvc = ps
 	return s
 }
 
@@ -159,6 +173,9 @@ func (s *Service) recordApply(scope string, projectID uint, name, tool string, r
 }
 
 // Apply 跑一次 apply:从 sskill 拿 canonical,逐 tool apply。
+//
+// 2026-06-29 改造:scope=project 时,先把 in.ProjectID 查成项目 root_path 再传给 applier;
+// 这是 Apply 写"真实项目根"而不是 ~/.skillbox/projects/<id>/ 占位的关键。
 func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 	if in == nil {
 		return nil, ErrSkillNotFound
@@ -176,6 +193,14 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 		}
 		return nil, err
 	}
+	// scope=project 时,把 project_id 解析成真实项目根
+	var projectRoot string
+	if in.Scope == skilladapter.ScopeProject {
+		projectRoot, err = s.resolveProjectRoot(in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	applier := s.applier()
 	out := &ApplyResult{
 		Name:    full.Manifest.Name,
@@ -188,11 +213,12 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 			scope = skilladapter.ScopeGlobal
 		}
 		res, err := applier.ApplyOne(skillapp.ApplyInput{
-			SkillName: full.Manifest.Name,
-			Scope:     scope,
-			ProjectID: in.ProjectID,
-			Tools:     []string{tool},
-			Canonical: full,
+			SkillName:   full.Manifest.Name,
+			Scope:       scope,
+			ProjectID:   in.ProjectID,
+			ProjectRoot: projectRoot,
+			Tools:       []string{tool},
+			Canonical:   full,
 		})
 		if err != nil {
 			out.AllOK = false
@@ -228,6 +254,8 @@ type BatchApplyInput struct {
 }
 
 // BatchApply 多 skill × 多 tool 笛卡尔积。
+//
+// 2026-06-29 改造:同 Apply — scope=project 时把 project_id 查成 root_path 传下去。
 func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error) {
 	if in == nil || len(in.Items) == 0 {
 		return &skillapp.BatchOutput{AllOK: true}, nil
@@ -238,18 +266,27 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		if err != nil {
 			return nil, err
 		}
+		// scope=project 时,把 project_id 解析成真实项目根(一次性查一次)
+		var projectRoot string
+		if it.Scope == skilladapter.ScopeProject {
+			projectRoot, err = s.resolveProjectRoot(it.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for _, tool := range it.Tools {
 			scope := it.Scope
 			if scope == "" {
 				scope = skilladapter.ScopeGlobal
 			}
 			items = append(items, skillapp.BatchItem{
-				SkillName:  full.Manifest.Name,
+				SkillName:    full.Manifest.Name,
 				SkillVersion: full.Manifest.Version,
-				Scope:      scope,
-				ProjectID:  it.ProjectID,
-				Tool:       tool,
-				Canonical:  full,
+				Scope:        scope,
+				ProjectID:    it.ProjectID,
+				ProjectRoot:  projectRoot,
+				Tool:         tool,
+				Canonical:    full,
 			})
 		}
 	}
@@ -549,6 +586,37 @@ func (s *Service) loadFull(name string) (*skilladapter.Canonical, error) {
 		return nil, err
 	}
 	return ssvc.Get(name)
+}
+
+// resolveProjectRoot 把 project_id 查成 entity.Project.RootPath(2026-06-29):
+//   - projectSvc 未注入 → 返空串(让 applier 走 fallback 占位路径)
+//   - project_id = 0 → 返空串(调用方应在 global scope 才传 0)
+//   - sproject.List 失败 → 返 error(让 Apply 在 controller 层弹 4xx)
+//   - 找到的 project.RootPath 为空 → 返 error(项目实体存在但未配置 root,拒写)
+func (s *Service) resolveProjectRoot(projectID uint) (string, error) {
+	if s.projectSvc == nil {
+		return "", nil
+	}
+	if projectID == 0 {
+		return "", nil
+	}
+	list, err := s.projectSvc.List(sproject.ListQuery{Page: 1, Size: 500})
+	if err != nil {
+		return "", fmt.Errorf("skillapp: list projects: %w", err)
+	}
+	if list == nil {
+		return "", fmt.Errorf("skillapp: project %d not found", projectID)
+	}
+	for _, p := range list.Items {
+		if p == nil || uint(p.ID) != projectID {
+			continue
+		}
+		if p.RootPath == "" {
+			return "", fmt.Errorf("skillapp: project %d (%s) has empty root_path", p.ID, p.Alias)
+		}
+		return p.RootPath, nil
+	}
+	return "", fmt.Errorf("skillapp: project %d not found", projectID)
 }
 
 // Suppress unused imports.

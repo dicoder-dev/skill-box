@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
+	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/pkg/ginp"
@@ -63,6 +64,9 @@ func init() {
 }
 
 // newService 工厂 - 统一从 dbs 取 db。
+//
+// 2026-06-29 增:WithProjectService — scope=project 的 apply 需要 sproject 查
+// entity.Project.RootPath,把 project_id 解析成真实项目根传给 applier。
 func newService() *sskillapp.Service {
 	ww := dbs.GetWriteDb()
 	rr := dbs.GetReadDb()
@@ -72,5 +76,5 @@ func newService() *sskillapp.Service {
 			return nil, err
 		}
 		return sskill.New(store), nil
-	})
+	}).WithProjectService(sproject.New(ww, rr))
 }

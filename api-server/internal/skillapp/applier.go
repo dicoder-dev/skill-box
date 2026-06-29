@@ -86,7 +86,7 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, toolID)
 	}
-	targetDir, err := resolveTargetDir(ad, in.Canonical, scope, in.ProjectID)
+	targetDir, err := resolveTargetDir(ad, in.Canonical, scope, in.ProjectID, in.ProjectRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +127,17 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	}, nil
 }
 
-// resolveTargetDir 把 (tool + scope + project_id + name) 拼到具体目录。
-// v1 简化:global scope 直接用 adapter 的第一个 DiscoverPaths;project scope 把相对路径
-// 拼到 home/.skillbox/projects/<id>/(占位实现,Step 9 配合 sproject 用真项目根)。
-func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope string, projectID uint) (string, error) {
+// resolveTargetDir 把 (tool + scope + project_id + project_root + name) 拼到具体目录。
+//
+// 2026-06-29 改造:
+//   - scope=project 时,优先用 ProjectRoot(由 caller 从 sproject.Service 查
+//     entity.Project.RootPath 得到)— 这是 Codex / Claude / Cursor 实际读的项目根
+//     (ai-image 这种项目的 root_path 是 /Volumes/MyDrive/.../ai-image,apply
+//     会写到 /Volumes/.../ai-image/.agents/skills/<name>,工具才能读到)。
+//   - ProjectRoot 为空时,fallback 到旧的占位实现 home/.skillbox/projects/<id>/
+//     (用于测试或 caller 暂时拿不到 root_path 的场景,但 production 必须传)。
+//   - scope=global 时,直接用 adapter 的 DiscoverPaths(scope)[0]。
+func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope string, projectID uint, projectRoot string) (string, error) {
 	paths, err := ad.DiscoverPaths(scope)
 	if err != nil {
 		return "", err
@@ -140,14 +147,22 @@ func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope 
 	}
 	parent := paths[0]
 	if !filepath.IsAbs(parent) {
-		if projectID == 0 {
-			return "", fmt.Errorf("skillapp: scope=project 需要 project_id")
+		if scope != skilladapter.ScopeProject {
+			return "", fmt.Errorf("skillapp: relative path %q only valid for scope=project", parent)
 		}
-		homedir, _ := os.UserHomeDir()
-		if homedir == "" {
-			return "", fmt.Errorf("skillapp: cannot resolve home for relative project path")
+		if projectRoot == "" {
+			// Fallback:占位实现(用于测试 / 老路径迁移期)
+			if projectID == 0 {
+				return "", fmt.Errorf("skillapp: scope=project 需要 project_id 或 project_root")
+			}
+			homedir, _ := os.UserHomeDir()
+			if homedir == "" {
+				return "", fmt.Errorf("skillapp: cannot resolve home for relative project path")
+			}
+			parent = filepath.Join(homedir, ".skillbox", "projects", fmt.Sprintf("%d", projectID), parent)
+		} else {
+			parent = filepath.Join(projectRoot, parent)
 		}
-		parent = filepath.Join(homedir, ".skillbox", "projects", fmt.Sprintf("%d", projectID), parent)
 	}
 	localName := ad.LocalName(*c)
 	return filepath.Join(parent, localName), nil

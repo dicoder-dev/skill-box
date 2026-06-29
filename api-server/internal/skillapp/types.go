@@ -88,12 +88,17 @@ func IsStatusValid(s string) bool {
 
 // ApplyInput 单次 apply 的入参。
 // 2026-06-24 改造:不再用 SkillID 数字 ID,改用 SkillName 字符串作为唯一键。
+// 2026-06-29 增:ProjectRoot = project scope 的真实项目根目录(由 caller 从
+// sproject.Service 查 entity.Project.RootPath 得到);不为空时,apply 把
+// <Tool.Project.Rel> 直接拼到 ProjectRoot 下;为空时退回"占位实现"
+// (home/.skillbox/projects/<ProjectID>/) — 占位逻辑已废,production 必须传。
 type ApplyInput struct {
-	SkillName string                    // 来自 sskill 的 Canonical.Manifest.Name
-	Scope     string                    // global / project
-	ProjectID uint                      // scope=project 时必填
-	Tools     []string                  // 目标工具 ID 列表
-	Canonical *skilladapter.Canonical   // 来自 sskill.Get
+	SkillName   string                  // 来自 sskill 的 Canonical.Manifest.Name
+	Scope       string                  // global / project
+	ProjectID   uint                    // scope=project 时必填
+	ProjectRoot string                  // scope=project 时的项目 root_path(从 sproject 查)
+	Tools       []string                // 目标工具 ID 列表
+	Canonical   *skilladapter.Canonical // 来自 sskill.Get
 }
 
 // ApplyOutput 单次 apply 的产出(每个 tool 一行 entity.SkillApply)。

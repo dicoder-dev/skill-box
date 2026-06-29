@@ -107,6 +107,11 @@ skill-box 把 `~/.claude/skills/`、`~/.codex/skills/`、`~/.trae/skills/` 当�
 - `api-server/internal/skilladapter/claude/claude.go` — Tools[global] 改 `~/.agents/skills`,Tools[project] 改 `.agents/skills`
 - `api-server/internal/skilladapter/codex/codex.go` — 同上
 - `api-server/internal/skilladapter/trae/trae.go` — 同上
+- `api-server/internal/skillapp/types.go` — ApplyInput 加 ProjectRoot 字段;BatchItem 同
+- `api-server/internal/skillapp/batch.go` — BatchItem 加 ProjectRoot 字段;BatchApplier.Apply 透传
+- `api-server/internal/skillapp/applier.go` — resolveTargetDir 接受 projectRoot,优先用真项目根;fallback 保留占位路径
+- `api-server/internal/gapi/service/skillapp/sskillapp/skillapp.s.go` — Service 加 projectSvc + WithProjectService + resolveProjectRoot;Apply / BatchApply 在 scope=project 时查 root_path 传给 applier
+- `api-server/internal/gapi/controller/skillbox/cskillapply/apply_skill.a.go` — newService 注入 WithProjectService
 - `docs/agent/task/2026-06/06-28_bug排查-skill未生效.md` — 本任务文档
 - `docs/agent/memory/project.md` — 加一条 memory:adapter 写入路径约定
 
