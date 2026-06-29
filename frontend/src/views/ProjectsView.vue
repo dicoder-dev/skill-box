@@ -375,19 +375,19 @@ onMounted(reload)
             <div class="project-card-actions">
               <!-- 直接用 Icon 标签,@click 绑逻辑,不用 button 包裹 -->
               <Icon
-                icon="mdi:folder-open-outline"
+                icon="mdi:folder-outline"
                 class="action-icon action-icon-finder"
                 :title="t('projects.openInFinder')"
-                width="20"
-                height="20"
+                width="16"
+                height="16"
                 @click.stop="openInFinder(p)"
               />
               <Icon
-                icon="mdi:delete"
+                icon="mdi:delete-outline"
                 class="action-icon action-icon-danger"
                 :title="t('common.delete')"
-                width="20"
-                height="20"
+                width="16"
+                height="16"
                 @click.stop="remove(p.id)"
               />
             </div>
@@ -768,13 +768,11 @@ onMounted(reload)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
-  /* Icon 组件默认会渲染 svg,这里用 font-size / color 控颜色 */
-  font-size: 18px;
   color: var(--text-dim);
 }
 .action-icon:hover {
