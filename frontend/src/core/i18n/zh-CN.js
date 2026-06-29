@@ -254,6 +254,9 @@ export default {
       moveTargetExists: '目标位置已存在同名 skill',
       moveSameGroup: '源和目标分组相同,无需移动',
       loadingTree: '加载技能树…',
+      // 2026-06-29 增:skill 卡片下方"被哪些工具全局调用了"小标题
+      skillToolsTitle: '被这些工具全局调用了',
+      skillToolsNone: '尚未被任何工具全局启用',
     },
 
     ai: {
