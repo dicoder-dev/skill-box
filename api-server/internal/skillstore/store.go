@@ -285,6 +285,8 @@ func (s *Store) ExistsByPath(groupPath string, name string) bool {
 //   - 若 source 不存在,返回 ErrNotFound
 //   - 若 dstGroupPath 已存在同名 skill,返回 error(避免覆盖)
 //   - 内部走 os.Rename(同设备下原子),跨设备降级为 copy+delete
+// 2026-06-29 改:加 ancestor check — 若 dstDir 在 srcDir 内部,直接 400 拒掉
+// (防死循环,见 MoveGroupDir 同名注释)。
 //
 // 注意:本函数只移动单个 skill 叶子目录;移动整个分组请用 MoveGroupDir。
 func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath string) error {
@@ -301,6 +303,11 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 	dstDir, err := s.resolveSkillDir(dstGroupPath, name)
 	if err != nil {
 		return err
+	}
+	// 2026-06-29 增:防御性 ancestor check。dstDir 在 srcDir 内部 = 把 skill 挪到
+	// 自己的子目录下,os.Rename 必失败,降级 copyDirRecursive 必死循环。
+	if isDescendantOrSame(dstDir, srcDir) {
+		return fmt.Errorf("skillstore: cannot move skill %q into its own descendant %q", name, dstGroupPath)
 	}
 	// 目标已存在 → 拒覆盖(让 caller 决定是否先删)
 	if _, err := os.Stat(filepath.Join(dstDir, "SKILL.md")); err == nil {
@@ -329,6 +336,9 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 // dstGroupPath 可以为空(=把分组挪到根下);name 不变(取 src 的最后一段)。
 //
 // 2026-06-29 增:复用 MoveGroupPath 思路,作用对象是整个分组目录子树。
+// 2026-06-29 改:加 ancestor check — 若 dstAbs 在 srcAbs 内部,直接 400 拒掉
+// (防死循环:os.Rename 失败降级 copyDirRecursive 后,会在 src 内建 dst 子目录,
+// 立刻 ReadDir 扫到,无限递归到路径长度上限)。
 func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
 	if srcGroupPath == "" {
 		return fmt.Errorf("skillstore: empty src group path")
@@ -346,6 +356,11 @@ func (s *Store) MoveGroupDir(srcGroupPath string, dstGroupPath string) error {
 	}
 	srcBase := filepath.Base(srcRel)
 	dstAbs := filepath.Join(s.root, filepath.FromSlash(dstGroupPath), srcBase)
+	// 2026-06-29 增:防御性 ancestor check。dstAbs 在 srcAbs 内部 = 把 src 挪到
+	// 自己的子目录下,os.Rename 必失败,降级 copyDirRecursive 必死循环。
+	if isDescendantOrSame(dstAbs, srcAbs) {
+		return fmt.Errorf("skillstore: cannot move group %q into its own descendant %q", srcGroupPath, dstGroupPath)
+	}
 	// 目标已存在 → 拒覆盖
 	if _, err := os.Stat(dstAbs); err == nil {
 		return fmt.Errorf("skillstore: target group %q already exists", dstAbs)
@@ -488,7 +503,18 @@ func (s *Store) collectSkillLeafPaths(abs, relGroup string, out *[]string) {
 }
 
 // copyDirRecursive 递归复制 src 目录到 dst(覆盖式);用于跨设备 MoveGroupPath 兜底。
+//
+// 2026-06-29 增:加防御性 ancestor check — 如果 dst 在 src 内部(含 dst == src),
+// 立即返回 error。原因是 caller(MoveGroupPath / MoveGroupDir)若没拦住
+// "把目录挪到自己子目录" 的情况,os.MkdirAll(dst) 会在 src 内创建一个新子目录,
+// 然后 ReadDir(src) 会扫到这个新子目录,递归 copy,死循环直到 macOS
+// 路径长度 255 字节上限才崩(tmp 下出现几百层 yy/aa/yy/aa/...)。
+// 失败路径在 caller 侧(MoveGroupPath / MoveGroupDir)的 normalize 之前
+// 就该被拦下,这里只是兜底,确保 copyDirRecursive 永不进入这种状态。
 func copyDirRecursive(src, dst string) error {
+	if isDescendantOrSame(dst, src) {
+		return fmt.Errorf("copyDirRecursive: dst %q is inside src %q (refusing to recurse)", dst, src)
+	}
 	info, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -879,6 +905,35 @@ func safeRelPath(p string) (string, error) {
 		return "", fmt.Errorf("path traversal not allowed")
 	}
 	return cleaned, nil
+}
+
+// isDescendantOrSame 2026-06-29 增:判断 dst 是否在 src 内部,或 dst == src。
+// 用途:copyDirRecursive / MoveGroupPath / MoveGroupDir 拦截"把目录挪到自己子目录"
+// 的非法操作(否则会进入死循环:os.MkdirAll 在 src 内创建 dst,然后 ReadDir(src)
+// 扫到 dst,递归,死循环直到路径长度超限)。
+//
+// 实现:把两边 Clean 之后,如果 dst == src 或 dst 是 src 父目录的子路径,返回 true。
+// 跨平台:用 filepath.Clean 走 OS 路径分隔符。
+func isDescendantOrSame(dst, src string) bool {
+	cleanDst := filepath.Clean(dst)
+	cleanSrc := filepath.Clean(src)
+	if cleanDst == cleanSrc {
+		return true
+	}
+	// rel, _ := filepath.Rel(cleanSrc, cleanDst):dst 相对 src 的路径
+	// 若以 .. 开头 → dst 在 src 外(不是后代);否则就是后代或自身
+	rel, err := filepath.Rel(cleanSrc, cleanDst)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	// 以 .. 开头 = 跳出 src 的子树;否则(没有 .. 前缀)就是 src 的子路径
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
 }
 
 func removeIfEmpty(dir string) error {

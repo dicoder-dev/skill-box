@@ -260,3 +260,91 @@ func TestRenameGroupDir(t *testing.T) {
 		t.Fatalf("RenameGroupDir: nonexistent src should fail")
 	}
 }
+
+// TestMoveGroupDir_AncestorCheck 2026-06-29 增:防止分组挪到自己的子目录下(死循环防御)。
+// 回归测试:之前 copyDirRecursive 漏做"src 在 dst 父级下"循环检测,导致
+// 把 aa 挪到 aa/yy/aa 时,os.Rename 失败 → 降级 copy,创建 aa/yy/aa 后
+// 立刻发现它落在 src 内,无限递归到 macOS 文件名长度上限才崩。
+func TestMoveGroupDir_AncestorCheck(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "skillstore-movegroup-ancestor-*")
+	defer os.RemoveAll(tmpDir)
+	store, _ := NewAt(tmpDir)
+
+	store.CreateGroupDir("aa")
+	store.CreateGroupDir("aa/yy")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+
+	// 把 aa 挪到 aa/yy 下 → 目标 = aa/yy/aa,正好在 src(aa) 内,必须拒
+	if err := store.MoveGroupDir("aa", "aa/yy"); err == nil {
+		t.Fatalf("MoveGroupDir: moving aa into its own descendant aa/yy/aa should be rejected")
+	}
+	// 源必须原封不动
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "x", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupDir: src should be untouched after rejection, got %v", err)
+	}
+	// 关键防御:不能误创建 aa/yy/aa(死循环的中间产物)
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "yy", "aa")); err == nil {
+		t.Fatalf("MoveGroupDir: target aa/yy/aa should NOT be created (would have been the loop's victim)")
+	}
+	// 根除:扫一遍 tmpDir,断言树深度不超过初始深度 + 1(否则就是死循环的痕迹)
+	if deep := maxDepthUnder(tmpDir); deep > 4 {
+		t.Fatalf("MoveGroupDir: tree depth %d after rejection — looks like a runaway loop created deep paths", deep)
+	}
+}
+
+// TestMoveGroupPath_AncestorCheck 2026-06-29 增:防止把 skill 挪到包含自己父级的位置。
+// 同 MoveGroupDir_AncestorCheck,加严检查:之前只测 SKILL.md 是否还在,会假 pass
+// (死循环产生了大量中间目录,但源未被覆盖)。现在断言目标父目录 aa/x/inner 不能
+// 被创建 + 整树深度不超过 4 层。
+func TestMoveGroupPath_AncestorCheck(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "skillstore-moveskill-ancestor-*")
+	defer os.RemoveAll(tmpDir)
+	store, _ := NewAt(tmpDir)
+
+	store.CreateGroupDir("aa")
+	store.Save(skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
+		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
+	})
+
+	// 把 aa/x 挪到 aa/x/inner 下 → 目标 = aa/x/inner/x,正好在 src(aa/x) 内,必须拒
+	if err := store.MoveGroupPath("aa", "x", "aa/x/inner"); err == nil {
+		t.Fatalf("MoveGroupPath: moving x into aa/x/inner/x should be rejected")
+	}
+	// 源 SKILL.md 必须还在
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "x", "SKILL.md")); err != nil {
+		t.Fatalf("MoveGroupPath: src should be untouched after rejection, got %v", err)
+	}
+	// 关键防御:不能误创建 aa/x/inner(死循环的中间产物)
+	if _, err := os.Stat(filepath.Join(tmpDir, "aa", "x", "inner")); err == nil {
+		t.Fatalf("MoveGroupPath: target parent aa/x/inner should NOT be created (would have been the loop's victim)")
+	}
+	// 根除:扫一遍 tmpDir,断言树深度不超过 4(否则就是死循环的痕迹)
+	if deep := maxDepthUnder(tmpDir); deep > 4 {
+		t.Fatalf("MoveGroupPath: tree depth %d after rejection — looks like a runaway loop created deep paths", deep)
+	}
+}
+
+// maxDepthUnder 算 root 下最深路径的段数(用于检测死循环产生的深层嵌套)。
+// 初始 tmpDir 下结构是 <tmp>/aa/x/SKILL.md,最深 3 段;死循环产物至少 6 段+。
+func maxDepthUnder(root string) int {
+	maxD := 0
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		if rel == "." {
+			return nil
+		}
+		d := strings.Count(rel, string(filepath.Separator)) + 1
+		if d > maxD {
+			maxD = d
+		}
+		return nil
+	})
+	return maxD
+}
