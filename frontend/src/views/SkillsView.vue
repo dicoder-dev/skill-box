@@ -2865,34 +2865,6 @@ onMounted(() => {
   border: 1px solid var(--border);
 }
 
-.md-body :deep(blockquote) {
-  margin: 8px 0;
-  padding: 6px 12px;
-  border-left: 3px solid var(--border);
-  color: var(--text-dim);
-  background: var(--bg-subtle);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.md-body :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 14px 0;
-}
-
-.md-body :deep(table) {
-  border-collapse: collapse;
-  margin: 10px 0;
-  font-size: 12.5px;
-}
-.md-body :deep(th),
-.md-body :deep(td) {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  text-align: left;
-}
-.md-body :deep(th) { background: var(--bg-subtle); font-weight: 600; }
-
 .detail-loading {
   display: flex;
   align-items: center;

@@ -10,43 +10,15 @@
 //
 // 安全性:markdown-it 默认对源文本做 escape,只通过白名单标签;
 // html 选项关闭(true → 关闭)以避免用户内容里嵌入危险脚本。
+//
+// 2026-06-27 改:不再 import 'highlight.js/lib/languages/xxx' 然后 registerLanguage,
+// 因为 Vite/Rollup 的 tree-shaking 会认为这种"只用于副作用"的 import 是死代码,
+// 把语言定义 JSON 整段摇掉,导致 highlight 输出里完全没有 token 染色。
+// 改用全量 'highlight.js'(自带 register),代价是 +~50KB,换取正确的语法高亮。
 
 import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
-import hljs from 'highlight.js/lib/core'
-
-// 只注册本项目实际会出现的语言,大幅减小打包体积(common languages)
-import javascript from 'highlight.js/lib/languages/javascript'
-import typescript from 'highlight.js/lib/languages/typescript'
-import bash from 'highlight.js/lib/languages/bash'
-import json from 'highlight.js/lib/languages/json'
-import yaml from 'highlight.js/lib/languages/yaml'
-import python from 'highlight.js/lib/languages/python'
-import go from 'highlight.js/lib/languages/go'
-import sql from 'highlight.js/lib/languages/sql'
-import xml from 'highlight.js/lib/languages/xml'
-import css from 'highlight.js/lib/languages/css'
-import markdown from 'highlight.js/lib/languages/markdown'
-
-hljs.registerLanguage('javascript', javascript)
-hljs.registerLanguage('js', javascript)
-hljs.registerLanguage('typescript', typescript)
-hljs.registerLanguage('ts', typescript)
-hljs.registerLanguage('bash', bash)
-hljs.registerLanguage('sh', bash)
-hljs.registerLanguage('shell', bash)
-hljs.registerLanguage('json', json)
-hljs.registerLanguage('yaml', yaml)
-hljs.registerLanguage('yml', yaml)
-hljs.registerLanguage('python', python)
-hljs.registerLanguage('py', python)
-hljs.registerLanguage('go', go)
-hljs.registerLanguage('sql', sql)
-hljs.registerLanguage('xml', xml)
-hljs.registerLanguage('html', xml)
-hljs.registerLanguage('css', css)
-hljs.registerLanguage('markdown', markdown)
-hljs.registerLanguage('md', markdown)
+import hljs from 'highlight.js'
 
 // markdown-it 实例(单例)
 const md = new MarkdownIt({
