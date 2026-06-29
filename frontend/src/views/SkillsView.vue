@@ -1497,8 +1497,16 @@ onMounted(() => {
         {{ error }}
       </p>
 
-      <!-- 2026-06-29 改:左侧从扁平列表升级为多级分组树 -->
-      <div class="tree-container" role="tree" :aria-label="t('skills.title')">
+      <!-- 2026-06-29 改:左侧从扁平列表升级为多级分组树。
+           关键:把根区域右键绑在 .tree-container 上(而不是 TreeNode 内部的 li),
+           这样无论树有没有节点 / 折叠状态如何,整个左侧空白处都能右键弹"新建分组"。
+           节点(skill / 分组)自身的右键在 TreeNode 内 stopPropagation,不会冒泡到这里。 -->
+      <div
+        class="tree-container"
+        role="tree"
+        :aria-label="t('skills.title')"
+        @contextmenu.prevent="onRootContextMenu({ event: $event })"
+      >
         <div v-if="loading" class="tree-loading">
           <span class="spinner"></span>
           <span>{{ t('skills.list.loadingTree') }}</span>
@@ -1517,10 +1525,9 @@ onMounted(() => {
           @toggle-collapse="(p) => skillTree.toggleCollapse(p)"
           @drop="onTreeDrop"
         />
-        <div v-if="!loading && !skillTree.totalSkills" class="tree-empty">
-          <Icon icon="mdi:book-open-variant" width="28" height="28" />
+        <div v-if="!loading && !skillTree.totalSkills" class="tree-empty-hint">
           <p>{{ t('skills.list.emptyTitle') }}</p>
-          <p class="hint">{{ t('skills.list.emptyHint') }}</p>
+          <p>{{ t('skills.list.treeRootHint') }}</p>
         </div>
       </div>
 
@@ -2467,6 +2474,24 @@ onMounted(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 8px 6px 12px;
+  /* 2026-06-29 增:容器空白处可右键,给个 cursor 提示 */
+  cursor: default;
+}
+/* 2026-06-29 增:树底部留白 + 微弱提示文字,告诉用户"这里能右键新建分组"。
+   只在树为空时显示(避免常态视觉噪音) */
+.tree-container::after {
+  content: '';
+  display: block;
+  min-height: 60px;
+}
+.tree-empty-hint {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+  user-select: none;
+  pointer-events: none; /* 不拦截右键,事件冒泡到 .tree-container */
 }
 .tree-loading,
 .tree-empty {

@@ -85,10 +85,10 @@ function onContextMenu(node, e) {
   }
 }
 
-function onRootContextMenu(e) {
-  e.preventDefault()
-  emit('context-menu-root', { event: e })
-}
+// 2026-06-29 改:onRootContextMenu 删除(根区域右键事件已上移到 SkillsView 的
+// .tree-container 元素上 — 那里覆盖整个左侧,无论是否有节点 / 折叠)。
+// @context-menu-root emit 仍保留在 defineEmits 里(供父组件透传 / 调试用),
+// 但不再有 emit 触发者。
 
 // ====== 拖拽 ======
 const dragCounter = ref(0) // 防止子元素 dragenter/leave 抖动
@@ -162,14 +162,8 @@ function isDropTarget(node) {
 
 <template>
   <ul class="tree" role="tree">
-    <!-- 根区域右键(在 ul 空白处右键) -->
-    <li
-      v-if="depth === 0"
-      class="tree-root-blank"
-      @contextmenu="onRootContextMenu"
-    >
-      <span v-if="!nodes.length" class="tree-empty-hint">右键新建分组,或拖拽 skill 到此处</span>
-    </li>
+    <!-- 2026-06-29 改:删除原 .tree-root-blank 占位 li(根区域右键事件已上移到
+         SkillsView 的 .tree-container 元素上 — 那里覆盖整个左侧,无论是否有节点 / 折叠) -->
 
     <li
       v-for="node in nodes"
@@ -275,13 +269,6 @@ function isDropTarget(node) {
   margin: 0;
   padding: 0;
 }
-
-.tree-root-blank {
-  padding: 8px 12px 4px;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-.tree-empty-hint { font-style: italic; }
 
 .tree-node {
   position: relative;
