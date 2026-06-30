@@ -235,9 +235,11 @@ func TestInstallV2_GlobalOk_UsingFallback(t *testing.T) {
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	skillApp := sskillapp.New(env.db, env.db, factory)
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
-	// 走 v2 路径,tools=nil 触发 AllTools 默认
+	// 走 v2 路径,2026-06-30 改:tools=nil 不再默认 AllTools,只写盘不 apply。
+	// 这里显式传 Tools=AllTools 测"apply 路径"分支
 	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
+		Tools: skilladapter.AllTools,
 	})
 	if err != nil {
 		t.Fatalf("install-v2 should succeed via fallback: %v", err)
@@ -297,6 +299,162 @@ func TestInstallV2_FinalName_Rename(t *testing.T) {
 	}
 	if !store.Exists("code-review-2") {
 		t.Error("expected renamed skill in store")
+	}
+}
+
+// TestInstallV2_EmptyTools_OnlyWrite 2026-06-30 增:Tools=nil/[] 时只写盘不 apply。
+func TestInstallV2_EmptyTools_OnlyWrite(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
+	store, _ := skillstore.NewAt(filepath.Join(t.TempDir(), "store-empty"))
+	ssvc := sskill.New(store)
+	factory := func() (*sskill.Service, error) { return ssvc, nil }
+	skillApp := sskillapp.New(env.db, env.db, factory)
+	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
+	// Tools 不传(零值 nil)→ 只写盘
+	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
+	})
+	if err != nil {
+		t.Fatalf("install-v2 with empty tools: %v", err)
+	}
+	if !store.Exists("code-review") {
+		t.Error("expected skill written to store")
+	}
+	if len(out.Tools) != 0 {
+		t.Errorf("expected 0 tools (empty), got %d", len(out.Tools))
+	}
+	if out.ApplyResult != nil {
+		t.Errorf("expected no apply result when tools is empty, got %+v", out.ApplyResult)
+	}
+}
+
+// TestInstallV2_GroupPath_WritesToSubdir 2026-06-30 增:GroupPath 写到 Manifest.GroupPath,
+// store 落到子目录。验证通过 store.LoadByPath 读回。
+func TestInstallV2_GroupPath_WritesToSubdir(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
+	store, _ := skillstore.NewAt(filepath.Join(t.TempDir(), "store-group"))
+	ssvc := sskill.New(store)
+	factory := func() (*sskill.Service, error) { return ssvc, nil }
+	v2 := smarket.NewWithApply(env.db, env.db, factory, nil) // 不注 apply
+	// GroupPath 装到 frontend/react/code-review
+	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: "frontend/react",
+	})
+	if err != nil {
+		t.Fatalf("install-v2 with group_path: %v", err)
+	}
+	if out.GroupPath != "frontend/react" {
+		t.Errorf("expected group_path=frontend/react, got %q", out.GroupPath)
+	}
+	// 验证写到了子目录(通过 LoadByPath 读回)
+	can, lerr := store.LoadByPath("frontend/react", "code-review")
+	if lerr != nil {
+		t.Fatalf("LoadByPath failed: %v", lerr)
+	}
+	if can.Manifest.GroupPath != "frontend/react" {
+		t.Errorf("manifest group_path should be frontend/react, got %q", can.Manifest.GroupPath)
+	}
+	if can.Manifest.Name != "code-review" {
+		t.Errorf("name should be code-review, got %q", can.Manifest.Name)
+	}
+}
+
+// TestInstallV2_BadGroupPath 2026-06-30 增:验证非法 group_path 在 normalize 阶段就被处理。
+//
+// 设计决策:NormalizeGroupName 只接受 [a-z0-9-],把 '.' / '/' / ' ' / 其它字符都折叠为 '-'。
+// 所以 "../escape" 实际 normalize 成 "-escape","foo/../bar" 变成 "foo-bar" ——
+// 等于"客户端永远造不出含 .. 的 group_path",store.safeRelPath 是第二道防线。
+// 这里测试三个"输入时看起来坏但 normalize 后是有效名"的 case,验证安装不挂即可。
+func TestInstallV2_BadGroupPath(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
+	store, _ := skillstore.NewAt(filepath.Join(t.TempDir(), "store-bad-gp"))
+	ssvc := sskill.New(store)
+	factory := func() (*sskill.Service, error) { return ssvc, nil }
+	v2 := smarket.NewWithApply(env.db, env.db, factory, nil)
+	// "脏"输入 — normalize 后变成安全名,不应该报错
+	cases := []string{
+		"../escape",    // → "-escape" (TrimRight 把首字符 - 去掉,实际变 "escape")
+		"foo/../bar",   // → "foo-bar"
+		"/abs/path",    // → "abs-path"
+		"FRONT END/React", // → "front-end-react"
+	}
+	for _, gp := range cases {
+		out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+			SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: gp,
+		})
+		if err != nil {
+			t.Errorf("group_path %q should normalize + install OK, got: %v", gp, err)
+			continue
+		}
+		// 验证 GroupPath 字段是规范化后的(不等于输入)
+		if out.GroupPath == gp {
+			t.Errorf("group_path %q should be normalized, but got raw %q", gp, out.GroupPath)
+		}
+	}
+	// 完全空 normalize 后也是空("    " 空白)→ InstallV2 当作没传 group_path
+	// 这一路径通过空字符串分支,不创建分组
+	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: "   ",
+	})
+	if err != nil {
+		t.Errorf("whitespace group_path should be treated as empty: %v", err)
+	}
+	if out.GroupPath != "" {
+		t.Errorf("whitespace group_path should normalize to empty, got %q", out.GroupPath)
 	}
 }
 

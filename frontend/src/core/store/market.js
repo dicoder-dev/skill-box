@@ -150,7 +150,7 @@ export const useMarketStore = defineStore('market', {
     },
 
     // --- 安装(v2) ---
-    async install({ sourceId, remoteId, scope, projectId, tools, finalName }) {
+    async install({ sourceId, remoteId, scope, projectId, tools, finalName, groupPath }) {
       this.installing = true
       this.lastError = ''
       try {
@@ -161,6 +161,7 @@ export const useMarketStore = defineStore('market', {
           project_id: projectId || 0,
           tools: tools || [],
           final_name: finalName || '',
+          group_path: groupPath || '',
         })
         this.lastInstallResult = res
         // 安装后立刻刷新 installed 标记

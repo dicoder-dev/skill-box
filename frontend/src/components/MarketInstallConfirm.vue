@@ -1,10 +1,16 @@
 <script setup>
-// MarketInstallConfirm.vue - 三方市场"安装"弹窗(2026-06-30 增)。
+// MarketInstallConfirm.vue - 三方市场"安装"弹窗(2026-06-30 增;06-30 二改)。
 //
 // 复用 frontend/src/components/Modal.vue。三态:
-//   - 未冲突:scope 选择 + tools 多选 + 确认/取消
+//   - 未冲突:scope 选择 + 分组选择 + tools 多选(默认全不勾) + 确认/取消
 //   - 冲突:三按钮(覆盖 / 另存为 / 取消)
 //     "另存为" 展开一个 input,前端自动生成候选 name-2 → name-3 ...
+//
+// 2026-06-30 二改:
+//   - 默认 selectedTools = [] (用户主动勾选,不再默认全选)
+//   - 加 group_path 选择:从 useSkillTreeStore().tree 派生 option(optgroup 缩进展示嵌套),
+//     配合"新建分组"按钮可 inline 创建
+//   - 注意:group_path 修改的是 Manifest.GroupPath,store 落子目录;
 //
 // 用法:
 //   <MarketInstallConfirm
@@ -15,10 +21,12 @@
 //     @cancel="() => dialog = false"
 //   />
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import Modal from '@/components/Modal.vue'
+import { useSkillTreeStore } from '@/core/store/skill-tree'
+import { createGroup as apiCreateGroup } from '@/api/skillbox/skills'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -27,14 +35,18 @@ const props = defineProps({
   projects: { type: Array, default: () => [] }, // [{id, name, alias}]
 })
 
-const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
+const emit = defineEmits(['update:modelValue', 'confirm', 'cancel', 'tree-changed'])
 
 const { t } = useI18n()
+const skillTree = useSkillTreeStore()
 
 // 状态
 const scope = ref('global') // global / project
 const projectId = ref(0)
-const selectedTools = ref(['codex', 'claude', 'opencode', 'cursor', 'trae'])
+// 2026-06-30 二改:默认全不勾,让用户主动选
+const selectedTools = ref([])
+// 2026-06-30 增:分组路径(空 = 根)
+const groupPath = ref('')
 const isDuplicate = computed(() => !!props.item && !!props.installed?.[props.item.name])
 
 // 另存为
@@ -44,6 +56,28 @@ const newName = ref('')
 // 内部状态
 const submitting = ref(false)
 const formError = ref('')
+
+// 分组新建 inline
+const newGroupOpen = ref(false)
+const newGroupInput = ref('')
+const newGroupErr = ref('')
+
+// 派生:把树压成 option 数组(带 depth 缩进,用于 <select> + 缩进字符)。
+// 格式: [{ value, label, depth }]
+const groupOptions = computed(() => {
+  const out = []
+  const walk = (nodes, depth) => {
+    for (const n of nodes || []) {
+      if (n.is_group) {
+        // 缩进字符 + 名字(后端 path 是 'a/b' 形式)
+        out.push({ value: n.path, label: '— '.repeat(depth) + n.name, depth })
+        walk(n.children, depth + 1)
+      }
+    }
+  }
+  walk(skillTree.tree || [], 0)
+  return out
+})
 
 // 切换 item 时重置
 watch(
@@ -59,11 +93,16 @@ watch(
       candidate = `${it.name}-${n}`
     }
     newName.value = candidate
-    // 重置 scope/tools
+    // 重置 scope/tools/group
     scope.value = 'global'
     projectId.value = 0
-    selectedTools.value = ['codex', 'claude', 'opencode', 'cursor', 'trae']
+    // 2026-06-30 二改:默认全不勾
+    selectedTools.value = []
+    groupPath.value = ''
     formError.value = ''
+    newGroupOpen.value = false
+    newGroupInput.value = ''
+    newGroupErr.value = ''
   },
   { immediate: true }
 )
@@ -103,6 +142,37 @@ function close() {
   emit('cancel')
 }
 
+async function ensureTreeLoaded() {
+  if (!skillTree.tree || skillTree.tree.length === 0) {
+    try {
+      await skillTree.load()
+    } catch (e) {
+      // 加载失败不阻塞弹窗
+    }
+  }
+}
+
+async function createNewGroup() {
+  const path = newGroupInput.value.trim()
+  if (!path) {
+    newGroupErr.value = t('market.installDialog.groupEmpty')
+    return
+  }
+  try {
+    const res = await apiCreateGroup({ group_path: path })
+    const created = res?.group_path || path
+    // 重新拉树(轻量)
+    await skillTree.load()
+    groupPath.value = created
+    newGroupOpen.value = false
+    newGroupInput.value = ''
+    newGroupErr.value = ''
+    emit('tree-changed')
+  } catch (e) {
+    newGroupErr.value = e?.message || String(e)
+  }
+}
+
 function onConfirm() {
   if (!canConfirm.value) {
     formError.value = t('common.invalidInput')
@@ -117,12 +187,16 @@ function onConfirm() {
     projectId: scope.value === 'project' ? projectId.value : 0,
     tools: [...selectedTools.value],
     finalName: finalName.value,
+    groupPath: groupPath.value || '',
   })
-  // 关闭交给父组件处理(等 install 完成后关闭)
   setTimeout(() => {
     submitting.value = false
   }, 100)
 }
+
+onMounted(() => {
+  ensureTreeLoaded()
+})
 </script>
 
 <template>
@@ -194,7 +268,48 @@ function onConfirm() {
         </div>
       </div>
 
-      <!-- tools 多选 -->
+      <!-- 分组选择 (2026-06-30 增) -->
+      <div class="form-row">
+        <label class="form-label">{{ t('market.installDialog.groupLabel') }}</label>
+        <div class="form-controls">
+          <select v-model="groupPath" class="form-select">
+            <option value="">{{ t('market.installDialog.groupNone') }}</option>
+            <option
+              v-for="opt in groupOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >{{ opt.label }}</option>
+          </select>
+          <button
+            type="button"
+            class="ghost sm"
+            :title="t('market.installDialog.btnNewGroup')"
+            @click="newGroupOpen = !newGroupOpen"
+          >
+            <Icon icon="mdi:folder-plus-outline" width="12" height="12" />
+            {{ t('market.installDialog.btnNewGroup') }}
+          </button>
+        </div>
+        <div v-if="newGroupOpen" class="group-create">
+          <input
+            v-model="newGroupInput"
+            type="text"
+            class="form-input"
+            :placeholder="t('market.installDialog.groupPlaceholder')"
+            @keyup.enter="createNewGroup"
+          />
+          <button type="button" class="primary sm" :disabled="!newGroupInput.trim()" @click="createNewGroup">
+            <Icon icon="mdi:check" width="12" height="12" />
+          </button>
+          <button type="button" class="ghost sm" @click="newGroupOpen = false; newGroupInput = ''">
+            <Icon icon="mdi:close" width="12" height="12" />
+          </button>
+        </div>
+        <p v-if="newGroupErr" class="form-hint form-hint-error">{{ newGroupErr }}</p>
+        <p v-else class="form-hint">{{ t('market.installDialog.groupHint') }}</p>
+      </div>
+
+      <!-- tools 多选(2026-06-30 改:默认空) -->
       <div class="form-row">
         <label class="form-label">{{ t('market.installDialog.toolsLabel') }}</label>
         <div class="form-controls-col">
@@ -356,7 +471,7 @@ function onConfirm() {
 .form-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -366,7 +481,8 @@ function onConfirm() {
   gap: 6px;
 }
 
-.form-select {
+.form-select,
+.form-input {
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -374,6 +490,12 @@ function onConfirm() {
   min-width: 200px;
   background: var(--bg-card);
   color: var(--text);
+  font-family: inherit;
+}
+
+.form-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .radio {
@@ -413,11 +535,20 @@ function onConfirm() {
   gap: 6px;
 }
 
+button.sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .form-hint {
   margin: 0;
   font-size: 11px;
   color: var(--text-faint);
   line-height: 1.4;
+}
+
+.form-hint-error {
+  color: var(--danger);
 }
 
 .form-error {
@@ -426,6 +557,14 @@ function onConfirm() {
   padding: 6px 10px;
   background: var(--danger-dim);
   border-radius: var(--radius-sm);
+}
+
+/* 分组新建 inline */
+.group-create {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .spinner {

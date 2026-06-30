@@ -13,14 +13,17 @@ import (
 
 // RequestInstallMarketSkillV2 一键安装入参(2026-06-30 增)。
 //
-// 与 RequestInstallMarketSkill 比:多 Tools / FinalName,内部自动 apply。
+// 与 RequestInstallMarketSkill 比:多 Tools / FinalName / GroupPath,内部自动 apply。
 type RequestInstallMarketSkillV2 struct {
 	SourceID  uint     `json:"source_id"`
 	RemoteID  string   `json:"remote_id"`
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
-	Tools     []string `json:"tools"`     // 可选;空 = skilladapter.AllTools
+	Tools     []string `json:"tools"`      // 可选;空数组 = 只写盘不 apply(2026-06-30 改)
 	FinalName string   `json:"final_name"` // 可选;支持"另存为"重命名
+	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
+	// 空 = 装到根(未分组);非空时写到 Manifest.GroupPath,store 落到子目录。
+	GroupPath string `json:"group_path"`
 }
 
 // RespondInstallMarketSkillV2 响应。
@@ -47,6 +50,7 @@ func InstallMarketSkillV2(c *ginp.ContextPlus, req *RequestInstallMarketSkillV2)
 		ProjectID: req.ProjectID,
 		Tools:     req.Tools,
 		FinalName: req.FinalName,
+		GroupPath: req.GroupPath,
 	})
 	if err != nil {
 		switch {

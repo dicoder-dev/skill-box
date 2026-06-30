@@ -378,7 +378,14 @@ export default {
       toolsLabel: '启用到工具:',
       selectAll: '全选',
       selectNone: '全不选',
-      toolsHint: '默认勾选本机全部 5 个工具(可在「技能」页调整)',
+      toolsHint: '默认不勾任何工具,需手动勾选要启用的工具(可在「技能」页调整)',
+      // 2026-06-30 增:分组选择
+      groupLabel: '分组:',
+      groupNone: '根(未分组)',
+      groupPlaceholder: 'frontend/react',
+      groupHint: '把 skill 落到这个分组下,空 = 根(未分组)。新分组可点 + 号现场创建。',
+      groupEmpty: '分组路径不能为空',
+      btnNewGroup: '新建',
       duplicateTitle: '「{name}」已存在于本地',
       duplicateHint: '同名 skill 已在 skillbox 库中。请选择处理方式:',
       btnOverwrite: '覆盖安装',
@@ -391,6 +398,7 @@ export default {
       applyPartial: '已装到本地库,但 {n} 个工具启用失败:{tools}',
       applyAllOk: '已装并自动启用到 {n} 个工具',
       applyAllFailed: '已装到本地库,但所有工具启用都失败,可在技能页手动重试',
+      noToolsWarn: '未勾选任何工具:skill 只会写盘到本地,不会自动启用到任何工具目录。',
     },
     // 源设置 (P1)
     sourcesSettings: {

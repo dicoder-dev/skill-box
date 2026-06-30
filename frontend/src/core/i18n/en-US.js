@@ -375,7 +375,14 @@ export default {
       toolsLabel: 'Apply to tools:',
       selectAll: 'Select all',
       selectNone: 'Deselect all',
-      toolsHint: 'All 5 local tools are checked by default (you can adjust in the Skills page)',
+      toolsHint: 'No tools are checked by default. Pick the ones you want to apply (you can adjust in the Skills page)',
+      // 2026-06-30 added
+      groupLabel: 'Group:',
+      groupNone: 'Root (ungrouped)',
+      groupPlaceholder: 'frontend/react',
+      groupHint: 'The skill will be saved under this group. Empty = root. Create a new group inline with the + button.',
+      groupEmpty: 'Group path is required',
+      btnNewGroup: 'New',
       duplicateTitle: '"{name}" already exists locally',
       duplicateHint: 'A skill with the same name is already in the skillbox store. Pick a strategy:',
       btnOverwrite: 'Overwrite',
@@ -388,6 +395,7 @@ export default {
       applyPartial: 'Installed to local store, but {n} tools failed to apply: {tools}',
       applyAllOk: 'Installed and applied to {n} tools',
       applyAllFailed: 'Installed to local store, but all tool applications failed. Retry from the Skills page.',
+      noToolsWarn: 'No tools selected: the skill will only be saved to the local store without enabling any tool directory.',
     },
     // source settings (P1)
     sourcesSettings: {

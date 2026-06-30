@@ -287,6 +287,11 @@ type InstallV2Input struct {
 	ProjectID uint     // scope=project 时必填
 	Tools     []string // 可选;空 = skilladapter.AllTools(本机全部 5 个工具)
 	FinalName string   // 前端确认后的最终 name(支持"另存为"重命名);空 = manifest.Name
+	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
+	// 走 NormalizeGroupName 校验(防 ../ / 绝对路径),非空时写到 Manifest.GroupPath,
+	// store.Save 会把 skill 落到 <root>/<group_path>/<name>/ 子目录。
+	// 空 = 装到根(与现状一致)。
+	GroupPath string
 }
 
 // InstallV2Result 一键安装响应。
@@ -299,15 +304,19 @@ type InstallV2Result struct {
 	ApplyResult  *sskillapp.ApplyResult     `json:"apply_result,omitempty"`
 	Canonical    *skilladapter.Canonical    `json:"canonical,omitempty"`
 	SkippedTools []string                   `json:"skipped_tools,omitempty"`
+	// 2026-06-30 增:实际写入的分组路径(空 = 根);前端用来刷新 tree 时定位
+	GroupPath string `json:"group_path,omitempty"`
 }
 
 // InstallV2 一站式:写盘 + apply 到工具。
 //
 // 关键决策(2026-06-30):
-//   - Tools 空时默认填 skilladapter.AllTools(5 个工具)
+//   - Tools 空数组(0 个) = "不 apply 任何工具,只写盘"(用户主动选择为空时尊重他的意图)
+//     旧行为:Tools=nil 时默认填 AllTools(5 个);2026-06-30 改为尊重空数组语义
 //   - 写盘成功 + apply 部分失败不回滚 store;SkippedTools 列出失败的工具
 //   - write 阶段就报错时仍然整体返 err(没东西可 apply)
 //   - 重名检测由前端做(传 FinalName),后端不重复检测
+//   - 分组路径(2026-06-30 增):in.GroupPath 写到 Manifest.GroupPath,store.Save 走子目录
 func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2Result, error) {
 	if in == nil {
 		return nil, fmt.Errorf("%w: nil input", ErrInstallFailed)
@@ -352,21 +361,43 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 		return nil, fmt.Errorf("%w: empty final_name after normalize", ErrInstallFailed)
 	}
 	can.Manifest.Name = finalName
-	// 5) 补 manifest 字段
+	// 5) 提前拿到 ssvc(2026-06-30:GroupPath 处理 + 后续写盘都要用,集中拿一次)。
+	//    sskillSvcFactory 为空时返错(无法写盘),不要继续走。
+	var ssvc *sskill.Service
+	if s.skillSvcFactory != nil {
+		var ferr error
+		ssvc, ferr = s.skillSvcFactory()
+		if ferr != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInstallFailed, ferr)
+		}
+	} else {
+		return nil, fmt.Errorf("%w: skill service factory not wired", ErrInstallFailed)
+	}
+	// 6) 分组路径(2026-06-30 增)——走 NormalizeGroupName 规范化(允许 / 嵌套)。
+	//    安全校验由 store.Save 内部 safeRelPath 做最后一道防线(防 ../ / 绝对路径),
+	//    这里只规范化 + 写 Manifest.GroupPath + 自动 CreateGroup 建父目录
+	//    (store.Save 不会自动 mkdir 父目录)。
+	groupPath := strings.TrimSpace(in.GroupPath)
+	if groupPath != "" {
+		normalized := skilladapter.NormalizeGroupName(groupPath)
+		if normalized == "" {
+			return nil, fmt.Errorf("%w: group_path %q invalid (empty after normalize)", ErrInstallFailed, groupPath)
+		}
+		can.Manifest.GroupPath = normalized
+		groupPath = normalized
+		// 自动建分组目录(让 InstallV2 一站式,前端不需要先 createGroup 再 install)
+		if gerr := ssvc.CreateGroup(normalized); gerr != nil {
+			return nil, fmt.Errorf("%w: create group %q: %v", ErrInstallFailed, normalized, gerr)
+		}
+	}
+	// 7) 补 manifest 字段
 	can.Manifest.Author = firstNonEmpty(can.Manifest.Author, row.Author)
 	if can.Manifest.License == "" {
 		can.Manifest.License = row.License
 	}
 	can.Manifest.Source = firstNonEmpty(can.Manifest.Source, "market")
 	can.Manifest.SourceRef = firstNonEmpty(can.Manifest.SourceRef, fmt.Sprintf("%s:%s", src.Name, in.RemoteID))
-	// 6) 写盘
-	if s.skillSvcFactory == nil {
-		return nil, fmt.Errorf("%w: skill service factory not wired", ErrInstallFailed)
-	}
-	ssvc, err := s.skillSvcFactory()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, err)
-	}
+	// 8) 写盘
 	version := firstNonEmpty(can.Manifest.Version, row.Version, "0.1.0")
 	created, cerr := ssvc.Create(&sskill.WriteInput{
 		Scope:     scope,
@@ -379,21 +410,23 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 	if cerr != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, cerr)
 	}
-	// 7) Tools 默认
+	// 8) Tools:空数组 = 不 apply,只写盘(2026-06-30 改:不再默认填 AllTools)
 	tools := in.Tools
-	if len(tools) == 0 {
-		tools = skilladapter.AllTools
-	}
 	result := &InstallV2Result{
-		Name:      finalName,
-		Version:   version,
-		Scope:     scope,
-		ProjectID: in.ProjectID,
-		Tools:     tools,
-		Canonical: created,
+		Name:         finalName,
+		Version:      version,
+		Scope:        scope,
+		ProjectID:    in.ProjectID,
+		Tools:        tools,
+		Canonical:    created,
+		GroupPath:    groupPath,
+		SkippedTools: nil,
 	}
-	// 8) Apply(skillAppSvc 未注入时降级为只写盘)
-	if s.skillAppSvc == nil {
+	// 9) Apply — Tools 为空时跳过 apply,只返回写盘结果
+	if s.skillAppSvc == nil || len(tools) == 0 {
+		if len(tools) == 0 {
+			result.SkippedTools = nil // 显式置空,前端易判断"未 apply"
+		}
 		return result, nil
 	}
 	ar, aerr := s.skillAppSvc.Apply(&sskillapp.ApplyInput{
