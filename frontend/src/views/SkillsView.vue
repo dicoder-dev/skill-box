@@ -219,15 +219,12 @@ const toolDisplay = computed(() => {
   return m
 })
 
-// 工具名 → 图标(后端 icon 字段已废弃为空,前端按 tool_id 映射 mdi)
-const TOOL_ICON_MAP = {
-  codex: 'mdi:console',
-  claude: 'mdi:robot-outline',
-  opencode: 'mdi:code-tags',
-  cursor: 'mdi:cursor-default-click-outline',
-  trae: 'mdi:leaf',
+// 工具名 → 图标(2026-06-30 后端化:icon 字段由 toolspecs/*.yaml 的 mdi_icon 决定,
+// 前端不再硬编码 TOOL_ICON_MAP,新工具适配零前端改动)。
+function toolIcon(toolID) {
+  const t = scopeTools.value.find((x) => x.tool_id === toolID)
+  return t?.icon || 'mdi:puzzle-outline'
 }
-function toolIcon(toolID) { return TOOL_ICON_MAP[toolID] || 'mdi:puzzle-outline' }
 function toolShort(toolID) {
   // 短名:codex/claude/opencode/cursor/trae 直接用 id,首字母大写
   if (!toolID) return '?'
