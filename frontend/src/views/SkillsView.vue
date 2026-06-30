@@ -1497,6 +1497,18 @@ function resolveDropGroupPath(target) {
 
 async function onTreeDrop(payload) {
   // payload: { target, event, hovering, source? }
+  // 2026-06-30 改:整体重写拦截逻辑顺序,确保所有 no-op / 非法操作都在前端拦下,
+  // 不会发无意义请求到后端。拦截优先级:
+  //   1. 源数据缺失 → 静默 return(数据传输出错,不该弹错给用户)
+  //   2. 解析 targetPath:target=null → 走合成 target → 路径 = '' (根)
+  //   3. 同位置 no-op:源/目标路径相同 → moveSameGroup toast
+  //   4. 分组挪到自己的子分组下 → moveIntoDescendant 错误 toast
+  //   5. 顶层分组"挪到根" → alreadyAtRoot info toast
+  //   6. 真正调 API
+  //
+  // 注意:TreeNode.onDropGroup 现在 stopPropagation,本函数收到 payload 只可能来自:
+  //   - 拖到具体 .tree-row(由 TreeNode emit)→ target=node
+  //   - 拖到 .tree-container 空白处(由 onTreeContainerDrop 调 onTreeDrop)→ target=null
   if (payload.hovering === true) {
     // 拖入中:把 dropTarget 设到目标分组,触发 .tree-node-drop-target 高亮
     skillTree.setDropTarget(resolveDropGroupPath(payload.target))
@@ -1520,6 +1532,8 @@ async function onTreeDrop(payload) {
   const targetPath = resolveDropGroupPath(target)
   // 同位置:跳过
   if (source.type === 'skill') {
+    // 2026-06-30 加防御:source.path 必填,空就静默 return(异常数据,不打扰用户)
+    if (!source.path) return
     // source.path = "<group>/<name>";目标分组 = targetPath
     const srcGroup = source.path.split('/').slice(0, -1).join('/')
     if (srcGroup === targetPath) {
@@ -1615,8 +1629,10 @@ function onTreeContainerDragLeave(e) {
 }
 
 function onTreeContainerDrop(e) {
+  // 2026-06-30 改:去掉 stopPropagation。TreeNode.onDropGroup 已经 stopPropagation,
+  // 本函数只在"事件落在 .tree-container 空白处、没有任何 .tree-row 命中"时触发,
+  // 不会再和 TreeNode 重复处理。保留 stopPropagation 反而可能吞掉未来加的全局监听。
   e.preventDefault()
-  e.stopPropagation()
   rootDragCounter.value = 0
   rootDropHover.value = false
   const raw = e.dataTransfer?.getData('application/x-skillbox-node')
