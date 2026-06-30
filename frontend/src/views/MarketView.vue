@@ -1,123 +1,55 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import {
-  listSources,
-  listMarketSkills,
-  refreshSource,
-  installMarketSkill,
-} from '@/api/skillbox/market.js'
+import { useMarketStore } from '@/core/store/market'
+import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
+import MarketInstallConfirm from '@/components/MarketInstallConfirm.vue'
 
 const { t } = useI18n()
+const market = useMarketStore()
+const toast = useToastStore()
+
+// 注入 appBus 用于跳到 skills tab
+const appBus = inject('appBus', null)
 
 // 状态
-const loading = ref(false)
-const error = ref('')
-
-// 源
-const sources = ref([])
-const activeSourceId = ref(0)
-const refreshing = ref(false)
-const lastRefresh = ref(null)
+const error = computed(() => market.lastError)
+const loading = computed(() => market.loading)
+const refreshing = computed(() => market.refreshing)
 
 // 列表
+const items = computed(() => market.skills)
+const total = computed(() => market.total)
+const page = computed(() => market.page)
+const size = computed(() => market.size)
+const totalPages = computed(() => market.totalPages)
+const installed = computed(() => market.installed)
+
+// 源
+const sources = computed(() => market.sources)
+const activeSourceId = computed(() => market.activeSourceId)
+
+// 工具栏
 const keyword = ref('')
-const items = ref([])
-const total = ref(0)
-const page = ref(1)
-const size = 20
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
-
-// 安装
-const installScope = ref('global')
-const installing = ref(false)
-const installError = ref('')
-const installOk = ref('')
-
-async function fetchSources() {
-  try {
-    const res = await listSources()
-    sources.value = res.items || []
-    if (sources.value.length > 0 && !activeSourceId.value) {
-      activeSourceId.value = sources.value[0].id
-    }
-  } catch (e) {
-    error.value = t('market.errLoadSources', { msg: e?.message || e })
-  }
-}
-
-async function fetchSkills() {
-  if (!activeSourceId.value) return
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await listMarketSkills({
-      source_id: activeSourceId.value,
-      keyword: keyword.value,
-      page: page.value,
-      size,
-    })
-    items.value = res.items || []
-    total.value = res.total || 0
-  } catch (e) {
-    error.value = t('market.errLoadList', { msg: e?.message || e })
-  } finally {
-    loading.value = false
-  }
-}
-
-async function onRefresh() {
-  if (!activeSourceId.value || refreshing.value) return
-  refreshing.value = true
-  error.value = ''
-  try {
-    const res = await refreshSource(activeSourceId.value)
-    lastRefresh.value = res
-    page.value = 1
-    await fetchSkills()
-  } catch (e) {
-    error.value = t('market.errRefresh', { msg: e?.message || e })
-  } finally {
-    refreshing.value = false
-  }
-}
 
 function onSearch() {
-  page.value = 1
-  fetchSkills()
+  market.setKeyword(keyword.value)
+  market.loadSkills()
 }
 
 function onSelectSource(id) {
-  activeSourceId.value = id
-  page.value = 1
-  lastRefresh.value = null
-  fetchSkills()
+  market.setSourceActive(id)
+  market.loadSkills()
 }
 
-async function onInstall(item) {
-  const ok = await openConfirm({
-    title: t('market.btnInstall'),
-    message: t('market.installConfirm', { name: item.name, scope: installScope.value }),
-    confirmText: t('market.btnInstall'),
-  })
-  if (!ok) return
-  installing.value = true
-  installError.value = ''
-  installOk.value = ''
+async function onRefresh() {
   try {
-    const res = await installMarketSkill({
-      source_id: activeSourceId.value,
-      remote_id: item.remote_id,
-      scope: installScope.value,
-      project_id: 0,
-    })
-    installOk.value = t('market.okInstalled', { name: res?.skill?.name || item.name, version: res?.skill?.version || '?' })
+    await market.refreshActive()
+    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh || {}) })
   } catch (e) {
-    installError.value = t('market.errInstall', { msg: e?.message || e })
-  } finally {
-    installing.value = false
+    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
   }
 }
 
@@ -129,33 +61,59 @@ function openDetail(item) {
   detailOpen.value = true
 }
 
-// 通用确认弹窗(取代原生 confirm)
-const confirmOpen = ref(false)
-const confirmOpts = reactive({
-  title: '',
-  message: '',
-  confirmText: '',
-  cancelText: '',
-  variant: 'default',
-  resolve: null,
-})
-function openConfirm(opts) {
-  confirmOpts.title = opts.title || t('common.confirm')
-  confirmOpts.message = opts.message || ''
-  confirmOpts.confirmText = opts.confirmText || t('common.confirm')
-  confirmOpts.cancelText = opts.cancelText || t('common.cancel')
-  confirmOpts.variant = opts.variant || 'default'
-  confirmOpen.value = true
-  return new Promise((resolve) => { confirmOpts.resolve = resolve })
+// 安装弹窗
+const installOpen = ref(false)
+const installItem = ref(null)
+function openInstall(item) {
+  installItem.value = item
+  installOpen.value = true
 }
-function resolveConfirm(ok) {
-  if (confirmOpts.resolve) confirmOpts.resolve(ok)
-  confirmOpen.value = false
+
+async function onInstallConfirm(payload) {
+  try {
+    const res = await market.install(payload)
+    installOpen.value = false
+    // 根据 apply 结果给 toast
+    if (res?.skipped_tools?.length && res.skipped_tools.length > 0) {
+      toast.push({
+        type: 'info',
+        message: t('market.installDialog.applyPartial', {
+          n: res.skipped_tools.length,
+          tools: res.skipped_tools.join(', '),
+        }),
+      })
+    } else if (res?.apply_result?.all_ok) {
+      toast.push({
+        type: 'success',
+        message: t('market.installDialog.applyAllOk', { n: res.apply_result?.applies?.length || 0 }),
+      })
+    } else {
+      toast.push({ type: 'success', message: t('market.okInstalled', { name: res?.name, version: res?.version }) })
+    }
+    // 刷新列表(更新 installed 标记)
+    await market.loadSkills()
+  } catch (e) {
+    toast.push({ type: 'error', message: t('market.errInstall', { msg: e?.message || e }) })
+  }
+}
+
+// 跳到 skills tab(已安装时查看)
+function viewSkill(name) {
+  if (appBus && typeof appBus.emit === 'function') {
+    appBus.emit('switch-tab', 'skills')
+  } else {
+    window.dispatchEvent(new CustomEvent('skillbox:switch-tab', { detail: 'skills' }))
+  }
 }
 
 onMounted(async () => {
-  await fetchSources()
-  await fetchSkills()
+  try {
+    await market.loadSources()
+    await market.loadProjects()
+    await market.loadSkills()
+  } catch (e) {
+    // error 已在 store 里
+  }
 })
 </script>
 
@@ -177,13 +135,6 @@ onMounted(async () => {
     <div class="card">
       <!-- 工具栏 -->
       <div class="toolbar">
-        <div class="toolbar-left">
-          <span class="toolbar-label">{{ t('market.scopeLabel') }}</span>
-          <select v-model="installScope" class="scope-select">
-            <option value="global">{{ t('market.scopeGlobal') }}</option>
-            <option value="project" disabled>{{ t('market.scopeProject') }}</option>
-          </select>
-        </div>
         <div class="toolbar-center">
           <div class="search-box">
             <Icon icon="mdi:magnify" width="16" height="16" class="search-icon" />
@@ -224,23 +175,15 @@ onMounted(async () => {
         <span v-if="!sources.length && !loading" class="source-empty">{{ t('market.noSources') }}</span>
       </nav>
 
-      <!-- 消息提示 -->
+      <!-- 错误提示 -->
       <div v-if="error" class="message message-error">
         <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
         {{ error }}
       </div>
-      <div v-if="lastRefresh" class="message message-success">
+      <div v-if="market.lastRefresh" class="message message-success">
         <Icon icon="mdi:check-circle-outline" width="14" height="14" />
-        {{ t('market.lastRefresh', { pulled: lastRefresh.pulled_count, inserted: lastRefresh.inserted, updated: lastRefresh.updated }) }}
-        <span class="muted">({{ lastRefresh.finished_at }})</span>
-      </div>
-      <div v-if="installOk" class="message message-success">
-        <Icon icon="mdi:check-circle-outline" width="14" height="14" />
-        {{ installOk }}
-      </div>
-      <div v-if="installError" class="message message-error">
-        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
-        {{ installError }}
+        {{ t('market.lastRefresh', { pulled: market.lastRefresh.pulled_count, inserted: market.lastRefresh.inserted, updated: market.lastRefresh.updated }) }}
+        <span class="muted">({{ market.lastRefresh.finished_at }})</span>
       </div>
 
       <!-- 列表 -->
@@ -253,7 +196,8 @@ onMounted(async () => {
               <th>{{ t('market.colAuthor') }}</th>
               <th>{{ t('market.colDescription') }}</th>
               <th>{{ t('market.colTags') }}</th>
-              <th style="width: 160px"></th>
+              <th>{{ t('market.colStatus') }}</th>
+              <th style="width: 200px"></th>
             </tr>
           </thead>
           <tbody>
@@ -271,13 +215,26 @@ onMounted(async () => {
                 </span>
               </td>
               <td>
+                <span v-if="installed[it.name]" class="installed-chip">
+                  <Icon icon="mdi:check-circle" width="12" height="12" />
+                  {{ t('market.installedChip') }}
+                </span>
+                <span v-else class="not-installed-chip">
+                  <Icon icon="mdi:circle-outline" width="12" height="12" />
+                  {{ t('market.notInstalledChip') }}
+                </span>
+              </td>
+              <td>
                 <div class="row-actions">
                   <button class="action-btn" :title="t('common.edit')" @click="openDetail(it)">
                     <Icon icon="mdi:eye-outline" width="12" height="12" />
                   </button>
-                  <button class="install-btn" :disabled="installing" @click="onInstall(it)">
+                  <button v-if="installed[it.name]" class="action-btn" :title="t('market.btnViewSkill')" @click="viewSkill(it.name)">
+                    <Icon icon="mdi:open-in-new" width="12" height="12" />
+                  </button>
+                  <button class="install-btn" :disabled="market.installing" @click="openInstall(it)">
                     <Icon icon="mdi:download" width="12" height="12" />
-                    {{ installing ? t('market.installing') : t('market.btnInstall') }}
+                    {{ installed[it.name] ? t('market.btnReinstall') : t('market.btnInstall') }}
                   </button>
                 </div>
               </td>
@@ -297,12 +254,12 @@ onMounted(async () => {
 
       <!-- 分页 -->
       <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="page--; fetchSkills()">
+        <button :disabled="page <= 1" @click="market.page--; market.loadSkills()">
           <Icon icon="mdi:chevron-left" width="14" height="14" />
           {{ t('common.prev') }}
         </button>
         <span class="pager-info">{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
-        <button :disabled="page >= totalPages" @click="page++; fetchSkills()">
+        <button :disabled="page >= totalPages" @click="market.page++; market.loadSkills()">
           {{ t('common.next') }}
           <Icon icon="mdi:chevron-right" width="14" height="14" />
         </button>
@@ -343,6 +300,17 @@ onMounted(async () => {
             </span>
           </div>
         </div>
+        <div class="detail-row detail-row-full">
+          <span class="detail-label">{{ t('market.colStatus') }}</span>
+          <span v-if="installed[detailItem.name]" class="installed-chip">
+            <Icon icon="mdi:check-circle" width="12" height="12" />
+            {{ t('market.installedChip') }}
+          </span>
+          <span v-else class="not-installed-chip">
+            <Icon icon="mdi:circle-outline" width="12" height="12" />
+            {{ t('market.notInstalledChip') }}
+          </span>
+        </div>
       </div>
       <template #footer>
         <button type="button" class="ghost" @click="detailOpen = false">
@@ -352,8 +320,8 @@ onMounted(async () => {
         <button
           type="button"
           class="primary"
-          :disabled="installing"
-          @click="detailOpen = false; onInstall(detailItem)"
+          :disabled="market.installing"
+          @click="detailOpen = false; openInstall(detailItem)"
         >
           <Icon icon="mdi:download" width="14" height="14" />
           {{ t('market.btnInstall') }}
@@ -361,27 +329,15 @@ onMounted(async () => {
       </template>
     </Modal>
 
-    <!-- 通用确认弹窗 -->
-    <Modal
-      v-model="confirmOpen"
-      size="sm"
-      :title="confirmOpts.title"
-      :close-on-mask="false"
-    >
-      <p class="confirm-message">{{ confirmOpts.message }}</p>
-      <template #footer>
-        <button type="button" class="ghost" @click="resolveConfirm(false)">
-          {{ confirmOpts.cancelText }}
-        </button>
-        <button
-          type="button"
-          :class="confirmOpts.variant === 'danger' ? 'danger' : 'primary'"
-          @click="resolveConfirm(true)"
-        >
-          {{ confirmOpts.confirmText }}
-        </button>
-      </template>
-    </Modal>
+    <!-- 安装弹窗 -->
+    <MarketInstallConfirm
+      v-model="installOpen"
+      :item="installItem"
+      :installed="installed"
+      :projects="market.projects"
+      @confirm="onInstallConfirm"
+      @cancel="installOpen = false"
+    />
   </div>
 </template>
 
@@ -567,6 +523,12 @@ onMounted(async () => {
   color: var(--danger);
 }
 
+.muted {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 /* 表格 */
 .table-container {
   overflow-x: auto;
@@ -631,6 +593,31 @@ onMounted(async () => {
   padding: 2px 8px;
   font-size: 11px;
   margin: 2px;
+}
+
+/* 已安装/未安装 chip */
+.installed-chip,
+.not-installed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.installed-chip {
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.not-installed-chip {
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
 }
 
 /* 安装按钮 */
@@ -729,15 +716,6 @@ onMounted(async () => {
   gap: 6px;
 }
 
-/* 确认弹窗 */
-.confirm-message {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-line;
-}
-
 /* 分页器 */
 .pager {
   display: flex;
@@ -782,6 +760,20 @@ onMounted(async () => {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-faint);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 响应式 */
