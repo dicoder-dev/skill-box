@@ -85,8 +85,9 @@ func TestSplitRemoteID(t *testing.T) {
 
 func TestParseCatalog_Fallback(t *testing.T) {
 	items := parseCatalog(knownCatalogFallback, "https://skills.sh")
-	if len(items) < 3 {
-		t.Fatalf("parseCatalog fallback should have >=3 items, got %d", len(items))
+	// 2026-06-30 增:fallback 列表扩到 ≥20 条,这里断言 ≥20
+	if len(items) < 20 {
+		t.Fatalf("parseCatalog fallback should have >=20 items, got %d", len(items))
 	}
 	seen := map[string]bool{}
 	for _, it := range items {
@@ -98,10 +99,71 @@ func TestParseCatalog_Fallback(t *testing.T) {
 	for _, key := range []string{
 		"vercel-labs/agent-skills@vercel-react-best-practices",
 		"ComposioHQ/awesome-claude-skills@pr-review",
+		"obra/superpowers@brainstorming",
+		"anthropics/skills@canvas-design",
 	} {
 		if !seen[key] {
 			t.Errorf("missing known catalog entry %q", key)
 		}
+	}
+}
+
+// TestParseHTMLLinks_LinkFallback 验证新版站点的 <a href> 链接模式解析。
+func TestParseHTMLLinks_LinkFallback(t *testing.T) {
+	body := `<html><body>
+<a href="/vercel-labs/agent-skills/code-review">code-review</a>
+<a href="/obra/superpowers/brainstorming">brainstorming</a>
+<a href="/about">about</a>
+<a href="/docs">docs</a>
+<a href="https://example.com/external">external</a>
+</body></html>`
+	items := parseHTMLLinks(body, "https://skills.sh")
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items (about/docs filtered), got %d (%+v)", len(items), items)
+	}
+	want := map[string]bool{
+		"vercel-labs/agent-skills@code-review": true,
+		"obra/superpowers@brainstorming":       true,
+	}
+	for _, it := range items {
+		if !want[it.RemoteID] {
+			t.Errorf("unexpected item %q", it.RemoteID)
+		}
+	}
+}
+
+// TestIsReservedPath 验证保留路径过滤。
+func TestIsReservedPath(t *testing.T) {
+	for _, s := range []string{"about", "About", "DOCS", "blog", "api"} {
+		if !isReservedPath(s) {
+			t.Errorf("%q should be reserved", s)
+		}
+	}
+	for _, s := range []string{"code-review", "my-skill", "tailwind"} {
+		if isReservedPath(s) {
+			t.Errorf("%q should not be reserved", s)
+		}
+	}
+}
+
+// TestDownload_ExtraPathCandidates 验证 Download 走 `<repo>/.claude/skills/<name>/SKILL.md` 路径。
+func TestDownload_ExtraPathCandidates(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		// 只 mock `.claude/skills/<name>/SKILL.md` 路径,验证新加的路径能命中
+		"/foo/bar/main/.claude/skills/hi/SKILL.md": {
+			status: 200,
+			ct:     "text/markdown",
+			body: "---\nname: hi\nversion: 0.2.0\n---\n# Hi\n",
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	a.SetRawBaseOverride("https://stub")
+	can, err := a.Download(context.Background(), "https://skills.sh", "foo/bar@hi")
+	if err != nil {
+		t.Fatalf("expected hit on .claude/skills path: %v", err)
+	}
+	if can == nil || can.Manifest.Name != "hi" {
+		t.Errorf("unexpected canonical: %+v", can)
 	}
 }
 

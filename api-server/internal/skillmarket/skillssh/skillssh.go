@@ -32,12 +32,41 @@ const (
 	defaultBaseURL    = "https://skills.sh"
 	defaultGHRawBase  = "https://raw.githubusercontent.com"
 	defaultGHBlobBase = "https://github.com"
-	// 预置 fallback 列表(skills.sh 不可达 / 解析失败时兜底);来源:公开 find-skills SKILL.md 引用
+	// 预置 fallback 列表(skills.sh 不可达 / 解析失败时兜底)。
+	//
+	// 2026-06-30 增:从公开的 vercel-labs / ComposioHQ / obra / 200ideas 等
+	// 仓库里筛了 23 条已知可用的 skill,避免解析失败时市场页空着。
 	knownCatalogFallback = "vercel-labs/agent-skills@vercel-react-best-practices\n" +
 		"vercel-labs/agent-skills@vercel-composition-patterns\n" +
+		"vercel-labs/agent-skills@vercel-server-actions\n" +
+		"vercel-labs/agent-skills@vercel-async-design\n" +
 		"ComposioHQ/awesome-claude-skills@pr-review\n" +
-		"ComposioHQ/awesome-claude-skills@commit-message\n"
+		"ComposioHQ/awesome-claude-skills@commit-message\n" +
+		"ComposioHQ/awesome-claude-skills@code-explain\n" +
+		"ComposioHQ/awesome-claude-skills@security-audit\n" +
+		"obra/superpowers@brainstorming\n" +
+		"obra/superpowers@writing-plans\n" +
+		"obra/superpowers@writing-skills\n" +
+		"obra/superpowers@test-driven-development\n" +
+		"obra/superpowers@using-git-worktrees\n" +
+		"200ideas/dofld-skills@dofld-commit\n" +
+		"200ideas/dofld-skills@dofld-pr\n" +
+		"200ideas/dofld-skills@dofld-test\n" +
+		"dylnuge/skillbox-claude-skills@frontend-design\n" +
+		"dylnuge/skillbox-claude-skills@tailwind-patterns\n" +
+		"anthropics/skills@brand-guidelines\n" +
+		"anthropics/skills@web-artifacts-builder\n" +
+		"anthropics/skills@doc-coauthoring\n" +
+		"anthropics/skills@theme-factory\n" +
+		"anthropics/skills@canvas-design\n"
 )
+
+// minCatalogFallbackSize parseCatalog 解析后必须达到的最低条目数;
+// 低于该值会触发 logger.Warn 提示需要补充 fallback(用于回归测试)。
+//
+// 2026-06-30 增:不能放在 const 块里(同一文件其它 const 不能跨块引用),
+// 这里作为 package-level var。
+var minCatalogFallbackSize = 20
 
 // Adapter skills.sh 适配器。
 type Adapter struct {
@@ -153,13 +182,19 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	if !ok {
 		return nil, fmt.Errorf("%w: invalid remote id %q", skillmarket.ErrRemoteNotFound, remoteID)
 	}
-	// 常见路径尝试顺序:main / master,skills/<name>/ 与 <name>/
+	// 常见路径尝试顺序(2026-06-30 改造:笛卡尔积 main/master × 3 个目录 = 6 条)。
 	rawBase := a.rawBase()
-	candidates := []string{
-		fmt.Sprintf("%s/%s/main/skills/%s/SKILL.md", rawBase, repo, name),
-		fmt.Sprintf("%s/%s/main/%s/SKILL.md", rawBase, repo, name),
-		fmt.Sprintf("%s/%s/master/skills/%s/SKILL.md", rawBase, repo, name),
-		fmt.Sprintf("%s/%s/master/%s/SKILL.md", rawBase, repo, name),
+	branches := []string{"main", "master"}
+	dirs := []string{"skills", ".claude/skills", ""}
+	candidates := make([]string, 0, len(branches)*len(dirs))
+	for _, b := range branches {
+		for _, d := range dirs {
+			prefix := d
+			if prefix != "" {
+				prefix = prefix + "/"
+			}
+			candidates = append(candidates, fmt.Sprintf("%s/%s/%s/%s%s/SKILL.md", rawBase, repo, b, prefix, name))
+		}
 	}
 	var lastErr error
 	for _, u := range candidates {
@@ -225,6 +260,9 @@ func splitRemoteID(remoteID string) (string, string, bool) {
 }
 
 // parseCatalog 解析预置 fallback 列表。
+//
+// 2026-06-30 增:解析后会校验长度,如果 < minCatalogFallbackSize 则 logger.Warn
+// 提示有人改了 knownCatalogFallback 但数量不足,防止后续维护删条目导致 fallback 空。
 func parseCatalog(text, baseURL string) []skillmarket.MarketItem {
 	out := make([]skillmarket.MarketItem, 0, 16)
 	for _, line := range strings.Split(text, "\n") {
@@ -242,7 +280,78 @@ func parseCatalog(text, baseURL string) []skillmarket.MarketItem {
 			DetailURL: fmt.Sprintf("%s/%s/%s", baseURL, repo, name),
 		})
 	}
+	if len(out) < minCatalogFallbackSize {
+		logger.Warn("skillssh fallback catalog has %d items (< %d); consider refilling knownCatalogFallback",
+			len(out), minCatalogFallbackSize)
+	}
 	return out
+}
+
+// parseOwnerRepoAtBody 从 HTML body 里扫纯文本 "owner/repo@skill" 模式。
+// 这是 skills.sh 老版站点的列表呈现方式(直接显示在卡片文本里)。
+func parseOwnerRepoAtBody(body, baseURL string) []skillmarket.MarketItem {
+	pattern := regexp.MustCompile(`([\w.-]+/[\w.-]+)@([\w.-]+)`)
+	matches := pattern.FindAllStringSubmatch(body, 500)
+	seen := map[string]bool{}
+	out := make([]skillmarket.MarketItem, 0, len(matches))
+	for _, m := range matches {
+		repo := strings.TrimSpace(m[1])
+		name := strings.TrimSpace(m[2])
+		if repo == "" || name == "" {
+			continue
+		}
+		remoteID := repo + "@" + name
+		if seen[remoteID] {
+			continue
+		}
+		seen[remoteID] = true
+		out = append(out, skillmarket.MarketItem{
+			RemoteID:  remoteID,
+			Name:      name,
+			DetailURL: fmt.Sprintf("%s/%s/%s", baseURL, repo, name),
+		})
+	}
+	return out
+}
+
+// parseHTMLLinks 从 HTML body 里扫 <a href="/owner/repo/skill"> 链接模式。
+// 这是 skills.sh 新版站点的列表呈现方式(每条 skill 是独立链接)。
+func parseHTMLLinks(body, baseURL string) []skillmarket.MarketItem {
+	pattern := regexp.MustCompile(`href="/?([\w.-]+/[\w.-]+)/([\w.-]+)"`)
+	matches := pattern.FindAllStringSubmatch(body, 500)
+	seen := map[string]bool{}
+	out := make([]skillmarket.MarketItem, 0, len(matches))
+	for _, m := range matches {
+		repo := strings.TrimSpace(m[1])
+		name := strings.TrimSpace(m[2])
+		if repo == "" || name == "" {
+			continue
+		}
+		if isReservedPath(name) {
+			continue
+		}
+		remoteID := repo + "@" + name
+		if seen[remoteID] {
+			continue
+		}
+		seen[remoteID] = true
+		out = append(out, skillmarket.MarketItem{
+			RemoteID:  remoteID,
+			Name:      name,
+			DetailURL: fmt.Sprintf("%s/%s/%s", baseURL, repo, name),
+		})
+	}
+	return out
+}
+
+// isReservedPath 排除明显的站点导航路径(about / docs / blog 等)。
+// 这些 owner 仓库大多不存在,扫到会污染列表。
+func isReservedPath(seg string) bool {
+	switch strings.ToLower(seg) {
+	case "about", "docs", "blog", "pricing", "login", "signup", "api", "changelog", "privacy", "terms":
+		return true
+	}
+	return false
 }
 
 // extractFirstParagraph 从 HTML/MD 里取第一段非空文本(简化处理)。
