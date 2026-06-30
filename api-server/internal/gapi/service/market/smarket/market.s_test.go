@@ -12,6 +12,8 @@ import (
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/internal/gapi/service/skill/sskill"
+	"ginp-api/internal/gapi/service/skillapp/sskillapp"
+	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillmarket"
 	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	"ginp-api/internal/skillstore"
@@ -200,6 +202,159 @@ func TestInstall_GlobalOk_UsingFallback(t *testing.T) {
 	}
 	if out.Canonical.Manifest.Source != "market" {
 		t.Errorf("skill source: %q", out.Canonical.Manifest.Source)
+	}
+}
+
+// TestInstallV2_GlobalOk_UsingFallback 验证 v2 写盘 + apply 链路。
+// 注入一个空 registry 的 sskillapp,避免真去操作各工具目录;写盘 + 走 apply
+// 路径(marketskill 的 status 会是 failed 因为没装工具,但 store 写盘已成功)。
+func TestInstallV2_GlobalOk_UsingFallback(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	// 让 base_url 走一个不可达地址,让 skillhub.Download 走 knownFallback 分支
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
+	// 构造 sskillapp + 注入到 smarket
+	store, _ := skillstore.NewAt(filepath.Join(t.TempDir(), "store2"))
+	ssvc := sskill.New(store)
+	factory := func() (*sskill.Service, error) { return ssvc, nil }
+	skillApp := sskillapp.New(env.db, env.db, factory)
+	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
+	// 走 v2 路径,tools=nil 触发 AllTools 默认
+	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
+	})
+	if err != nil {
+		t.Fatalf("install-v2 should succeed via fallback: %v", err)
+	}
+	if out == nil {
+		t.Fatal("nil result")
+	}
+	if out.Name != "code-review" {
+		t.Errorf("expected name=code-review, got %q", out.Name)
+	}
+	if out.Version == "" {
+		t.Error("version should be set")
+	}
+	if len(out.Tools) != len(skilladapter.AllTools) {
+		t.Errorf("expected %d tools (AllTools), got %d", len(skilladapter.AllTools), len(out.Tools))
+	}
+	// 写盘应已存在(store 后台扫到 code-review)
+	if !store.Exists("code-review") {
+		t.Error("expected skill written to store")
+	}
+}
+
+// TestInstallV2_FinalName_Rename 验证 FinalName 字段支持"另存为"。
+func TestInstallV2_FinalName_Rename(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
+	store, _ := skillstore.NewAt(filepath.Join(t.TempDir(), "store3"))
+	ssvc := sskill.New(store)
+	factory := func() (*sskill.Service, error) { return ssvc, nil }
+	skillApp := sskillapp.New(env.db, env.db, factory)
+	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
+	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		SourceID: src.ID, RemoteID: "code-review", Scope: "global", FinalName: "code-review-2",
+	})
+	if err != nil {
+		t.Fatalf("install-v2 with final_name: %v", err)
+	}
+	if out.Name != "code-review-2" {
+		t.Errorf("expected name=code-review-2, got %q", out.Name)
+	}
+	if !store.Exists("code-review-2") {
+		t.Error("expected renamed skill in store")
+	}
+}
+
+// TestInstallV2_BadInput 验证 v2 入参校验。
+func TestInstallV2_BadInput(t *testing.T) {
+	env := newTestEnv(t)
+	cases := []smarket.InstallV2Input{
+		{},
+		{SourceID: 1},
+		{SourceID: 1, RemoteID: "x", Scope: "weird"},
+		{SourceID: 1, RemoteID: "x", Scope: "project"},
+		{SourceID: 1, RemoteID: "x", Scope: "global", FinalName: "!!!"}, // 归一化后空
+	}
+	for i, in := range cases {
+		if _, err := env.svc.InstallV2(context.Background(), &in); err == nil {
+			t.Errorf("case %d: expected error, got nil", i)
+		}
+	}
+}
+
+// TestListSkillsWithInstalled 验证带 installed 标记的列表。
+func TestListSkillsWithInstalled(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	env.seedMarketSkill(t, 1, "skillhub", "code-review", "code-review", "1.0.0")
+	env.seedMarketSkill(t, 1, "skillhub", "commit-msg", "commit-msg", "1.0.0")
+	res, err := env.svc.ListSkillsWithInstalled(smarket.ListSkillsQuery{Page: 1, Size: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total != 2 {
+		t.Errorf("expected 2 items, got %d", res.Total)
+	}
+	if res.Installed == nil {
+		t.Error("Installed map should not be nil")
+	}
+}
+
+// TestUpdateSource 验证源 update 走 enabled / config_json。
+func TestUpdateSource(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	if len(res.Items) == 0 {
+		t.Fatal("no sources")
+	}
+	src := res.Items[0]
+	disabled := false
+	updated, err := env.svc.UpdateSource(src.ID, &smarket.UpdateSourceInput{Enabled: &disabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Enabled {
+		t.Error("expected enabled=false")
 	}
 }
 
