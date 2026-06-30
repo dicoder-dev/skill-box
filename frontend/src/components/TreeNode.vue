@@ -121,6 +121,9 @@ function onDragStart(node, e) {
   })
   e.dataTransfer.setData('application/x-skillbox-node', payload)
   e.dataTransfer.effectAllowed = 'move'
+  // 2026-06-30 临时诊断:在 dragstart 入口打 console,
+  // 确认 node 解析成什么、payload 写进 dataTransfer 的内容
+  console.log('[DRAG START]', { node, payload })
   // 用透明 dragImage,让默认的"卡片副本"不显示 — 默认那个半透明副本
   // 会跟目标位置视觉冲突,用户看着累。W3C 推荐做法。
   const ghost = document.createElement('div')
