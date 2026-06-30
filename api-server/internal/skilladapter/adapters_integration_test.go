@@ -7,11 +7,7 @@ import (
 	"testing"
 
 	"ginp-api/internal/skilladapter"
-	_ "ginp-api/internal/skilladapter/claude"
-	_ "ginp-api/internal/skilladapter/codex"
-	_ "ginp-api/internal/skilladapter/cursor"
-	_ "ginp-api/internal/skilladapter/opencode"
-	_ "ginp-api/internal/skilladapter/trae"
+	_ "ginp-api/internal/skilladapter/toolspecs"
 )
 
 func TestAllAdaptersRegistered(t *testing.T) {
@@ -25,11 +21,25 @@ func TestAllAdaptersRegistered(t *testing.T) {
 		if a.DisplayName() == "" {
 			t.Errorf("adapter %s has empty DisplayName", a.ToolID())
 		}
+		// 2026-06-30 改造:icon 字段从 toolspecs 的 mdi_icon 注入,必须非空且以 "mdi:" 开头
+		icon := a.Icon()
+		if icon == "" {
+			t.Errorf("adapter %s has empty Icon (mdi_icon in spec missing?)", a.ToolID())
+		}
+		if !strings.HasPrefix(icon, "mdi:") {
+			t.Errorf("adapter %s icon %q must start with mdi:", a.ToolID(), icon)
+		}
 	}
+	// 5 个老工具必须存在(向后兼容);新工具(antigravity/cline/codebuddy/jetbrains)
+	// 不在此断言,数量由 toolspecs/*.yaml 文件数决定。
 	for _, want := range skilladapter.AllTools {
 		if !ids[want] {
-			t.Errorf("missing adapter for %q", want)
+			t.Errorf("missing legacy adapter for %q", want)
 		}
+	}
+	// 至少得有 9 个(5 老 + 4 新),避免误删 yaml
+	if got := len(all); got < 9 {
+		t.Errorf("expected at least 9 adapters (5 legacy + 4 new), got %d", got)
 	}
 }
 

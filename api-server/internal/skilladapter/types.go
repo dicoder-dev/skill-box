@@ -53,7 +53,8 @@ const (
 	ScopeProject = "project"
 )
 
-// ToolID 已支持的目标工具 ID 集合(与 skillbox 内部 storage.tool 字段对应)。
+// ToolID 已支持的目标工具 ID 集合(legacy 命名常量,新工具以 toolspecs/*.yaml
+// 为准,不要在此追加;这里只保留最初 5 个老工具的常量以兼容旧调用方)。
 const (
 	ToolCodex    = "codex"
 	ToolClaude   = "claude"
@@ -62,7 +63,14 @@ const (
 	ToolTrae     = "trae"
 )
 
-// AllTools v1 支持的全部工具 ID。
+// AllTools v1 时期硬编码的 5 个老工具 ID。
+//
+// 2026-06-30 改造:AllTools 仅为兼容老调用方保留的"最小工具集",
+// 实际生效的工具清单以 defaultRegistry 为准(由 toolspecs 包在 init() 时
+// 按 specs/*.yaml 注册)。新工具的 ID 不会再追加到这个 slice 里。
+//
+// 业务侧应使用 skilladapter.All() 或 skilladapter.Get(id) 拿 adapter,
+// 而不是遍历 AllTools 自行反查。
 var AllTools = []string{ToolCodex, ToolClaude, ToolOpenCode, ToolCursor, ToolTrae}
 
 // Adapter canonical 与目标工具双向转换的接口。

@@ -5,6 +5,8 @@
 //
 // 不依赖 HTTP / 桌面端 / DB,直接调 skillimporter 包做 scan + import。
 // 幂等: 二次跑同名 skill 会覆盖。
+//
+// 2026-06-30 改造:不再逐一 import 5 个 adapter 子包,改用 toolspecs 一次注册。
 package main
 
 import (
@@ -13,21 +15,12 @@ import (
 	"os"
 
 	"ginp-api/internal/skilladapter"
-	"ginp-api/internal/skilladapter/claude"
-	"ginp-api/internal/skilladapter/codex"
-	"ginp-api/internal/skilladapter/cursor"
-	"ginp-api/internal/skilladapter/opencode"
-	"ginp-api/internal/skilladapter/trae"
+	_ "ginp-api/internal/skilladapter/toolspecs"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
 )
 
 func main() {
-	// 触发所有 adapter init() 注册
-	_ = []skilladapter.Adapter{
-		claude.Adapter, codex.Adapter, cursor.Adapter, opencode.Adapter, trae.Adapter,
-	}
-
 	store, err := skillstore.New()
 	if err != nil {
 		log.Fatalf("open store: %v", err)
