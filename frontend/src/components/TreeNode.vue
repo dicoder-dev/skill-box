@@ -138,7 +138,19 @@ function onDragOverGroup(e) {
 
 function onDropGroup(node, e) {
   e.preventDefault()
-  e.stopPropagation()
+  // 2026-06-29 改:不再 stopPropagation。配合 .tree-container 的 @drop,
+  // 让"拖到根"的意图能穿透到 .tree-container。
+  //
+  // 检测鼠标位置:如果落在 .tree-container 顶部 / 底部 40px 边缘,
+  // 判定为"放到根"或"放到末尾" 意图 — 不处理本节点的 drop,让事件冒泡
+  // 到 .tree-container 的 onTreeContainerDrop 接走。
+  //
+  // 不 stopPropagation 但保留 preventDefault(防止浏览器默认行为,如打开链接),
+  // 浏览器在 drop 事件上需要 preventDefault 才允许 drop,即使不处理。
+  //
+  // 判定条件只检查鼠标 y 坐标(不查 x)— 因为 tree 整体宽度小于容器宽度,
+  // 左右两边天然是空白,已经被 .tree-container 直接接住。
+  if (isRootDropIntent(e)) return
   dragCounter.value = 0
   const raw = e.dataTransfer?.getData('application/x-skillbox-node')
   if (!raw) return
@@ -146,6 +158,22 @@ function onDropGroup(node, e) {
     const payload = JSON.parse(raw)
     emit('drop', { target: node, event: e, hovering: false, source: payload })
   } catch (_) { /* 解析失败就当作无效拖放 */ }
+}
+
+// isRootDropIntent 2026-06-29 增:判断 drop 事件是否意图放到根区域。
+//
+// 实现:取 .tree-container 的 bounding rect,如果鼠标 y 坐标离容器顶 / 底
+// 不超过 ROOT_DROP_MARGIN(40px),则视为"放到根 / 末尾" 意图。
+//
+// 为什么用 40px:既给树顶 / 树底留出明显的"安全区",又不会太窄让用户难以命中。
+// 40px 大约是 .tree-row-group 的 32px 高度 + 8px 边距,视觉上是"刚好
+// 不在某个节点上"的范围。
+const ROOT_DROP_MARGIN = 40
+function isRootDropIntent(e) {
+  const container = e.currentTarget?.closest?.('.tree-container')
+  if (!container) return false
+  const rect = container.getBoundingClientRect()
+  return e.clientY - rect.top < ROOT_DROP_MARGIN || rect.bottom - e.clientY < ROOT_DROP_MARGIN
 }
 
 // 应用工具 chip 列表(给 skill 叶子用)
