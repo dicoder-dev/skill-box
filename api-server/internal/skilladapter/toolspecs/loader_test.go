@@ -1,46 +1,16 @@
 package toolspecs
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"ginp-api/internal/skilladapter"
 )
 
-// TestLoadAll 全部内嵌 spec 都能加载 + Validate 通过。
-// 启动期硬约束,任何不合法的 spec 都让服务起不来。
-func TestLoadAll(t *testing.T) {
-	specs, err := LoadAll()
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
-	}
-	if len(specs) < 9 {
-		t.Errorf("expected at least 9 specs, got %d", len(specs))
-	}
-	for _, s := range specs {
-		t.Run(s.ToolID, func(t *testing.T) {
-			if s.ToolID == "" {
-				t.Error("empty tool_id")
-			}
-			if s.DisplayName == "" {
-				t.Error("empty display_name")
-			}
-			if !strings.HasPrefix(s.MdiIcon, "mdi:") {
-				t.Errorf("mdi_icon %q must start with mdi:", s.MdiIcon)
-			}
-			if s.Maturity != "" {
-				switch s.Maturity {
-				case "stable", "experimental", "deprecated":
-				default:
-					t.Errorf("invalid maturity %q", s.Maturity)
-				}
-			}
-		})
-	}
-}
-
 // TestSpecAdapter_PathExpansion 验证 ~/ 展开 + project 路径原样透传。
+//
+// 2026-06-30 二改:LoadAll 不再是"读 yaml",改为"读 DB";此处只测纯逻辑
+// 转换 + ~/ 展开,与 DB 无关(不需要 sqlite 实例)。
 func TestSpecAdapter_PathExpansion(t *testing.T) {
 	spec := &ToolSpec{
 		ToolID:      "test",
@@ -87,58 +57,32 @@ func TestSpecAdapter_IconPassThrough(t *testing.T) {
 	}
 }
 
-// TestSpecificSpecs 抽 1-2 个工具的关键断言,避免 YAML 改错时漏检。
-func TestSpecificSpecs(t *testing.T) {
-	specs, err := LoadAll()
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
-	}
-	byID := make(map[string]*ToolSpec, len(specs))
-	for _, s := range specs {
-		byID[s.ToolID] = s
+// TestToolSpec_Validate 全面的 schema 校验。
+func TestToolSpec_Validate(t *testing.T) {
+	good := &ToolSpec{ToolID: "ok", DisplayName: "OK", MdiIcon: "mdi:ok", Paths: ToolPaths{
+		Global:  CategoryPaths{User: []string{"~/x"}},
+		Project: CategoryPaths{User: []string{".x"}},
+	}}
+	if err := good.Validate(); err != nil {
+		t.Errorf("good spec should pass, got %v", err)
 	}
 
-	// claude:global.user 必须含 .agents/skills(Agent Skills 标准)
-	if c, ok := byID["claude"]; !ok {
-		t.Error("missing claude spec")
-	} else {
-		found := false
-		for _, p := range c.Paths.Global.User {
-			if filepath.Base(p) == "skills" && strings.Contains(p, ".agents") {
-				found = true
-				break
+	bad := []struct {
+		name string
+		spec *ToolSpec
+	}{
+		{"empty tool_id", &ToolSpec{DisplayName: "X", MdiIcon: "mdi:x", Paths: good.Paths}},
+		{"empty display", &ToolSpec{ToolID: "x", MdiIcon: "mdi:x", Paths: good.Paths}},
+		{"empty mdi", &ToolSpec{ToolID: "x", DisplayName: "X", Paths: good.Paths}},
+		{"bad maturity", &ToolSpec{ToolID: "x", DisplayName: "X", MdiIcon: "mdi:x", Maturity: "weird", Paths: good.Paths}},
+		{"empty global", &ToolSpec{ToolID: "x", DisplayName: "X", MdiIcon: "mdi:x", Paths: ToolPaths{Project: good.Paths.Project}}},
+		{"empty project", &ToolSpec{ToolID: "x", DisplayName: "X", MdiIcon: "mdi:x", Paths: ToolPaths{Global: good.Paths.Global}}},
+	}
+	for _, b := range bad {
+		t.Run(b.name, func(t *testing.T) {
+			if err := b.spec.Validate(); err == nil {
+				t.Error("expected error, got nil")
 			}
-		}
-		if !found {
-			t.Errorf("claude.global.user should contain ~/.agents/skills, got %v", c.Paths.Global.User)
-		}
-	}
-
-	// codex:global.system 必须含 .system
-	if c, ok := byID["codex"]; !ok {
-		t.Error("missing codex spec")
-	} else {
-		found := false
-		for _, p := range c.Paths.Global.System {
-			if strings.Contains(p, ".system") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("codex.global.system should contain .system path, got %v", c.Paths.Global.System)
-		}
-	}
-
-	// 新增 4 个工具必须都是 stable 或 experimental
-	for _, id := range []string{"antigravity", "cline", "codebuddy", "jetbrains"} {
-		s, ok := byID[id]
-		if !ok {
-			t.Errorf("missing new spec: %s", id)
-			continue
-		}
-		if s.Maturity != "stable" && s.Maturity != "experimental" {
-			t.Errorf("%s: maturity should be stable or experimental, got %q", id, s.Maturity)
-		}
+		})
 	}
 }
