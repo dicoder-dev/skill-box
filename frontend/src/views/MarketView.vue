@@ -6,6 +6,7 @@ import { useMarketStore } from '@/core/store/market'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
 import MarketInstallConfirm from '@/components/MarketInstallConfirm.vue'
+import MarketSourceSettings from '@/components/MarketSourceSettings.vue'
 
 const { t } = useI18n()
 const market = useMarketStore()
@@ -59,6 +60,12 @@ const detailItem = ref(null)
 function openDetail(item) {
   detailItem.value = item
   detailOpen.value = true
+}
+
+// 源设置弹窗
+const settingsOpen = ref(false)
+function openSettings() {
+  settingsOpen.value = true
 }
 
 // 安装弹窗
@@ -152,6 +159,10 @@ onMounted(async () => {
           </button>
         </div>
         <div class="toolbar-right">
+          <button class="ghost" :disabled="!sources.length" @click="openSettings">
+            <Icon icon="mdi:cog-outline" width="14" height="14" />
+            {{ t('market.btnSourceSettings') }}
+          </button>
           <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefresh">
             <span v-if="refreshing" class="spinner"></span>
             <Icon v-else icon="mdi:refresh" width="14" height="14" />
@@ -338,6 +349,9 @@ onMounted(async () => {
       @confirm="onInstallConfirm"
       @cancel="installOpen = false"
     />
+
+    <!-- 源设置弹窗 -->
+    <MarketSourceSettings v-model="settingsOpen" />
   </div>
 </template>
 
