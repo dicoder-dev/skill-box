@@ -1477,64 +1477,24 @@ async function openSkillTagDialog(node) {
 }
 
 // ====== 拖拽处理 ======
-// 2026-06-29 改:补 setDropTarget 调用,让拖入目标在拖动时高亮。
-// 之前只有 hovering=false 的清除路径,hovering=true 时只 return 啥也不干,
-// 导致 .tree-node-drop-target 类永远不挂上,用户拖动时看不到反馈。
+// 2026-06-30 改:drop 路由**完全统一到 .tree-container 一个 handler**。
+// 之前用"TreeNode 内部 @drop emit + .tree-container 兜底"双 handler,DOM 冒泡
+// + stopPropagation 互相打架,5 次 commit 没修好。这次换思路:
+//   - TreeNode 内部不再 bind drop,只在 .tree-row 上加 :data-node-path(给
+//     elementsFromPoint 用)
+//   - .tree-container 一个 drop handler,drop 时用 document.elementsFromPoint
+//     实时拿到"鼠标下最顶层的 .tree-row",读 data-node-path 得目标 group path
+//   - 任何路径(具体 group / 容器空白处 = 根)都走同一个 onTreeDrop 入口
 //
-// 关键决策:把 drop target path 统一规范成"目标分组 path"。
-//   - target 是 group:        → target.path
-//   - target 是 skill 叶子:   → 父分组 path(target.path 去掉最后一段)
-// 这样高亮永远落在分组行上(用户视觉上知道"会落到这个组里"),
-// 而不是落在 skill 卡片上造成误导。
-function resolveDropGroupPath(target) {
-  if (!target) return ''
-  if (target.is_group) return target.path || ''
-  // skill 叶子 → 取其父路径
-  const parts = (target.path || '').split('/')
-  if (parts.length <= 1) return ''
-  return parts.slice(0, -1).join('/')
-}
+// 这样不管 TreeNode 怎么递归、stopPropagation 怎么搞,真相源唯一。
 
-async function onTreeDrop(payload) {
-  // payload: { target, event, hovering, source? }
-  // 2026-06-30 改:整体重写拦截逻辑顺序,确保所有 no-op / 非法操作都在前端拦下,
-  // 不会发无意义请求到后端。拦截优先级:
-  //   1. 源数据缺失 → 静默 return(数据传输出错,不该弹错给用户)
-  //   2. 解析 targetPath:target=null → 走合成 target → 路径 = '' (根)
-  //   3. 同位置 no-op:源/目标路径相同 → moveSameGroup toast
-  //   4. 分组挪到自己的子分组下 → moveIntoDescendant 错误 toast
-  //   5. 顶层分组"挪到根" → alreadyAtRoot info toast
-  //   6. 真正调 API
-  //
-  // 注意:TreeNode.onDropGroup 现在 stopPropagation,本函数收到 payload 只可能来自:
-  //   - 拖到具体 .tree-row(由 TreeNode emit)→ target=node
-  //   - 拖到 .tree-container 空白处(由 onTreeContainerDrop 调 onTreeDrop)→ target=null
-  if (payload.hovering === true) {
-    // 拖入中:把 dropTarget 设到目标分组,触发 .tree-node-drop-target 高亮
-    skillTree.setDropTarget(resolveDropGroupPath(payload.target))
-    return
-  }
-  // hovering=false 路径:清掉视觉态
-  if (payload.hovering === false) {
-    skillTree.setDropTarget('')
-    if (!payload.source) return
-  }
-  if (!payload.source) return
-  const source = payload.source
-  let target = payload.target
-  // 2026-06-29 改:target 为 null 时(=.tree-container 拖到根场景)用合成 target,
-  // 让 resolveDropGroupPath 返 '' (= 根)。之前 `if (!target) return` 静默拦下,
-  // 用户拖 skill 到根后"没反应、没请求、没 toast"就是这个 bug。
-  // 合成 target 的 path='' + is_group=false 走 skill 分支,parts=[''],length=1 → return ''
-  if (!target) {
-    target = { is_group: false, path: '', name: '', _isRoot: true }
-  }
-  const targetPath = resolveDropGroupPath(target)
-  // 同位置:跳过
+// 单一 drop 入口接收的 payload:
+//   { targetPath: string, source: { type, path, name }, event: DragEvent }
+// targetPath: 目标 group 的 path(空字符串 = 根)
+async function onTreeDrop({ targetPath, source }) {
+  if (!source) return
   if (source.type === 'skill') {
-    // 2026-06-30 加防御:source.path 必填,空就静默 return(异常数据,不打扰用户)
     if (!source.path) return
-    // source.path = "<group>/<name>";目标分组 = targetPath
     const srcGroup = source.path.split('/').slice(0, -1).join('/')
     if (srcGroup === targetPath) {
       toast.info(t('skills.list.moveSameGroup'))
@@ -1555,12 +1515,7 @@ async function onTreeDrop(payload) {
     }
     toast.success(t('common.confirm'))
   } else if (source.type === 'group') {
-    // 分组嵌套到另一分组(2026-06-29 改:走独立 move_group 接口,
-    // 之前用 move_skill + name='__group__' sentinel 临时绕过,后端会返 not found)
-
-    // 2026-06-29 改:本地先拦 ancestor check,不发无意义请求。
-    // 后端也会拒,但本层拦下能给用户一个清晰 toast,
-    // 比"target already exists"或"cannot move into own descendant"友好得多。
+    // 同位置:跳过(顶层 group 拖到根,或嵌套 group 拖到自身父级)
     if (source.path === targetPath) {
       toast.info(t('skills.list.moveSameGroup'))
       return
@@ -1570,9 +1525,7 @@ async function onTreeDrop(payload) {
       toast.error(t('skills.list.moveIntoDescendant'))
       return
     }
-    // 2026-06-29 增:本地拦 no-op。把顶层分组(无 '/')拖到根(= targetPath='')
-    // 是 no-op,后端 no-op 短路返 200 OK,前端看到 "成功" 但目录结构无变化,
-    // 用户会困惑。这里在 UI 层就拦下,给清晰 toast,不发请求。
+    // 顶层 group "挪到根" 是 no-op
     if (targetPath === '' && !source.path.includes('/')) {
       toast.info(t('skills.list.alreadyAtRoot'))
       return
@@ -1589,53 +1542,60 @@ async function onTreeDrop(payload) {
   }
 }
 
-// isGroupDescendant 2026-06-29 增:判断 child 是不是 parent 的子孙分组。
+// isGroupDescendant:判断 child 是不是 parent 的子孙分组。
 // 例:("aa/bb", "aa") = true,("aa", "aa/bb") = false,("aa", "aa") = false(同层不算)。
 // 用 / 分隔段比较,避免 "aa-x" 被误判为 "aa" 的子孙。
 function isGroupDescendant(child, parent) {
   if (!child || !parent) return false
   if (child === parent) return false
-  // child 必须以 "parent/" 开头(必须是 parent 的严格子孙)
   return child.startsWith(parent + '/')
 }
 
-// ====== 拖到根区域(.tree-container 空白处) ======
-// 2026-06-29 增:TreeNode 内部的 @drop 只在拖到具体节点时触发,落到容器空白处不会
-// 触发任何 drop 事件。让 .tree-container 接管这部分:从 dataTransfer 解析 source,
-// 用 target=null(让 resolveDropGroupPath 返 '')统一走 onTreeDrop。
-//
-// 视觉反馈用 rootDropHover 控制 .tree-container-drag-over 类,拖动时高亮"放
-// 到根"提示,离开时清除。
-const rootDropHover = ref(false)
-const rootDragCounter = ref(0) // 防止子元素 dragenter/leave 抖动
+// ====== .tree-container 单一 drop / dragover / dragleave ======
 
-function onTreeContainerDragOver(e) {
-  // 已经在 template 上 .prevent 了,这里只设 dropEffect 提示用户
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+// 用 document.elementsFromPoint 找"鼠标下最顶层的 .tree-row",
+// 读它的 data-node-path 属性,得到目标 group path。
+// 返回 '' 表示鼠标在容器空白处 = 拖到根。
+function detectTargetGroupPath(x, y) {
+  // elementsFromPoint 在 Vue/transition 动画中可能短暂返回 [],用 || [] 兜底
+  const els = (typeof document !== 'undefined' && document.elementsFromPoint)
+    ? document.elementsFromPoint(x, y) || []
+    : []
+  for (const el of els) {
+    // 跳过 .tree-container 自身(它的 dataset.nodePath 可能是 undefined,
+    // 但我们要的是它内部的 .tree-row,继续往下找)
+    if (el.dataset && el.dataset.nodePath !== undefined) {
+      return el.dataset.nodePath
+    }
+  }
+  return ''
 }
 
-function onTreeContainerDragEnter(e) {
-  // 只在拖的是 skillbox 节点时进入"根拖入"态(避免普通文件拖入时误高亮)
-  if (!e.dataTransfer?.types.includes('application/x-skillbox-node')) return
-  rootDragCounter.value++
-  rootDropHover.value = true
-}
+function onContainerDragOver(e) {
+  // 只对 skillbox 内部节点拖动做高亮(避免外部文件拖入时误高亮)
+  if (!e.dataTransfer?.types.includes('application/x-skillbox-node')) {
+    e.dataTransfer.dropEffect = 'none'
+    return
+  }
+  e.preventDefault()  // 必须 preventDefault 才能让 drop 事件触发
+  e.dataTransfer.dropEffect = 'move'
 
-function onTreeContainerDragLeave(e) {
-  rootDragCounter.value = Math.max(0, rootDragCounter.value - 1)
-  if (rootDragCounter.value === 0) {
-    rootDropHover.value = false
+  // 用 elementsFromPoint 实时算目标 group path,有变化才更新 store(避免响应式风暴)
+  const targetPath = detectTargetGroupPath(e.clientX, e.clientY)
+  if (targetPath !== lastHighlightedPath.value) {
+    skillTree.setDropTarget(targetPath)
+    rootDropHover.value = targetPath === ''  // 容器空白处 = 显示"放到根"提示
+    lastHighlightedPath.value = targetPath
   }
 }
 
-function onTreeContainerDrop(e) {
-  // 2026-06-30 改:去掉 stopPropagation。TreeNode.onDropGroup 已经 stopPropagation,
-  // 本函数只在"事件落在 .tree-container 空白处、没有任何 .tree-row 命中"时触发,
-  // 不会再和 TreeNode 重复处理。保留 stopPropagation 反而可能吞掉未来加的全局监听。
+function onContainerDrop(e) {
   e.preventDefault()
-  rootDragCounter.value = 0
-  rootDropHover.value = false
   const raw = e.dataTransfer?.getData('application/x-skillbox-node')
+  // 清视觉态
+  skillTree.setDropTarget('')
+  rootDropHover.value = false
+  lastHighlightedPath.value = ''
   if (!raw) return
   let source
   try {
@@ -1643,9 +1603,24 @@ function onTreeContainerDrop(e) {
   } catch (_) {
     return
   }
-  // 复用 onTreeDrop,target=null → resolveDropGroupPath 返 '' (= 根)
-  onTreeDrop({ target: null, event: e, hovering: false, source })
+  const targetPath = detectTargetGroupPath(e.clientX, e.clientY)
+  onTreeDrop({ targetPath, source, event: e })
 }
+
+function onContainerDragLeave(e) {
+  // dragleave 在鼠标进入子元素时也会触发(relatedTarget 进入子节点),
+  // 只有"鼠标真正离开容器"才是 e.target === e.currentTarget。
+  if (e.target === e.currentTarget) {
+    skillTree.setDropTarget('')
+    rootDropHover.value = false
+    lastHighlightedPath.value = ''
+  }
+}
+
+// module-level 缓存上次高亮的 path,避免 dragover 高频触发时频繁 setDropTarget
+// 引发响应式风暴。
+const lastHighlightedPath = ref('')
+const rootDropHover = ref(false)
 
 onMounted(() => {
   reload()
@@ -1685,13 +1660,14 @@ onMounted(() => {
         {{ error }}
       </p>
 
-      <!-- 2026-06-29 改:左侧从扁平列表升级为多级分组树。
-           关键:把根区域右键绑在 .tree-container 上(而不是 TreeNode 内部的 li),
-           这样无论树有没有节点 / 折叠状态如何,整个左侧空白处都能右键弹"新建分组"。
-           节点(skill / 分组)自身的右键在 TreeNode 内 stopPropagation,不会冒泡到这里。
-           2026-06-29 再改:把根区域也变成"可拖入目标" — 用户拖 skill/group 到空白
-           处 = 拖到根(= 无父分组 / 顶层)。TreeNode 内部的 @drop 命中具体节点;
-           落到空白处时(目标不在 TreeNode 内)就由 .tree-container 的 @drop 接管。 -->
+      <!-- 2026-06-30 改:拖拽路由**完全统一到 .tree-container 一个 handler**。
+           TreeNode 内部不再 bind drop(只 bind @dragstart + :data-node-path)。
+           .tree-container 单一接管:
+             - @dragover  用 elementsFromPoint 实时高亮目标 group
+             - @drop     单一入口,读 source + targetPath 走 onTreeDrop
+             - @dragleave  鼠标真正离开容器时清视觉态(target===currentTarget 判定)
+           之前 5 次 commit 反复在 TreeNode 内部绑 drop 修各种 bug,这次彻底放弃,
+           一个容器一个 handler,真相源唯一。 -->
       <div
         class="tree-container"
         :class="{ 'tree-container-drag-over': rootDropHover }"
@@ -1699,10 +1675,9 @@ onMounted(() => {
         role="tree"
         :aria-label="t('skills.title')"
         @contextmenu.prevent="onRootContextMenu({ event: $event })"
-        @drop="onTreeContainerDrop"
-        @dragover.prevent="onTreeContainerDragOver"
-        @dragenter="onTreeContainerDragEnter"
-        @dragleave="onTreeContainerDragLeave"
+        @dragover="onContainerDragOver"
+        @drop="onContainerDrop"
+        @dragleave="onContainerDragLeave"
       >
         <div v-if="loading" class="tree-loading">
           <span class="spinner"></span>
@@ -1720,7 +1695,6 @@ onMounted(() => {
           @context-menu-group="onGroupContextMenu"
           @context-menu-root="onRootContextMenu"
           @toggle-collapse="(p) => skillTree.toggleCollapse(p)"
-          @drop="onTreeDrop"
         />
         <div v-if="!loading && !skillTree.totalSkills" class="tree-empty-hint">
           <p>{{ t('skills.list.emptyTitle') }}</p>

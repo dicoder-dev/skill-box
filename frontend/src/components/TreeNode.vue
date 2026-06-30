@@ -17,7 +17,9 @@
  *   - skill:点击选中(emit select-skill),右键弹菜单(emit context-menu-skill)
  *   - 分组右键:emit context-menu-group
  *   - 根区域右键:emit context-menu-root
- *   - 拖拽:skill 可拖到分组 / 分组可拖到另一分组(emit drop),含视觉反馈
+ *   - 拖拽:@dragstart 把 source payload 塞到 dataTransfer;@drop 由父级 .tree-container
+ *     统一处理(用 document.elementsFromPoint 定位鼠标下的目标 group),见 commit
+ *     下一条。TreeNode 内部不再 bind drop 事件。
  *
  * 状态从外部 prop 传入(collapsedPaths 是个 Set,记录当前折叠的 path 列表),
  * 让父组件能跨节点共享展开状态(搜索时自动展开匹配路径用)。
@@ -26,7 +28,7 @@
  *   卡片内部分两行:头(name + @version + description)、尾(工具调用小标题 + 工具 chip 列表);
  *   折叠时缩进(分组)不影响 skill 卡片视觉。
  */
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({
@@ -36,7 +38,9 @@ const props = defineProps({
   selectedPath: { type: String, default: '' },
   // 当前折叠的 path 集合(从父组件传入,跨节点共享)
   collapsedPaths: { type: Object, default: () => new Set() },
-  // 当前正在被拖入的 path(用于视觉高亮)
+  // 当前正在被拖入的 path(用于视觉高亮)— 2026-06-30 改:还保留 prop,
+  // 但 SkillsView 不再通过它驱动高亮(改用 elementsFromPoint 实时算)。
+  // 保留 prop 是为了不破坏未来其它场景(如搜索时显示"匹配 drop 目标")。
   dropTargetPath: { type: String, default: '' },
   // 缩进级别(根为 0,每深一级 +1)
   depth: { type: Number, default: 0 },
@@ -52,7 +56,6 @@ const emit = defineEmits([
   'context-menu-skill',
   'context-menu-group',
   'context-menu-root',
-  'drop',
   'toggle-collapse',
 ])
 
@@ -99,7 +102,15 @@ function onContextMenu(node, e) {
 // 但不再有 emit 触发者。
 
 // ====== 拖拽 ======
-const dragCounter = ref(0) // 防止子元素 dragenter/leave 抖动
+// 2026-06-30 改:完全移除 @drop / @dragenter / @dragleave / @dragover 绑定。
+// 之前 5 次 commit 在"DOM 冒泡 + TreeNode 路由 drop"上反复打补丁,每次都出新 bug。
+// 现在把 drop 路由**唯一化到 .tree-container**(在 SkillsView),用 document.elementsFromPoint
+// 实时判断鼠标下到底是哪个 group 节点。TreeNode 内部不再关心 drop,只负责:
+//   1. 标记每个 .tree-row 的 path(给 .tree-container 的 drop handler 用)
+//   2. @dragstart 把 source payload 塞到 dataTransfer
+//
+// data-node-path 是关键 — elementsFromPoint 返回的 z-stack 数组里,
+// 第一个带这个属性的元素就是"鼠标下最顶层的 group/skill 节点"。
 
 function onDragStart(node, e) {
   if (!e.dataTransfer) return
@@ -110,50 +121,13 @@ function onDragStart(node, e) {
   })
   e.dataTransfer.setData('application/x-skillbox-node', payload)
   e.dataTransfer.effectAllowed = 'move'
-}
-
-function onDragEnterGroup(node, e) {
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.dataTransfer?.types.includes('application/x-skillbox-node')) {
-    dragCounter.value++
-    emit('drop', { target: node, event: e, hovering: true })
-  }
-}
-
-function onDragLeaveGroup(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  dragCounter.value = Math.max(0, dragCounter.value - 1)
-  if (dragCounter.value === 0) {
-    emit('drop', { target: null, event: e, hovering: false })
-  }
-}
-
-function onDragOverGroup(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-}
-
-function onDropGroup(node, e) {
-  // 本节点命中就吃掉,不让 .tree-container 的 onTreeContainerDrop 重复处理。
-  // DOM 冒泡天然支持:
-  //   - 事件落在 .tree-row 内 → 本函数处理,emit 'drop' 给 SkillsView
-  //   - 事件落在 .tree-container 空白处(没有任何 .tree-row 命中)
-  //     → 本函数不触发,冒泡到 .tree-container.onTreeContainerDrop
-  // 之前(commit 589aada)加的 isRootDropIntent 40px 边距检测是把简单问题搞复杂,
-  // 导致"鼠标贴近容器边缘 + 想拖到某个具体 group"的场景被错误穿透到根分支,
-  // 触发到 no-op 拦截弹"已在根"或命中错误的 ancestor 检查。删掉,让 DOM 自然路由。
-  e.preventDefault()
-  e.stopPropagation()
-  dragCounter.value = 0
-  const raw = e.dataTransfer?.getData('application/x-skillbox-node')
-  if (!raw) return
-  try {
-    const payload = JSON.parse(raw)
-    emit('drop', { target: node, event: e, hovering: false, source: payload })
-  } catch (_) { /* 解析失败就当作无效拖放 */ }
+  // 用透明 dragImage,让默认的"卡片副本"不显示 — 默认那个半透明副本
+  // 会跟目标位置视觉冲突,用户看着累。W3C 推荐做法。
+  const ghost = document.createElement('div')
+  ghost.style.cssText = 'position:fixed;top:-1000px;width:1px;height:1px;'
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(ghost, 0, 0)
+  setTimeout(() => ghost.remove(), 0)
 }
 
 // 应用工具 chip 列表(给 skill 叶子用)
@@ -202,12 +176,9 @@ function isDropTarget(node) {
       <div
         v-if="node.is_group"
         class="tree-row tree-row-group"
+        :data-node-path="fullPath(node)"
         @click="onClickGroup(node, $event)"
         @contextmenu="onContextMenu(node, $event)"
-        @dragenter="onDragEnterGroup(node, $event)"
-        @dragleave="onDragLeaveGroup($event)"
-        @dragover="onDragOverGroup($event)"
-        @drop="onDropGroup(node, $event)"
       >
         <Icon
           :icon="isCollapsed(node) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
@@ -231,12 +202,9 @@ function isDropTarget(node) {
       <div
         v-else
         class="tree-row tree-row-skill"
+        :data-node-path="fullPath(node)"
         @click="onClickSkill(node, $event)"
         @contextmenu="onContextMenu(node, $event)"
-        @dragenter="onDragEnterGroup(node, $event)"
-        @dragleave="onDragLeaveGroup($event)"
-        @dragover="onDragOverGroup($event)"
-        @drop="onDropGroup(node, $event)"
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
@@ -270,7 +238,6 @@ function isDropTarget(node) {
         @context-menu-skill="(p) => emit('context-menu-skill', p)"
         @context-menu-group="(p) => emit('context-menu-group', p)"
         @context-menu-root="(p) => emit('context-menu-root', p)"
-        @drop="(p) => emit('drop', p)"
         @toggle-collapse="(p) => emit('toggle-collapse', p)"
       />
     </li>
