@@ -1,0 +1,35 @@
+# CodeBuddy (腾讯云)
+#
+# 2026-06-30 增:CodeBuddy 是腾讯云的 AI 编程 IDE / VSCode 插件 / CLI 三形态产品。
+# 截至 2026-06,官方没有公开 SKILL.md 路径的明确规范文档;
+# 社区按"CodeBuddy 的目录命名习惯"(.codebuddy/skills/)作占位实现。
+#
+# 三个形态各自的项目结构:
+#   - CodeBuddy IDE(独立应用):直接 <project>/.codebuddy/skills/
+#   - CodeBuddy VSCode 插件:沿用 VSCode 习惯,~/.codebuddy/skills/ 跟项目级
+#   - CodeBuddy CLI:命令行工具,跟 Codex CLI 风格类似,走 ~/.codebuddy/skills/
+#
+# 参考:
+#   https://cloud.tencent.com/developer/article/2550112
+#   https://blog.csdn.net/2303_80720440/article/details/157655345(Skills 完全入门指南)
+#
+# maturity=experimental:官方 SKILL.md 路径规范尚未文档化,占位路径若
+# 跟实际不符,后续用户反馈可改。
+
+tool_id: codebuddy
+display_name: "CodeBuddy"
+mdi_icon: "mdi:buddy"
+maturity: experimental
+
+note: |
+  CodeBuddy 官方目前未公开 SKILL.md 路径规范,本 spec 为占位实现。
+  路径 .codebuddy/skills/ 是按 CodeBuddy 工具自身的目录命名习惯推断,
+  实际若与官方不同,以用户实测为准。
+
+paths:
+  global:
+    user:
+      - "~/.codebuddy/skills"
+  project:
+    user:
+      - ".codebuddy/skills"

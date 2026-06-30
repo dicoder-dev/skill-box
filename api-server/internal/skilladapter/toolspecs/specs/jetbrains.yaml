@@ -1,0 +1,37 @@
+# JetBrains AI Assistant
+#
+# 2026-06-30 增:JetBrains IDE 自带的 AI 助手,深度集成 IntelliJ / PyCharm /
+# GoLand 等所有 JetBrains IDE。AI 助手通过 LM Studio 支持本地 LLM,云端走
+# Anthropic / OpenAI / 阿里通义(国内版)。
+#
+# 截至 2026-06,JetBrains 官方尚未公开 Agent Skills 兼容规范的目录约定;
+# 社区按"JetBrains 工具自身的目录命名习惯"作占位实现。
+#
+# 注意事项:
+#   - JetBrains 工具的项目结构以 .idea/ 为主,但 skill 目录跟 .idea 无关
+#   - 与 VSCode 风格不同(没 settings.json),用单独的 .jetbrains/ 子目录
+#
+# 参考:
+#   https://www.jetbrains.com/help/idea/ai-assistant.html
+#   https://blog.csdn.net/2301_76601027/article/details/145114990
+#
+# maturity=experimental:官方 SKILL.md 路径规范尚未文档化,占位路径若
+# 跟实际不符,后续用户反馈可改。
+
+tool_id: jetbrains
+display_name: "JetBrains AI"
+mdi_icon: "mdi:language-java"
+maturity: experimental
+
+note: |
+  JetBrains AI Assistant 官方目前未公开 SKILL.md 路径规范,本 spec 为占位实现。
+  路径 .jetbrains/skills/ 是按 JetBrains 工具自身的目录命名习惯推断,
+  实际若与官方不同,以用户实测为准。
+
+paths:
+  global:
+    user:
+      - "~/.jetbrains/skills"
+  project:
+    user:
+      - ".jetbrains/skills"
