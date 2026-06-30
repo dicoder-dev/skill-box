@@ -13,6 +13,7 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillpkg"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskilltest"
 	_ "ginp-api/internal/gapi/controller/skillbox/ctag"
+	_ "ginp-api/internal/gapi/controller/skillbox/ctool"
 	_ "ginp-api/internal/gapi/controller/system/cindex"
 	_ "ginp-api/internal/gapi/controller/user/cuser"
 	//{{placeholder_router_import}}//
