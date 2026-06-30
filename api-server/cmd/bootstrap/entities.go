@@ -30,6 +30,9 @@ var EntityAutoMigrateList = []any{
 	new(entity.MarketSkill),
 	new(entity.OnboardingState),
 	new(entity.Setting),
+	// 2026-06-30 二改:工具元数据从 yaml embed 迁到 DB,前端可编辑
+	new(entity.Tool),
+	new(entity.ToolPath),
 }
 
 // EntityGenerationList 需要自动生成的实体(代码生成器使用,运行期不参与)。
