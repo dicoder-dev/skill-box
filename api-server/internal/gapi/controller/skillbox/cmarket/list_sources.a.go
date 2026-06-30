@@ -2,9 +2,9 @@ package cmarket
 
 import (
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/internal/gapi/service/skill/sskill"
+	"ginp-api/internal/db/dbs"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -50,15 +50,7 @@ func init() {
 	})
 }
 
-// newService 工厂,统一从 dbs 取 db,避免每个 controller 重复拼装。
-func newService() *smarket.Service {
-	ww := dbs.GetWriteDb()
-	rr := dbs.GetReadDb()
-	return smarket.New(ww, rr, func() (*sskill.Service, error) {
-		store, err := sskill.NewStore()
-		if err != nil {
-			return nil, err
-		}
-		return sskill.New(store), nil
-	})
-}
+// 2026-06-30 改造:newService 工厂已搬到 cmarket_factory.go,这里只保留兜底别名,
+// 避免外部包误调 cmarket.newService() 编译失败。
+var _ = sskill.New
+var _ = dbs.GetReadDb

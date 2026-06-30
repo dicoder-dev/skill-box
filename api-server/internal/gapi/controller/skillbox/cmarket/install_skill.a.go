@@ -52,6 +52,9 @@ func InstallMarketSkill(c *ginp.ContextPlus, req *RequestInstallMarketSkill) {
 		}
 		return
 	}
+	// 2026-06-30 增:旧 install 端点标 deprecated,响应头提示前端改用 /install-v2。
+	// 行为不变(只写盘不 apply),保留向后兼容。
+	c.Header("X-Deprecated", "use /api/skillbox/market/install-v2")
 	c.JSON(200, out)
 }
 
