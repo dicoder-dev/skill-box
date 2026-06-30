@@ -21,11 +21,16 @@ import (
 //go:embed appicon.png
 var trayAppIconPNG []byte
 
+// 临时测试:embed wails 官方 DefaultMacTemplateIcon.png,验证 SetTemplateIcon 流程
+//
+//go:embed assets/official_template.png
+var trayOfficialTemplatePNG []byte
+
 // 托盘图标尺寸。
 //   - darwin 模板图标 36×36 覆盖 @2x(系统会自己画到 22pt 菜单栏 backing 上,清晰)。
 //   - Windows / Linux 走 SetIcon 彩色版,32×32 兼顾小尺寸 DPI。
 const (
-	trayTemplateSize = 36
+	trayTemplateSize = 64
 	trayColorSize    = 32
 )
 
@@ -76,7 +81,9 @@ func NewTrayManager(app *application.App, cb TrayCallbacks, notifier *Notifier) 
 			// macOS 上 SetTemplateIcon 与 SetIcon 互斥(systemtray_darwin.go
 			// 的 setIcon 会读 isTemplateIcon 标记,两个都调会污染),所以只调
 			// SetTemplateIcon;label 留空避免图标+文字挤在一起。
-			t.SetTemplateIcon(tmpl)
+			// DEBUG: 改用 wails 官方 DefaultMacTemplateIcon 验证 SetTemplateIcon 流程
+			log.Printf("tray: DEBUG darwin SetTemplateIcon - tmpl=%d bytes, official=%d bytes", len(tmpl), len(trayOfficialTemplatePNG))
+			t.SetTemplateIcon(trayOfficialTemplatePNG)
 			t.SetLabel("")
 		default:
 			// windows / linux
