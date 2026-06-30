@@ -1,7 +1,8 @@
-# toolspecs — AI 编程工具元数据配置(数据驱动)
+# toolspecs — AI 编程工具元数据(DB 驱动版)
 
 > 给"接一个新 AI 编程工具"这件事准备的一份速查手册。
-> **新加一个工具 = 在 `specs/` 加一个 yaml 文件,不需要改 Go 代码。**
+> **2026-06-30 二改**:工具元数据从 `specs/*.yaml` embed 改成 **e_tool + e_tool_path 数据库表**,
+> 新加工具 = 在前端 UI 加一行(或改 paths),不需要改 Go 代码、不需要 build。
 
 ---
 
@@ -9,151 +10,171 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `specs/*.yaml` | 工具清单(每工具一个文件) |
-| `schema.go` | `ToolSpec` / `ToolPaths` / `CategoryPaths` 结构体定义 + 校验 |
-| `loader.go` | `//go:embed` + `yaml.Unmarshal` 加载器 |
-| `specadapter.go` | `NewSpecAdapter(spec)` 把 ToolSpec 转成 `skilladapter.BaseAdapter` |
-| `registry.go` | `init()` 把全部 spec 注册到 `skilladapter.DefaultRegistry()` |
+| `schema.go` | `ToolSpec` / `ToolPaths` / `CategoryPaths` 结构体定义 + 校验(转换器,运行时用) |
+| `dbload.go` | `LoadAllFromDB(db)` — 查 e_tool + e_tool_path 拼成 `[]*ToolSpec` |
+| `dbload_registry.go` | `ReloadAllFromDB(db)` — 把全部 spec 转成 BaseAdapter,刷到 `DefaultRegistry` |
+| `specadapter.go` | `NewSpecAdapter(spec)` — ToolSpec → `BaseAdapter` 工厂 |
+| `loader_test.go` | `TestSpecAdapter_*` + `TestToolSpec_Validate` 纯逻辑测试 |
+
+> 历史文件:`loader.go` / `registry.go` / `specs/*.yaml` 已删除(2026-06-30 二改)。
 
 ---
 
-## ToolSpec schema 草案
+## 数据流
 
-```yaml
-tool_id: <string, 必填,全局唯一>
-display_name: <string, 必填,UI 展示名>
-mdi_icon: <string, 必填,"mdi:xxx" 格式,前端 iconify 用的 mdi 图标>
-maturity: <stable|experimental|deprecated, 选填,默认 stable>
-note: <string, 选填,自由文本,前端不展示>
+```
+启动期:
+  cmd/bootstrap/start_db.go
+    → AutoMigrate(e_tool, e_tool_path)        // 创建/更新表
+    → toolseed.EnsureSeeded(db)                // 全新 DB 写 9 个默认工具
+    → toolspecs.ReloadAllFromDB(db)            // 拉一次注册到 DefaultRegistry
 
-paths:
-  global:                       # 用户级,挂在 $HOME 下
-    user:                       # 用户自己装,可读可写
-      - "~/.xxx/skills"
-    system:                     # 工具自带 / vendor,只读
-      - "~/.xxx/skills/.system"
-  project:                      # 项目级,挂在 <project>/.xxx/skills
-    user:
-      - ".xxx/skills"
-    system:                     # 可省略
-      - ".xxx/.system"
+运行时(用户在 UI 改了工具):
+  frontend POST /api/skillbox/tools/update
+    → ctool.UpdateTool
+      → stool.Service.Update
+        → mtool.Update(...) + replacePaths(...)
+        → ctool 返回成功
+  frontend POST /api/skillbox/tools/reload
+    → stool.Service.Reload
+      → toolspecs.ReloadAllFromDB(db)
+        → DefaultRegistry().Reload(adapters)  // 整体替换,旧 tool_id 真的没了
 ```
 
-### 字段约束
+---
 
-| 字段 | 必填 | 约束 |
+## e_tool + e_tool_path schema
+
+### e_tool(主表)
+
+| 字段 | 类型 | 约束 |
 | --- | --- | --- |
-| `tool_id` | ✅ | 小写字母 + 数字 + `-` / `_`,全局唯一,变更会破坏 DB 关联 |
-| `display_name` | ✅ | 非空字符串,前端 i18n 可覆盖 |
-| `mdi_icon` | ✅ | 必须 `mdi:` 开头;查 https://pictogrammers.com/library/mdi/ 选 |
-| `maturity` | ❌ | `stable` / `experimental` / `deprecated`,默认 `stable` |
-| `paths.<scope>` | ✅ | 每个 scope(global / project)至少一个 user 或 system 路径非空 |
-| `note` | ❌ | 自由文本,前端不展示,仅供阅读 / 日志 |
+| `id` | uint | PK |
+| `tool_id` | varchar(32) | **uniqueIndex** — 全局唯一,业务上不可改 |
+| `display_name` | varchar(64) | UI 展示名 |
+| `mdi_icon` | varchar(64) | 前端 mdi 图标(mdi:xxx) |
+| `maturity` | varchar(16) | stable / experimental / deprecated |
+| `note` | text | 自由文本 |
+| `is_system` | bool | seed 出的系统工具(不可删 / 不可改 tool_id) |
+| `enabled` | bool | 全局开关;false 时 Reload 跳过 |
+| `sort_order` | int | 列表展示顺序 |
+| `created_at` / `updated_at` | timestamp | GORM 自动 |
+
+### e_tool_path(子表,一对多)
+
+| 字段 | 类型 | 约束 |
+| --- | --- | --- |
+| `id` | uint | PK |
+| `tool_id` | uint | 逻辑外键 → e_tool.id,删 tool 级联 |
+| `scope` | varchar(16) | global / project |
+| `category` | varchar(16) | user / system |
+| `path` | varchar(512) | 绝对或相对路径(含 ~/),运行时展开 |
+| `path_order` | int | 同一 (scope, category) 内的顺序 |
+
+**唯一索引:** `(tool_id, scope, category, path)` — 防重复。
 
 ---
 
-## 路径展开规则
+## 业务约束(由 stool 服务层保证)
 
-YAML 里写 `~/xxx` 路径时,Go 启动期会把 `~/` 展开为 `$HOME` 绝对路径。
-项目级路径(以 `.` 开头,例如 `.claude/skills`)不展开,原样透传。
-
-> ⚠️ 不要写环境变量 `$HOME` / `%USERPROFILE%`,目前只支持 `~/` 缩写。
-> 需要绝对路径直接写出来,例如 `/opt/opencode/skills`。
+| 场景 | 行为 |
+| --- | --- |
+| 用户新建 tool | `is_system` 强制 false |
+| 改系统工具的 `tool_id` | 后端忽略(本字段不是 UpdateInput 的一部分) |
+| 删系统工具 (`is_system=true`) | **拒绝**,返回 400 `ErrSystemToolFrozen` |
+| 删用户工具 | 事务里级联删 e_tool_path,不留悬空 |
+| 改 path | `UpdateInput.Paths` 非 nil = 覆盖式替换;nil = 不动 |
+| 加单条 path | `POST /api/skillbox/tools/paths/add`,追加不覆盖 |
+| `tool_id` 重复 | 拒绝,返回 409 `ErrToolIDConflict` |
+| `mdi_icon` 不是 `mdi:` 开头 | 拒绝,返回 400 `ErrEmptyMdi` |
+| `maturity` 不是 stable/experimental/deprecated | 拒绝,返回 400 `ErrBadMaturity` |
+| 路径 scope 不是 global/project | 拒绝,返回 400 `ErrBadScope` |
+| 路径 category 不是 user/system | 拒绝,返回 400 `ErrBadCategory` |
 
 ---
 
-## 扩展一个新工具 — Step by Step
+## 启动期 seed
 
-假设要加一个新工具 `mytool`,用户级目录 `~/.mytool/skills`,项目级 `.mytool/skills`。
+`internal/toolseed/builtin.go` 内置 9 个默认工具的 Go 常量(原 yaml 内容)。
+启动期(全新 DB,e_tool.Count == 0)自动写入,事务内保证一致性。
 
-### 1. 在 specs/ 加一个 yaml
+| 工具 | tool_id | maturity | sort_order |
+| --- | --- | --- | --- |
+| Claude Code | `claude` | stable | 10 |
+| Codex | `codex` | stable | 20 |
+| Cursor | `cursor` | stable | 30 |
+| OpenCode | `opencode` | stable | 40 |
+| Trae | `trae` | stable | 50 |
+| Antigravity | `antigravity` | stable | 60 |
+| Cline | `cline` | stable | 70 |
+| CodeBuddy | `codebuddy` | **experimental** | 80 |
+| JetBrains AI | `jetbrains` | **experimental** | 90 |
 
-```bash
-# 在 api-server/internal/skilladapter/toolspecs/specs/ 下
-cat > mytool.yaml <<'EOF'
-tool_id: mytool
-display_name: "My Tool"
-mdi_icon: "mdi:tools"
-maturity: stable
+**判定语义:** `e_tool.Count() == 0` → seed;`> 0` → 跳过(已初始化过)。
+不区分"系统" / "用户"行 — 全新 DB seed 后含 9 个;用户加的工具
+意味着 DB 早就被 seed 过了。
 
-note: |
-  简单说一下这个工具是什么、为什么这样配路径。
+**幂等性:** Count==0 时重跑 seed 是幂等的(无主键冲突)。
+**无历史遗留:** 项目未发布,seed 不考虑"老数据迁移"。
 
-paths:
-  global:
-    user:
-      - "~/.mytool/skills"
-  project:
-    user:
-      - ".mytool/skills"
-EOF
-```
+---
 
-### 2. 验证(单元测试)
+## 改一个新工具 — Step by Step
 
-```bash
-cd api-server
-go test ./internal/skilladapter/...
-```
+### 方式 1(用户友好):前端 UI
 
-`TestAllAdaptersRegistered` 会断言:
-- adapter 列表 ≥ 9 个(5 老 + N 新)
-- 每个 adapter `Icon()` 返回 `"mdi:xxx"`(非空、mdi: 开头)
+1. 进 Settings → 工具管理
+2. 点"新建工具",填:
+   - `tool_id`: 全小写,字母数字 + `-` / `_`
+   - `display_name`: 任意(前端 i18n 可覆盖)
+   - `mdi_icon`: 查 https://pictogrammers.com/library/mdi/
+   - `maturity`: stable / experimental / deprecated
+   - `paths`: 至少 (1 个 global + 1 个 project) 各一条 user path
+3. 保存
+4. 调 `POST /api/skillbox/tools/reload` → 立刻生效
 
-如果 `maturity: experimental`,前端会标注该工具为"实验性"。
+### 方式 2(改 seed 默认):修改内置 9 个工具
 
-### 3. 验证(运行时)
-
-启动后调用 `GET /api/skillbox/skills/scope-status?name=<any-skill>`,
-响应 `tools[]` 数组里能看到新工具的 `{tool_id, display_name, icon}`。
-`icon` 必须是 `mdi:xxx`,不是空串。
-
-### 4. 完事
-
-不需要改 Go 代码,不需要 build skillbox。`wails3 dev` 会重新加载
-`internal/skilladapter/toolspecs/` 包,YAML 改动后下次 API 请求就生效。
+1. 改 `internal/toolseed/builtin.go`,增删条目
+2. 重新 `go build`(只改常量,无新文件)
+3. 全新 DB 用户:启动自动 seed 新内容
+4. 已初始化用户:**不会自动更新** — 需要清空 e_tool + e_tool_path 表,或用前端 UI 改
 
 ---
 
 ## 一些坑
 
-1. **`//go:embed` 不支持符号链接** — specs/ 目录里**别放 symlink**。本目录
-   走 embed 加载,符号链接会触发 `pattern cannot embed irregular file` 错误。
-   真实案例见 docs/agent/memory/项目里记录的踩坑。
+1. **改完业务数据没调 reload** — 前端必须 reload;后端 reload 是同步阻塞,
+   无性能问题(约 10ms)。
 
-2. **tool_id 重复会 panic** — loader 二次校验 tool_id 唯一性,如果两个 yaml
-   写了同一个 tool_id,启动时直接 `log.Fatalf`,不静默放过。
+2. **`~/` 展开时机** — 路径在 DB 里以 `~/xxx` 形式存,运行时由
+   `BaseAdapter` 在生成 adapter 时按当前用户 home 展开。
+   不同用户(系统)可能共享同一个 DB 快照,但 home 不同 — 这种设计兼容。
 
-3. **Maturity 拼写错会被拒绝** — 必须是 `stable` / `experimental` / `deprecated`
-   之一(大小写敏感)。错拼写会 `LoadAll` 失败,服务起不来。
+3. **GORM 软删除 vs 硬删除** — 当前 `Delete` 走 `SoftDelete: false`,
+   真删。新建 + 删同 tool_id 不会冲突(没残留行)。
 
-4. **system 路径不要写到 BaseAdapter.Tools** — system 走
-   `BaseAdapter.SystemPaths`,这样 importer 才能区分 user / system 档位,
-   前端 phase2 才把 system 列为"只读参考,不可勾选"。
+4. **并发安全** — `Registry` 用 `sync.RWMutex` 保护;`Reload()` 整体替换
+   时用写锁,保证"读"侧(skillimporter.Scan / scope-status)不会看到中间状态。
 
-5. **项目级路径** — 一刀切写 `<project>/.claude/skills/` 这种是错的,
-   一定要看工具官方文档。Antigravity 是 `.gemini/antigravity/skills/`,
-   Claude 是 `.claude/skills/`,OpenCode 是 `.opencode/skills/`。
+5. **用户工具的 tool_id 重命名** — 本表设计不支持(tool_id 不可改);
+   如果想重命名,先删后建。
 
-6. **`mdi_icon` 找不到合适的图标** — 用 `mdi:puzzle-outline` 占位,
-   后续在 pictogrammers 找到合适的再改。
+6. **seed 阶段失败 → 服务起不来** — AutoMigrate 后立即 seed,失败 panic;
+   启动期硬约束,符合"DB 不一致就别起来"原则。
 
 ---
 
-## 已注册工具一览(2026-06-30)
+## 调试技巧
 
-| tool_id | display_name | mdi_icon | maturity | 个人级路径 |
-| --- | --- | --- | --- | --- |
-| `antigravity` | Antigravity | `mdi:rocket-launch-outline` | stable | `~/.gemini/antigravity/skills` |
-| `claude` | Claude Code | `mdi:robot-outline` | stable | `~/.agents/skills` |
-| `cline` | Cline | `mdi:file-document-outline` | stable | `~/.agents/skills` + `~/.cline/skills` |
-| `codebuddy` | CodeBuddy | `mdi:buddy` | **experimental** | `~/.codebuddy/skills` |
-| `codex` | Codex | `mdi:console` | stable | `~/.agents/skills` |
-| `cursor` | Cursor | `mdi:cursor-default-click-outline` | stable | `~/.cursor/skills` |
-| `jetbrains` | JetBrains AI | `mdi:language-java` | **experimental** | `~/.jetbrains/skills` |
-| `opencode` | OpenCode | `mdi:code-tags` | stable | `~/.config/opencode/skills` |
-| `trae` | Trae | `mdi:leaf` | stable | `~/.agents/skills` |
+```bash
+# 1. 看当前 DB 里的工具
+sqlite3 ~/.skill-box/data.db "SELECT tool_id, display_name, is_system, enabled FROM tools;"
 
-> **Why:** 5 个老工具是 2026-06 之前各占一个 Go 子包,2026-06-30 改造后
-> 全部迁到本目录的 yaml;4 个新工具直接以 yaml 形式落地,不需要写
-> 任何 Go 代码。
+# 2. 强制重新 seed(全新状态)
+sqlite3 ~/.skill-box/data.db "DELETE FROM tool_paths; DELETE FROM tools;"
+# 重启服务,EnsureSeeded 会重新写 9 条
+
+# 3. 看某个工具的 path
+sqlite3 ~/.skill-box/data.db "SELECT t.tool_id, p.scope, p.category, p.path FROM tools t JOIN tool_paths p ON p.tool_id = t.id WHERE t.tool_id = 'codex';"
+```
