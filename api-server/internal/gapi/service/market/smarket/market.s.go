@@ -508,15 +508,19 @@ func (s *Service) ListSourcesAggregated() (*ListSourcesAggregatedResult, error) 
 		return nil, err
 	}
 	_ = total
-	// 按 source_id 聚合 market_skills
+	// 按 source_id 聚合 market_skills。
+	//
+	// 2026-06-30 注:SQLite 的 MAX(time) 返回 string 类型,直接 Scan 到 *time.Time
+	// 会报 "unsupported Scan"。这里把 last_fetched 用 strftime 强转 RFC3339 string
+	// 取出,再 parse 成 time.Time,跨 driver 兼容。
 	type aggRow struct {
-		SourceID     uint
-		SkillCount   int
-		LastFetched  time.Time
+		SourceID    uint
+		SkillCount  int
+		LastFetched *string
 	}
 	var aggs []aggRow
 	if err := s.dbRead.Model(&entity.MarketSkill{}).
-		Select("source_id, COUNT(*) as skill_count, MAX(fetched_at) as last_fetched").
+		Select("source_id, COUNT(*) as skill_count, strftime('%Y-%m-%dT%H:%M:%fZ', MAX(fetched_at)) as last_fetched").
 		Group("source_id").
 		Scan(&aggs).Error; err != nil {
 		return nil, err
@@ -525,7 +529,13 @@ func (s *Service) ListSourcesAggregated() (*ListSourcesAggregatedResult, error) 
 	lasts := make(map[uint]time.Time, len(aggs))
 	for _, a := range aggs {
 		counts[a.SourceID] = a.SkillCount
-		lasts[a.SourceID] = a.LastFetched
+		if a.LastFetched != nil && *a.LastFetched != "" {
+			if t, err := time.Parse("2006-01-02T15:04:05.000Z", *a.LastFetched); err == nil {
+				lasts[a.SourceID] = t
+			} else if t, err := time.Parse(time.RFC3339Nano, *a.LastFetched); err == nil {
+				lasts[a.SourceID] = t
+			}
+		}
 	}
 	return &ListSourcesAggregatedResult{
 		Items:         items,

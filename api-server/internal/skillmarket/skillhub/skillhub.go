@@ -245,8 +245,31 @@ func (a *Adapter) fetchBody(ctx context.Context, url string) (string, error) {
 }
 
 // buildFallbackCanonical 把 fallback item 拼成最小可用的 canonical。
+//
+// 2026-06-30 修:SKILL.md 必须带 frontmatter(`---` 开头),不然 skilladapter.ParseSkillMD
+// 会报 "missing frontmatter"。原 body 没 frontmatter,导致 install-v2 / 旧 install
+// 在沙盒里走 fallback 时返 500。
 func buildFallbackCanonical(it skillmarket.MarketItem) *skilladapter.Canonical {
-	body := "# " + it.Name + "\n\n" + it.Description + "\n"
+	body := "---\n"
+	body += "name: " + it.RemoteID + "\n"
+	body += "version: " + firstNonEmpty(it.Version, "0.1.0") + "\n"
+	if it.Description != "" {
+		body += "description: " + it.Description + "\n"
+	}
+	if it.Author != "" {
+		body += "author: " + it.Author + "\n"
+	}
+	if len(it.Tags) > 0 {
+		body += "triggers:\n"
+		for _, tg := range it.Tags {
+			body += "  - " + tg + "\n"
+		}
+	}
+	body += "---\n\n"
+	body += "# " + it.Name + "\n\n"
+	if it.Description != "" {
+		body += it.Description + "\n"
+	}
 	if len(it.Tags) > 0 {
 		body += "\n## Triggers\n\n- " + strings.Join(it.Tags, "\n- ") + "\n"
 	}
