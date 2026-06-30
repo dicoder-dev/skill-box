@@ -1604,15 +1604,6 @@ function onContainerDrop(e) {
     return
   }
   const targetPath = detectTargetGroupPath(e.clientX, e.clientY)
-  // 2026-06-30 临时诊断:在 onContainerDrop 入口打 console,
-  // 让用户能直接看到 source 解析成什么、targetPath 是什么,
-  // 快速定位是 dataTransfer 解析问题还是 elementsFromPoint 问题
-  console.log('[DROP]', {
-    source,
-    targetPath,
-    clientX: e.clientX,
-    clientY: e.clientY,
-  })
   onTreeDrop({ targetPath, source, event: e })
 }
 

@@ -121,9 +121,6 @@ function onDragStart(node, e) {
   })
   e.dataTransfer.setData('application/x-skillbox-node', payload)
   e.dataTransfer.effectAllowed = 'move'
-  // 2026-06-30 临时诊断:在 dragstart 入口打 console,
-  // 确认 node 解析成什么、payload 写进 dataTransfer 的内容
-  console.log('[DRAG START]', { node, payload })
   // 用透明 dragImage,让默认的"卡片副本"不显示 — 默认那个半透明副本
   // 会跟目标位置视觉冲突,用户看着累。W3C 推荐做法。
   const ghost = document.createElement('div')
@@ -170,18 +167,23 @@ function isDropTarget(node) {
         isDropTarget(node) ? 'tree-node-drop-target' : '',
       ]"
       :style="{ paddingLeft: `${depth * 14 + 4}px` }"
-      :draggable="true"
       :aria-expanded="node.is_group ? !isCollapsed(node) : undefined"
       :aria-selected="!node.is_group && selectedPath === fullPath(node)"
-      @dragstart="onDragStart(node, $event)"
     >
-      <!-- 分组行:箭头 + 图标 + 名称 + 子项计数 -->
+      <!-- 分组行:箭头 + 图标 + 名称 + 子项计数。
+           2026-06-30 改:draggable + @dragstart 移到 .tree-row 自身,不再用 <li> 整个 draggable。
+           原因:之前 <li> draggable 时,鼠标在 li 内任意子元素上 mousedown 都会触发 dragstart,
+           用户从 code-review 划到 aa group 行时,aa 行的 dragstart 会再次触发并重置 dataTransfer,
+           导致拖动源从 skill 变成 group,误触发 moveIntoDescendant / alreadyAtRoot。
+           现在 dragstart 只在用户实际点中的那个 .tree-row 上触发,跨行 hover 不会重置。 -->
       <div
         v-if="node.is_group"
         class="tree-row tree-row-group"
         :data-node-path="fullPath(node)"
+        draggable="true"
         @click="onClickGroup(node, $event)"
         @contextmenu="onContextMenu(node, $event)"
+        @dragstart="onDragStart(node, $event)"
       >
         <Icon
           :icon="isCollapsed(node) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
@@ -201,13 +203,16 @@ function isDropTarget(node) {
         </span>
       </div>
 
-      <!-- skill 行:卡片样式 — 点击选中;卡片下方显示已被哪些工具全局启用 -->
+      <!-- skill 行:卡片样式 — 点击选中;卡片下方显示已被哪些工具全局启用。
+           2026-06-30 改:draggable + @dragstart 放到 .tree-row-skill 自己(同 .tree-row-group)。 -->
       <div
         v-else
         class="tree-row tree-row-skill"
         :data-node-path="fullPath(node)"
+        draggable="true"
         @click="onClickSkill(node, $event)"
         @contextmenu="onContextMenu(node, $event)"
+        @dragstart="onDragStart(node, $event)"
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
