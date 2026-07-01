@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"ginp-api/internal/skillmarket"
 )
 
 // fakeRT 复用 skillhub 的实现,这里 inline 简化。
@@ -620,6 +622,58 @@ func TestDiscover_AuditsAPI_InvalidJSON(t *testing.T) {
 	}
 	if len(items) != 1 {
 		t.Fatalf("expected 1 item from HTML fallback, got %d", len(items))
+	}
+}
+
+// TestDiscover_AuditsAPI_NilAgentTrustHub 2026-07-01 增:验证部分冷门 skill
+// agentTrustHub 字段为 null 时不会 panic(原 bug:OverallRiskLevel 解引用 nil)。
+func TestDiscover_AuditsAPI_NilAgentTrustHub(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200,
+			ct:     "application/json",
+			// 两条 skill:一条有 agentTrustHub,一条没有
+			body: `{"skills":[
+				{"rank":1,"source":"foo/bar","skillId":"audited","agentTrustHub":{"result":{"gemini_analysis":{"summary":"OK"}}}},
+				{"rank":2,"source":"baz/qux","skillId":"not-audited","agentTrustHub":null}
+			]}`,
+		},
+		"/api/audits/1": {
+			status: 200,
+			ct:     "application/json",
+			body:   `{"skills":[]}`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 两条都应该拿到(不能 panic,也不能漏条)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d (%+v)", len(items), items)
+	}
+	// 已审计的应有 description;未审计的 description/tags 都应为空字符串
+	var audited, unaudited *skillmarket.MarketItem
+	for i := range items {
+		if items[i].Name == "audited" {
+			audited = &items[i]
+		}
+		if items[i].Name == "not-audited" {
+			unaudited = &items[i]
+		}
+	}
+	if audited == nil || audited.Description == "" {
+		t.Errorf("audited item should have description, got %+v", audited)
+	}
+	if unaudited == nil {
+		t.Fatal("not-audited item missing")
+	}
+	if unaudited.Description != "" {
+		t.Errorf("not-audited should have empty description, got %q", unaudited.Description)
+	}
+	if len(unaudited.Tags) != 0 {
+		t.Errorf("not-audited should have no tags, got %v", unaudited.Tags)
 	}
 }
 

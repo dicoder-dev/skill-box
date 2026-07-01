@@ -255,9 +255,12 @@ func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pag
 			if s.AgentTrustHub != nil && s.AgentTrustHub.Result.GeminiAnalysis.Summary != "" {
 				item.Description = trimDescription(s.AgentTrustHub.Result.GeminiAnalysis.Summary, 280)
 			}
-			// tags: 安全等级作为可见标签
-			if level := s.AgentTrustHub.Result.OverallRiskLevel; level != "" {
-				item.Tags = []string{"risk:" + strings.ToLower(level)}
+			// tags: 安全等级作为可见标签(2026-07-01 修:nil 检查,部分冷门 skill
+			// 没被 Agent Trust Hub 审计过,AgentTrustHub 字段为 null,直接读会 panic)
+			if s.AgentTrustHub != nil {
+				if level := s.AgentTrustHub.Result.OverallRiskLevel; level != "" {
+					item.Tags = []string{"risk:" + strings.ToLower(level)}
+				}
 			}
 			out = append(out, item)
 		}
