@@ -563,10 +563,33 @@ onMounted(async () => {
 
 <style scoped>
 .tools-view {
-  max-width: 1100px;
-  margin: 0 auto;
+  /* 占满内容区宽度(与 MarketView 一致) */
+  width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
+}
+
+/* ===== 工具主题:Emerald Workshop(独立作用域变量) ===== */
+.tools-view {
+  /* 主色:teal-500(冷一点的青色,和翠绿 emerald 拉开层次) */
+  --tool-primary: #14b8a6;
+  --tool-primary-hover: #0d9488;
+  /* 强调:emerald-500(绿,代表"工具可用/成功") */
+  --tool-accent: #10b981;
+  /* 派生浅底/边/字 */
+  --tool-bg: #f0fdfa;          /* teal-50 */
+  --tool-bg-strong: #ccfbf1;   /* teal-100 */
+  --tool-border: #99f6e4;      /* teal-200 */
+  --tool-text: #0f766e;        /* teal-700 */
+}
+:global(html.dark) .tools-view {
+  --tool-primary: #2dd4bf;     /* teal-400 提亮 */
+  --tool-primary-hover: #5eead4; /* teal-300 */
+  --tool-accent: #34d399;      /* emerald-400 */
+  --tool-bg: #042f2e;          /* teal-950 */
+  --tool-bg-strong: #134e4a;  /* teal-900 */
+  --tool-border: #115e59;      /* teal-800 */
+  --tool-text: #99f6e4;        /* teal-200 */
 }
 
 /* ===== 页面头 ===== */
@@ -593,8 +616,10 @@ onMounted(async () => {
 }
 
 .view-icon-emerald {
-  background: var(--success);
-  color: white;
+  /* 主题色块:teal→emerald 渐变 + 发光阴影 */
+  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--tool-primary) 40%, transparent);
 }
 
 .view-title h1 {
@@ -645,8 +670,9 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  /* 主题浅底 + 主题淡边(柔和不刺眼) */
+  background: var(--tool-bg);
+  border: 1px solid var(--tool-border);
   border-radius: var(--radius-sm);
 }
 
@@ -666,14 +692,16 @@ onMounted(async () => {
 }
 
 .filter-btn:hover:not(.active) {
-  color: var(--text);
-  background: var(--bg-hover);
+  /* hover 时上主题色,文字也跟随 */
+  color: var(--tool-text);
+  background: var(--tool-bg-strong);
 }
 
 .filter-btn.active {
-  background: var(--bg-card);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  /* 激活态:teal→emerald 渐变(类似 Market 的 source-tab) */
+  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--tool-primary) 50%, transparent);
 }
 
 .filter-count {
@@ -690,8 +718,9 @@ onMounted(async () => {
 }
 
 .filter-btn.active .filter-count {
-  background: var(--primary);
-  color: var(--bg-card);
+  /* 激活态时:count 数字用主色突出 */
+  background: color-mix(in srgb, #ffffff 25%, transparent);
+  color: #ffffff;
 }
 
 .toolbar-right {
@@ -699,6 +728,20 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* 新建按钮(CTA):主题 teal→emerald 渐变 + hover 上浮(视觉关键转化点) */
+.toolbar-right button.primary {
+  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tool-primary) 30%, transparent);
+}
+.toolbar-right button.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--tool-primary-hover) 0%, var(--tool-accent) 100%);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--tool-primary) 45%, transparent);
 }
 
 /* ===== 错误提示 ===== */
@@ -750,16 +793,24 @@ onMounted(async () => {
   border-left: 4px solid transparent;
   border-radius: var(--radius);
   position: relative;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .tool-card:hover {
-  border-color: var(--text-faint);
+  /* hover 时显示主题色淡边 + 轻微抬起 */
+  border-color: color-mix(in srgb, var(--tool-primary) 35%, var(--border));
   box-shadow: var(--shadow-card);
 }
 
+/* 系统工具:左侧 emerald 渐变条 */
 .tool-card.is-system {
-  border-left-color: var(--success);
+  border-left: 4px solid;
+  border-image: linear-gradient(180deg, var(--tool-primary) 0%, var(--tool-accent) 100%) 1;
+}
+
+/* 用户工具:左侧浅主题色条(轻提示,与系统工具区分但不刺眼) */
+.tool-card:not(.is-system) {
+  border-left-color: color-mix(in srgb, var(--tool-primary) 25%, transparent);
 }
 
 .tool-card.is-disabled {
@@ -779,10 +830,11 @@ onMounted(async () => {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--bg-subtle);
-  color: var(--text);
+  /* 主题浅底 + 主题主色图标 */
+  background: var(--tool-bg);
+  color: var(--tool-primary);
   flex-shrink: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--tool-border);
 }
 
 .tool-card-titles {
@@ -806,12 +858,14 @@ onMounted(async () => {
 .tool-card-id {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  background: var(--primary-dim);
-  color: var(--primary);
+  /* 主题色 chip */
+  background: var(--tool-bg);
+  color: var(--tool-text);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   align-self: flex-start;
   max-width: fit-content;
+  border: 1px solid var(--tool-border);
 }
 
 .badge {
@@ -826,8 +880,10 @@ onMounted(async () => {
 }
 
 .badge-system {
-  background: var(--success-dim);
-  color: var(--success);
+  /* 系统徽章:teal→emerald 渐变,和卡片左侧条带呼应 */
+  background: linear-gradient(135deg, var(--tool-bg) 0%, var(--tool-bg-strong) 100%);
+  color: var(--tool-text);
+  border: 1px solid var(--tool-border);
 }
 
 .tool-card-meta {
@@ -926,8 +982,9 @@ onMounted(async () => {
 }
 
 .action-icon-edit:hover {
-  background: var(--primary-dim);
-  color: var(--primary);
+  /* 编辑:hover 时用主题色(区别于危险) */
+  background: var(--tool-bg);
+  color: var(--tool-primary);
 }
 
 .action-icon-danger:hover {
@@ -981,7 +1038,8 @@ onMounted(async () => {
 }
 
 .switch input:checked + .switch-slider {
-  background-color: var(--success);
+  /* 开启时:teal→emerald 渐变(与卡片左侧条带呼应) */
+  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
 }
 
 .switch input:checked + .switch-slider::before {
