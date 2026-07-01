@@ -594,21 +594,28 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 14px 12px;
+  padding: 14px 14px 12px 18px; /* 左侧 18px 给 box-shadow 留位,避开 border-radius 切割 */
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-left: 4px solid transparent;
   border-radius: var(--radius);
+  box-shadow: inset 4px 0 0 transparent; /* 默认透明占位,避免布局抖动 */
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .market-card:hover {
   border-color: var(--text-faint);
-  box-shadow: var(--shadow-card);
+  box-shadow: inset 4px 0 0 transparent, var(--shadow-card);
 }
 
+/* 2026-07-01 修:已安装/未安装用 inset box-shadow 显示左侧条带,
+   替代 border-left(避免被 border-radius 圆角切割导致不可见)。
+   inset shadow 不会被 border-radius 裁剪,边角清晰。 */
 .market-card.is-installed {
-  border-left-color: var(--success);
+  box-shadow: inset 4px 0 0 var(--success);
+}
+
+.market-card.is-installed:hover {
+  box-shadow: inset 4px 0 0 var(--success), var(--shadow-card);
 }
 
 .market-card-top {
