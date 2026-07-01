@@ -731,23 +731,24 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
+/* spacer 不再占空间,改为 0 宽,让 actions 紧贴左对齐;
+   模板保留节点是为了不破坏依赖它的潜在样式,这里用 CSS 兜底 */
 .market-card-bottom-spacer {
-  flex: 1;
+  display: none;
 }
 
+/* 卡片底部 actions 始终显示。
+   之前 opacity:0 + hover 显示的方案会让 actions 区域在网格里
+   留出一大块空白(占位但不渲染),且行高不一致显得别扭。 */
 .market-card-actions {
   display: flex;
   gap: 4px;
   align-items: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.market-card:hover .market-card-actions {
   opacity: 1;
 }
 
