@@ -370,19 +370,19 @@ onMounted(async () => {
 
 <style scoped>
 /* ============================================
-   市场主题色 - Indigo Marketplace
+   市场主题色 - Ocean Teal Market
    只在 .market 作用域内生效,不影响其他 view
-   亮色: indigo-500 主色 / violet-500 渐变收尾
-   暗色: indigo-400 提亮,violet-400 收尾
+   亮色: sky-500 主色 / cyan-500 渐变收尾
+   暗色: sky-400 提亮,cyan-400 收尾
    ============================================ */
 .market {
-  --mkt-primary: #6366f1;       /* indigo-500 */
-  --mkt-primary-hover: #4f46e5; /* indigo-600 */
-  --mkt-accent: #8b5cf6;        /* violet-500 */
-  --mkt-bg: #eef2ff;            /* indigo-50 浅底 */
-  --mkt-bg-strong: #e0e7ff;     /* indigo-100 */
-  --mkt-border: #c7d2fe;        /* indigo-200 */
-  --mkt-text: #4338ca;          /* indigo-700 深字 */
+  --mkt-primary: #0ea5e9;       /* sky-500 主色(信任蓝) */
+  --mkt-primary-hover: #0284c7; /* sky-600 hover */
+  --mkt-accent: #06b6d4;        /* cyan-500 渐变收尾 */
+  --mkt-bg: #f0f9ff;            /* sky-50 浅底 */
+  --mkt-bg-strong: #e0f2fe;     /* sky-100 */
+  --mkt-border: #bae6fd;        /* sky-200 */
+  --mkt-text: #0369a1;          /* sky-700 深字 */
 
   display: flex;
   flex-direction: column;
@@ -392,15 +392,15 @@ onMounted(async () => {
   transition: color 0.3s ease;
 }
 
-/* 暗黑模式:用更亮的 indigo-400,深底用 950-tint */
+/* 暗黑模式:用更亮的 sky-400 提亮,cyan-400 收尾 */
 :global(html.dark) .market {
-  --mkt-primary: #818cf8;       /* indigo-400 */
-  --mkt-primary-hover: #a5b4fc; /* indigo-300 */
-  --mkt-accent: #a78bfa;        /* violet-400 */
-  --mkt-bg: #1e1b4b;            /* indigo-950 */
-  --mkt-bg-strong: #312e81;     /* indigo-900 */
-  --mkt-border: #4338ca;        /* indigo-700 */
-  --mkt-text: #c7d2fe;          /* indigo-200 浅字 */
+  --mkt-primary: #38bdf8;       /* sky-400 */
+  --mkt-primary-hover: #7dd3fc; /* sky-300 */
+  --mkt-accent: #22d3ee;        /* cyan-400 */
+  --mkt-bg: #082f49;            /* sky-950 */
+  --mkt-bg-strong: #0c4a6e;     /* sky-900 */
+  --mkt-border: #0369a1;        /* sky-700 */
+  --mkt-text: #bae6fd;          /* sky-200 浅字 */
 }
 
 /* 页面头部 - flex 子项,不收缩不滚动 */
