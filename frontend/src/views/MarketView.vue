@@ -367,6 +367,9 @@ onMounted(async () => {
 
 <style scoped>
 .market {
+  display: flex;
+  flex-direction: column;
+  height: 100%;                  /* 占满 content-area(已被 app-container 锁为视口高度) */
   max-width: 1100px;
   margin: 0 auto;
   color: var(--text);
@@ -416,11 +419,14 @@ onMounted(async () => {
   transition: color 0.3s ease;
 }
 
-/* 卡片 - flex 列布局,只让中部 .market-body 滚动;
-   工具栏/源标签/分页栏全部 flex-shrink:0 保持原位 */
+/* 卡片 - flex 列占满 .market 剩余高度,内部三段各自负责;
+   顶部工具栏/源标签 flex-shrink:0 不滚,.market-body flex:1 接管滚动,
+   .pager flex-shrink:0 始终在 .card 底部 = 视口内可见 */
 .card {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;                /* 关键:允许子项收缩到内容以下,触发内部 overflow */
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -573,15 +579,12 @@ onMounted(async () => {
 }
 
 /* 卡片网格 - 中部可滚动容器,卡片多时只滚这一段;
-   用 max-height 限定上限,卡片少时仍自然占高度,分页栏紧贴其下。
-   calc 拆解:100vh 视口
-              - topbar 约 56px
-              - content-area 上下 padding 各 20px
-              - view-header 约 90px
-              - 卡片 padding 40px + 分页 60px ≈ 100px
-              - 安全余量 */
+   flex:1 占 .card 剩余高度,min-height:0 允许收缩触发内部 overflow。
+   配合 .market height:100% + .card flex:1 链路,自适应任何屏幕,
+   保证顶部工具栏/分页栏始终在 .card 上下两端 = 视口上下两端。 */
 .market-body {
-  max-height: calc(100vh - 56px - 40px - 90px - 100px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
