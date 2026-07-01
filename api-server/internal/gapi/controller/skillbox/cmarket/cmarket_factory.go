@@ -8,7 +8,7 @@ import (
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 )
 
-// newService 旧工厂(2026-06-30 保留):仅用于老 Install 端点,不带 apply 能力。
+// newService 旧工厂(2026-06-30 保留,2026-07-01 改名注释):仅用于老 pull 端点(/install),不带 apply 能力。
 func newService() *smarket.Service {
 	ww := dbs.GetWriteDb()
 	rr := dbs.GetReadDb()
@@ -21,7 +21,7 @@ func newService() *smarket.Service {
 	})
 }
 
-// newServiceV2 工厂(2026-06-30 增):注入 sskillapp + sproject,供 install-v2
+// newServiceV2 工厂(2026-06-30 增,2026-07-01 改名注释):注入 sskillapp + sproject,供 pull-v2
 // 和源管理端点使用;scope=project 时 sproject 让 sskillapp 能把 project_id
 // 解析成真实项目根路径。
 func newServiceV2() *smarket.Service {

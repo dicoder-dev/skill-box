@@ -116,24 +116,24 @@ func TestListSkills_Empty(t *testing.T) {
 	}
 }
 
-func TestInstall_BadInput(t *testing.T) {
+func TestPull_BadInput(t *testing.T) {
 	env := newTestEnv(t)
-	cases := []smarket.InstallInput{
+	cases := []smarket.PullInput{
 		{},
 		{SourceID: 1},
 		{SourceID: 1, RemoteID: "x", Scope: "weird"},
 		{SourceID: 1, RemoteID: "x", Scope: "project"},
 	}
 	for i, in := range cases {
-		if _, err := env.svc.Install(context.Background(), &in); err == nil {
+		if _, err := env.svc.Pull(context.Background(), &in); err == nil {
 			t.Errorf("case %d: expected error, got nil", i)
 		}
 	}
 }
 
-func TestInstall_SourceNotFound(t *testing.T) {
+func TestPull_SourceNotFound(t *testing.T) {
 	env := newTestEnv(t)
-	_, err := env.svc.Install(context.Background(), &smarket.InstallInput{
+	_, err := env.svc.Pull(context.Background(), &smarket.PullInput{
 		SourceID: 999, RemoteID: "x", Scope: "global",
 	})
 	if err == nil {
@@ -141,7 +141,7 @@ func TestInstall_SourceNotFound(t *testing.T) {
 	}
 }
 
-func TestInstall_SkillNotFound(t *testing.T) {
+func TestPull_SkillNotFound(t *testing.T) {
 	env := newTestEnv(t)
 	_ = env.svc.EnsureDefaultSources()
 	res, _ := env.svc.ListSources()
@@ -149,7 +149,7 @@ func TestInstall_SkillNotFound(t *testing.T) {
 		t.Fatal("setup failed")
 	}
 	src := res.Items[0]
-	_, err := env.svc.Install(context.Background(), &smarket.InstallInput{
+	_, err := env.svc.Pull(context.Background(), &smarket.PullInput{
 		SourceID: src.ID, RemoteID: "no-such-remote-id", Scope: "global",
 	})
 	if err == nil {
@@ -157,14 +157,14 @@ func TestInstall_SkillNotFound(t *testing.T) {
 	}
 }
 
-// fakeRT 用全局 map 模拟响应;Install 测试需要替换 skillhub 默认 transport,
+// fakeRT 用全局 map 模拟响应;Pull 测试需要替换 skillhub 默认 transport,
 // 但 skillmarket 包里用的是 default httpClient(里面 hardcode *http.Client)。
 // 这里走"修改 source.config_json.base_url" + "通过 http.DefaultTransport 拦截"的方案不行
 // (http.DefaultTransport 没法替换 RoundTripper)。
 // 替代方案:直接调用 orchestrator.DownloadFromSource 路径需要的 adapter → 但 default
 // 走的是 skillhub.New()(即默认 httpClient)。所以这条 E2E 路径在沙盒里不能完整跑。
-// 退一步:只验证 service.Install 的 happy path 用 fallback canonical(走 knownFallback)。
-func TestInstall_GlobalOk_UsingFallback(t *testing.T) {
+// 退一步:只验证 service.Pull 的 happy path 用 fallback canonical(走 knownFallback)。
+func TestPull_GlobalOk_UsingFallback(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -188,11 +188,11 @@ func TestInstall_GlobalOk_UsingFallback(t *testing.T) {
 	env.seedMarketSkill(t, src.ID, src.Name, "code-review", "Code Review", "1.0.0")
 
 	// 沙盒里 127.0.0.1:1 会立即连接拒绝 → fetchBody 返错 → 走 knownFallback 分支
-	out, err := env.svc.Install(context.Background(), &smarket.InstallInput{
+	out, err := env.svc.Pull(context.Background(), &smarket.PullInput{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
 	})
 	if err != nil {
-		t.Fatalf("install should succeed via fallback: %v", err)
+		t.Fatalf("pull should succeed via fallback: %v", err)
 	}
 	if out == nil || out.Canonical == nil {
 		t.Fatalf("nil result: %+v", out)
@@ -205,10 +205,10 @@ func TestInstall_GlobalOk_UsingFallback(t *testing.T) {
 	}
 }
 
-// TestInstallV2_GlobalOk_UsingFallback 验证 v2 写盘 + apply 链路。
+// TestPullV2_GlobalOk_UsingFallback 验证 v2 写盘 + apply 链路。
 // 注入一个空 registry 的 sskillapp,避免真去操作各工具目录;写盘 + 走 apply
 // 路径(marketskill 的 status 会是 failed 因为没装工具,但 store 写盘已成功)。
-func TestInstallV2_GlobalOk_UsingFallback(t *testing.T) {
+func TestPullV2_GlobalOk_UsingFallback(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -237,12 +237,12 @@ func TestInstallV2_GlobalOk_UsingFallback(t *testing.T) {
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
 	// 走 v2 路径,2026-06-30 改:tools=nil 不再默认 AllTools,只写盘不 apply。
 	// 这里显式传 Tools=AllTools 测"apply 路径"分支
-	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
 		Tools: skilladapter.AllTools,
 	})
 	if err != nil {
-		t.Fatalf("install-v2 should succeed via fallback: %v", err)
+		t.Fatalf("pull-v2 should succeed via fallback: %v", err)
 	}
 	if out == nil {
 		t.Fatal("nil result")
@@ -262,8 +262,8 @@ func TestInstallV2_GlobalOk_UsingFallback(t *testing.T) {
 	}
 }
 
-// TestInstallV2_FinalName_Rename 验证 FinalName 字段支持"另存为"。
-func TestInstallV2_FinalName_Rename(t *testing.T) {
+// TestPullV2_FinalName_Rename 验证 FinalName 字段支持"另存为"。
+func TestPullV2_FinalName_Rename(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -288,11 +288,11 @@ func TestInstallV2_FinalName_Rename(t *testing.T) {
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	skillApp := sskillapp.New(env.db, env.db, factory)
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
-	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global", FinalName: "code-review-2",
 	})
 	if err != nil {
-		t.Fatalf("install-v2 with final_name: %v", err)
+		t.Fatalf("pull-v2 with final_name: %v", err)
 	}
 	if out.Name != "code-review-2" {
 		t.Errorf("expected name=code-review-2, got %q", out.Name)
@@ -302,8 +302,8 @@ func TestInstallV2_FinalName_Rename(t *testing.T) {
 	}
 }
 
-// TestInstallV2_EmptyTools_OnlyWrite 2026-06-30 增:Tools=nil/[] 时只写盘不 apply。
-func TestInstallV2_EmptyTools_OnlyWrite(t *testing.T) {
+// TestPullV2_EmptyTools_OnlyWrite 2026-06-30 增:Tools=nil/[] 时只写盘不 apply。
+func TestPullV2_EmptyTools_OnlyWrite(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -329,11 +329,11 @@ func TestInstallV2_EmptyTools_OnlyWrite(t *testing.T) {
 	skillApp := sskillapp.New(env.db, env.db, factory)
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
 	// Tools 不传(零值 nil)→ 只写盘
-	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
 	})
 	if err != nil {
-		t.Fatalf("install-v2 with empty tools: %v", err)
+		t.Fatalf("pull-v2 with empty tools: %v", err)
 	}
 	if !store.Exists("code-review") {
 		t.Error("expected skill written to store")
@@ -346,9 +346,9 @@ func TestInstallV2_EmptyTools_OnlyWrite(t *testing.T) {
 	}
 }
 
-// TestInstallV2_GroupPath_WritesToSubdir 2026-06-30 增:GroupPath 写到 Manifest.GroupPath,
+// TestPullV2_GroupPath_WritesToSubdir 2026-06-30 增:GroupPath 写到 Manifest.GroupPath,
 // store 落到子目录。验证通过 store.LoadByPath 读回。
-func TestInstallV2_GroupPath_WritesToSubdir(t *testing.T) {
+func TestPullV2_GroupPath_WritesToSubdir(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -373,11 +373,11 @@ func TestInstallV2_GroupPath_WritesToSubdir(t *testing.T) {
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	v2 := smarket.NewWithApply(env.db, env.db, factory, nil) // 不注 apply
 	// GroupPath 装到 frontend/react/code-review
-	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: "frontend/react",
 	})
 	if err != nil {
-		t.Fatalf("install-v2 with group_path: %v", err)
+		t.Fatalf("pull-v2 with group_path: %v", err)
 	}
 	if out.GroupPath != "frontend/react" {
 		t.Errorf("expected group_path=frontend/react, got %q", out.GroupPath)
@@ -395,13 +395,13 @@ func TestInstallV2_GroupPath_WritesToSubdir(t *testing.T) {
 	}
 }
 
-// TestInstallV2_BadGroupPath 2026-06-30 增:验证非法 group_path 在 normalize 阶段就被处理。
+// TestPullV2_BadGroupPath 2026-06-30 增:验证非法 group_path 在 normalize 阶段就被处理。
 //
 // 设计决策:NormalizeGroupName 只接受 [a-z0-9-],把 '.' / '/' / ' ' / 其它字符都折叠为 '-'。
 // 所以 "../escape" 实际 normalize 成 "-escape","foo/../bar" 变成 "foo-bar" ——
 // 等于"客户端永远造不出含 .. 的 group_path",store.safeRelPath 是第二道防线。
 // 这里测试三个"输入时看起来坏但 normalize 后是有效名"的 case,验证安装不挂即可。
-func TestInstallV2_BadGroupPath(t *testing.T) {
+func TestPullV2_BadGroupPath(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -433,7 +433,7 @@ func TestInstallV2_BadGroupPath(t *testing.T) {
 		"FRONT END/React", // → "front-end-react"
 	}
 	for _, gp := range cases {
-		out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+		out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 			SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: gp,
 		})
 		if err != nil {
@@ -445,9 +445,9 @@ func TestInstallV2_BadGroupPath(t *testing.T) {
 			t.Errorf("group_path %q should be normalized, but got raw %q", gp, out.GroupPath)
 		}
 	}
-	// 完全空 normalize 后也是空("    " 空白)→ InstallV2 当作没传 group_path
+	// 完全空 normalize 后也是空("    " 空白)→ PullV2 当作没传 group_path
 	// 这一路径通过空字符串分支,不创建分组
-	out, err := v2.InstallV2(context.Background(), &smarket.InstallV2Input{
+	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global", GroupPath: "   ",
 	})
 	if err != nil {
@@ -458,10 +458,10 @@ func TestInstallV2_BadGroupPath(t *testing.T) {
 	}
 }
 
-// TestInstallV2_BadInput 验证 v2 入参校验。
-func TestInstallV2_BadInput(t *testing.T) {
+// TestPullV2_BadInput 验证 v2 入参校验。
+func TestPullV2_BadInput(t *testing.T) {
 	env := newTestEnv(t)
-	cases := []smarket.InstallV2Input{
+	cases := []smarket.PullV2Input{
 		{},
 		{SourceID: 1},
 		{SourceID: 1, RemoteID: "x", Scope: "weird"},
@@ -469,7 +469,7 @@ func TestInstallV2_BadInput(t *testing.T) {
 		{SourceID: 1, RemoteID: "x", Scope: "global", FinalName: "!!!"}, // 归一化后空
 	}
 	for i, in := range cases {
-		if _, err := env.svc.InstallV2(context.Background(), &in); err == nil {
+		if _, err := env.svc.PullV2(context.Background(), &in); err == nil {
 			t.Errorf("case %d: expected error, got nil", i)
 		}
 	}

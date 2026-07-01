@@ -5,7 +5,7 @@ import { Icon } from '@iconify/vue'
 import { useMarketStore } from '@/core/store/market'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
-import MarketInstallConfirm from '@/components/MarketInstallConfirm.vue'
+import MarketPullConfirm from '@/components/MarketPullConfirm.vue'
 import MarketSourceSettings from '@/components/MarketSourceSettings.vue'
 
 const { t } = useI18n()
@@ -69,6 +69,7 @@ function openSettings() {
 }
 
 // 安装弹窗
+// 2026-07-01 改:MarketInstallConfirm → MarketPullConfirm。
 const installOpen = ref(false)
 const installItem = ref(null)
 function openInstall(item) {
@@ -78,13 +79,13 @@ function openInstall(item) {
 
 async function onInstallConfirm(payload) {
   try {
-    const res = await market.install(payload)
+    const res = await market.pull(payload)
     installOpen.value = false
     // 根据 apply 结果给 toast
     if (res?.skipped_tools?.length && res.skipped_tools.length > 0) {
       toast.push({
         type: 'info',
-        message: t('market.installDialog.applyPartial', {
+        message: t('market.pullDialog.applyPartial', {
           n: res.skipped_tools.length,
           tools: res.skipped_tools.join(', '),
         }),
@@ -92,15 +93,15 @@ async function onInstallConfirm(payload) {
     } else if (res?.apply_result?.all_ok) {
       toast.push({
         type: 'success',
-        message: t('market.installDialog.applyAllOk', { n: res.apply_result?.applies?.length || 0 }),
+        message: t('market.pullDialog.applyAllOk', { n: res.apply_result?.applies?.length || 0 }),
       })
     } else {
-      toast.push({ type: 'success', message: t('market.okInstalled', { name: res?.name, version: res?.version }) })
+      toast.push({ type: 'success', message: t('market.okPulled', { name: res?.name, version: res?.version }) })
     }
     // 刷新列表(更新 installed 标记)
     await market.loadSkills()
   } catch (e) {
-    toast.push({ type: 'error', message: t('market.errInstall', { msg: e?.message || e }) })
+    toast.push({ type: 'error', message: t('market.errPull', { msg: e?.message || e }) })
   }
 }
 
@@ -243,9 +244,9 @@ onMounted(async () => {
                   <button v-if="installed[it.name]" class="action-btn" :title="t('market.btnViewSkill')" @click="viewSkill(it.name)">
                     <Icon icon="mdi:open-in-new" width="12" height="12" />
                   </button>
-                  <button class="install-btn" :disabled="market.installing" @click="openInstall(it)">
+                  <button class="install-btn" :disabled="market.pulling" @click="openInstall(it)">
                     <Icon icon="mdi:download" width="12" height="12" />
-                    {{ installed[it.name] ? t('market.btnReinstall') : t('market.btnInstall') }}
+                    {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
                   </button>
                 </div>
               </td>
@@ -331,17 +332,17 @@ onMounted(async () => {
         <button
           type="button"
           class="primary"
-          :disabled="market.installing"
+          :disabled="market.pulling"
           @click="detailOpen = false; openInstall(detailItem)"
         >
           <Icon icon="mdi:download" width="14" height="14" />
-          {{ t('market.btnInstall') }}
+          {{ t('market.btnPull') }}
         </button>
       </template>
     </Modal>
 
-    <!-- 安装弹窗 -->
-    <MarketInstallConfirm
+    <!-- 拉取弹窗 -->
+    <MarketPullConfirm
       v-model="installOpen"
       :item="installItem"
       :installed="installed"

@@ -32,14 +32,13 @@ const (
 	defaultBaseURL    = "https://skills.sh"
 	defaultGHRawBase  = "https://raw.githubusercontent.com"
 	defaultGHBlobBase = "https://github.com"
-	// 预置 fallback 列表(skills.sh 不可达 / 解析失败时兜底)。
-	//
-	// 2026-06-30 增:从公开的 vercel-labs / ComposioHQ / obra / 200ideas 等
-	// 仓库里筛了 23 条已知可用的 skill,避免解析失败时市场页空着。
+	// 2026-07-01 增:dylnuge-skillbox-claude-skills / vercel-labs-agent-skills
+	// 下其它常用 skill,让 fallback 覆盖更全。已知可用的扩充条目。
 	knownCatalogFallback = "vercel-labs/agent-skills@vercel-react-best-practices\n" +
 		"vercel-labs/agent-skills@vercel-composition-patterns\n" +
 		"vercel-labs/agent-skills@vercel-server-actions\n" +
 		"vercel-labs/agent-skills@vercel-async-design\n" +
+		"vercel-labs/agent-skills@next-best-practices\n" +
 		"ComposioHQ/awesome-claude-skills@pr-review\n" +
 		"ComposioHQ/awesome-claude-skills@commit-message\n" +
 		"ComposioHQ/awesome-claude-skills@code-explain\n" +
@@ -49,24 +48,30 @@ const (
 		"obra/superpowers@writing-skills\n" +
 		"obra/superpowers@test-driven-development\n" +
 		"obra/superpowers@using-git-worktrees\n" +
+		"obra/superpowers@verification-before-completion\n" +
 		"200ideas/dofld-skills@dofld-commit\n" +
 		"200ideas/dofld-skills@dofld-pr\n" +
 		"200ideas/dofld-skills@dofld-test\n" +
 		"dylnuge/skillbox-claude-skills@frontend-design\n" +
 		"dylnuge/skillbox-claude-skills@tailwind-patterns\n" +
+		"dylnuge/skillbox-claude-skills@vue-best-practices\n" +
+		"dylnuge/skillbox-claude-skills@react-best-practices\n" +
 		"anthropics/skills@brand-guidelines\n" +
 		"anthropics/skills@web-artifacts-builder\n" +
 		"anthropics/skills@doc-coauthoring\n" +
 		"anthropics/skills@theme-factory\n" +
-		"anthropics/skills@canvas-design\n"
+		"anthropics/skills@canvas-design\n" +
+		"anthropics/skills@pdf\n" +
+		"anthropics/skills@mcp-builder\n" +
+		"anthropics/skills@frontend-design\n" +
+		"anthropics/skills@skill-creator"
 )
 
 // minCatalogFallbackSize parseCatalog 解析后必须达到的最低条目数;
 // 低于该值会触发 logger.Warn 提示需要补充 fallback(用于回归测试)。
 //
-// 2026-06-30 增:不能放在 const 块里(同一文件其它 const 不能跨块引用),
-// 这里作为 package-level var。
-var minCatalogFallbackSize = 20
+// 2026-07-01 增:fallback 从 23 → 30,门槛提到 28。
+var minCatalogFallbackSize = 28
 
 // Adapter skills.sh 适配器。
 type Adapter struct {
@@ -108,6 +113,10 @@ func (a *Adapter) DisplayName() string { return "skills.sh" }
 func (a *Adapter) BaseURL() string     { return defaultBaseURL }
 
 // Discover 解析 catalog 页,提取 (owner/repo, skill) 列表。
+//
+// 2026-07-01 改:三段式 — 先抓 HTML,再跑两个解析器(老版 @ 文本 + 新版 href 链接),
+// 合并去重。两者都为空才走 knownCatalogFallback。修复之前只跑 owner@repo 正则
+// 拿不到新版目录的问题。
 func (a *Adapter) Discover(ctx context.Context, baseURL string) ([]skillmarket.MarketItem, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -118,28 +127,21 @@ func (a *Adapter) Discover(ctx context.Context, baseURL string) ([]skillmarket.M
 		logger.Warn("skillssh discover: %v; falling back to known catalog", err)
 		return parseCatalog(knownCatalogFallback, baseURL), nil
 	}
-	// 简单匹配 "owner/repo@skill" 形式(站点 HTML 里通常以纯文本 / href 出现)
-	pattern := regexp.MustCompile(`([\w.-]+/[\w.-]+)@([\w.-]+)`)
-	matches := pattern.FindAllStringSubmatch(body, 500)
+	// 合并两个解析器:老版纯文本 owner/repo@skill + 新版 href 链接。
+	// 任一有结果就用并集(去重 by RemoteID),不再只看 owner@repo。
 	seen := map[string]bool{}
-	out := make([]skillmarket.MarketItem, 0, len(matches))
-	for _, m := range matches {
-		repo := strings.TrimSpace(m[1])
-		name := strings.TrimSpace(m[2])
-		if repo == "" || name == "" {
-			continue
+	out := make([]skillmarket.MarketItem, 0, 64)
+	add := func(items []skillmarket.MarketItem) {
+		for _, it := range items {
+			if seen[it.RemoteID] {
+				continue
+			}
+			seen[it.RemoteID] = true
+			out = append(out, it)
 		}
-		remoteID := repo + "@" + name
-		if seen[remoteID] {
-			continue
-		}
-		seen[remoteID] = true
-		out = append(out, skillmarket.MarketItem{
-			RemoteID:  remoteID,
-			Name:      name,
-			DetailURL: fmt.Sprintf("%s/%s/%s", defaultBaseURL, repo, name),
-		})
 	}
+	add(parseOwnerRepoAtBody(body, baseURL))
+	add(parseHTMLLinks(body, baseURL))
 	if len(out) == 0 {
 		return parseCatalog(knownCatalogFallback, baseURL), nil
 	}

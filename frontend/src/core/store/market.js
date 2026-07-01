@@ -5,7 +5,7 @@
 //   - activeSourceId 当前选中的源 id(0 = 聚合视图)
 //   - skills         当前页列表(market_skills 缓存 + installed 标记)
 //   - projects       项目列表(供 scope=project 选项用)
-//   - installDialog  控制"安装"弹窗的开关
+//   - pullDialog     控制"拉取"弹窗的开关
 //
 // 用法:
 //   import { useMarketStore } from '@/core/store/market'
@@ -18,7 +18,7 @@ import {
   listSources,
   listMarketSkillsWithInstalled,
   refreshSource,
-  installMarketSkillV2,
+  pullMarketSkillV2,
   listMarketSourcesAggregated,
   updateMarketSource,
 } from '@/api/skillbox/market'
@@ -39,14 +39,14 @@ export const useMarketStore = defineStore('market', {
     page: 1,
     size: 20,
     keyword: '',
-    showInstalledOnly: false, // "只看未安装" 开关
+    showInstalledOnly: false, // "只看未拉取" 开关
 
     // 项目(供 scope=project 选项)
     projects: [], // [{ id, name, alias, root_path }]
 
-    // 安装
-    installing: false,
-    lastInstallResult: null, // InstallV2Result
+    // 拉取
+    pulling: false,
+    lastPullResult: null, // PullV2Result
     lastError: '',
 
     // 状态
@@ -119,7 +119,7 @@ export const useMarketStore = defineStore('market', {
           installed: !!installedMap[it.name],
         }))
         this.total = res.total || 0
-        // 过滤"只看未安装"
+        // 过滤"只看未拉取"
         if (this.showInstalledOnly) {
           this.skills = this.skills.filter((s) => !s.installed)
           this.total = this.skills.length
@@ -149,12 +149,13 @@ export const useMarketStore = defineStore('market', {
       }
     },
 
-    // --- 安装(v2) ---
-    async install({ sourceId, remoteId, scope, projectId, tools, finalName, groupPath }) {
-      this.installing = true
+    // --- 拉取(v2) ---
+    // 2026-07-01 改名:install → pull。语义对齐"从三方源拉取 skill 到 skill-box"。
+    async pull({ sourceId, remoteId, scope, projectId, tools, finalName, groupPath }) {
+      this.pulling = true
       this.lastError = ''
       try {
-        const res = await installMarketSkillV2({
+        const res = await pullMarketSkillV2({
           source_id: sourceId,
           remote_id: remoteId,
           scope: scope || 'global',
@@ -163,8 +164,8 @@ export const useMarketStore = defineStore('market', {
           final_name: finalName || '',
           group_path: groupPath || '',
         })
-        this.lastInstallResult = res
-        // 安装后立刻刷新 installed 标记
+        this.lastPullResult = res
+        // 拉取后立刻刷新 installed 标记
         if (res?.name) {
           this.installed[res.name] = true
         }
@@ -173,8 +174,14 @@ export const useMarketStore = defineStore('market', {
         this.lastError = e?.message || String(e)
         throw e
       } finally {
-        this.installing = false
+        this.pulling = false
       }
+    },
+
+    // install 旧名 alias(2026-07-01 deprecated),新代码请用 pull。
+    // 行为完全等价,留作向后兼容。
+    async install(payload) {
+      return this.pull(payload)
     },
 
     // --- 源管理 ---

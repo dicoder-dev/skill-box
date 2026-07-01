@@ -1,6 +1,6 @@
 // skillbox/market.js - 三方市场域的 HTTP 客户端。
 //
-// 后端路径(2026-06-30 增 4 个新端点):
+// 后端路径(2026-07-01 改:术语 install → pull,HTTP 路径保留不变):
 //   GET  /api/skillbox/market/sources                          (旧)
 //   GET  /api/skillbox/market/skills?source_id=&keyword=...    (旧)
 //   POST /api/skillbox/market/refresh                          (旧)
@@ -24,7 +24,7 @@ export function refreshSource(sourceId) {
   return http.post('/api/skillbox/market/refresh', { source_id: sourceId })
 }
 
-// 旧 install 端点(2026-06-30 标 deprecated):只写盘不 apply。生产请改用 installMarketSkillV2。
+// 旧 install 端点(2026-06-30 标 deprecated):只写盘不 apply。生产请改用 pullMarketSkillV2。
 export function installMarketSkill(payload) {
   return http.post('/api/skillbox/market/install', payload)
 }
@@ -36,11 +36,14 @@ export function listMarketSkillsWithInstalled(params = {}) {
   return http.get('/api/skillbox/market/skills-with-installed', params)
 }
 
-// 一键安装:写盘 + apply(2026-06-30 增)。
+// 一键拉取:写盘 + apply(2026-07-01 改名:installMarketSkillV2 → pullMarketSkillV2)。
 // payload: { source_id, remote_id, scope, project_id, tools, final_name }
-export function installMarketSkillV2(payload) {
+export function pullMarketSkillV2(payload) {
   return http.post('/api/skillbox/market/install-v2', payload)
 }
+
+// installMarketSkillV2 旧名 alias(2026-07-01 deprecated),新代码请用 pullMarketSkillV2。
+export const installMarketSkillV2 = pullMarketSkillV2
 
 // 源聚合列表(2026-06-30 增):每个源带 skill_count / last_fetched_at。
 export function listMarketSourcesAggregated() {

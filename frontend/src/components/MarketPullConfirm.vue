@@ -1,5 +1,5 @@
 <script setup>
-// MarketInstallConfirm.vue - 三方市场"安装"弹窗(2026-06-30 增;06-30 二改)。
+// MarketPullConfirm.vue - 三方市场"拉取"弹窗(2026-06-30 增;06-30 二改;2026-07-01 改名)。
 //
 // 复用 frontend/src/components/Modal.vue。三态:
 //   - 未冲突:scope 选择 + 分组选择 + tools 多选(默认全不勾) + 确认/取消
@@ -12,12 +12,15 @@
 //     配合"新建分组"按钮可 inline 创建
 //   - 注意:group_path 修改的是 Manifest.GroupPath,store 落子目录;
 //
+// 2026-07-01 改名:MarketInstallConfirm → MarketPullConfirm。"拉取"对应"从三方源
+// 拿到 skill-box 统一管理",比"安装"更准确。
+//
 // 用法:
-//   <MarketInstallConfirm
+//   <MarketPullConfirm
 //     :item="marketSkill"
 //     :installed="market.installed"
 //     :projects="market.projects"
-//     @confirm="(payload) => market.install(payload)"
+//     @confirm="(payload) => market.pull(payload)"
 //     @cancel="() => dialog = false"
 //   />
 
@@ -155,7 +158,7 @@ async function ensureTreeLoaded() {
 async function createNewGroup() {
   const path = newGroupInput.value.trim()
   if (!path) {
-    newGroupErr.value = t('market.installDialog.groupEmpty')
+    newGroupErr.value = t('market.pullDialog.groupEmpty')
     return
   }
   try {
@@ -203,7 +206,7 @@ onMounted(() => {
   <Modal
     :model-value="modelValue"
     size="md"
-    :title="t('market.installDialog.title', { name: item?.name || '' })"
+    :title="t('market.pullDialog.title', { name: item?.name || '' })"
     :close-on-mask="!submitting"
     @update:model-value="(v) => emit('update:modelValue', v)"
   >
@@ -211,17 +214,17 @@ onMounted(() => {
       <Icon icon="mdi:download-outline" width="18" height="18" />
     </template>
 
-    <div v-if="item" class="install-form">
+    <div v-if="item" class="pull-form">
       <!-- 描述 -->
-      <p v-if="item.description" class="install-desc">{{ item.description }}</p>
+      <p v-if="item.description" class="pull-desc">{{ item.description }}</p>
 
       <!-- 重复检测提示 -->
       <div v-if="isDuplicate" class="dup-warn">
         <div class="dup-title">
           <Icon icon="mdi:alert-outline" width="16" height="16" />
-          {{ t('market.installDialog.duplicateTitle', { name: item.name }) }}
+          {{ t('market.pullDialog.duplicateTitle', { name: item.name }) }}
         </div>
-        <div class="dup-hint">{{ t('market.installDialog.duplicateHint') }}</div>
+        <div class="dup-hint">{{ t('market.pullDialog.duplicateHint') }}</div>
         <div class="dup-actions">
           <button
             type="button"
@@ -229,7 +232,7 @@ onMounted(() => {
             @click="strategy = 'overwrite'"
           >
             <Icon icon="mdi:content-save-outline" width="14" height="14" />
-            {{ t('market.installDialog.btnOverwrite') }}
+            {{ t('market.pullDialog.btnOverwrite') }}
           </button>
           <button
             type="button"
@@ -237,19 +240,19 @@ onMounted(() => {
             @click="strategy = 'saveAs'"
           >
             <Icon icon="mdi:content-copy" width="14" height="14" />
-            {{ t('market.installDialog.btnSaveAs') }}
+            {{ t('market.pullDialog.btnSaveAs') }}
           </button>
         </div>
         <div v-if="strategy === 'saveAs'" class="dup-saveas">
-          <label class="saveas-label">{{ t('market.installDialog.newNameLabel') }}</label>
+          <label class="saveas-label">{{ t('market.pullDialog.newNameLabel') }}</label>
           <input v-model="newName" type="text" class="saveas-input" :placeholder="item.name + '-2'" />
-          <p class="saveas-hint">{{ t('market.installDialog.saveAsHint') }}</p>
+          <p class="saveas-hint">{{ t('market.pullDialog.saveAsHint') }}</p>
         </div>
       </div>
 
       <!-- scope 选择 -->
       <div class="form-row">
-        <label class="form-label">{{ t('market.installDialog.scopeLabel') }}</label>
+        <label class="form-label">{{ t('market.pullDialog.scopeLabel') }}</label>
         <div class="form-controls">
           <label class="radio">
             <input v-model="scope" type="radio" value="global" />
@@ -270,10 +273,10 @@ onMounted(() => {
 
       <!-- 分组选择 (2026-06-30 增) -->
       <div class="form-row">
-        <label class="form-label">{{ t('market.installDialog.groupLabel') }}</label>
+        <label class="form-label">{{ t('market.pullDialog.groupLabel') }}</label>
         <div class="form-controls">
           <select v-model="groupPath" class="form-select">
-            <option value="">{{ t('market.installDialog.groupNone') }}</option>
+            <option value="">{{ t('market.pullDialog.groupNone') }}</option>
             <option
               v-for="opt in groupOptions"
               :key="opt.value"
@@ -283,11 +286,11 @@ onMounted(() => {
           <button
             type="button"
             class="ghost sm"
-            :title="t('market.installDialog.btnNewGroup')"
+            :title="t('market.pullDialog.btnNewGroup')"
             @click="newGroupOpen = !newGroupOpen"
           >
             <Icon icon="mdi:folder-plus-outline" width="12" height="12" />
-            {{ t('market.installDialog.btnNewGroup') }}
+            {{ t('market.pullDialog.btnNewGroup') }}
           </button>
         </div>
         <div v-if="newGroupOpen" class="group-create">
@@ -295,7 +298,7 @@ onMounted(() => {
             v-model="newGroupInput"
             type="text"
             class="form-input"
-            :placeholder="t('market.installDialog.groupPlaceholder')"
+            :placeholder="t('market.pullDialog.groupPlaceholder')"
             @keyup.enter="createNewGroup"
           />
           <button type="button" class="primary sm" :disabled="!newGroupInput.trim()" @click="createNewGroup">
@@ -306,12 +309,12 @@ onMounted(() => {
           </button>
         </div>
         <p v-if="newGroupErr" class="form-hint form-hint-error">{{ newGroupErr }}</p>
-        <p v-else class="form-hint">{{ t('market.installDialog.groupHint') }}</p>
+        <p v-else class="form-hint">{{ t('market.pullDialog.groupHint') }}</p>
       </div>
 
       <!-- tools 多选(2026-06-30 改:默认空) -->
       <div class="form-row">
-        <label class="form-label">{{ t('market.installDialog.toolsLabel') }}</label>
+        <label class="form-label">{{ t('market.pullDialog.toolsLabel') }}</label>
         <div class="form-controls-col">
           <div class="tools-list">
             <label v-for="tool in ['codex', 'claude', 'opencode', 'cursor', 'trae']" :key="tool" class="tool-chip">
@@ -325,13 +328,13 @@ onMounted(() => {
           </div>
           <div class="tools-actions">
             <button type="button" class="ghost sm" @click="selectAll">
-              {{ t('market.installDialog.selectAll') }}
+              {{ t('market.pullDialog.selectAll') }}
             </button>
             <button type="button" class="ghost sm" @click="deselectAll">
-              {{ t('market.installDialog.selectNone') }}
+              {{ t('market.pullDialog.selectNone') }}
             </button>
           </div>
-          <p class="form-hint">{{ t('market.installDialog.toolsHint') }}</p>
+          <p class="form-hint">{{ t('market.pullDialog.toolsHint') }}</p>
         </div>
       </div>
 
@@ -340,26 +343,26 @@ onMounted(() => {
 
     <template #footer>
       <button type="button" class="ghost" :disabled="submitting" @click="close">
-        {{ t('market.installDialog.btnCancel') }}
+        {{ t('market.pullDialog.btnCancel') }}
       </button>
       <button type="button" class="primary" :disabled="!canConfirm || submitting" @click="onConfirm">
         <span v-if="submitting" class="spinner"></span>
         <Icon v-else icon="mdi:download" width="14" height="14" />
-        {{ submitting ? t('market.installDialog.installing') : t('market.installDialog.confirm') }}
+        {{ submitting ? t('market.pullDialog.pulling') : t('market.pullDialog.confirm') }}
       </button>
     </template>
   </Modal>
 </template>
 
 <style scoped>
-.install-form {
+.pull-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
   font-size: 13px;
 }
 
-.install-desc {
+.pull-desc {
   margin: 0;
   color: var(--text-dim);
   line-height: 1.5;

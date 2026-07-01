@@ -3,12 +3,15 @@
 // 设计要点(见 docs/project/需求规划.md 第 4.1.8 + 5.1 节):
 //   - 三方源走 entity.MarketSource + skillmarket.Orchestrator
 //   - 列表:直接查 entity.MarketSkill(避免每次都打三方)
-//   - 装到本地:orchestrator.DownloadFromSource 拿 canonical,再走 sskill.Service.Create
+//   - 拉取到本地:orchestrator.DownloadFromSource 拿 canonical,再走 sskill.Service.Create
 //   - source 维度:smarket 自身只读 / 缓存元数据;源增删不在本步范围(Step 7 落 4 端点,源由
 //     seed 在 Onboarding 阶段插入)
 //
-// 2026-06-30 增:InstallV2 一站式流程(写盘 + apply 到工具),与 Install 旧路径并存;
-// 旧 Install 仅写盘不 apply,保留向后兼容(标记 deprecated),新前端默认走 v2。
+// 2026-06-30 增:PullV2 一站式流程(写盘 + apply 到工具),与 Pull 旧路径并存;
+// 旧 Pull 仅写盘不 apply,保留向后兼容(标记 deprecated),新前端默认走 v2。
+//
+// 2026-07-01 改:Install/PullV2 → Pull/PullV2(pull 是新名,install 留 alias);
+// 术语改为"拉取",反映"从三方源 → skill-box 统一管理"的语义。
 package smarket
 
 import (
@@ -35,21 +38,25 @@ import (
 )
 
 // 业务错误。
+//
+// 2026-07-01 改:ErrPullFailed 是新名,ErrInstallFailed 留作 alias。
 var (
 	ErrSourceNotFound = errors.New("market: source not found")
 	ErrSkillNotFound  = errors.New("market: skill not found")
-	ErrInstallFailed  = errors.New("market: install failed")
+	ErrPullFailed     = errors.New("market: pull failed")
+	// ErrInstallFailed 历史别名,新代码请用 ErrPullFailed。
+	ErrInstallFailed = ErrPullFailed
 )
 
 // Service 业务服务。
 //
-// 2026-06-30 增:skillAppSvc 字段,InstallV2 走它来 apply;老 Install 仍不依赖此字段。
+// 2026-06-30 增:skillAppSvc 字段,PullV2 走它来 apply;老 Pull 仍不依赖此字段。
 type Service struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
-	// skillSvc 在 Install 时复用,避免本包重写 sskill 写盘逻辑
+	// skillSvc 在 Pull 时复用,避免本包重写 sskill 写盘逻辑
 	skillSvcFactory func() (*sskill.Service, error)
-	// skillAppSvc 可选;注入后 InstallV2 才会触发 apply。生产由 controller 工厂注入。
+	// skillAppSvc 可选;注入后 PullV2 才会触发 apply。生产由 controller 工厂注入。
 	skillAppSvc *sskillapp.Service
 }
 
@@ -58,7 +65,7 @@ func New(dbWrite, dbRead *gorm.DB, skillSvcFactory func() (*sskill.Service, erro
 }
 
 // NewWithApply 构造带 apply 能力的 Service(2026-06-30 增)。
-// InstallV2 走此构造,旧 Install 仍可走 New(不依赖 skillAppSvc)。
+// PullV2 走此构造,旧 Pull 仍可走 New(不依赖 skillAppSvc)。
 func NewWithApply(dbWrite, dbRead *gorm.DB,
 	skillSvcFactory func() (*sskill.Service, error),
 	skillAppSvc *sskillapp.Service) *Service {
@@ -135,37 +142,45 @@ func (s *Service) RefreshSource(ctx context.Context, sourceID uint) (*skillmarke
 	return s.orchestrator().RefreshFromSource(ctx, sourceID)
 }
 
-// InstallInput 装到 store 的入参。
-type InstallInput struct {
+// PullInput 拉取到 store 的入参(2026-07-01 改名:InstallInput → PullInput)。
+type PullInput struct {
 	SourceID  uint   `json:"source_id"`
 	RemoteID  string `json:"remote_id"`
 	Scope     string `json:"scope"`     // global / project
 	ProjectID uint   `json:"project_id"` // scope=project 时必填
 }
 
-// InstallResult 装到 store 的结果。
-type InstallResult struct {
+// InstallInput 旧名 alias(2026-07-01 deprecated),新代码请用 PullInput。
+type InstallInput = PullInput
+
+// PullResult 拉取到 store 的结果(2026-07-01 改名:InstallResult → PullResult)。
+type PullResult struct {
 	MarketSkill *entity.MarketSkill     `json:"market_skill"`
 	Canonical   *skilladapter.Canonical `json:"canonical,omitempty"`
 }
 
-// Install 从三方下载,转成 canonical,再走 sskill.Service.Create 落到 store。
-func (s *Service) Install(ctx context.Context, in *InstallInput) (*InstallResult, error) {
+// InstallResult 旧名 alias(2026-07-01 deprecated),新代码请用 PullResult。
+type InstallResult = PullResult
+
+// Pull 从三方下载,转成 canonical,再走 sskill.Service.Create 落到 store。
+//
+// 2026-07-01 改名:Install → Pull。语义对齐"从三方源拉取 skill 到 skill-box 统一管理"。
+func (s *Service) Pull(ctx context.Context, in *PullInput) (*PullResult, error) {
 	if in == nil {
-		return nil, fmt.Errorf("%w: nil input", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: nil input", ErrPullFailed)
 	}
 	if in.SourceID == 0 || strings.TrimSpace(in.RemoteID) == "" {
-		return nil, fmt.Errorf("%w: source_id / remote_id 必填", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: source_id / remote_id 必填", ErrPullFailed)
 	}
 	scope := strings.ToLower(strings.TrimSpace(in.Scope))
 	if scope == "" {
 		scope = skilladapter.ScopeGlobal
 	}
 	if scope != skilladapter.ScopeGlobal && scope != skilladapter.ScopeProject {
-		return nil, fmt.Errorf("%w: scope 必须是 global / project", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: scope 必须是 global / project", ErrPullFailed)
 	}
 	if scope == skilladapter.ScopeProject && in.ProjectID == 0 {
-		return nil, fmt.Errorf("%w: project scope 需要 project_id", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: project scope 需要 project_id", ErrPullFailed)
 	}
 	// 1) 找源
 	src, err := s.sourceModel().FindOneById(in.SourceID)
@@ -182,15 +197,15 @@ func (s *Service) Install(ctx context.Context, in *InstallInput) (*InstallResult
 	// 3) 下载
 	can, err := s.orchestrator().DownloadFromSource(ctx, in.SourceID, in.RemoteID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrPullFailed, err)
 	}
 	// 4) 落到 store(走 sskill)
 	if s.skillSvcFactory == nil {
-		return nil, fmt.Errorf("%w: skill service factory not wired", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: skill service factory not wired", ErrPullFailed)
 	}
 	ssvc, err := s.skillSvcFactory()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrPullFailed, err)
 	}
 	// 补 manifest 字段(以三方元数据为底,canonical 为真)
 	can.Manifest.Author = firstNonEmpty(can.Manifest.Author, row.Author)
@@ -209,9 +224,20 @@ func (s *Service) Install(ctx context.Context, in *InstallInput) (*InstallResult
 		Files:     can.Files,
 	})
 	if cerr != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, cerr)
+		return nil, fmt.Errorf("%w: %v", ErrPullFailed, cerr)
 	}
-	return &InstallResult{MarketSkill: row, Canonical: created}, nil
+	return &PullResult{MarketSkill: row, Canonical: created}, nil
+}
+
+// Install 旧名(2026-07-01 deprecated),新代码请用 Pull。
+// 行为完全等价,留作向后兼容。
+//
+//nolint:staticcheck // SA1019: alias for Pull, 保留向后兼容
+func (s *Service) Install(ctx context.Context, in *InstallInput) (*InstallResult, error) {
+	if in == nil {
+		return nil, fmt.Errorf("%w: nil input", ErrInstallFailed)
+	}
+	return s.Pull(ctx, (*PullInput)(in))
 }
 
 // GetMarketSkill 拿单个缓存记录。
@@ -279,8 +305,8 @@ func SanityJSON(v any) string {
 	return string(b)
 }
 
-// InstallV2Input 一键安装入参(2026-06-30 增)。
-type InstallV2Input struct {
+// PullV2Input 一站式拉取入参(2026-06-30 增,2026-07-01 改名:InstallV2Input → PullV2Input)。
+type PullV2Input struct {
 	SourceID  uint
 	RemoteID  string
 	Scope     string   // global / project,缺省 global
@@ -294,8 +320,11 @@ type InstallV2Input struct {
 	GroupPath string
 }
 
-// InstallV2Result 一键安装响应。
-type InstallV2Result struct {
+// InstallV2Input 旧名 alias(2026-07-01 deprecated),新代码请用 PullV2Input。
+type InstallV2Input = PullV2Input
+
+// PullV2Result 一站式拉取响应(2026-07-01 改名:InstallV2Result → PullV2Result)。
+type PullV2Result struct {
 	Name         string                     `json:"name"`
 	Version      string                     `json:"version"`
 	Scope        string                     `json:"scope"`
@@ -308,7 +337,10 @@ type InstallV2Result struct {
 	GroupPath string `json:"group_path,omitempty"`
 }
 
-// InstallV2 一站式:写盘 + apply 到工具。
+// InstallV2Result 旧名 alias(2026-07-01 deprecated),新代码请用 PullV2Result。
+type InstallV2Result = PullV2Result
+
+// PullV2 一站式:写盘 + apply 到工具。
 //
 // 关键决策(2026-06-30):
 //   - Tools 空数组(0 个) = "不 apply 任何工具,只写盘"(用户主动选择为空时尊重他的意图)
@@ -317,22 +349,24 @@ type InstallV2Result struct {
 //   - write 阶段就报错时仍然整体返 err(没东西可 apply)
 //   - 重名检测由前端做(传 FinalName),后端不重复检测
 //   - 分组路径(2026-06-30 增):in.GroupPath 写到 Manifest.GroupPath,store.Save 走子目录
-func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2Result, error) {
+//
+// 2026-07-01 改名:InstallV2 → PullV2。语义对齐"从三方源拉取到 skill-box"。
+func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, error) {
 	if in == nil {
-		return nil, fmt.Errorf("%w: nil input", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: nil input", ErrPullFailed)
 	}
 	if in.SourceID == 0 || strings.TrimSpace(in.RemoteID) == "" {
-		return nil, fmt.Errorf("%w: source_id / remote_id 必填", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: source_id / remote_id 必填", ErrPullFailed)
 	}
 	scope := strings.ToLower(strings.TrimSpace(in.Scope))
 	if scope == "" {
 		scope = skilladapter.ScopeGlobal
 	}
 	if scope != skilladapter.ScopeGlobal && scope != skilladapter.ScopeProject {
-		return nil, fmt.Errorf("%w: scope 必须是 global / project", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: scope 必须是 global / project", ErrPullFailed)
 	}
 	if scope == skilladapter.ScopeProject && in.ProjectID == 0 {
-		return nil, fmt.Errorf("%w: project scope 需要 project_id", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: project scope 需要 project_id", ErrPullFailed)
 	}
 	// 1) 找源
 	src, err := s.sourceModel().FindOneById(in.SourceID)
@@ -349,7 +383,7 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 	// 3) 下载
 	can, err := s.orchestrator().DownloadFromSource(ctx, in.SourceID, in.RemoteID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrPullFailed, err)
 	}
 	// 4) FinalName 处理(支持"另存为"重命名)
 	finalName := strings.TrimSpace(in.FinalName)
@@ -358,7 +392,7 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 	}
 	finalName = skilladapter.NormalizeName(finalName)
 	if finalName == "" {
-		return nil, fmt.Errorf("%w: empty final_name after normalize", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: empty final_name after normalize", ErrPullFailed)
 	}
 	can.Manifest.Name = finalName
 	// 5) 提前拿到 ssvc(2026-06-30:GroupPath 处理 + 后续写盘都要用,集中拿一次)。
@@ -368,10 +402,10 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 		var ferr error
 		ssvc, ferr = s.skillSvcFactory()
 		if ferr != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInstallFailed, ferr)
+			return nil, fmt.Errorf("%w: %v", ErrPullFailed, ferr)
 		}
 	} else {
-		return nil, fmt.Errorf("%w: skill service factory not wired", ErrInstallFailed)
+		return nil, fmt.Errorf("%w: skill service factory not wired", ErrPullFailed)
 	}
 	// 6) 分组路径(2026-06-30 增)——走 NormalizeGroupName 规范化(允许 / 嵌套)。
 	//    安全校验由 store.Save 内部 safeRelPath 做最后一道防线(防 ../ / 绝对路径),
@@ -381,13 +415,13 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 	if groupPath != "" {
 		normalized := skilladapter.NormalizeGroupName(groupPath)
 		if normalized == "" {
-			return nil, fmt.Errorf("%w: group_path %q invalid (empty after normalize)", ErrInstallFailed, groupPath)
+			return nil, fmt.Errorf("%w: group_path %q invalid (empty after normalize)", ErrPullFailed, groupPath)
 		}
 		can.Manifest.GroupPath = normalized
 		groupPath = normalized
-		// 自动建分组目录(让 InstallV2 一站式,前端不需要先 createGroup 再 install)
+		// 自动建分组目录(让 PullV2 一站式,前端不需要先 createGroup 再 pull)
 		if gerr := ssvc.CreateGroup(normalized); gerr != nil {
-			return nil, fmt.Errorf("%w: create group %q: %v", ErrInstallFailed, normalized, gerr)
+			return nil, fmt.Errorf("%w: create group %q: %v", ErrPullFailed, normalized, gerr)
 		}
 	}
 	// 7) 补 manifest 字段
@@ -408,11 +442,11 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 		Files:     can.Files,
 	})
 	if cerr != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInstallFailed, cerr)
+		return nil, fmt.Errorf("%w: %v", ErrPullFailed, cerr)
 	}
 	// 8) Tools:空数组 = 不 apply,只写盘(2026-06-30 改:不再默认填 AllTools)
 	tools := in.Tools
-	result := &InstallV2Result{
+	result := &PullV2Result{
 		Name:         finalName,
 		Version:      version,
 		Scope:        scope,
@@ -455,6 +489,14 @@ func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2
 	}
 	result.SkippedTools = skipped
 	return result, nil
+}
+
+// InstallV2 旧名 alias(2026-07-01 deprecated),新代码请用 PullV2。
+func (s *Service) InstallV2(ctx context.Context, in *InstallV2Input) (*InstallV2Result, error) {
+	if in == nil {
+		return nil, fmt.Errorf("%w: nil input", ErrInstallFailed)
+	}
+	return s.PullV2(ctx, (*PullV2Input)(in))
 }
 
 // ListSkillsWithInstalledResult 列表响应(每条带 installed 标记)。
