@@ -343,7 +343,9 @@ const messages = {
     btnSearch: '搜索',
     btnRefresh: '刷新源',
     refreshing: '刷新中…',
-    // 2026-07-01 增:工具栏拆两个按钮,loading 互不冲突
+    // 2026-07-01 改:UI 重构后,刷新 loading 统一单 flag,以下 6 个 key 弃用
+    // (刷新按钮改名为「搜索」,走 keyword 透传到三方源;进页面/切 tab 自动拉全量)
+    // 保留旧 key 仅为避免第三方代码引用炸掉,可后续清理时整段删除
     btnRefreshAll: '拉取全部',
     btnRefreshCurrent: '刷新当前搜索',
     refreshingAll: '拉取全量中…',
@@ -377,7 +379,10 @@ const messages = {
     colDescription: '描述',
     colTags: '标签',
     colStatus: '状态',
+    // 2026-07-01 改:进入页面已自动拉取,空态文案分两种
     emptyFirstTime: '当前源还没拉过。点 "刷新源" 把三方目录拉到本地。',
+    emptyAfter: '该源暂无内容',
+    emptyAfterHint: '刷新一次试试,或检查网络后切到其他源',
     loading: '加载中…',
     // 2026-06-30 增
     allSources: '全部源',

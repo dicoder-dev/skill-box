@@ -7,6 +7,11 @@
 //   - projects       项目列表(供 scope=project 选项用)
 //   - pullDialog     控制"拉取"弹窗的开关
 //
+// 2026-07-01 改造:刷新策略统一为单 refreshing flag。
+//   - 进页面 / 切 tab 都会自动触发 refreshActive({ keyword: '' }) 拉全量
+//   - 搜索框 + 「搜索」按钮触发 refreshActive({ keyword }) 走三方源搜索
+//   - Enter 仅做本地缓存过滤(loadSkills),不打三方源
+//
 // 用法:
 //   import { useMarketStore } from '@/core/store/market'
 //   const store = useMarketStore()
@@ -29,11 +34,9 @@ export const useMarketStore = defineStore('market', {
     // 源
     sources: [], // [{ id, name, type, enabled, config_json }]
     activeSourceId: 0, // 0 = "全部源" 聚合视图
-    // 2026-07-01 改:refreshing 拆成两个 flag,分别对应"拉全量"和"刷新当前搜索",
-    // 按钮 loading 互不冲突。refreshing 字段保留作 alias(向后兼容)。
-    refreshing: false, // alias,等同 refreshingAll
-    refreshingAll: false, // keyword 为空,拉全量
-    refreshingCurrent: false, // keyword 非空,刷新当前搜索
+    // 2026-07-01 改:刷新 loading 统一用单 refreshing flag。
+    // 进入页面自动拉、tab 切换自动拉、点搜索按钮打三方源搜索,均共用此 flag。
+    refreshing: false, // 唯一的刷新 loading 标记
     lastRefresh: null, // { source_id, pulled_count, inserted, updated, finished_at, error }
 
     // 列表
@@ -138,13 +141,11 @@ export const useMarketStore = defineStore('market', {
 
     // 2026-07-01 改:keyword 透传到三方源。opts.keyword 为空时拉全量,
     // 非空时走三方源搜索语义(skillhub 走 /api/skills?keyword=,
-    // skills.sh 走 /search?q=)。refreshing flag 按 keyword 是否为空分开置。
+    // skills.sh 走 /search?q=)。refreshing flag 统一管理(进页面/切 tab/搜索按钮都走这里)。
     async refreshActive(opts = {}) {
       if (!this.activeSourceId) return
       const keyword = (opts.keyword ?? this.keyword ?? '').trim()
-      const flag = keyword ? 'refreshingCurrent' : 'refreshingAll'
-      if (this[flag] || this.refreshing) return
-      this[flag] = true
+      if (this.refreshing) return // 已在刷,丢弃新请求(简单防抖)
       this.refreshing = true
       this.lastError = ''
       try {
@@ -156,19 +157,8 @@ export const useMarketStore = defineStore('market', {
         this.lastError = e?.message || String(e)
         throw e
       } finally {
-        this[flag] = false
         this.refreshing = false
       }
-    },
-
-    // refreshAll 强制 keyword=空,拉全量目录(2026-07-01 增,作为 UI 按钮 alias)。
-    async refreshAll() {
-      return this.refreshActive({ keyword: '' })
-    },
-
-    // refreshCurrent 用当前 keyword,刷新三方源搜索结果(2026-07-01 增)。
-    async refreshCurrent() {
-      return this.refreshActive({ keyword: this.keyword })
     },
 
     // --- 拉取(v2) ---

@@ -343,7 +343,8 @@ const messages = {
     btnSearch: 'Search',
     btnRefresh: 'Refresh source',
     refreshing: 'Refreshing…',
-    // 2026-07-01 增:工具栏拆两个按钮,loading 互不冲突
+    // 2026-07-01 deprecated: single refreshing flag replaces these after UI refactor.
+    // Kept as aliases only; safe to remove once no other code references them.
     btnRefreshAll: 'Fetch all',
     btnRefreshCurrent: 'Refresh current search',
     refreshingAll: 'Fetching all…',
@@ -377,7 +378,10 @@ const messages = {
     colDescription: 'description',
     colTags: 'tags',
     colStatus: 'status',
+    // 2026-07-01: entry page auto-refreshes the first source; empty states split into two
     emptyFirstTime: 'This source has not been pulled yet. Click "Refresh source" to fetch from the upstream catalog.',
+    emptyAfter: 'No skills in this source',
+    emptyAfterHint: 'Try refreshing, or check your network and switch to another source',
     loading: 'Loading…',
     // 2026-06-30 added
     allSources: 'All sources',

@@ -18,9 +18,9 @@ const appBus = inject('appBus', null)
 // 状态
 const error = computed(() => market.lastError)
 const loading = computed(() => market.loading)
-// 2026-07-01 改:refreshing 拆成 all / current 两个独立 flag,两个按钮 loading 互不冲突。
-const refreshingAll = computed(() => market.refreshingAll)
-const refreshingCurrent = computed(() => market.refreshingCurrent)
+// 2026-07-01 改:刷新 loading 统一单 refreshing flag。
+// 进页面 / 切 tab / 搜索按钮均共用此 loading,无需分两路。
+const refreshing = computed(() => market.refreshing)
 
 // 列表
 const items = computed(() => market.skills)
@@ -38,32 +38,32 @@ const activeSourceId = computed(() => market.activeSourceId)
 const keyword = ref('')
 
 function onSearch() {
+  // Enter = 本地缓存过滤(快、不打三方源)
   market.setKeyword(keyword.value)
   market.loadSkills()
 }
 
-function onSelectSource(id) {
-  market.setSourceActive(id)
-  market.loadSkills()
-}
-
-async function onRefreshAll() {
+async function onSearchRemote() {
+  // 搜索按钮 = 三方源搜索(走 keyword 语义,skillhub 命中 /api/skills?keyword=)
+  market.setKeyword(keyword.value)
   try {
-    await market.refreshAll()
-    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh || {}) })
+    await market.refreshActive({ keyword: keyword.value })
   } catch (e) {
-    toast.push({ type: 'error', message: t('market.errRefreshAll', { msg: e?.message || e }) })
+    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+    return
+  }
+  if (market.lastRefresh) {
+    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh) })
   }
 }
 
-async function onRefreshCurrent() {
-  // 先把输入框 keyword 推入 store(让 refreshCurrent 用它),再触发刷新
-  market.setKeyword(keyword.value)
+async function onSelectSource(id) {
+  // 2026-07-01 改:切 tab 自动拉全量,不再只是切缓存
+  market.setSourceActive(id)
   try {
-    await market.refreshCurrent()
-    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh || {}) })
+    await market.refreshActive({ keyword: '' })
   } catch (e) {
-    toast.push({ type: 'error', message: t('market.errRefreshCurrent', { msg: e?.message || e }) })
+    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
   }
 }
 
@@ -131,6 +131,15 @@ onMounted(async () => {
   try {
     await market.loadSources()
     await market.loadProjects()
+    // 2026-07-01 改:进入页面后自动拉取第一个源(loadSources 已默认选第一个)
+    if (market.activeSourceId) {
+      try {
+        await market.refreshActive({ keyword: '' })
+      } catch (e) {
+        // 自动拉取失败不抛出,只 toast(避免误以为是列表加载失败)
+        toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+      }
+    }
     await market.loadSkills()
   } catch (e) {
     // error 已在 store 里
@@ -177,18 +186,14 @@ onMounted(async () => {
             <Icon icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
           </button>
-          <!-- 2026-07-01 改:工具栏拆两个按钮,loading 互不冲突
-               - 「拉取全部」(ghost):keyword 强制空,即使搜索框有值
-               - 「刷新当前搜索」(primary):用搜索框当前 keyword 透传到三方源 -->
-          <button class="ghost" :disabled="refreshingAll || refreshingCurrent || !activeSourceId" @click="onRefreshAll">
-            <span v-if="refreshingAll" class="spinner"></span>
-            <Icon v-else icon="mdi:download-multiple" width="14" height="14" />
-            {{ refreshingAll ? t('market.refreshingAll') : t('market.btnRefreshAll') }}
-          </button>
-          <button class="primary" :disabled="refreshingAll || refreshingCurrent || !activeSourceId" @click="onRefreshCurrent">
-            <span v-if="refreshingCurrent" class="spinner"></span>
-            <Icon v-else icon="mdi:refresh" width="14" height="14" />
-            {{ refreshingCurrent ? t('market.refreshingCurrent') : t('market.btnRefreshCurrent') }}
+          <!-- 2026-07-01 改:工具栏只留「搜索」按钮,走 onSearchRemote(打三方源搜索)
+               - 进页面 / 切 tab 已自动拉全量,不再有「拉取全部」按钮
+               - Enter 走本地缓存过滤,不打三方源
+               - 搜索按钮 = keyword 透传到 skillhub / skills.sh 搜索语义 -->
+          <button class="primary" :disabled="refreshing || !activeSourceId" @click="onSearchRemote">
+            <span v-if="refreshing" class="spinner"></span>
+            <Icon v-else icon="mdi:magnify" width="14" height="14" />
+            {{ refreshing ? t('market.refreshing') : t('common.search') }}
           </button>
         </div>
       </div>
@@ -219,70 +224,83 @@ onMounted(async () => {
         <span class="muted">({{ market.lastRefresh.finished_at }})</span>
       </div>
 
-      <!-- 列表 -->
-      <div class="table-container">
-        <table v-if="items.length > 0" class="grid">
-          <thead>
-            <tr>
-              <th>{{ t('market.colName') }}</th>
-              <th>{{ t('market.colVersion') }}</th>
-              <th>{{ t('market.colAuthor') }}</th>
-              <th>{{ t('market.colDescription') }}</th>
-              <th>{{ t('market.colTags') }}</th>
-              <th>{{ t('market.colStatus') }}</th>
-              <th style="width: 200px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="it in items" :key="it.remote_id">
-              <td>
-                <span class="item-name">{{ it.name }}</span>
-                <span class="item-id">{{ it.remote_id }}</span>
-              </td>
-              <td><code>{{ it.version || t('common.dash') }}</code></td>
-              <td>{{ it.author || t('common.dash') }}</td>
-              <td class="item-desc">{{ it.description || t('common.dash') }}</td>
-              <td>
-                <span v-for="tg in (it.tags || '').split(',').filter(Boolean)" :key="tg" class="tag">
-                  {{ tg }}
-                </span>
-              </td>
-              <td>
-                <span v-if="installed[it.name]" class="installed-chip">
-                  <Icon icon="mdi:check-circle" width="12" height="12" />
-                  {{ t('market.installedChip') }}
-                </span>
-                <span v-else class="not-installed-chip">
-                  <Icon icon="mdi:circle-outline" width="12" height="12" />
-                  {{ t('market.notInstalledChip') }}
-                </span>
-              </td>
-              <td>
-                <div class="row-actions">
-                  <button class="action-btn" :title="t('common.edit')" @click="openDetail(it)">
-                    <Icon icon="mdi:eye-outline" width="12" height="12" />
-                  </button>
-                  <button v-if="installed[it.name]" class="action-btn" :title="t('market.btnViewSkill')" @click="viewSkill(it.name)">
-                    <Icon icon="mdi:open-in-new" width="12" height="12" />
-                  </button>
-                  <button class="install-btn" :disabled="market.pulling" @click="openInstall(it)">
-                    <Icon icon="mdi:download" width="12" height="12" />
-                    {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 2026-07-01 改:列表用卡片网格(原表格) -->
+      <div v-if="items.length > 0" class="market-grid">
+        <article
+          v-for="it in items"
+          :key="it.remote_id"
+          class="market-card"
+          :class="{ 'is-installed': installed[it.name] }"
+        >
+          <header class="market-card-top">
+            <div class="market-card-icon">
+              <Icon icon="mdi:puzzle-outline" width="22" height="22" />
+            </div>
+            <div class="market-card-titles">
+              <h3 class="market-card-name" :title="it.name">{{ it.name }}</h3>
+              <code class="market-card-id">{{ it.remote_id }}</code>
+            </div>
+            <span v-if="installed[it.name]" class="badge badge-installed">
+              <Icon icon="mdi:check-circle" width="10" height="10" />
+              {{ t('market.installedChip') }}
+            </span>
+            <span v-else class="badge badge-not-installed">
+              <Icon icon="mdi:circle-outline" width="10" height="10" />
+              {{ t('market.notInstalledChip') }}
+            </span>
+          </header>
 
-        <div v-else-if="!loading" class="empty-state">
-          <Icon icon="mdi:radio-tower" width="48" height="48" />
-          <p class="empty-title">{{ t('market.emptyFirstTime') }}</p>
-        </div>
-        <div v-else class="loading-state">
-          <span class="spinner"></span>
-          <p>{{ t('market.loading') }}</p>
-        </div>
+          <div class="market-card-meta">
+            <span class="meta-item">
+              <Icon icon="mdi:tag-outline" width="12" height="12" />
+              {{ it.version || t('common.dash') }}
+            </span>
+            <span class="meta-item">
+              <Icon icon="mdi:account-outline" width="12" height="12" />
+              {{ it.author || t('common.dash') }}
+            </span>
+          </div>
+
+          <p class="market-card-desc" :title="it.description">{{ it.description || t('common.dash') }}</p>
+
+          <div v-if="it.tags" class="market-card-tags">
+            <span v-for="tg in String(it.tags).split(',').filter(Boolean)" :key="tg" class="tag">{{ tg }}</span>
+          </div>
+
+          <footer class="market-card-bottom">
+            <span class="market-card-bottom-spacer"></span>
+            <div class="market-card-actions">
+              <Icon
+                icon="mdi:eye-outline"
+                :title="t('market.btnViewSkill')"
+                class="action-icon action-icon-view"
+                @click="openDetail(it)"
+              />
+              <Icon
+                v-if="installed[it.name]"
+                icon="mdi:open-in-new"
+                :title="t('market.btnViewSkill')"
+                class="action-icon action-icon-jump"
+                @click="viewSkill(it.name)"
+              />
+              <button class="market-card-pull" :disabled="market.pulling" @click="openInstall(it)">
+                <Icon icon="mdi:download" width="13" height="13" />
+                {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
+              </button>
+            </div>
+          </footer>
+        </article>
+      </div>
+
+      <div v-else-if="refreshing || loading" class="loading-state">
+        <span class="spinner"></span>
+        <p>{{ t('market.refreshing') }}</p>
+      </div>
+
+      <div v-else class="empty-state">
+        <Icon icon="mdi:radio-tower" width="48" height="48" />
+        <p class="empty-title">{{ t('market.emptyAfter') }}</p>
+        <p class="empty-hint">{{ t('market.emptyAfterHint') }}</p>
       </div>
 
       <!-- 分页 -->
@@ -565,103 +583,190 @@ onMounted(async () => {
   margin-left: 4px;
 }
 
-/* 表格 */
-.table-container {
-  overflow-x: auto;
-  margin: 0 -20px;
-  padding: 0 20px;
+/* 卡片网格 */
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
 }
 
-.grid {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+.market-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid transparent;
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.grid th, .grid td {
-  padding: 12px 14px;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
-  transition: background-color 0.3s ease;
+.market-card:hover {
+  border-color: var(--text-faint);
+  box-shadow: var(--shadow-card);
 }
 
-.grid th {
+.market-card.is-installed {
+  border-left-color: var(--success);
+}
+
+.market-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   background: var(--bg-subtle);
-  color: var(--text-dim);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-.grid tbody tr {
-  transition: background-color 0.15s ease;
+.market-card-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.grid tbody tr:hover {
-  background: var(--bg-hover);
-}
-
-.item-name {
+.market-card-name {
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  display: block;
-}
-
-.item-id {
-  font-size: 11px;
-  color: var(--text-faint);
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.item-desc {
-  color: var(--text-dim);
-  max-width: 360px;
-}
-
-.tag {
-  display: inline-block;
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-  margin: 2px;
-}
-
-/* 已安装/未安装 chip */
-.installed-chip,
-.not-installed-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.installed-chip {
+.market-card-id {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--primary-dim);
+  color: var(--primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+  max-width: fit-content;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.badge-installed {
   background: var(--success-dim);
   color: var(--success);
-  border: 1px solid var(--success);
 }
 
-.not-installed-chip {
+.badge-not-installed {
   background: var(--bg-subtle);
   color: var(--text-faint);
-  border: 1px solid var(--border);
 }
 
-/* 安装按钮 */
-.install-btn {
+.market-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.meta-item {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.market-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.market-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.market-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.market-card-bottom-spacer {
+  flex: 1;
+}
+
+.market-card-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.market-card:hover .market-card-actions {
+  opacity: 1;
+}
+
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.action-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.action-icon-view:hover {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.action-icon-jump:hover {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.market-card-pull {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
   font-size: 12px;
   font-weight: 500;
   background: var(--text);
@@ -672,37 +777,20 @@ onMounted(async () => {
   transition: all 0.15s ease;
 }
 
-.install-btn:hover:not(:disabled) {
+.market-card-pull:hover:not(:disabled) {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
 }
 
-/* 行内操作按钮组 */
-.row-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+/* 标签 chips(卡片里也用) */
+.tag {
+  display: inline-block;
+  background: var(--bg-subtle);
   color: var(--text-dim);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--text-faint);
-  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
 }
 
 /* 详情弹窗 */
@@ -756,9 +844,9 @@ onMounted(async () => {
 .pager {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
-  margin-top: 16px;
+  margin: 20px auto 0;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
@@ -790,6 +878,12 @@ onMounted(async () => {
   font-weight: 500;
   color: var(--text);
   margin: 12px 0 0;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 6px 0 0;
 }
 
 .loading-state {
@@ -828,9 +922,12 @@ onMounted(async () => {
     width: 100%;
   }
 
-  .table-container {
-    margin: 0 -16px;
-    padding: 0 16px;
+  .market-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .market-card-actions {
+    opacity: 1;
   }
 }
 </style>
