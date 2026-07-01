@@ -652,7 +652,7 @@ const messages = {
 
     // paths sub-table
     paths: {
-      title: 'Paths',
+      title: 'Skill Paths',
       add: 'Add path',
       scope: 'Scope',
       category: 'Category',

@@ -654,7 +654,7 @@ const messages = {
 
     // paths 子表
     paths: {
-      title: '路径(Paths)',
+      title: '技能路径',
       add: '添加路径',
       scope: '作用域',
       category: '类别',
