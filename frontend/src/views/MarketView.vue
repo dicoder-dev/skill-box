@@ -439,6 +439,19 @@ onMounted(async () => {
   gap: 10px;
 }
 
+/* 工具栏内 ghost 按钮:常驻可见背景+对齐图标文字(覆盖全局 ghost 透明) */
+.toolbar .ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+.toolbar .ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+}
+
 .toolbar-label {
   font-size: 13px;
   font-weight: 500;
