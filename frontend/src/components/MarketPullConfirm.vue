@@ -465,17 +465,19 @@ onMounted(() => {
   color: var(--text-dim);
 }
 .saveas-input {
-  padding: 6px 10px;
+  padding: 11px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   font-family: 'JetBrains Mono', monospace;
   background: var(--bg-card);
   color: var(--text);
+  line-height: 1.4;
 }
 .saveas-input:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
 }
 .saveas-hint {
   margin: 0;
@@ -511,12 +513,12 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 9px 16px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: calc(var(--radius-sm) - 2px);
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -536,26 +538,41 @@ onMounted(() => {
   flex: 1;
 }
 
-/* 表单控件 */
+/* 表单控件(2026-07-01:加大高度 + chevron,显得大气不局促) */
 .form-select,
 .form-input {
-  padding: 8px 10px;
+  padding: 11px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   min-width: 200px;
   background: var(--bg-card);
   color: var(--text);
   font-family: inherit;
+  line-height: 1.4;
 }
 .form-select {
   flex: 1;
   min-width: 0;
+  /* 自绘 chevron(2026-07-01),更精致,不再用浏览器默认丑下拉箭头 */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+  cursor: pointer;
 }
 .form-select:focus,
 .form-input:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.form-select:hover:not(:disabled) {
+  border-color: var(--text-faint);
 }
 .mt {
   margin-top: 4px;
@@ -636,8 +653,8 @@ onMounted(() => {
 
 /* 通用按钮尺寸 */
 button.sm {
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 /* footer 按钮覆盖全局 ghost / primary 透明 + 居中 */
