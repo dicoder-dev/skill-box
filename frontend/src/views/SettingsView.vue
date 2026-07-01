@@ -1,12 +1,32 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
+import { setLocale, getLocale } from '@/core/i18n'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// 当前语言响应式镜像,组件外修改 i18n.locale 也能即时反映
+const currentLang = ref(getLocale())
+watch(locale, (v) => { currentLang.value = v })
+
+const store = useAppStore()
+const { isDesktop } = storeToRefs(store)
+const prefsSupported = ref(isDesktop.value)
+const saveHint = ref('')
+const notifyTest = ref('')
+const langHint = ref('')
+
+function onLangChange(loc) {
+  if (loc !== 'zh-CN' && loc !== 'en-US') return
+  if (loc === currentLang.value) return
+  setLocale(loc)
+  langHint.value = t('settings.saved')
+  setTimeout(() => (langHint.value = ''), 1500)
+}
 
 const desktopPrefs = reactive({
   start_minimized: 'false',
@@ -14,12 +34,6 @@ const desktopPrefs = reactive({
   shortcut_enabled: 'true',
   global_hotkey: 'Cmd+Shift+S',
 })
-
-const store = useAppStore()
-const { isDesktop } = storeToRefs(store)
-const prefsSupported = ref(isDesktop.value)
-const saveHint = ref('')
-const notifyTest = ref('')
 
 async function loadPrefs() {
   if (!isDesktop.value) return
@@ -93,6 +107,51 @@ onMounted(loadPrefs)
         </div>
       </div>
     </header>
+
+    <!-- 通用偏好(语言切换,Web / 桌面端均可见) -->
+    <section class="card">
+      <header class="card-header">
+        <h3>
+          <Icon icon="mdi:tune-variant" width="18" height="18" />
+          {{ t('settings.general.title') }}
+          <span class="card-sub">— {{ t('settings.general.subtitle') }}</span>
+        </h3>
+      </header>
+
+      <div class="pref-list">
+        <!-- 界面语言 -->
+        <div class="pref-item">
+          <div class="pref-info">
+            <div class="pref-label">{{ t('settings.general.language') }}</div>
+            <div class="pref-hint">{{ t('settings.general.languageHint') }}</div>
+          </div>
+          <div class="lang-segmented">
+            <button
+              type="button"
+              :class="['lang-btn', currentLang === 'zh-CN' ? 'lang-active' : '']"
+              @click="onLangChange('zh-CN')"
+            >
+              <Icon icon="mdi:check" width="14" height="14" v-if="currentLang === 'zh-CN'" />
+              {{ t('settings.general.langZhCN') }}
+            </button>
+            <button
+              type="button"
+              :class="['lang-btn', currentLang === 'en-US' ? 'lang-active' : '']"
+              @click="onLangChange('en-US')"
+            >
+              <Icon icon="mdi:check" width="14" height="14" v-if="currentLang === 'en-US'" />
+              {{ t('settings.general.langEnUS') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 切换提示 -->
+      <div v-if="langHint" class="hint-box lang-hint">
+        <Icon icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
+        <span>{{ langHint }}</span>
+      </div>
+    </section>
 
     <!-- 桌面端设置 -->
     <section v-if="isDesktop" class="card">
@@ -416,6 +475,48 @@ onMounted(loadPrefs)
 .hotkey-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+/* 语言切换器(分段式按钮组) */
+.lang-segmented {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.lang-btn:hover { color: var(--text); }
+
+.lang-btn.lang-active {
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.lang-hint {
+  margin-top: 16px;
 }
 
 /* 提示框 */
