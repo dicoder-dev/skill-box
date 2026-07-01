@@ -16,6 +16,7 @@ package skillssh
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,39 +34,45 @@ const (
 	defaultBaseURL    = "https://skills.sh"
 	defaultGHRawBase  = "https://raw.githubusercontent.com"
 	defaultGHBlobBase = "https://github.com"
-	// 2026-07-01 增:dylnuge-skillbox-claude-skills / vercel-labs-agent-skills
-	// 下其它常用 skill,让 fallback 覆盖更全。已知可用的扩充条目。
-	knownCatalogFallback = "vercel-labs/agent-skills@vercel-react-best-practices\n" +
-		"vercel-labs/agent-skills@vercel-composition-patterns\n" +
-		"vercel-labs/agent-skills@vercel-server-actions\n" +
-		"vercel-labs/agent-skills@vercel-async-design\n" +
-		"vercel-labs/agent-skills@next-best-practices\n" +
-		"ComposioHQ/awesome-claude-skills@pr-review\n" +
-		"ComposioHQ/awesome-claude-skills@commit-message\n" +
-		"ComposioHQ/awesome-claude-skills@code-explain\n" +
-		"ComposioHQ/awesome-claude-skills@security-audit\n" +
-		"obra/superpowers@brainstorming\n" +
-		"obra/superpowers@writing-plans\n" +
-		"obra/superpowers@writing-skills\n" +
-		"obra/superpowers@test-driven-development\n" +
-		"obra/superpowers@using-git-worktrees\n" +
-		"obra/superpowers@verification-before-completion\n" +
-		"200ideas/dofld-skills@dofld-commit\n" +
-		"200ideas/dofld-skills@dofld-pr\n" +
-		"200ideas/dofld-skills@dofld-test\n" +
-		"dylnuge/skillbox-claude-skills@frontend-design\n" +
-		"dylnuge/skillbox-claude-skills@tailwind-patterns\n" +
-		"dylnuge/skillbox-claude-skills@vue-best-practices\n" +
-		"dylnuge/skillbox-claude-skills@react-best-practices\n" +
-		"anthropics/skills@brand-guidelines\n" +
-		"anthropics/skills@web-artifacts-builder\n" +
-		"anthropics/skills@doc-coauthoring\n" +
-		"anthropics/skills@theme-factory\n" +
-		"anthropics/skills@canvas-design\n" +
-		"anthropics/skills@pdf\n" +
-		"anthropics/skills@mcp-builder\n" +
-		"anthropics/skills@frontend-design\n" +
-		"anthropics/skills@skill-creator"
+	// 2026-07-01 改:用 /api/audits/{page} 公开 JSON API(无需鉴权)做主数据源。
+	// 走 2 页 = 100 条;技能排名 100 之后的不在主列表展示(用户可走搜索或本地)。
+	defaultAuditsAPIPath = "/api/audits/"
+	defaultAuditsPages   = 2
+	// 2026-07-01 改:fallback 行格式升级为 "owner/repo@skill | author | description",
+	// 用 | 分隔,前段保留 remote_id,后两段填 MarketItem.Author / Description。
+	// 真实环境若 audits API 不可达,fallback 也能展示基本信息。
+	// 已扩充到 30 条;门槛提到 28(见 minCatalogFallbackSize)。
+	knownCatalogFallback = "vercel-labs/agent-skills@vercel-react-best-practices | Vercel Engineering | Performance optimization guidelines for React and Next.js, maintained by Vercel Engineering.\n" +
+		"vercel-labs/agent-skills@vercel-composition-patterns | Vercel Engineering | Composition patterns for React Server Components and Next.js App Router.\n" +
+		"vercel-labs/agent-skills@vercel-server-actions | Vercel Engineering | Server Actions best practices: form handling, revalidation, error states.\n" +
+		"vercel-labs/agent-skills@vercel-async-design | Vercel Engineering | Async patterns in React: Suspense, streaming, parallel routes, loading UI.\n" +
+		"vercel-labs/agent-skills@next-best-practices | Vercel Engineering | Next.js best practices: data fetching, caching, revalidation, routing.\n" +
+		"ComposioHQ/awesome-claude-skills@pr-review | Composio | Pull request review checklist and inline comment guidance.\n" +
+		"ComposioHQ/awesome-claude-skills@commit-message | Composio | Conventional commit message writer with type scope detection.\n" +
+		"ComposioHQ/awesome-claude-skills@code-explain | Composio | Explain a code block: what it does, why, edge cases.\n" +
+		"ComposioHQ/awesome-claude-skills@security-audit | Composio | Audit code for common security issues (injection, secrets, auth).\n" +
+		"obra/superpowers@brainstorming | Obra | Brainstorm a feature with structured prompts before implementation.\n" +
+		"obra/superpowers@writing-plans | Obra | Write an implementation plan from a brainstormed design.\n" +
+		"obra/superpowers@writing-skills | Obra | Author a new skill: frontmatter, body, examples, anti-patterns.\n" +
+		"obra/superpowers@test-driven-development | Obra | TDD red-green-refactor workflow with focused unit tests.\n" +
+		"obra/superpowers@using-git-worktrees | Obra | Use git worktrees to isolate feature work and reviews.\n" +
+		"obra/superpowers@verification-before-completion | Obra | Self-check before marking work done: tests, types, lint, smoke.\n" +
+		"200ideas/dofld-skills@dofld-commit | 200ideas | Stage-aware commit messages for solo or team workflows.\n" +
+		"200ideas/dofld-skills@dofld-pr | 200ideas | PR description template with rationale, screenshots, test plan.\n" +
+		"200ideas/dofld-skills@dofld-test | 200ideas | Generate test scaffolding from a function signature or user story.\n" +
+		"dylnuge/skillbox-claude-skills@frontend-design | dylnuge | Frontend design heuristics: typography, color, spacing, hierarchy.\n" +
+		"dylnuge/skillbox-claude-skills@tailwind-patterns | dylnuge | Tailwind utility composition patterns for readable UI markup.\n" +
+		"dylnuge/skillbox-claude-skills@vue-best-practices | dylnuge | Vue 3 best practices: composition API, reactivity, lifecycle.\n" +
+		"dylnuge/skillbox-claude-skills@react-best-practices | dylnuge | React best practices: hooks, state, effects, performance.\n" +
+		"anthropics/skills@brand-guidelines | Anthropic | Apply Anthropic brand voice, tone, and visual style to copy.\n" +
+		"anthropics/skills@web-artifacts-builder | Anthropic | Build self-contained HTML/JS/CSS artifacts for the web.\n" +
+		"anthropics/skills@doc-coauthoring | Anthropic | Co-author a document: outline, draft, review, polish.\n" +
+		"anthropics/skills@theme-factory | Anthropic | Generate themed CSS tokens and component snippets.\n" +
+		"anthropics/skills@canvas-design | Anthropic | Compose designs on a canvas with primitives: shape, text, layout.\n" +
+		"anthropics/skills@pdf | Anthropic | Read, edit, and extract content from PDF documents.\n" +
+		"anthropics/skills@mcp-builder | Anthropic | Author an MCP server: tools, resources, prompts, transport.\n" +
+		"anthropics/skills@frontend-design | Anthropic | Frontend design heuristics aligned with Anthropic design language.\n" +
+		"anthropics/skills@skill-creator | Anthropic | Scaffold a new skill: SKILL.md template + body outline."
 )
 
 // minCatalogFallbackSize parseCatalog 解析后必须达到的最低条目数;
@@ -116,22 +123,37 @@ func (a *Adapter) BaseURL() string     { return defaultBaseURL }
 
 // Discover 解析 catalog 页,提取 (owner/repo, skill) 列表。
 //
-// 2026-07-01 改:三段式 — 先抓 HTML,再跑两个解析器(老版 @ 文本 + 新版 href 链接),
-// 合并去重。两者都为空才走 knownCatalogFallback。修复之前只跑 owner@repo 正则
-// 拿不到新版目录的问题。
+// 2026-07-01 改:三段式 —
+//   1) 优先走 /api/audits/{page} 公开 JSON API(无需鉴权,含 author/description/tags)
+//   2) JSON 解析失败时回退 HTML 解析(老版 @ 文本 + 新版 href 链接),合并去重
+//   3) HTML 也为空时走 knownCatalogFallback
 //
 // 2026-07-01 增:keyword 参数处理。
-//   - 空 keyword:走 GET /,解析首页
-//   - 非空 keyword:走 GET /search?q=<encoded> 解析搜索结果页(经验路径);
-//     拿不到或解析为空时,降级到 knownCatalogFallback + substring 过滤(remote_id/name 命中),
-//     保证 UI 不空白。
+//   - 空 keyword:走 /api/audits/{0..N-1} 全量目录
+//   - 非空 keyword:走 /api/audits/0 全量 + substring 过滤(API 不直接支持关键字);
+//     也可走 GET /search?q=<encoded> HTML 解析,失败时降级到 knownCatalogFallback
 func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skillmarket.MarketItem, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
 	kw := strings.TrimSpace(keyword)
 
-	// 1) 抓 HTML
+	// 1) 优先:JSON API(/api/audits/{page})
+	// 空 keyword 时拉多页(默认 2 页 = 100 条);非空 keyword 时只拉首页,再 substring 过滤
+	pages := defaultAuditsPages
+	if kw != "" {
+		pages = 1
+	}
+	if items, ok := a.discoverFromAuditsAPI(ctx, baseURL, pages); ok && len(items) > 0 {
+		if kw != "" {
+			items = filterItemsByKeyword(items, kw)
+		}
+		if len(items) > 0 {
+			return items, nil
+		}
+	}
+
+	// 2) 回退:HTML 解析(首页 / 搜索页)
 	var targetURL string
 	if kw == "" {
 		targetURL = strings.TrimRight(baseURL, "/") + "/"
@@ -144,8 +166,7 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 		return filterCatalogByKeyword(knownCatalogFallback, baseURL, kw), nil
 	}
 
-	// 2) 合并两个解析器:老版纯文本 owner/repo@skill + 新版 href 链接。
-	// 任一有结果就用并集(去重 by RemoteID),不再只看 owner@repo。
+	// 合并两个解析器:老版纯文本 owner/repo@skill + 新版 href 链接
 	seen := map[string]bool{}
 	out := make([]skillmarket.MarketItem, 0, 64)
 	add := func(items []skillmarket.MarketItem) {
@@ -160,17 +181,141 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 	add(parseOwnerRepoAtBody(body, baseURL))
 	add(parseHTMLLinks(body, baseURL))
 
-	// 3) 关键词二次过滤(防御解析器拿到但不含 kw 的条目;
-	//    例如首页目录被搜索引擎收录了无关词)
+	// 关键词二次过滤
 	if kw != "" {
 		out = filterItemsByKeyword(out, kw)
 	}
 
-	// 4) HTML 解析为空 → 走 knownCatalogFallback + substring 过滤
+	// 3) HTML 解析为空 → 走 knownCatalogFallback + substring 过滤
 	if len(out) == 0 {
 		return filterCatalogByKeyword(knownCatalogFallback, baseURL, kw), nil
 	}
 	return out, nil
+}
+
+// discoverFromAuditsAPI 走 /api/audits/{0..pages-1} 拉 JSON,合并去重转 MarketItem。
+//
+// 字段映射:
+//   - RemoteID    = "{source}@{skillId}"  (与 HTML 路径一致)
+//   - Name        = skillId(URL slug)
+//   - Author      = source 的 owner 部分("vercel-labs/skills" → "vercel-labs")
+//   - Description = agentTrustHub.result.gemini_analysis.summary(裁剪到 280 字)
+//   - Tags        = [overall_risk_level](SAFE/LOW/MEDIUM/HIGH)
+//   - DetailURL   = "{baseURL}/{source}/{skillId}"
+//   - UpdatedAt   = 暂不填(API 没暴露更新时间)
+//
+// 失败/解析异常 → 返回 (nil, false),调用方降级到 HTML 解析。
+func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pages int) ([]skillmarket.MarketItem, bool) {
+	if pages <= 0 {
+		pages = 1
+	}
+	seen := map[string]bool{}
+	out := make([]skillmarket.MarketItem, 0, 64)
+
+	for p := 0; p < pages; p++ {
+		u := strings.TrimRight(baseURL, "/") + defaultAuditsAPIPath + fmt.Sprintf("%d", p)
+		body, err := a.fetchBody(ctx, u)
+		if err != nil {
+			logger.Warn("skillssh audits API page %d: %v", p, err)
+			// 第一页失败直接放弃 JSON 路径
+			if p == 0 {
+				return nil, false
+			}
+			// 后续页失败:已拿到前面的就返回
+			break
+		}
+		var resp auditsAPIResponse
+		if err := json.Unmarshal([]byte(body), &resp); err != nil {
+			logger.Warn("skillssh audits API page %d: unmarshal: %v", p, err)
+			if p == 0 {
+				return nil, false
+			}
+			break
+		}
+		for _, s := range resp.Skills {
+			if s.Source == "" || s.SkillID == "" {
+				continue
+			}
+			remoteID := s.Source + "@" + s.SkillID
+			if seen[remoteID] {
+				continue
+			}
+			seen[remoteID] = true
+			author := s.Source
+			if idx := strings.Index(s.Source, "/"); idx > 0 {
+				author = s.Source[:idx]
+			}
+			item := skillmarket.MarketItem{
+				RemoteID:  remoteID,
+				Name:      s.SkillID,
+				Author:    author,
+				DetailURL: fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), s.Source, s.SkillID),
+			}
+			// description: 优先用 gemini summary,裁剪到 280 字符
+			if s.AgentTrustHub != nil && s.AgentTrustHub.Result.GeminiAnalysis.Summary != "" {
+				item.Description = trimDescription(s.AgentTrustHub.Result.GeminiAnalysis.Summary, 280)
+			}
+			// tags: 安全等级作为可见标签
+			if level := s.AgentTrustHub.Result.OverallRiskLevel; level != "" {
+				item.Tags = []string{"risk:" + strings.ToLower(level)}
+			}
+			out = append(out, item)
+		}
+	}
+
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+// auditsAPIResponse 对应 /api/audits/{page} 的响应(只取需要的字段)。
+type auditsAPIResponse struct {
+	Skills []struct {
+		Rank     int    `json:"rank"`
+		Source   string `json:"source"`
+		SkillID  string `json:"skillId"`
+		Name     string `json:"name"`
+		AgentTrustHub *struct {
+			Source string `json:"source"`
+			Slug   string `json:"slug"`
+			Result struct {
+				GeminiAnalysis struct {
+					Verdict  string `json:"verdict"`
+					Summary  string `json:"summary"`
+					Categories []string `json:"categories"`
+				} `json:"gemini_analysis"`
+				OverallRiskLevel string `json:"overall_risk_level"`
+			} `json:"result"`
+		} `json:"agentTrustHub"`
+		Socket *json.RawMessage `json:"socket"`
+		Snyk   *json.RawMessage `json:"snyk"`
+	} `json:"skills"`
+}
+
+// trimDescription 把 description 文本裁剪到 max 字符(避免长文本撑爆卡片布局)。
+// 在最近的句号/逗号/空格处断行更友好,避免把英文单词从中间切。
+func trimDescription(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	cut := s[:max]
+	// 找最近的句号/逗号/分号断行(从 cut 末尾往回找,最多回溯 50 字符)。
+	start := len(cut) - 1
+	if start > max-1 {
+		start = max - 1
+	}
+	limit := start - 50
+	if limit < 0 {
+		limit = 0
+	}
+	for i := start; i >= limit; i-- {
+		if cut[i] == '.' || cut[i] == ',' || cut[i] == ';' {
+			return strings.TrimSpace(cut[:i+1])
+		}
+	}
+	return strings.TrimSpace(cut) + "…"
 }
 
 // Detail 拉详情(只填展示字段;canonical 走 Download)。
@@ -288,6 +433,9 @@ func splitRemoteID(remoteID string) (string, string, bool) {
 
 // parseCatalog 解析预置 fallback 列表。
 //
+// 2026-07-01 改:行格式 "owner/repo@skill | author | description"(用 | 分隔,前段必填,
+// 后两段可选;不填则为空字符串),让 fallback 在审计 API 不可达时也能展示 author/description。
+//
 // 2026-06-30 增:解析后会校验长度,如果 < minCatalogFallbackSize 则 logger.Warn
 // 提示有人改了 knownCatalogFallback 但数量不足,防止后续维护删条目导致 fallback 空。
 func parseCatalog(text, baseURL string) []skillmarket.MarketItem {
@@ -297,15 +445,25 @@ func parseCatalog(text, baseURL string) []skillmarket.MarketItem {
 		if line == "" {
 			continue
 		}
-		repo, name, ok := splitRemoteID(line)
+		// 拆分 "remote_id | author | description"(后两段可空)
+		parts := strings.SplitN(line, "|", 3)
+		head := strings.TrimSpace(parts[0])
+		repo, name, ok := splitRemoteID(head)
 		if !ok {
 			continue
 		}
-		out = append(out, skillmarket.MarketItem{
-			RemoteID:  line,
+		item := skillmarket.MarketItem{
+			RemoteID:  head,
 			Name:      name,
 			DetailURL: fmt.Sprintf("%s/%s/%s", baseURL, repo, name),
-		})
+		}
+		if len(parts) >= 2 {
+			item.Author = strings.TrimSpace(parts[1])
+		}
+		if len(parts) >= 3 {
+			item.Description = strings.TrimSpace(parts[2])
+		}
+		out = append(out, item)
 	}
 	if len(out) < minCatalogFallbackSize {
 		logger.Warn("skillssh fallback catalog has %d items (< %d); consider refilling knownCatalogFallback",

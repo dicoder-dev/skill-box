@@ -3,6 +3,7 @@ package skillssh
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -410,6 +411,274 @@ func TestDiscover_Keyword_FilterItemsByKeyword(t *testing.T) {
 		low := strings.ToLower(it.RemoteID)
 		if !strings.Contains(low, "react") {
 			t.Errorf("expected filter to remove %q", it.RemoteID)
+		}
+	}
+}
+
+// === /api/audits/{page} JSON 路径测试(2026-07-01) ===
+
+// auditsMockResponse 构造一个 /api/audits 风格的 JSON 响应(含完整字段)。
+func auditsMockResponse(skills []map[string]any) string {
+	type ath struct {
+		Source string `json:"source"`
+		Slug   string `json:"slug"`
+		Result struct {
+			GeminiAnalysis struct {
+				Verdict string `json:"verdict"`
+				Summary string `json:"summary"`
+			} `json:"gemini_analysis"`
+			OverallRiskLevel string `json:"overall_risk_level"`
+		} `json:"result"`
+	}
+	type sk struct {
+		Rank           int   `json:"rank"`
+		Source         string `json:"source"`
+		SkillID        string `json:"skillId"`
+		Name           string `json:"name"`
+		AgentTrustHub  *ath  `json:"agentTrustHub"`
+		Socket         any   `json:"socket"`
+		Snyk           any   `json:"snyk"`
+	}
+	out := struct {
+		Skills []sk `json:"skills"`
+	}{}
+	for _, m := range skills {
+		s := sk{
+			Rank:    m["rank"].(int),
+			Source:  m["source"].(string),
+			SkillID: m["skillId"].(string),
+			Name:    m["skillId"].(string),
+		}
+		if v, ok := m["summary"].(string); ok && v != "" {
+			s.AgentTrustHub = &ath{}
+			s.AgentTrustHub.Source = s.Source
+			s.AgentTrustHub.Slug = s.SkillID
+			s.AgentTrustHub.Result.GeminiAnalysis.Verdict = "SAFE"
+			s.AgentTrustHub.Result.GeminiAnalysis.Summary = v
+		}
+		if v, ok := m["risk"].(string); ok && v != "" {
+			if s.AgentTrustHub == nil {
+				s.AgentTrustHub = &ath{}
+			}
+			s.AgentTrustHub.Result.OverallRiskLevel = v
+		}
+		out.Skills = append(out.Skills, s)
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
+// TestDiscover_AuditsAPI_HappyPath 验证空 keyword 走 /api/audits 拿到 author/description/tags。
+func TestDiscover_AuditsAPI_HappyPath(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200,
+			ct:     "application/json",
+			body: auditsMockResponse([]map[string]any{
+				{
+					"rank":    1,
+					"source":  "vercel-labs/skills",
+					"skillId": "find-skills",
+					"summary": "Find and install additional agent skills via a CLI. Standard package management.",
+					"risk":    "SAFE",
+				},
+				{
+					"rank":    2,
+					"source":  "anthropics/skills",
+					"skillId": "pdf",
+					"summary": "Read, edit, and extract content from PDF documents.",
+					"risk":    "LOW",
+				},
+			}),
+		},
+		"/api/audits/1": {
+			status: 200,
+			ct:     "application/json",
+			body:   `{"skills":[]}`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d (%+v)", len(items), items)
+	}
+	// 字段映射校验
+	got := items[0]
+	if got.RemoteID != "vercel-labs/skills@find-skills" {
+		t.Errorf("RemoteID = %q want vercel-labs/skills@find-skills", got.RemoteID)
+	}
+	if got.Name != "find-skills" {
+		t.Errorf("Name = %q want find-skills", got.Name)
+	}
+	if got.Author != "vercel-labs" {
+		t.Errorf("Author = %q want vercel-labs", got.Author)
+	}
+	if got.Description == "" || !strings.Contains(got.Description, "Find and install") {
+		t.Errorf("Description = %q want contain 'Find and install'", got.Description)
+	}
+	if len(got.Tags) != 1 || got.Tags[0] != "risk:safe" {
+		t.Errorf("Tags = %v want [risk:safe]", got.Tags)
+	}
+	if got.DetailURL != "https://stub/vercel-labs/skills/find-skills" {
+		t.Errorf("DetailURL = %q want https://stub/vercel-labs/skills/find-skills", got.DetailURL)
+	}
+	// 第二条:LOW 风险等级
+	if items[1].Tags[0] != "risk:low" {
+		t.Errorf("items[1] Tags = %v want [risk:low]", items[1].Tags)
+	}
+}
+
+// TestDiscover_AuditsAPI_KeywordFilter 验证非空 keyword 时只拉首页再 substring 过滤。
+func TestDiscover_AuditsAPI_KeywordFilter(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200,
+			ct:     "application/json",
+			body: auditsMockResponse([]map[string]any{
+				{
+					"rank":    1,
+					"source":  "vercel-labs/agent-skills",
+					"skillId": "vercel-react-best-practices",
+					"summary": "React performance guidelines.",
+				},
+				{
+					"rank":    2,
+					"source":  "obra/superpowers",
+					"skillId": "brainstorming",
+					"summary": "Brainstorm a feature.",
+				},
+			}),
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "react")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 只应剩 1 条
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item after react filter, got %d (%+v)", len(items), items)
+	}
+	if items[0].Name != "vercel-react-best-practices" {
+		t.Errorf("filtered item = %q want vercel-react-best-practices", items[0].Name)
+	}
+}
+
+// TestDiscover_AuditsAPI_FailFallbackToHTML 验证 audits API 失败时降级到 HTML 解析。
+func TestDiscover_AuditsAPI_FailFallbackToHTML(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 500,
+			body:   `internal server error`,
+		},
+		"/": {
+			status: 200,
+			body: `<html><body>
+<div>vercel-labs/agent-skills@vercel-react-best-practices</div>
+<div>obra/superpowers@brainstorming</div>
+</body></html>`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// HTML 解析应该兜底拿到 2 条(注意此时 Author/Description 为空,因为 HTML 解析不填)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items from HTML fallback, got %d (%+v)", len(items), items)
+	}
+	for _, it := range items {
+		if it.Author != "" {
+			t.Errorf("HTML fallback should leave Author empty, got %q for %q", it.Author, it.RemoteID)
+		}
+	}
+}
+
+// TestDiscover_AuditsAPI_InvalidJSON 验证 audits API 返非 JSON 时降级到 HTML。
+func TestDiscover_AuditsAPI_InvalidJSON(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200,
+			ct:     "application/json",
+			body:   `not json {`,
+		},
+		"/": {
+			status: 200,
+			body: `<html><body>
+<div>vercel-labs/agent-skills@vercel-react-best-practices</div>
+</body></html>`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item from HTML fallback, got %d", len(items))
+	}
+}
+
+// TestDiscover_AuditsAPI_EmptyAndFallback 验证 audits API 返空 + HTML 解析失败时走 knownCatalogFallback。
+func TestDiscover_AuditsAPI_EmptyAndFallback(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200,
+			ct:     "application/json",
+			body:   `{"skills":[]}`,
+		},
+		"/api/audits/1": {
+			status: 200,
+			ct:     "application/json",
+			body:   `{"skills":[]}`,
+		},
+		"/": {
+			status: 503,
+			body:   `unavailable`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// fallback 应该返回 >= 28 条(静态填了 30 条)
+	if len(items) < 28 {
+		t.Fatalf("expected >= 28 fallback items, got %d", len(items))
+	}
+	// 至少第一条应该有 author(静态 fallback 填了)
+	found := false
+	for _, it := range items {
+		if it.Author != "" && it.Description != "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected at least one fallback item with Author+Description, got 0")
+	}
+}
+
+// TestTrimDescription 验证 description 裁剪逻辑(避免撑爆卡片布局)。
+func TestTrimDescription(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"", 100, ""},
+		{"short", 100, "short"},
+		{"a long sentence, that goes on and on. but should be trimmed.", 20, "a long sentence,"},
+		{"abcdefghijklmnopqrstuvwxyz", 10, "abcdefghij…"},
+	}
+	for _, c := range cases {
+		got := trimDescription(c.in, c.max)
+		if got != c.want {
+			t.Errorf("trimDescription(%q, %d) = %q want %q", c.in, c.max, got, c.want)
 		}
 	}
 }
