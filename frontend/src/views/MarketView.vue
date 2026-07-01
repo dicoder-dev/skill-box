@@ -736,10 +736,10 @@ onMounted(async () => {
   border-top: 1px solid var(--border);
 }
 
-/* spacer 不再占空间,改为 0 宽,让 actions 紧贴左对齐;
-   模板保留节点是为了不破坏依赖它的潜在样式,这里用 CSS 兜底 */
+/* spacer 恢复 flex:1 占满左侧空间,把 actions 推到卡片底部右侧;
+   spacer 是空 <span>,无视觉内容,不会在卡片底部留空白块 */
 .market-card-bottom-spacer {
-  display: none;
+  flex: 1;
 }
 
 /* 卡片底部 actions 始终显示。
