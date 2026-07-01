@@ -288,7 +288,7 @@ onMounted(async () => {
           <Icon icon="mdi:chevron-left" width="14" height="14" />
           {{ t('common.prev') }}
         </button>
-        <span class="pager-info">{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
+        <span class="pager-info">{{ t('common.pageOfNoCount', { page, total: totalPages }) }}</span>
         <button :disabled="page >= totalPages" @click="market.page++; market.loadSkills()">
           {{ t('common.next') }}
           <Icon icon="mdi:chevron-right" width="14" height="14" />

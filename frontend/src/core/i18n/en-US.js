@@ -48,7 +48,11 @@ const messages = {
     none: '—',
     dash: '—',
     confirm: 'Confirm',
+    // 2026-07-01 改:去 1000 上限后 total 数字不代表全网真数,误导。
+    // 改为只显示"第 X / Y 页",Y 是 totalPages 由 size 推算出来。
     pageOf: 'Page {page} / {total} · {count} total',
+    // 2026-07-01 增:市场专用分页 — 隐藏"共 N 条"误导数字,只显示页数。
+    pageOfNoCount: 'Page {page} / {total}',
     totalCount: '{count} total',
     noData: 'No skills in this scope yet',
     noDataHint: 'Click "+ New" to start, or import from installed tools via Onboarding',
@@ -346,7 +350,7 @@ const messages = {
     // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),新增 loading 文案
     btnRemoteLoading: 'Fetching from upstream…',
     // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
-    loadingFromSource: 'Fetching catalog from {source}, up to 45s…',
+    loadingFromSource: 'Fetching catalog from {source}, up to 90s…',
     // 2026-07-01 deprecated: single refreshing flag replaces these after UI refactor.
     // Kept as aliases only; safe to remove once no other code references them.
     btnRefreshAll: 'Fetch all',

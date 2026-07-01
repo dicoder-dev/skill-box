@@ -48,7 +48,11 @@ const messages = {
     none: '—',
     dash: '—',
     confirm: '确认',
+    // 2026-07-01 改:去 1000 上限后 total 数字不代表全网真数,误导。
+    // 改为只显示"第 X / Y 页",Y 是 totalPages 由 size 推算出来(可能 = 实际页数 / ctx 超时后是个偏小的估计)。
     pageOf: '第 {page} / {total} 页 · 共 {count} 条',
+    // 2026-07-01 增:市场专用分页 — 隐藏"共 N 条"误导数字,只显示页数。
+    pageOfNoCount: '第 {page} / {total} 页',
     totalCount: '共 {count} 条',
     noData: '该作用域下还没有技能',
     noDataHint: '点右上角"新建"开始,或去首次配置从已装工具导入',
@@ -348,7 +352,7 @@ const messages = {
     // 2026-07-01 改:全走 API,新增 loading 文案
     btnRemoteLoading: '从三方源拉取中…',
     // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
-    loadingFromSource: '正在从 {source} 拉取目录,最多 45 秒…',
+    loadingFromSource: '正在从 {source} 拉取目录,最多 90 秒…',
     btnRefreshAll: '拉取全部',
     btnRefreshCurrent: '刷新当前搜索',
     refreshingAll: '拉取全量中…',

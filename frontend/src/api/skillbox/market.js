@@ -15,11 +15,12 @@
 
 import { http } from '@/core/utils/requests'
 
-// 2026-07-01 改:listMarketSkillsRemote 超时对齐后端 45s。
-// 后端 ctx 超时 45s(见 list_skills_remote.a.go),前端 15s 默认太短会被 fetch
-// 先杀,看到的就是"网络异常"而不是后端真实返回。统一 45s 让两端窗口一致,
+// 2026-07-01 改:listMarketSkillsRemote 超时对齐后端 90s。
+// 后端 ctx 超时 90s(见 list_skills_remote.a.go),前端 15s 默认太短会被 fetch
+// 先杀,看到的就是"网络异常"而不是后端真实返回。统一 90s 让两端窗口一致,
 // 用户感知到的就是"远端比较慢"而不是前端假死/后端未响应。
-const MARKET_REMOTE_TIMEOUT_MS = 45_000
+// 90s 来自 skillhub 去 maxDiscoverItems 上限后,翻页到 total 全部拉完的实测上限。
+const MARKET_REMOTE_TIMEOUT_MS = 90_000
 
 export function listSources() {
   return http.get('/api/skillbox/market/sources')

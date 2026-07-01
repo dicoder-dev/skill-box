@@ -33,11 +33,10 @@ const (
 	defaultBaseURL = "https://api.skillhub.cn"
 	// 默认 list 页大小(文档说最大 100)
 	defaultPageSize = 100
-	// 2026-07-01 改:skillhub 单页 pageSize 最大 100,接口不直接支持更大 pageSize。
-	// 原实现 page=1 一次性只拿 100 条,被用户报"全网肯定不止 100 条"。
-	// 改造:Discover 走 page 翻页,直到 total 拉满或达到 maxDiscoverItems 上限。
-	// 上限 1000 条 — 兼顾 99% 用户浏览需求,防 API 翻车(限流)或单次响应太慢。
-	maxDiscoverItems = 1000
+	// 2026-07-01 改:去掉 maxDiscoverItems=1000 上限(2026-07-01 第一版改造时设的),
+	// 之前 1000 条上限导致"共 N 条"是误导数字(不是全网真数)。
+	// 现在翻页跑完 total 全部或 ctx 取消为止,上限由后端 ctx 超时控制(见 list_skills_remote.a.go)。
+	// 单次请求仍按 pageSize=100 拉,翻页到 total 走完或超时。
 )
 
 // 兜底 skill 列表(skillhub.cn API 暂不可达时使用)。
@@ -186,8 +185,10 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 	}
 
 	// 全量目录:翻页拉全量。
-	seen := make(map[string]struct{}, maxDiscoverItems)
-	out := make([]skillmarket.MarketItem, 0, maxDiscoverItems)
+	// 2026-07-01 改:去掉 maxDiscoverItems 硬上限,seen/out 直接按 pageSize * 总页数动态扩。
+	// 实际终止条件:①累计 ≥ total ②本页<pageSize ③ctx 取消(后端 90s 超时触发)。
+	seen := make(map[string]struct{}, defaultPageSize*4)
+	out := make([]skillmarket.MarketItem, 0, defaultPageSize*4)
 	totalHint := -1 // 0 = API 没回 total 字段;>0 = 上限
 	stop := false
 	for page := 1; !stop; page++ {
@@ -232,10 +233,6 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 			seen[it.RemoteID] = struct{}{}
 			out = append(out, it)
 			added++
-			if len(out) >= maxDiscoverItems {
-				stop = true
-				break
-			}
 		}
 		// 翻页退出条件 1:本页没新增(全重复,可能 total 字段不可信,防死循环)
 		if added == 0 {
@@ -249,7 +246,7 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 		if len(resp.Data.Skills) < defaultPageSize {
 			break
 		}
-		// 翻页退出条件 4:ctx 取消(交给上层 45s ctx 触发)
+		// 翻页退出条件 4:ctx 取消(交给上层 ctx 触发,90s)
 		if cerr := ctx.Err(); cerr != nil {
 			logger.Warn("skillhub discover cancelled at page=%d: %v", page, cerr)
 			break

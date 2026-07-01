@@ -128,9 +128,9 @@ export const useMarketStore = defineStore('market', {
           this.total = this.skills.length
         }
       } catch (e) {
-        // 2026-07-01 改:远端每次都打三方,超时(45s 仍不够)是常态,翻译成中文。
+        // 2026-07-01 改:远端每次都打三方,超时(90s 仍不够)是常态,翻译成中文。
         if (e instanceof TimeoutError) {
-          this.lastError = '远端市场请求超时(45s),请稍后重试或切换源试试'
+          this.lastError = '远端市场请求超时(90s),请稍后重试或切换源试试'
         } else {
           this.lastError = e?.message || String(e)
         }
