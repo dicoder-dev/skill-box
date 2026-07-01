@@ -370,8 +370,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   height: 100%;                  /* 占满 content-area(已被 app-container 锁为视口高度) */
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
 }
@@ -592,10 +591,11 @@ onMounted(async () => {
   margin-right: -4px;       /* 抵消 padding-right,保持外边距不变 */
 }
 
-/* 卡片网格 */
+/* 卡片网格 - auto-fill 让卡片随容器宽度自动列数,260px 最小宽
+   在 1920px 屏可铺 ~6 列(原来 max-width:1100 限制下只铺 3 列) */
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
 }
 
