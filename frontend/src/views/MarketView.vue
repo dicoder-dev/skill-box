@@ -38,16 +38,20 @@ const activeSourceId = computed(() => market.activeSourceId)
 const keyword = ref('')
 
 function onSearch() {
-  // Enter = 本地缓存过滤(快、不打三方源)
+  // 2026-07-01 改:Enter 走 setKeyword + loadSkills。
+  // loadSkills 调 listMarketSkillsWithInstalled,后端对 market_skills 表
+  // 走 keyword LIKE 过滤(等价于"对已拉数据做 substring 过滤")。
+  // 这样 Enter 走的是"已拉数据子集内的搜索",不打三方源。
   market.setKeyword(keyword.value)
   market.loadSkills()
 }
 
-async function onSearchRemote() {
-  // 搜索按钮 = 三方源搜索(走 keyword 语义,skillhub 命中 /api/skills?keyword=)
+async function onRefreshAll() {
+  // 2026-07-01 改:搜索按钮 = 强制重新拉全量最新数据(force=true 忽略缓存)。
+  // 跟 Enter 的区别:Enter 走缓存过滤(快),按钮 = 强制走远端(新数据)。
   market.setKeyword(keyword.value)
   try {
-    await market.refreshActive({ keyword: keyword.value })
+    await market.refreshActive({ keyword: keyword.value, force: true })
   } catch (e) {
     toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
     return
@@ -58,12 +62,19 @@ async function onSearchRemote() {
 }
 
 async function onSelectSource(id) {
-  // 2026-07-01 改:切 tab 自动拉全量,不再只是切缓存
+  // 2026-07-01 改:切 tab 走 shouldAutoRefresh 策略
+  //   - 缓存为空(首次切到该源)→ 自动拉全量
+  //   - 缓存非空 → 只切缓存,不打扰
+  // 用户想要该源最新数据时手动点搜索按钮(force=true)
   market.setSourceActive(id)
-  try {
-    await market.refreshActive({ keyword: '' })
-  } catch (e) {
-    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+  // 切源后先 loadSkills 加载该源数据(可能为空,自动显示空态)
+  await market.loadSkills()
+  if (market.shouldAutoRefresh) {
+    try {
+      await market.refreshActive({ keyword: '' })
+    } catch (e) {
+      toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+    }
   }
 }
 
@@ -131,16 +142,19 @@ onMounted(async () => {
   try {
     await market.loadSources()
     await market.loadProjects()
-    // 2026-07-01 改:进入页面后自动拉取第一个源(loadSources 已默认选第一个)
     if (market.activeSourceId) {
-      try {
-        await market.refreshActive({ keyword: '' })
-      } catch (e) {
-        // 自动拉取失败不抛出,只 toast(避免误以为是列表加载失败)
-        toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+      // 2026-07-01 改:先 loadSkills 拿现有缓存,让 UI 立即呈现已拉数据
+      await market.loadSkills()
+      // 缓存为空(首次进入)才自动拉全量;非空则跳过,等用户手动点刷新按钮
+      if (market.shouldAutoRefresh) {
+        try {
+          await market.refreshActive({ keyword: '' })
+        } catch (e) {
+          // 自动拉取失败不抛出,只 toast(避免误以为是列表加载失败)
+          toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+        }
       }
     }
-    await market.loadSkills()
   } catch (e) {
     // error 已在 store 里
   }
@@ -186,13 +200,13 @@ onMounted(async () => {
             <Icon icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
           </button>
-          <!-- 2026-07-01 改:工具栏只留「搜索」按钮,走 onSearchRemote(打三方源搜索)
-               - 进页面 / 切 tab 已自动拉全量,不再有「拉取全部」按钮
-               - Enter 走本地缓存过滤,不打三方源
-               - 搜索按钮 = keyword 透传到 skillhub / skills.sh 搜索语义 -->
-          <button class="primary" :disabled="refreshing || !activeSourceId" @click="onSearchRemote">
+          <!-- 2026-07-01 改:工具栏只留「搜索」按钮,功能 = 强制拉全量最新数据(force=true)
+               - Enter 走本地缓存过滤(setKeyword + loadSkills),不打远端
+               - 搜索按钮 = 强制从三方源拉全量最新(覆盖旧缓存)
+               - 进页面 / 切 tab 仅缓存为空时才自动拉(shouldAutoRefresh),不打扰用户 -->
+          <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefreshAll">
             <span v-if="refreshing" class="spinner"></span>
-            <Icon v-else icon="mdi:magnify" width="14" height="14" />
+            <Icon v-else icon="mdi:download-multiple" width="14" height="14" />
             {{ refreshing ? t('market.refreshing') : t('common.search') }}
           </button>
         </div>

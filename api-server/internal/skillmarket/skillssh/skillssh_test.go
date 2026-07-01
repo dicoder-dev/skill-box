@@ -677,6 +677,42 @@ func TestDiscover_AuditsAPI_NilAgentTrustHub(t *testing.T) {
 	}
 }
 
+// TestDiscover_AuditsAPI_50Pages 2026-07-01 增:验证 defaultAuditsPages=50 时,
+// page 0/1 拿到数据后即使后续 page 失败/为空,也能正常返回(走分页容错)。
+func TestDiscover_AuditsAPI_50Pages(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/api/audits/0": {
+			status: 200, ct: "application/json",
+			body: auditsMockResponse([]map[string]any{
+				{"rank": 1, "source": "foo/bar", "skillId": "sk1", "summary": "first"},
+			}),
+		},
+		"/api/audits/1": {
+			status: 200, ct: "application/json",
+			body: auditsMockResponse([]map[string]any{
+				{"rank": 2, "source": "baz/qux", "skillId": "sk2", "summary": "second"},
+			}),
+		},
+		// page 2-49 没有 mock → 走 fakeRT 兜底 404
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 至少 page 0+1 的 2 条都拿到了
+	if len(items) < 2 {
+		t.Fatalf("expected >= 2 items, got %d", len(items))
+	}
+	gotNames := map[string]bool{}
+	for _, it := range items {
+		gotNames[it.Name] = true
+	}
+	if !gotNames["sk1"] || !gotNames["sk2"] {
+		t.Errorf("expected sk1+sk2, got %v", gotNames)
+	}
+}
+
 // TestDiscover_AuditsAPI_EmptyAndFallback 验证 audits API 返空 + HTML 解析失败时走 knownCatalogFallback。
 func TestDiscover_AuditsAPI_EmptyAndFallback(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{

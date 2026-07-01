@@ -35,9 +35,12 @@ const (
 	defaultGHRawBase  = "https://raw.githubusercontent.com"
 	defaultGHBlobBase = "https://github.com"
 	// 2026-07-01 改:用 /api/audits/{page} 公开 JSON API(无需鉴权)做主数据源。
-	// 走 2 页 = 100 条;技能排名 100 之后的不在主列表展示(用户可走搜索或本地)。
+	// 50 页 = 2500 条,覆盖 skills.sh Top 实用区。audits API 单页固定 50 条,
+	// 全站 851,604 是 GitHub 仓库抓取总维度,网站全榜只展示 Top N,
+	// 2500 条后密度稀疏,对用户来说"基本够用"。
+	// 若用户需要更精准搜索,需走 Vercel OIDC 鉴权接 /api/v1/skills/search(本项目暂不支持)。
 	defaultAuditsAPIPath = "/api/audits/"
-	defaultAuditsPages   = 2
+	defaultAuditsPages   = 50
 	// 2026-07-01 改:fallback 行格式升级为 "owner/repo@skill | author | description",
 	// 用 | 分隔,前段保留 remote_id,后两段填 MarketItem.Author / Description。
 	// 真实环境若 audits API 不可达,fallback 也能展示基本信息。

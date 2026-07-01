@@ -7,10 +7,11 @@
 //   - projects       项目列表(供 scope=project 选项用)
 //   - pullDialog     控制"拉取"弹窗的开关
 //
-// 2026-07-01 改造:刷新策略统一为单 refreshing flag。
-//   - 进页面 / 切 tab 都会自动触发 refreshActive({ keyword: '' }) 拉全量
-//   - 搜索框 + 「搜索」按钮触发 refreshActive({ keyword }) 走三方源搜索
-//   - Enter 仅做本地缓存过滤(loadSkills),不打三方源
+// 2026-07-01 改造:刷新策略 — 仅缓存为空时自动拉,搜索统一走"已拉数据 substring 过滤"。
+//   - 进页面 / 切 tab:缓存为空(shouldAutoRefresh())才拉全量,否则只 loadSkills
+//   - Enter / 搜索按钮:都走 setKeyword + loadSkills,keyword 在 DB 走 LIKE(等价于已拉数据 substring 过滤)
+//   - "搜索按钮" vs "Enter" 区别:搜索按钮显式 force=true 强制拉全量最新
+//   - 用户想强制重新拉:点搜索按钮(force=true);默认行为是缓存优先
 //
 // 用法:
 //   import { useMarketStore } from '@/core/store/market'
@@ -66,6 +67,21 @@ export const useMarketStore = defineStore('market', {
     },
     totalPages(state) {
       return Math.max(1, Math.ceil(state.total / state.size))
+    },
+    // 2026-07-01 增:当前源在 DB 缓存(market_skills)里是否有数据。
+    // 用 total 判断而不是 skills 数组,因为 skills 只是当前页(分页 20 条),
+    // 而 total 是后端查的"该源下缓存总数"。
+    hasCachedData(state) {
+      return (state.total || 0) > 0
+    },
+    // 2026-07-01 增:判断当前源是否需要自动拉全量。
+    //   - 强制:用户切源 / 切 keyword 后想看最新数据
+    //   - 自动:仅当缓存为空时才拉,避免每次进入都打远端
+    shouldAutoRefresh(state) {
+      // 缓存非空 = 跳过自动拉(用户可手动点搜索按钮 force 刷新)
+      if ((state.total || 0) > 0) return false
+      // 缓存为空 = 首次进入,需要拉
+      return true
     },
   },
   actions: {
@@ -139,13 +155,23 @@ export const useMarketStore = defineStore('market', {
       }
     },
 
-    // 2026-07-01 改:keyword 透传到三方源。opts.keyword 为空时拉全量,
-    // 非空时走三方源搜索语义(skillhub 走 /api/skills?keyword=,
-    // skills.sh 走 /search?q=)。refreshing flag 统一管理(进页面/切 tab/搜索按钮都走这里)。
+    // 2026-07-01 改:keyword 透传到三方源。行为:
+    //   - opts.force=true:忽略缓存状态,强制拉全量
+    //   - opts.force=false(默认):仅当缓存为空(shouldAutoRefresh)时才拉,
+    //                            否则走 loadSkills 读缓存即可
+    //   - opts.keyword 为空:拉全量目录
+    //   - opts.keyword 非空:走三方源搜索语义(skillhub 走 /api/skills?keyword=,
+    //                       skills.sh 走 audits API + substring 过滤)
     async refreshActive(opts = {}) {
-      if (!this.activeSourceId) return
+      if (!this.activeSourceId) return false
       const keyword = (opts.keyword ?? this.keyword ?? '').trim()
-      if (this.refreshing) return // 已在刷,丢弃新请求(简单防抖)
+      // 非强制模式:缓存非空就跳过拉三方源
+      if (!opts.force && (this.total || 0) > 0) {
+        // 仍然 reload 一下当前页(让 keyword 改动立即生效)
+        await this.loadSkills()
+        return false
+      }
+      if (this.refreshing) return false // 已在刷,丢弃新请求(简单防抖)
       this.refreshing = true
       this.lastError = ''
       try {
@@ -153,6 +179,7 @@ export const useMarketStore = defineStore('market', {
         this.lastRefresh = res
         this.page = 1
         await this.loadSkills()
+        return true
       } catch (e) {
         this.lastError = e?.message || String(e)
         throw e
