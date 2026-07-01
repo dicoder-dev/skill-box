@@ -547,6 +547,91 @@ func (s *Service) ListSkillsWithInstalled(q ListSkillsQuery) (*ListSkillsWithIns
 	}, nil
 }
 
+// ListSkillsRemote 走 adapter.Discover,纯远端不读本地缓存(2026-07-01 增)。
+//
+// 数据流:
+//   1) orchestrator.DiscoverFromSource(sourceID, keyword) → []MarketItem(走三方源)
+//   2) 在内存里按 page/size 切片(in-memory 分页)
+//   3) 调 orchestrator.ItemToRow 把 MarketItem 映射成 entity.MarketSkill
+//      (让前端继续用统一 schema,无需改前端类型)
+//   4) installed map 像 ListSkillsWithInstalled 一样扫本地 store
+//
+// skills.sh 因 audits API 单页固定 50 条且不支持 keyword,会拉 50 页 + substring;
+// skillhub 走 /api/skills?keyword= 直接拿搜索结果。
+//
+// 超时:60s(继承 controller 的 ctx timeout)。
+func (s *Service) ListSkillsRemote(ctx context.Context, q ListSkillsQuery) (*ListSkillsWithInstalledResult, error) {
+	src, err := s.sourceModel().FindOneById(q.SourceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %d", ErrSourceNotFound, q.SourceID)
+	}
+	items, derr := s.orchestrator().DiscoverFromSource(ctx, q.SourceID, q.Keyword)
+	if derr != nil {
+		return nil, derr
+	}
+	page, size := q.Page, q.Size
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	// 内存分页:Discover 一次性返回全量,这里按 page/size 切片
+	total := int64(len(items))
+	start := (page - 1) * size
+	if start < 0 {
+		start = 0
+	}
+	if start > int(total) {
+		start = int(total)
+	}
+	end := start + size
+	if end > int(total) {
+		end = int(total)
+	}
+	paged := items[start:end]
+	// Map MarketItem → entity.MarketSkill(前端字段对齐)
+	ad, _ := skillmarket.Get(src.Type)
+	baseURL := resolveBaseForItem(src.ConfigJSON, ad)
+	rows := make([]*entity.MarketSkill, 0, len(paged))
+	for _, it := range paged {
+		rows = append(rows, s.orchestrator().ItemToRow(src, ad, baseURL, it))
+	}
+	// installed 二次扫本地 store(失败降级为空 map,不影响主列表)
+	installed, _ := s.scanInstalledNames()
+	if installed == nil {
+		installed = map[string]bool{}
+	}
+	return &ListSkillsWithInstalledResult{
+		Items:     rows,
+		Total:     total,
+		Page:      page,
+		Size:      size,
+		Installed: installed,
+	}, nil
+}
+
+// resolveBaseForItem 给 ListSkillsRemote 解析 source.ConfigJSON.base_url;
+// adapter 为空时(未知 type)返回空字符串,ItemToRow 内会 fallback 到 detail/install 字段。
+func resolveBaseForItem(configJSON string, ad skillmarket.MarketAdapter) string {
+	if ad == nil {
+		return ""
+	}
+	if strings.TrimSpace(configJSON) == "" {
+		return ad.BaseURL()
+	}
+	cfg := struct {
+		BaseURL string `json:"base_url,omitempty"`
+	}{}
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		return ad.BaseURL()
+	}
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		return ad.BaseURL()
+	}
+	return cfg.BaseURL
+}
+
 // scanInstalledNames 扫本地 store,返回 name -> exists 映射。
 // 复用 sskill.List(store.List),轻量无 DB I/O。
 func (s *Service) scanInstalledNames() (map[string]bool, error) {

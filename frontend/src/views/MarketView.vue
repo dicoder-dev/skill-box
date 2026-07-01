@@ -18,9 +18,9 @@ const appBus = inject('appBus', null)
 // 状态
 const error = computed(() => market.lastError)
 const loading = computed(() => market.loading)
-// 2026-07-01 改:刷新 loading 统一单 refreshing flag。
-// 进页面 / 切 tab / 搜索按钮均共用此 loading,无需分两路。
-const refreshing = computed(() => market.refreshing)
+// 2026-07-01 改:全走 API 后只剩 loading 单 flag。
+// 每次进入/切 tab/输入搜索,都会走远端,loading 是正反馈。
+const refreshing = computed(() => market.loading)
 
 // 列表
 const items = computed(() => market.skills)
@@ -38,44 +38,16 @@ const activeSourceId = computed(() => market.activeSourceId)
 const keyword = ref('')
 
 function onSearch() {
-  // 2026-07-01 改:Enter 走 setKeyword + loadSkills。
-  // loadSkills 调 listMarketSkillsWithInstalled,后端对 market_skills 表
-  // 走 keyword LIKE 过滤(等价于"对已拉数据做 substring 过滤")。
-  // 这样 Enter 走的是"已拉数据子集内的搜索",不打三方源。
+  // 2026-07-01 改:全走 API,Enter 走 setKeyword + loadSkills(每次都打远端)。
+  // skillhub 走 ?keyword= 搜索语义;skills.sh 走 50 页 + substring。
   market.setKeyword(keyword.value)
   market.loadSkills()
 }
 
-async function onRefreshAll() {
-  // 2026-07-01 改:搜索按钮 = 强制重新拉全量最新数据(force=true 忽略缓存)。
-  // 跟 Enter 的区别:Enter 走缓存过滤(快),按钮 = 强制走远端(新数据)。
-  market.setKeyword(keyword.value)
-  try {
-    await market.refreshActive({ keyword: keyword.value, force: true })
-  } catch (e) {
-    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
-    return
-  }
-  if (market.lastRefresh) {
-    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh) })
-  }
-}
-
 async function onSelectSource(id) {
-  // 2026-07-01 改:切 tab 走 shouldAutoRefresh 策略
-  //   - 缓存为空(首次切到该源)→ 自动拉全量
-  //   - 缓存非空 → 只切缓存,不打扰
-  // 用户想要该源最新数据时手动点搜索按钮(force=true)
+  // 2026-07-01 改:全走 API 后每次切源都重新打远端(纯 API,无缓存判断)。
   market.setSourceActive(id)
-  // 切源后先 loadSkills 加载该源数据(可能为空,自动显示空态)
   await market.loadSkills()
-  if (market.shouldAutoRefresh) {
-    try {
-      await market.refreshActive({ keyword: '' })
-    } catch (e) {
-      toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
-    }
-  }
 }
 
 // 详情弹窗
@@ -143,17 +115,9 @@ onMounted(async () => {
     await market.loadSources()
     await market.loadProjects()
     if (market.activeSourceId) {
-      // 2026-07-01 改:先 loadSkills 拿现有缓存,让 UI 立即呈现已拉数据
+      // 2026-07-01 改:全走 API,直接 loadSkills 即可。
+      // 每次都打远端,loading 是正反馈,失败有 banner + toast。
       await market.loadSkills()
-      // 缓存为空(首次进入)才自动拉全量;非空则跳过,等用户手动点刷新按钮
-      if (market.shouldAutoRefresh) {
-        try {
-          await market.refreshActive({ keyword: '' })
-        } catch (e) {
-          // 自动拉取失败不抛出,只 toast(避免误以为是列表加载失败)
-          toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
-        }
-      }
     }
   } catch (e) {
     // error 已在 store 里
@@ -200,15 +164,8 @@ onMounted(async () => {
             <Icon icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
           </button>
-          <!-- 2026-07-01 改:工具栏只留「搜索」按钮,功能 = 强制拉全量最新数据(force=true)
-               - Enter 走本地缓存过滤(setKeyword + loadSkills),不打远端
-               - 搜索按钮 = 强制从三方源拉全量最新(覆盖旧缓存)
-               - 进页面 / 切 tab 仅缓存为空时才自动拉(shouldAutoRefresh),不打扰用户 -->
-          <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefreshAll">
-            <span v-if="refreshing" class="spinner"></span>
-            <Icon v-else icon="mdi:download-multiple" width="14" height="14" />
-            {{ refreshing ? t('market.refreshing') : t('common.search') }}
-          </button>
+          <!-- 2026-07-01 改:全走 API 后,Enter 已经每次都打远端,搜索按钮被删除。
+               工具栏右侧只留「源设置」一个 action;搜索 = 直接 Enter 输入框即可触发。 -->
         </div>
       </div>
 
@@ -232,11 +189,8 @@ onMounted(async () => {
         <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
         {{ error }}
       </div>
-      <div v-if="market.lastRefresh" class="message message-success">
-        <Icon icon="mdi:check-circle-outline" width="14" height="14" />
-        {{ t('market.lastRefresh', { pulled: market.lastRefresh.pulled_count, inserted: market.lastRefresh.inserted, updated: market.lastRefresh.updated }) }}
-        <span class="muted">({{ market.lastRefresh.finished_at }})</span>
-      </div>
+      <!-- 2026-07-01 改:全走 API 后,refresh 端点不再被前端调用,
+           lastRefresh banner 失去意义,已删除。失败用上面 error banner + toast 即可。 -->
 
       <!-- 2026-07-01 改:列表用卡片网格(原表格) -->
       <div v-if="items.length > 0" class="market-grid">
@@ -308,7 +262,7 @@ onMounted(async () => {
 
       <div v-else-if="refreshing || loading" class="loading-state">
         <span class="spinner"></span>
-        <p>{{ t('market.refreshing') }}</p>
+        <p>{{ t('market.btnRemoteLoading') }}</p>
       </div>
 
       <div v-else class="empty-state">

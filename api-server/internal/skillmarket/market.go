@@ -154,6 +154,27 @@ func (o *Orchestrator) DownloadFromSource(ctx context.Context, sourceID uint, re
 	return can, nil
 }
 
+// DiscoverFromSource 走 adapter.Discover,纯拉不写(2026-07-01 增)。
+//
+// 用于 ListSkillsRemote:不依赖 market_skills 缓存,每次都打三方源,响应永远最新。
+// 与 RefreshFromSource 的差别:本方法不 upsert 到 DB、不返回 RefreshResult,
+// 仅返回 []MarketItem 给调用方做 in-memory 分页 / 过滤。
+func (o *Orchestrator) DiscoverFromSource(ctx context.Context, sourceID uint, keyword string) ([]MarketItem, error) {
+	src, err := o.sourceModel.FindOneById(sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %d", ErrSourceNotFound, sourceID)
+	}
+	if !src.Enabled {
+		return nil, ErrSourceDisabled
+	}
+	ad, ok := o.registry.Get(src.Type)
+	if !ok {
+		return nil, fmt.Errorf("%w: type=%s", ErrSourceNotImpl, src.Type)
+	}
+	baseURL := resolveBaseFromConfig(src.ConfigJSON, ad.BaseURL())
+	return ad.Discover(ctx, baseURL, strings.TrimSpace(keyword))
+}
+
 // ListSources 简化的"所有源"读出。
 func (o *Orchestrator) ListSources() ([]*entity.MarketSource, error) {
 	list, _, err := o.sourceModel.FindList(nil, nil)
@@ -186,6 +207,15 @@ func (o *Orchestrator) ListSkills(sourceID uint, keyword string, page, size int)
 		return nil, 0, err
 	}
 	return list, int64(total), nil
+}
+
+// ItemToRow 把 MarketItem + source 拼成 entity.MarketSkill(2026-07-01 导出)。
+//
+// 原本为 RefreshFromSource 内部 helper,2026-07-01 暴露给 smarket.ListSkillsRemote 用:
+// ListSkillsRemote 不写 DB,但仍需要把 MarketItem 映射成 entity.MarketSkill,
+// 让前端继续用统一 schema(items 数组里的字段保持 remote_id / name / version / author / tags 等)。
+func (o *Orchestrator) ItemToRow(src *entity.MarketSource, ad MarketAdapter, baseURL string, it MarketItem) *entity.MarketSkill {
+	return itemToRow(src, ad, baseURL, it)
 }
 
 // itemToRow 把 MarketItem + source 拼成 entity.MarketSkill。

@@ -339,13 +339,14 @@ const messages = {
     scopeGlobal: '全局 (global)',
     scopeProject: '项目 (project)',
     projectPlaceholder: '选择项目…',
-    searchPlaceholder: '按名称搜索…',
+    searchPlaceholder: '按名称搜索(回车即查)…',
+    // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),以下旧 key 弃用。
+    // 保留旧 key 仅为向后兼容,后续可清理。
     btnSearch: '搜索',
     btnRefresh: '刷新源',
     refreshing: '刷新中…',
-    // 2026-07-01 改:UI 重构后,刷新 loading 统一单 flag,以下 6 个 key 弃用
-    // (刷新按钮改名为「搜索」,走 keyword 透传到三方源;进页面/切 tab 自动拉全量)
-    // 保留旧 key 仅为避免第三方代码引用炸掉,可后续清理时整段删除
+    // 2026-07-01 改:全走 API,新增 loading 文案
+    btnRemoteLoading: '从三方源拉取中…',
     btnRefreshAll: '拉取全部',
     btnRefreshCurrent: '刷新当前搜索',
     refreshingAll: '拉取全量中…',
@@ -353,6 +354,7 @@ const messages = {
     errRefreshAll: '拉取全量失败: {msg}',
     errRefreshCurrent: '刷新搜索失败: {msg}',
     noSources: '没有可用的源',
+    // 2026-07-01 改:lastRefresh banner 删除,以下 key 弃用
     lastRefresh: '上次刷新:拉取 {pulled} · 新增 {inserted} · 更新 {updated}',
     errLoadSources: '源加载失败: {msg}',
     errLoadList: '列表加载失败: {msg}',
@@ -379,10 +381,11 @@ const messages = {
     colDescription: '描述',
     colTags: '标签',
     colStatus: '状态',
-    // 2026-07-01 改:进入页面已自动拉取,空态文案分两种
+    // 2026-07-01 改:全走 API 后,empty 语义变化(已拉过且 0 结果 = 真没找到,
+    // 不是缓存空),emptyFirstTime 弃用,emptyAfter 文案相应改写
     emptyFirstTime: '当前源还没拉过。点 "刷新源" 把三方目录拉到本地。',
-    emptyAfter: '该源暂无内容',
-    emptyAfterHint: '刷新一次试试,或检查网络后切到其他源',
+    emptyAfter: '没找到匹配的 skill',
+    emptyAfterHint: '换个关键词,或切到其他源试试',
     loading: '加载中…',
     // 2026-06-30 增
     allSources: '全部源',

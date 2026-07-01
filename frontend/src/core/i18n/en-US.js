@@ -339,10 +339,12 @@ const messages = {
     scopeGlobal: 'Global (global)',
     scopeProject: 'Project (project)',
     projectPlaceholder: 'Pick a project…',
-    searchPlaceholder: 'Search by name…',
+    searchPlaceholder: 'Search by name (press Enter)…',
     btnSearch: 'Search',
     btnRefresh: 'Refresh source',
     refreshing: 'Refreshing…',
+    // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),新增 loading 文案
+    btnRemoteLoading: 'Fetching from upstream…',
     // 2026-07-01 deprecated: single refreshing flag replaces these after UI refactor.
     // Kept as aliases only; safe to remove once no other code references them.
     btnRefreshAll: 'Fetch all',
@@ -352,6 +354,7 @@ const messages = {
     errRefreshAll: 'Fetch-all failed: {msg}',
     errRefreshCurrent: 'Refresh-search failed: {msg}',
     noSources: 'No available sources',
+    // 2026-07-01 deprecated: lastRefresh banner removed (全走 API 后 refresh 不再被前端调用)
     lastRefresh: 'Last refresh: pulled {pulled} · added {inserted} · updated {updated}',
     errLoadSources: 'Failed to load sources: {msg}',
     errLoadList: 'Failed to load list: {msg}',
@@ -378,10 +381,10 @@ const messages = {
     colDescription: 'description',
     colTags: 'tags',
     colStatus: 'status',
-    // 2026-07-01: entry page auto-refreshes the first source; empty states split into two
+    // 2026-07-01 改:全走 API 后,empty 语义变化(已拉过且 0 结果 = 真没找到)
     emptyFirstTime: 'This source has not been pulled yet. Click "Refresh source" to fetch from the upstream catalog.',
-    emptyAfter: 'No skills in this source',
-    emptyAfterHint: 'Try refreshing, or check your network and switch to another source',
+    emptyAfter: 'No matching skills found',
+    emptyAfterHint: 'Try a different keyword, or switch to another source',
     loading: 'Loading…',
     // 2026-06-30 added
     allSources: 'All sources',

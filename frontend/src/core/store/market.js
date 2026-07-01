@@ -1,29 +1,23 @@
-// store/market.js - 三方市场域的 Pinia store。
+// store/market.js - 三方市场域的 Pinia store(2026-07-01 改造:全走 API)。
 //
-// 2026-06-30 新建。集中管理:
-//   - sources        已注册源(skillhub / skills.sh / 自定义)
-//   - activeSourceId 当前选中的源 id(0 = 聚合视图)
-//   - skills         当前页列表(market_skills 缓存 + installed 标记)
-//   - projects       项目列表(供 scope=project 选项用)
-//   - pullDialog     控制"拉取"弹窗的开关
-//
-// 2026-07-01 改造:刷新策略 — 仅缓存为空时自动拉,搜索统一走"已拉数据 substring 过滤"。
-//   - 进页面 / 切 tab:缓存为空(shouldAutoRefresh())才拉全量,否则只 loadSkills
-//   - Enter / 搜索按钮:都走 setKeyword + loadSkills,keyword 在 DB 走 LIKE(等价于已拉数据 substring 过滤)
-//   - "搜索按钮" vs "Enter" 区别:搜索按钮显式 force=true 强制拉全量最新
-//   - 用户想强制重新拉:点搜索按钮(force=true);默认行为是缓存优先
+// 策略(2026-07-01):完全弃用本地缓存。
+//   - listMarketSkillsRemote:走 adapter.Discover + in-memory 分页,每次都打三方源
+//   - skillhub:走 /api/skills?keyword= 搜索语义
+//   - skills.sh:走 50 页 /api/audits + substring(API 无 search 参数)
+//   - installed 标记仍走本地 store(扫 ~/.skill-box,与 API 数据正交)
+//   - 旧缓存端点 listMarketSkillsWithInstalled / refreshSource 后端仍保留
+//     (CLI/调试用),前端不再调用
 //
 // 用法:
 //   import { useMarketStore } from '@/core/store/market'
 //   const store = useMarketStore()
 //   await store.loadSources()
-//   await store.loadSkills()
+//   await store.loadSkills()    // 每次都打远端
 
 import { defineStore } from 'pinia'
 import {
   listSources,
-  listMarketSkillsWithInstalled,
-  refreshSource,
+  listMarketSkillsRemote,
   pullMarketSkillV2,
   listMarketSourcesAggregated,
   updateMarketSource,
@@ -35,12 +29,8 @@ export const useMarketStore = defineStore('market', {
     // 源
     sources: [], // [{ id, name, type, enabled, config_json }]
     activeSourceId: 0, // 0 = "全部源" 聚合视图
-    // 2026-07-01 改:刷新 loading 统一用单 refreshing flag。
-    // 进入页面自动拉、tab 切换自动拉、点搜索按钮打三方源搜索,均共用此 flag。
-    refreshing: false, // 唯一的刷新 loading 标记
-    lastRefresh: null, // { source_id, pulled_count, inserted, updated, finished_at, error }
 
-    // 列表
+    // 列表 — 当前页(market_skills 缓存 + installed 标记)
     skills: [], // 完整结构 + installed bool
     installed: {}, // name -> bool
     total: 0,
@@ -58,6 +48,7 @@ export const useMarketStore = defineStore('market', {
     lastError: '',
 
     // 状态
+    // 2026-07-01 简化:每次都打远端,只剩 loading 单 flag(取代旧 refreshing)。
     loading: false,
   }),
   getters: {
@@ -67,21 +58,6 @@ export const useMarketStore = defineStore('market', {
     },
     totalPages(state) {
       return Math.max(1, Math.ceil(state.total / state.size))
-    },
-    // 2026-07-01 增:当前源在 DB 缓存(market_skills)里是否有数据。
-    // 用 total 判断而不是 skills 数组,因为 skills 只是当前页(分页 20 条),
-    // 而 total 是后端查的"该源下缓存总数"。
-    hasCachedData(state) {
-      return (state.total || 0) > 0
-    },
-    // 2026-07-01 增:判断当前源是否需要自动拉全量。
-    //   - 强制:用户切源 / 切 keyword 后想看最新数据
-    //   - 自动:仅当缓存为空时才拉,避免每次进入都打远端
-    shouldAutoRefresh(state) {
-      // 缓存非空 = 跳过自动拉(用户可手动点搜索按钮 force 刷新)
-      if ((state.total || 0) > 0) return false
-      // 缓存为空 = 首次进入,需要拉
-      return true
     },
   },
   actions: {
@@ -123,12 +99,15 @@ export const useMarketStore = defineStore('market', {
       }
     },
 
-    // --- 列表 ---
+    // --- 列表(2026-07-01 改:走纯远端) ---
     async loadSkills() {
       this.loading = true
       this.lastError = ''
       try {
-        const res = await listMarketSkillsWithInstalled({
+        // listMarketSkillsRemote:走 adapter.Discover,完全不读本地缓存,
+        // 响应永远是三方源最新数据;keyword 透传到三方源(skillhub 走真实搜索语义,
+        // skills.sh 走 substring,因为该 API 无 search 参数)。
+        const res = await listMarketSkillsRemote({
           source_id: this.activeSourceId,
           keyword: this.keyword,
           page: this.page,
@@ -152,39 +131,6 @@ export const useMarketStore = defineStore('market', {
         throw e
       } finally {
         this.loading = false
-      }
-    },
-
-    // 2026-07-01 改:keyword 透传到三方源。行为:
-    //   - opts.force=true:忽略缓存状态,强制拉全量
-    //   - opts.force=false(默认):仅当缓存为空(shouldAutoRefresh)时才拉,
-    //                            否则走 loadSkills 读缓存即可
-    //   - opts.keyword 为空:拉全量目录
-    //   - opts.keyword 非空:走三方源搜索语义(skillhub 走 /api/skills?keyword=,
-    //                       skills.sh 走 audits API + substring 过滤)
-    async refreshActive(opts = {}) {
-      if (!this.activeSourceId) return false
-      const keyword = (opts.keyword ?? this.keyword ?? '').trim()
-      // 非强制模式:缓存非空就跳过拉三方源
-      if (!opts.force && (this.total || 0) > 0) {
-        // 仍然 reload 一下当前页(让 keyword 改动立即生效)
-        await this.loadSkills()
-        return false
-      }
-      if (this.refreshing) return false // 已在刷,丢弃新请求(简单防抖)
-      this.refreshing = true
-      this.lastError = ''
-      try {
-        const res = await refreshSource(this.activeSourceId, { keyword })
-        this.lastRefresh = res
-        this.page = 1
-        await this.loadSkills()
-        return true
-      } catch (e) {
-        this.lastError = e?.message || String(e)
-        throw e
-      } finally {
-        this.refreshing = false
       }
     },
 
@@ -238,7 +184,6 @@ export const useMarketStore = defineStore('market', {
     setSourceActive(id) {
       this.activeSourceId = id
       this.page = 1
-      this.lastRefresh = null
     },
 
     setKeyword(kw) {

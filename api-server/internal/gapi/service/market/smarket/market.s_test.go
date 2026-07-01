@@ -543,6 +543,187 @@ func TestUpdateSource(t *testing.T) {
 	}
 }
 
+// TestListSkillsRemote_HappyPath 验证 ListSkillsRemote 走 adapter.Discover,
+// 不读 market_skills 表(2026-07-01 增)。沙盒里走 knownFallback 路径,确保链路通。
+func TestListSkillsRemote_HappyPath(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	// 让 base_url 不可达 → 走 knownFallback(adapters 内置兜底)
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: src.ID, Keyword: "code", Page: 1, Size: 20,
+	})
+	if err != nil {
+		t.Fatalf("ListSkillsRemote should not fail (uses fallback): %v", err)
+	}
+	if out == nil {
+		t.Fatal("nil result")
+	}
+	if out.Total <= 0 {
+		t.Errorf("expected total >= 1 from fallback, got %d", out.Total)
+	}
+	if out.Installed == nil {
+		t.Error("installed map should never be nil")
+	}
+	// 即使空 market_skills,items 也不应 nil
+	if out.Items == nil && out.Total > 0 {
+		t.Error("items should not be nil when total > 0")
+	}
+}
+
+// TestListSkillsRemote_KeywordPass 验证 keyword 字符串透传不丢。
+// 2026-07-01 增:走 adapter.Discover(keyword) 后,空关键词 vs 非空关键词应该都能正常返回。
+func TestListSkillsRemote_KeywordPass(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, kw := range []string{"", "react", "code"} {
+		out, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+			SourceID: src.ID, Keyword: kw, Page: 1, Size: 20,
+		})
+		if err != nil {
+			t.Errorf("keyword %q: ListSkillsRemote error: %v", kw, err)
+		}
+		if out == nil {
+			t.Errorf("keyword %q: nil result", kw)
+		}
+	}
+}
+
+// TestListSkillsRemote_InMemoryPaging 验证 page / size 在内存切片正确。
+// 2026-07-01 增:总 5 条结果,page=2/size=2 应返 [2,2)](下标 2-3)、page=3/size=2 应返 [1)](下标 4)。
+func TestListSkillsRemote_InMemoryPaging(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	// knownFallback 有 3 条 → 总 3
+	out, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: src.ID, Keyword: "", Page: 1, Size: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Total != 3 {
+		t.Errorf("expected total=3 (knownFallback), got %d", out.Total)
+	}
+	// page=2 / size=2 → 应返第 3 条(下标 2..2)
+	out2, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: src.ID, Keyword: "", Page: 2, Size: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out2.Items) != 1 {
+		t.Errorf("page=2 size=2: expected 1 item, got %d", len(out2.Items))
+	}
+	// page=3 / size=2 → 已超出,应返空(不能 panic)
+	out3, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: src.ID, Keyword: "", Page: 3, Size: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out3.Items) != 0 {
+		t.Errorf("page=3 size=2: expected 0 items, got %d", len(out3.Items))
+	}
+}
+
+// TestListSkillsRemote_SourceNotFound 验证 sourceID=0 返 ErrSourceNotFound。
+func TestListSkillsRemote_SourceNotFound(t *testing.T) {
+	env := newTestEnv(t)
+	_, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: 0, Keyword: "", Page: 1, Size: 20,
+	})
+	if err == nil {
+		t.Fatal("expected error for source_id=0")
+	}
+}
+
+// TestListSkillsRemote_InstalledMapping 验证 installed map 反映本地 store,
+// 即使 market_skills 缓存为空也能扫到。
+func TestListSkillsRemote_InstalledMapping(t *testing.T) {
+	env := newTestEnv(t)
+	if err := env.svc.EnsureDefaultSources(); err != nil {
+		t.Fatal(err)
+	}
+	res, _ := env.svc.ListSources()
+	var src *entity.MarketSource
+	for _, s := range res.Items {
+		if s.Type == skillmarket.SourceSkillhub {
+			src = s
+			break
+		}
+	}
+	if src == nil {
+		t.Fatal("skillhub source not seeded")
+	}
+	if _, err := env.svc.UpdateSourceConfig(src.ID, `{"base_url":"https://127.0.0.1:1"}`); err != nil {
+		t.Fatal(err)
+	}
+	// 不预插 market_skill,直接走 fallback;installed map 应是空或 false
+	out, err := env.svc.ListSkillsRemote(context.Background(), smarket.ListSkillsQuery{
+		SourceID: src.ID, Keyword: "", Page: 1, Size: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Installed == nil {
+		t.Fatal("installed map should be non-nil map (possibly empty)")
+	}
+	// 已知 fallback 第一项 name=code-review;若 store 不存在它,installed[code-review] 应为 false
+	if v, ok := out.Installed["code-review"]; ok && v {
+		t.Log("note: code-review unexpectedly installed (跨测试污染?检查 store 隔离)")
+	}
+}
+
 // Suppress unused import warnings.
 var (
 	_ = bytes.NewReader

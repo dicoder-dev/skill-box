@@ -1,14 +1,17 @@
 // skillbox/market.js - 三方市场域的 HTTP 客户端。
 //
-// 后端路径(2026-07-01 改:术语 install → pull,HTTP 路径保留不变):
+// 后端路径(2026-07-01 改:术语 install → pull,新增 skills-remote 端点):
 //   GET  /api/skillbox/market/sources                          (旧)
 //   GET  /api/skillbox/market/skills?source_id=&keyword=...    (旧)
 //   POST /api/skillbox/market/refresh                          (旧)
 //   POST /api/skillbox/market/install                          (旧,deprecated,只写盘不 apply)
 //   POST /api/skillbox/market/install-v2                       (新,写盘+apply 一站式)
-//   GET  /api/skillbox/market/skills-with-installed            (新,带 installed 标记)
-//   GET  /api/skillbox/market/sources/aggregated               (新,源 + skill_count + last_fetched_at)
+//   GET  /api/skillbox/market/skills-with-installed            (旧,读本地缓存)
+//   GET  /api/skillbox/market/skills-remote                    (新,纯远端,不读缓存)
+//   GET  /api/skillbox/market/sources/aggregated               (旧,源 + skill_count + last_fetched_at)
 //   POST /api/skillbox/market/sources/:id/update               (新,局部更新 enabled/config_json)
+//
+// 2026-07-01 改造:全走 API。前端统一调 listMarketSkillsRemote,旧缓存端点保留。
 
 import { http } from '@/core/utils/requests'
 
@@ -39,6 +42,14 @@ export function installMarketSkill(payload) {
 // 带 installed 标记的列表(2026-06-30 增)。响应多 installed map。
 export function listMarketSkillsWithInstalled(params = {}) {
   return http.get('/api/skillbox/market/skills-with-installed', params)
+}
+
+// 纯远端列表(2026-07-01 增):不读本地缓存,每次打三方源。
+// 返回 schema 与 listMarketSkillsWithInstalled 一致(沿用 installed map)。
+// skillhub 走 /api/skills?keyword= 真实搜索语义;
+// skills.sh 走 50 页 /api/audits + substring(API 无搜索参数)。
+export function listMarketSkillsRemote(params = {}) {
+  return http.get('/api/skillbox/market/skills-remote', params)
 }
 
 // 一键拉取:写盘 + apply(2026-07-01 改名:installMarketSkillV2 → pullMarketSkillV2)。
