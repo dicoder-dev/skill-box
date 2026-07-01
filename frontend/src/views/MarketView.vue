@@ -727,13 +727,18 @@ onMounted(async () => {
   gap: 4px;
 }
 
+/* 卡片底部 - flex-shrink:0 保持自然高度不被压,
+   margin-top:auto 在 .market-card flex 列里把自身推到卡片底部,
+   保证内容长度不一时 actions 仍统一贴底 */
 .market-card-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: auto;
   padding-top: 8px;
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* spacer 恢复 flex:1 占满左侧空间,把 actions 推到卡片底部右侧;
