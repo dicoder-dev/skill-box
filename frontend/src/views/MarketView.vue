@@ -367,9 +367,6 @@ onMounted(async () => {
 
 <style scoped>
 .market {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 40px);   /* 视口高度减去 content-area 的上下 padding(各 20px) */
   max-width: 1100px;
   margin: 0 auto;
   color: var(--text);
@@ -419,13 +416,11 @@ onMounted(async () => {
   transition: color 0.3s ease;
 }
 
-/* 卡片 - flex:1 占满 .market 剩余高度,内部三段(工具栏/网格/分页)各自负责
-   min-height:0 让子项能正常收缩触发内部 overflow 滚动 */
+/* 卡片 - flex 列布局,只让中部 .market-body 滚动;
+   工具栏/源标签/分页栏全部 flex-shrink:0 保持原位 */
 .card {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -577,14 +572,21 @@ onMounted(async () => {
   margin-left: 4px;
 }
 
-/* 卡片网格 - 中部可滚动容器,卡片多时只滚这一段,
-   分页栏(.pager)在外层,flex-shrink:0 固定在卡片底部 */
+/* 卡片网格 - 中部可滚动容器,卡片多时只滚这一段;
+   用 max-height 限定上限,卡片少时仍自然占高度,分页栏紧贴其下。
+   calc 拆解:100vh 视口
+              - topbar 约 56px
+              - content-area 上下 padding 各 20px
+              - view-header 约 90px
+              - 卡片 padding 40px + 分页 60px ≈ 100px
+              - 安全余量 */
 .market-body {
-  flex: 1;
-  min-height: 0;
+  max-height: calc(100vh - 56px - 40px - 90px - 100px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  padding-right: 4px;       /* 给滚动条留位置,避免遮住卡片 */
+  margin-right: -4px;       /* 抵消 padding-right,保持外边距不变 */
 }
 
 /* 卡片网格 */
@@ -851,7 +853,7 @@ onMounted(async () => {
   gap: 6px;
 }
 
-/* 分页器 - flex-shrink:0 让卡片滚动时分页栏始终在底部不被压掉 */
+/* 分页器 - flex-shrink:0 在 .card flex 列里保持自然高度,不被压掉 */
 .pager {
   display: flex;
   align-items: center;
