@@ -345,6 +345,8 @@ const messages = {
     refreshing: 'Refreshing…',
     // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),新增 loading 文案
     btnRemoteLoading: 'Fetching from upstream…',
+    // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
+    loadingFromSource: 'Fetching catalog from {source}, up to 45s…',
     // 2026-07-01 deprecated: single refreshing flag replaces these after UI refactor.
     // Kept as aliases only; safe to remove once no other code references them.
     btnRefreshAll: 'Fetch all',

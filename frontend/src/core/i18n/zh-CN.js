@@ -347,6 +347,8 @@ const messages = {
     refreshing: '刷新中…',
     // 2026-07-01 改:全走 API,新增 loading 文案
     btnRemoteLoading: '从三方源拉取中…',
+    // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
+    loadingFromSource: '正在从 {source} 拉取目录,最多 45 秒…',
     btnRefreshAll: '拉取全部',
     btnRefreshCurrent: '刷新当前搜索',
     refreshingAll: '拉取全量中…',

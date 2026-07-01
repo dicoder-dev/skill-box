@@ -33,6 +33,11 @@ const (
 	defaultBaseURL = "https://api.skillhub.cn"
 	// 默认 list 页大小(文档说最大 100)
 	defaultPageSize = 100
+	// 2026-07-01 改:skillhub 单页 pageSize 最大 100,接口不直接支持更大 pageSize。
+	// 原实现 page=1 一次性只拿 100 条,被用户报"全网肯定不止 100 条"。
+	// 改造:Discover 走 page 翻页,直到 total 拉满或达到 maxDiscoverItems 上限。
+	// 上限 1000 条 — 兼顾 99% 用户浏览需求,防 API 翻车(限流)或单次响应太慢。
+	maxDiscoverItems = 1000
 )
 
 // 兜底 skill 列表(skillhub.cn API 暂不可达时使用)。
@@ -149,47 +154,137 @@ type apiSkill struct {
 
 // Discover 拉目录(走真实 API /api/skills)。
 //
-// 2026-07-01 改:替换旧 HTML 兜底,改走真实 JSON API。
-//   - 空 keyword: ?page=1&pageSize=100&sortBy=downloads&order=desc(拉首页 top)
-//   - 非空 keyword: ?keyword=<encoded>&pageSize=100(走搜索语义)
-//   - 响应非 code=0 / HTTP 非 2xx / JSON 解析失败 → 走 knownFallback
-//   - subCategories[].name + tags 合并后去重(逗号 join 在 MarketItem.Tags)
+// 2026-07-01 改造:
+//   - keyword 透传到 /api/skills?keyword=&pageSize=100(走搜索语义)
+//   - 空 keyword:走 /api/skills?page=N&pageSize=100&sortBy=downloads&order=desc 翻页拉全量,
+//     直到累计 ≥ apiListResp.Data.Total 或达到 maxDiscoverItems 上限,或 ctx 取消。
+//   - 翻页过程中单页失败:已拿到的全部返回(降级部分可见),不整体 fallback。
+//   - 任何 HTTP/JSON 解析失败 / 响应非 code=0 / 全量翻页一页都没拿到 → 走 knownFallback。
+//   - subCategories[].name + tags 合并后去重(逗号 join 在 MarketItem.Tags)。
 func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skillmarket.MarketItem, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
 	kw := strings.TrimSpace(keyword)
+	trimBase := strings.TrimRight(baseURL, "/")
 
-	var u string
-	if kw == "" {
-		u = fmt.Sprintf("%s/api/skills?page=1&pageSize=%d&sortBy=downloads&order=desc",
-			strings.TrimRight(baseURL, "/"), defaultPageSize)
-	} else {
-		u = fmt.Sprintf("%s/api/skills?keyword=%s&pageSize=%d",
-			strings.TrimRight(baseURL, "/"), url.QueryEscape(kw), defaultPageSize)
+	// 关键词搜索:API 一次返回搜索结果(已 server-side 过滤),
+	// 不需要翻页 — 走 page=1&pageSize=100 拿搜索结果即可。
+	if kw != "" {
+		u := fmt.Sprintf("%s/api/skills?keyword=%s&pageSize=%d",
+			trimBase, url.QueryEscape(kw), defaultPageSize)
+		body, err := a.fetchBody(ctx, u)
+		if err != nil {
+			logger.Warn("skillhub discover (keyword): %v; falling back to known list", err)
+			return cloneFallback(baseURL), nil
+		}
+		items, ok := parseAndMapSkillList(body, baseURL)
+		if !ok || len(items) == 0 {
+			return cloneFallback(baseURL), nil
+		}
+		return items, nil
 	}
 
-	body, err := a.fetchBody(ctx, u)
-	if err != nil {
-		logger.Warn("skillhub discover: %v; falling back to known list", err)
+	// 全量目录:翻页拉全量。
+	seen := make(map[string]struct{}, maxDiscoverItems)
+	out := make([]skillmarket.MarketItem, 0, maxDiscoverItems)
+	totalHint := -1 // 0 = API 没回 total 字段;>0 = 上限
+	stop := false
+	for page := 1; !stop; page++ {
+		// 首页带 sortBy/order(与原契约一致,测试与下游消费者都对齐)
+		var u string
+		if page == 1 {
+			u = fmt.Sprintf("%s/api/skills?page=1&pageSize=%d&sortBy=downloads&order=desc",
+				trimBase, defaultPageSize)
+		} else {
+			u = fmt.Sprintf("%s/api/skills?page=%d&pageSize=%d",
+				trimBase, page, defaultPageSize)
+		}
+		body, err := a.fetchBody(ctx, u)
+		if err != nil {
+			logger.Warn("skillhub discover page=%d: %v", page, err)
+			break
+		}
+		var resp apiListResp
+		if uerr := json.Unmarshal([]byte(body), &resp); uerr != nil {
+			logger.Warn("skillhub discover page=%d unmarshal: %v", page, uerr)
+			break
+		}
+		if resp.Code != 0 {
+			logger.Warn("skillhub discover page=%d code=%d msg=%q", page, resp.Code, resp.Message)
+			break
+		}
+		// 记录 totalHint:第一页拿一次即可
+		if totalHint < 0 {
+			totalHint = resp.Data.Total
+		}
+		if len(resp.Data.Skills) == 0 {
+			// 空页:已无更多数据
+			break
+		}
+		// 把当前页 map 成 MarketItem,合并去重,累加
+		pageItems := mapSkillList(resp.Data.Skills, baseURL)
+		added := 0
+		for _, it := range pageItems {
+			if _, dup := seen[it.RemoteID]; dup {
+				continue
+			}
+			seen[it.RemoteID] = struct{}{}
+			out = append(out, it)
+			added++
+			if len(out) >= maxDiscoverItems {
+				stop = true
+				break
+			}
+		}
+		// 翻页退出条件 1:本页没新增(全重复,可能 total 字段不可信,防死循环)
+		if added == 0 {
+			break
+		}
+		// 翻页退出条件 2:已拿到 totalHint 的全部
+		if totalHint > 0 && len(out) >= totalHint {
+			break
+		}
+		// 翻页退出条件 3:本页不到 pageSize,后面也没了
+		if len(resp.Data.Skills) < defaultPageSize {
+			break
+		}
+		// 翻页退出条件 4:ctx 取消(交给上层 45s ctx 触发)
+		if cerr := ctx.Err(); cerr != nil {
+			logger.Warn("skillhub discover cancelled at page=%d: %v", page, cerr)
+			break
+		}
+	}
+
+	if len(out) == 0 {
+		// 一页都没拿到 → 走 fallback
 		return cloneFallback(baseURL), nil
 	}
+	return out, nil
+}
+
+// parseAndMapSkillList 解析 JSON 响应 + map 成 MarketItem 列表。
+// 返回 (items, ok) — ok=false 表示解析/响应失败,调用方应降级。
+func parseAndMapSkillList(body, baseURL string) ([]skillmarket.MarketItem, bool) {
 	var resp apiListResp
 	if err := json.Unmarshal([]byte(body), &resp); err != nil {
-		logger.Warn("skillhub discover unmarshal: %v; falling back", err)
-		return cloneFallback(baseURL), nil
+		logger.Warn("skillhub unmarshal: %v; falling back", err)
+		return nil, false
 	}
 	if resp.Code != 0 {
-		logger.Warn("skillhub discover code=%d msg=%q; falling back", resp.Code, resp.Message)
-		return cloneFallback(baseURL), nil
+		logger.Warn("skillhub code=%d msg=%q; falling back", resp.Code, resp.Message)
+		return nil, false
 	}
 	if len(resp.Data.Skills) == 0 {
-		// 空列表时仍 fallback(给用户一些内容,避免 0 列表)
-		return cloneFallback(baseURL), nil
+		return nil, false
 	}
+	return mapSkillList(resp.Data.Skills, baseURL), true
+}
 
-	out := make([]skillmarket.MarketItem, 0, len(resp.Data.Skills))
-	for _, s := range resp.Data.Skills {
+// mapSkillList 把 apiSkill 列表转 MarketItem 列表(不做去重,去重由调用方控制)。
+func mapSkillList(skills []apiSkill, baseURL string) []skillmarket.MarketItem {
+	out := make([]skillmarket.MarketItem, 0, len(skills))
+	for _, s := range skills {
 		if s.Slug == "" {
 			continue
 		}
@@ -224,10 +319,7 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 			UpdatedAt:   time.UnixMilli(s.UpdatedAt),
 		})
 	}
-	if len(out) == 0 {
-		return cloneFallback(baseURL), nil
-	}
-	return out, nil
+	return out
 }
 
 // apiDetailResp /api/v1/skills/{slug} 详情响应。

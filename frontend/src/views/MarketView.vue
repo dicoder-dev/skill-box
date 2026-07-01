@@ -265,8 +265,14 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="refreshing || loading" class="loading-state">
-          <span class="spinner"></span>
-          <p>{{ t('market.btnRemoteLoading') }}</p>
+          <!-- 2026-07-01 改:用 mdi:loading icon(36px)+ spin 动画,
+               替代原来 12px 小 spinner,视觉更明显 + 用 source 名字给用户上下文。
+               iconify 自带 icon 但不带动画,这里 CSS 加 spin。 -->
+          <Icon icon="mdi:loading" width="36" height="36" class="loading-icon" />
+          <p class="loading-text">{{ t('market.btnRemoteLoading') }}</p>
+          <p v-if="market.activeSource" class="loading-hint">
+            {{ t('market.loadingFromSource', { source: market.activeSource.name }) }}
+          </p>
         </div>
 
         <div v-else class="empty-state">
@@ -959,16 +965,31 @@ onMounted(async () => {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-faint);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
-.spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--text-faint);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* 2026-07-01 改:用 iconify mdi:loading 替代自绘 12px spinner。
+   icon 36px + spin 1s linear infinite,视觉上明显是一个"正在加载"的图标。
+   颜色用 mkt-primary(海蓝)与市场主题呼应,而不是默认灰。 */
+.loading-state .loading-icon {
+  color: var(--mkt-primary);
+  animation: spin 1s linear infinite;
+}
+
+.loading-state .loading-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.loading-state .loading-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
 }
 
 @keyframes spin {

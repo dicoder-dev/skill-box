@@ -270,6 +270,129 @@ func TestDiscover_InvalidJSON_Fallback(t *testing.T) {
 	}
 }
 
+// TestDiscover_Pagination 验证 2026-07-01 翻页改造:
+//   - 首页 ?page=1&pageSize=100&sortBy=downloads&order=desc 拿满 100 条 + total=250
+//   - 翻到第 2、3 页 ?page=2&pageSize=100 / ?page=3&pageSize=100 拿剩余 150 条
+//   - 共 250 条全部去重合并返回
+func TestDiscover_Pagination(t *testing.T) {
+	mkPage := func(start, end int) string {
+		var sb strings.Builder
+		sb.WriteString(`{"code":0,"data":{"skills":[`)
+		for i := start; i <= end; i++ {
+			if i > start {
+				sb.WriteString(",")
+			}
+			fmt.Fprintf(&sb, `{"slug":"skill-%03d","name":"Skill %03d","description":"d","version":"0.1.0","ownerName":"o","tags":[],"homepage":"https://x","updated_at":0}`, i, i)
+		}
+		fmt.Fprintf(&sb, `],"total":250}}`)
+		return sb.String()
+	}
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/skills?page=1&pageSize=100&sortBy=downloads&order=desc": {
+			status: 200,
+			body:   mkPage(1, 100),
+		},
+		"/api/skills?page=2&pageSize=100": {
+			status: 200,
+			body:   mkPage(101, 200),
+		},
+		"/api/skills?page=3&pageSize=100": {
+			status: 200,
+			body:   mkPage(201, 250),
+		},
+	})
+	a := NewWithClient(rt)
+	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 250 {
+		t.Fatalf("expected 250 items (3 pages merged), got %d", len(items))
+	}
+	if items[0].RemoteID != "skill-001" {
+		t.Errorf("first RemoteID: %s", items[0].RemoteID)
+	}
+	if items[249].RemoteID != "skill-250" {
+		t.Errorf("last RemoteID: %s", items[249].RemoteID)
+	}
+	seen := map[string]bool{}
+	for _, it := range items {
+		if seen[it.RemoteID] {
+			t.Errorf("duplicate: %s", it.RemoteID)
+		}
+		seen[it.RemoteID] = true
+	}
+}
+
+// TestDiscover_Pagination_StopsOnShortPage 验证翻页退出条件 3:
+// 本页条数 < pageSize(50 < 100)→ 视为已无更多数据,停止翻页。
+func TestDiscover_Pagination_StopsOnShortPage(t *testing.T) {
+	mkPage := func(start, end int) string {
+		var sb strings.Builder
+		sb.WriteString(`{"code":0,"data":{"skills":[`)
+		for i := start; i <= end; i++ {
+			if i > start {
+				sb.WriteString(",")
+			}
+			fmt.Fprintf(&sb, `{"slug":"skill-%03d","name":"S","description":"","version":"0.1.0","ownerName":"o","tags":[],"homepage":"","updated_at":0}`, i)
+		}
+		sb.WriteString(`]}}`) // 不写 total
+		return sb.String()
+	}
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/skills?page=1&pageSize=100&sortBy=downloads&order=desc": {
+			status: 200,
+			body:   mkPage(1, 100),
+		},
+		"/api/skills?page=2&pageSize=100": {
+			status: 200,
+			body:   mkPage(101, 150), // 50 < 100,翻页停
+		},
+	})
+	a := NewWithClient(rt)
+	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 150 {
+		t.Fatalf("expected 150 items (page1+page2, page2<pageSize 停翻), got %d", len(items))
+	}
+}
+
+// TestDiscover_Pagination_MidPageFail 验证翻页中途失败:
+// 首页 100 条成功,第 2 页 HTTP 500 → 已拿到的 100 条仍返回(不整体 fallback)。
+func TestDiscover_Pagination_MidPageFail(t *testing.T) {
+	var page1 strings.Builder
+	page1.WriteString(`{"code":0,"data":{"skills":[`)
+	for i := 1; i <= 100; i++ {
+		if i > 1 {
+			page1.WriteString(",")
+		}
+		fmt.Fprintf(&page1, `{"slug":"skill-%03d","name":"S","description":"","version":"0.1.0","ownerName":"o","tags":[],"homepage":"","updated_at":0}`, i)
+	}
+	page1.WriteString(`],"total":500}}`)
+
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/skills?page=1&pageSize=100&sortBy=downloads&order=desc": {
+			status: 200,
+			body:   page1.String(),
+		},
+		"/api/skills?page=2&pageSize=100": {
+			status: 500,
+			body:   "boom",
+		},
+	})
+	a := NewWithClient(rt)
+	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 翻页中途 500:已拿的 100 条返回,不全 fallback
+	if len(items) != 100 {
+		t.Fatalf("expected 100 items (page1 成功 + page2 失败保留 page1), got %d", len(items))
+	}
+}
+
 // --- Detail ---
 
 func TestDetail_RealAPI_ExtraFields(t *testing.T) {
