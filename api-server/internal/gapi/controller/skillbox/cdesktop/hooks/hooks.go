@@ -86,6 +86,11 @@ type BootstrapHooks struct {
 	// 取消选择时返回空字符串且 error 为 nil。Web 端无桌面,hook 不会注入,
 	// 前端需要降级到 input[type=file] webkitdirectory 等价方案。
 	FsPickFolder func() (string, error)
+	// FsPickFile 弹出系统文件选择对话框(2026-07-01 增),可选 accept 过滤
+	// 后缀(如 []string{".zip"})。返回用户选中的绝对路径,取消时返空串。
+	// 桌面端通过 wails3 v3 OpenFileDialog 绑定(待 wails3 alpha 稳定后补);
+	// 当前未实现时,hook 不会被注入,前端走到降级(<input type="file">)。
+	FsPickFile func(accept []string) (string, error)
 	WindowShow                 func()
 	WindowToggleAlwaysOnTop    func() bool
 	WindowToggleMaximise       func()

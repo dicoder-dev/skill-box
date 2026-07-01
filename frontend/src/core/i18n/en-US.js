@@ -5,8 +5,11 @@
 //   - Keep code identifiers / values as-is (e.g. "codex", "global", "applied")
 //   - Names of internal targets (file paths, API paths) NOT translated
 //   - Placeholders use {name} syntax matching vue-i18n interpolation
+//
+// 2026-07-01: install → pull rename, installDialog becomes an alias of
+// pullDialog (auto-synced at module bottom).
 
-export default {
+const messages = {
   app: {
     brand: 'Skill Box',
     closeSidebar: 'Close sidebar',
@@ -331,7 +334,7 @@ export default {
 
   market: {
     title: 'Marketplace',
-    subtitle: 'Pull skills from 3rd-party sources like skillhub.cn / skills.sh and install them directly into the Skill Box store.',
+    subtitle: 'Pull skills from 3rd-party sources like skillhub.cn / skills.sh into the local Skill Box store.',
     scopeLabel: 'Scope:',
     scopeGlobal: 'Global (global)',
     scopeProject: 'Project (project)',
@@ -345,11 +348,22 @@ export default {
     errLoadSources: 'Failed to load sources: {msg}',
     errLoadList: 'Failed to load list: {msg}',
     errRefresh: 'Refresh failed: {msg}',
-    errInstall: 'Install failed: {msg}',
-    okInstalled: 'Installed: {name} (v{version})',
-    installConfirm: 'Install "{name}" into {scope} ?',
-    btnInstall: 'Install',
-    installing: 'Installing…',
+    // 2026-07-01 改:errInstall → errPull("install" → "pull")
+    errPull: 'Pull failed: {msg}',
+    // 兼容 alias
+    errInstall: 'Pull failed: {msg}',
+    okPulled: 'Pulled: {name} (v{version})',
+    // 兼容 alias
+    okInstalled: 'Pulled: {name} (v{version})',
+    pullConfirm: 'Pull "{name}" into {scope} ?',
+    // 兼容 alias
+    installConfirm: 'Pull "{name}" into {scope} ?',
+    btnPull: 'Pull',
+    // 兼容 alias
+    btnInstall: 'Pull',
+    pulling: 'Pulling…',
+    // 兼容 alias
+    installing: 'Pulling…',
     colName: 'name',
     colVersion: 'version',
     colAuthor: 'author',
@@ -368,12 +382,15 @@ export default {
     appliedTools: 'Applied: {tools}',
     appliedNone: 'No tools enabled',
     btnViewSkill: 'View skill',
-    btnReinstall: 'Reinstall',
+    // 2026-07-01 改:btnReinstall → btnRepull
+    btnRepull: 'Re-pull',
+    // 兼容 alias
+    btnReinstall: 'Re-pull',
     btnSourceSettings: 'Source settings',
-    // install dialog
-    installDialog: {
-      title: 'Install "{name}"',
-      scopeLabel: 'Install into:',
+    // pull dialog (2026-07-01 改:installDialog → pullDialog)
+    pullDialog: {
+      title: 'Pull "{name}" into skill-box',
+      scopeLabel: 'Pull into:',
       toolsLabel: 'Apply to tools:',
       selectAll: 'Select all',
       selectNone: 'Deselect all',
@@ -385,20 +402,22 @@ export default {
       groupHint: 'The skill will be saved under this group. Empty = root. Create a new group inline with the + button.',
       groupEmpty: 'Group path is required',
       btnNewGroup: 'New',
-      duplicateTitle: '"{name}" already exists locally',
+      duplicateTitle: '"{name}" already exists in skill-box',
       duplicateHint: 'A skill with the same name is already in the skillbox store. Pick a strategy:',
       btnOverwrite: 'Overwrite',
       btnSaveAs: 'Save as…',
       btnCancel: 'Cancel',
       saveAsHint: 'The new name will be saved as a separate skill in the store.',
       newNameLabel: 'Save as:',
-      confirm: 'Confirm install',
-      installing: 'Installing…',
-      applyPartial: 'Installed to local store, but {n} tools failed to apply: {tools}',
-      applyAllOk: 'Installed and applied to {n} tools',
-      applyAllFailed: 'Installed to local store, but all tool applications failed. Retry from the Skills page.',
+      confirm: 'Confirm pull',
+      pulling: 'Pulling…',
+      applyPartial: 'Pulled to local store, but {n} tools failed to apply: {tools}',
+      applyAllOk: 'Pulled and applied to {n} tools',
+      applyAllFailed: 'Pulled to local store, but all tool applications failed. Retry from the Skills page.',
       noToolsWarn: 'No tools selected: the skill will only be saved to the local store without enabling any tool directory.',
     },
+    // 兼容 alias(2026-07-01),会在文件末尾通过 Object.assign 同步。
+    installDialog: {},
     // source settings (P1)
     sourcesSettings: {
       title: 'Source settings',
@@ -418,6 +437,33 @@ export default {
     btnRescan: 'Rescan',
     btnRescanning: 'Scanning…',
     btnRescanTitle: 'Rescan all 5 adapters',
+    // 2026-07-01: dialog top tab switcher
+    tabs: {
+      scan: 'Scan tools',
+      local: 'From local',
+    },
+    // 2026-07-01: from-local import panel
+    local: {
+      title: 'Import from local',
+      desc: 'Pick a local folder or .zip; we read SKILL.md and land them into the Skill Box store.',
+      btnPickFolder: 'Pick folder',
+      btnPickFolderTitle: 'Pick a local directory; recursively read sub-dirs with SKILL.md',
+      btnPickZip: 'Pick .zip',
+      btnPickZipTitle: 'Pick a .zip; identify all SKILL.md inside',
+      webNoFolder: 'Web mode does not support folder picker; use .zip instead',
+      webNoFolderHint: 'Please use "Pick .zip" below',
+      importing: 'Importing…',
+      errNoPick: 'No file or folder selected',
+      errNoSKILLMD: 'No SKILL.md found: the folder or .zip must contain SKILL.md',
+      errImport: 'Import failed: {msg}',
+      okImport: 'Imported: {ok} ok, {failed} failed',
+      statOk: 'OK',
+      statErr: 'Failed',
+      statFound: 'Found',
+      resultTitle: 'Import result',
+      btnAgain: 'Import another',
+      btnDone: 'Done',
+    },
     steps: {
       status: 'Status',
       scan: 'Scan + select',
@@ -618,3 +664,12 @@ export default {
     confirmDeleteMsg: 'Delete "{name}"? This cannot be undone; the tool row and all its paths will be removed.',
   },
 }
+
+// 2026-07-01 增:市场域 install → pull 改名。installDialog 段在市场块内已声明为
+// alias 占位(空对象),这里把 pullDialog 同步给 installDialog,
+// 保证旧模板 t('market.installDialog.*') 仍能命中,新模板 t('market.pullDialog.*') 也可。
+if (messages.market && messages.market.pullDialog && messages.market.installDialog) {
+  Object.assign(messages.market.installDialog, messages.market.pullDialog)
+}
+
+export default messages

@@ -119,6 +119,17 @@ function createWebPlatform() {
           throw new Error(`pickFolder failed: ${e?.message || e}`)
         }
       },
+      // 2026-07-01 增:pickFile 弹系统文件选择对话框。
+      // Web 端无桌面 hook,后端返 501 → 这里抛"不支持",由调用方降级到
+      // <input type="file"> 走 /api/skillbox/onboarding/import-zip-bytes。
+      async pickFile() {
+        try {
+          const r = await http.post('/api/desktop/fs/pick-file', {})
+          return r?.path || ''
+        } catch (e) {
+          throw new Error(`pickFile failed: ${e?.message || e}`)
+        }
+      },
       // inspectProject 从目录路径推断 name / alias,供"导入项目"预填表单。
       async inspectProject(path) {
         try {
@@ -209,6 +220,12 @@ function createDesktopPlatform() {
       },
       async pickFolder() {
         const r = await http.post('/api/desktop/fs/pick-folder', {})
+        return r?.path || ''
+      },
+      // 2026-07-01 增:桌面端 pickFile,后端走 wails3 OpenFileDialog 绑定
+      // (wails3 v3 alpha.60 暂无该绑定,fsutil 端点先返 501,后续补齐)。
+      async pickFile() {
+        const r = await http.post('/api/desktop/fs/pick-file', {})
         return r?.path || ''
       },
       async inspectProject(path) {

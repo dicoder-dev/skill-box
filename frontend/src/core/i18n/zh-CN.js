@@ -9,7 +9,7 @@
 //   - onboarding.* OnboardingView
 //   - audit.*   AuditView
 
-export default {
+const messages = {
   app: {
     brand: 'Skill Box',
     closeSidebar: '关闭侧栏',
@@ -348,11 +348,22 @@ export default {
     errLoadSources: '源加载失败: {msg}',
     errLoadList: '列表加载失败: {msg}',
     errRefresh: '刷新失败: {msg}',
-    errInstall: '安装失败: {msg}',
-    okInstalled: '已装:{name} (v{version})',
-    installConfirm: '确定把 "{name}" 装到 {scope} 吗?',
-    btnInstall: '安装',
-    installing: '装中…',
+    // 2026-07-01 改:errInstall → errPull("安装" → "拉取")
+    errPull: '拉取失败: {msg}',
+    // 兼容 alias(2026-07-01)
+    errInstall: '拉取失败: {msg}',
+    okPulled: '已拉取:{name} (v{version})',
+    // 兼容 alias
+    okInstalled: '已拉取:{name} (v{version})',
+    pullConfirm: '确定把 "{name}" 拉取到 {scope} 吗?',
+    // 兼容 alias
+    installConfirm: '确定把 "{name}" 拉取到 {scope} 吗?',
+    btnPull: '拉取',
+    // 兼容 alias
+    btnInstall: '拉取',
+    pulling: '拉取中…',
+    // 兼容 alias
+    installing: '拉取中…',
     colName: '名称',
     colVersion: '版本',
     colAuthor: '作者',
@@ -371,12 +382,15 @@ export default {
     appliedTools: '已启用:{tools}',
     appliedNone: '未启用任何工具',
     btnViewSkill: '查看技能',
-    btnReinstall: '再装一次',
+    // 2026-07-01 改:btnReinstall → btnRepull
+    btnRepull: '再拉取一次',
+    // 兼容 alias
+    btnReinstall: '再拉取一次',
     btnSourceSettings: '源设置',
-    // 安装弹窗
-    installDialog: {
-      title: '安装「{name}」',
-      scopeLabel: '安装到:',
+    // 拉取弹窗(2026-07-01 改:installDialog → pullDialog)
+    pullDialog: {
+      title: '拉取「{name}」到 skill-box',
+      scopeLabel: '拉取到:',
       toolsLabel: '启用到工具:',
       selectAll: '全选',
       selectNone: '全不选',
@@ -388,20 +402,23 @@ export default {
       groupHint: '把 skill 落到这个分组下,空 = 根(未分组)。新分组可点 + 号现场创建。',
       groupEmpty: '分组路径不能为空',
       btnNewGroup: '新建',
-      duplicateTitle: '「{name}」已存在于本地',
+      duplicateTitle: '「{name}」已存在于 skill-box 库',
       duplicateHint: '同名 skill 已在 skillbox 库中。请选择处理方式:',
-      btnOverwrite: '覆盖安装',
+      btnOverwrite: '覆盖',
       btnSaveAs: '另存为',
       btnCancel: '取消',
       saveAsHint: '新名字会保存为 skillbox 库里的另一条 skill。',
       newNameLabel: '另存为:',
-      confirm: '确认安装',
-      installing: '安装中…',
-      applyPartial: '已装到本地库,但 {n} 个工具启用失败:{tools}',
-      applyAllOk: '已装并自动启用到 {n} 个工具',
-      applyAllFailed: '已装到本地库,但所有工具启用都失败,可在技能页手动重试',
+      confirm: '确认拉取',
+      pulling: '拉取中…',
+      applyPartial: '已拉到本地库,但 {n} 个工具启用失败:{tools}',
+      applyAllOk: '已拉取并自动启用到 {n} 个工具',
+      applyAllFailed: '已拉到本地库,但所有工具启用都失败,可在技能页手动重试',
       noToolsWarn: '未勾选任何工具:skill 只会写盘到本地,不会自动启用到任何工具目录。',
     },
+    // 兼容 alias(2026-07-01),所有键都映射到 pullDialog。
+    // 前端模板已切到 pullDialog,这里留 alias 兜底,后续清理时整段删除即可。
+    installDialog: {}, // 占位(实际值在下方用 Object.assign 同步)
     // 源设置 (P1)
     sourcesSettings: {
       title: '源设置',
@@ -421,6 +438,33 @@ export default {
     btnRescan: '重新扫描',
     btnRescanning: '扫描中…',
     btnRescanTitle: '重新扫描 5 个 adapter',
+    // 2026-07-01 增:弹窗顶部 tab 切换(扫工具 vs 从本地导入)
+    tabs: {
+      scan: '扫描工具',
+      local: '从本地导入',
+    },
+    // 2026-07-01 增:从本地 zip / 文件夹导入面板
+    local: {
+      title: '从本地导入',
+      desc: '从本地的文件夹或 zip 压缩包里读取 SKILL.md,直接落地到 Skill Box 的 store。',
+      btnPickFolder: '选择文件夹',
+      btnPickFolderTitle: '选一个本地目录,递归读取含 SKILL.md 的子目录',
+      btnPickZip: '选择 zip 压缩包',
+      btnPickZipTitle: '选一个 .zip 文件,解压后识别所有 SKILL.md',
+      webNoFolder: 'Web 端不支持选文件夹,请用 zip',
+      webNoFolderHint: '请用下方"选择 zip 压缩包"按钮',
+      importing: '导入中…',
+      errNoPick: '未选择任何文件/目录',
+      errNoSKILLMD: '未找到 SKILL.md 文件:目录或 zip 内必须存在 SKILL.md',
+      errImport: '导入失败:{msg}',
+      okImport: '导入完成:成功 {ok} 个,失败 {failed} 个',
+      statOk: '成功',
+      statErr: '失败',
+      statFound: '命中',
+      resultTitle: '导入结果',
+      btnAgain: '再导一次',
+      btnDone: '完成',
+    },
     steps: {
       status: '查看状态',
       scan: '扫描 + 勾选',
@@ -621,3 +665,13 @@ export default {
     confirmDeleteMsg: '确定删除「{name}」吗?该操作不可恢复,工具表行 + 全部 path 都会一并删除。',
   },
 }
+
+// 2026-07-01 增:市场域 install → pull 改名。installDialog 段在市场块内已声明为
+// alias 占位(空对象),这里把 pullDialog 同步给 installDialog,
+// 保证旧模板 t('market.installDialog.*') 仍能命中,新模板 t('market.pullDialog.*') 也可。
+// 后续如果 installDialog 真的不再被任何模板引用,可以把空占位整段删掉。
+if (messages.market && messages.market.pullDialog && messages.market.installDialog) {
+  Object.assign(messages.market.installDialog, messages.market.pullDialog)
+}
+
+export default messages
