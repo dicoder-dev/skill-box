@@ -272,7 +272,7 @@ onMounted(reload)
     <!-- 页面头部 -->
     <header class="view-header">
       <div class="view-title">
-        <div class="view-icon view-icon-purple">
+        <div class="view-icon view-icon-amber">
           <Icon icon="mdi:folder-multiple-outline" width="24" height="24" />
         </div>
         <div>
@@ -612,13 +612,38 @@ onMounted(reload)
 
 <style scoped>
 .projects-view {
-  max-width: 1100px;
-  margin: 0 auto;
+  /* 占满 content-area(与 MarketView / ToolsView 一致) */
+  width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
 }
 
-/* 页面头部 */
+/* ===== 项目主题:Amber Workshop(独立作用域变量) =====
+   与 ToolsView 的 Emerald Workshop、MarketView 的 Sky→Cyan 形成区分;
+   amber/orange 暖色调,语义贴合"项目目录 / 工作空间"。 */
+.projects-view {
+  /* 主色:amber-500(暖橙,代表"项目 / 文件夹") */
+  --prj-primary: #f59e0b;
+  --prj-primary-hover: #d97706;
+  /* 强调:orange-500(更红一点的橙,做渐变收尾) */
+  --prj-accent: #f97316;
+  /* 派生浅底/边/字 */
+  --prj-bg: #fffbeb;          /* amber-50 */
+  --prj-bg-strong: #fef3c7;   /* amber-100 */
+  --prj-border: #fde68a;      /* amber-200 */
+  --prj-text: #92400e;        /* amber-800 */
+}
+:global(html.dark) .projects-view {
+  --prj-primary: #fbbf24;     /* amber-400 提亮 */
+  --prj-primary-hover: #fcd34d; /* amber-300 */
+  --prj-accent: #fb923c;      /* orange-400 */
+  --prj-bg: #451a03;          /* amber-950 */
+  --prj-bg-strong: #78350f;   /* amber-900 */
+  --prj-border: #b45309;      /* amber-700 */
+  --prj-text: #fde68a;        /* amber-200 */
+}
+
+/* ===== 页面头部 ===== */
 .view-header {
   margin-bottom: 24px;
 }
@@ -641,8 +666,11 @@ onMounted(reload)
   flex-shrink: 0;
 }
 
-.view-icon-purple {
-  background: var(--text-dim);
+.view-icon-amber {
+  /* 主题色块:amber→orange 渐变 + 发光阴影 */
+  background: linear-gradient(135deg, var(--prj-primary) 0%, var(--prj-accent) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--prj-primary) 40%, transparent);
 }
 
 .view-title h1 {
@@ -664,9 +692,31 @@ onMounted(reload)
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* 工具栏右侧:把 CTA 推靠右,与 ToolsView 风格统一 */
+.toolbar > .primary {
+  margin-left: auto;
+}
+
+/* "导入项目"按钮:amber→orange 渐变 CTA,与 ToolsView 的新建按钮风格对齐 */
+.toolbar > button.primary {
+  background: linear-gradient(135deg, var(--prj-primary) 0%, var(--prj-accent) 100%);
+  color: #ffffff;
+  border-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--prj-primary) 30%, transparent);
+}
+.toolbar > button.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--prj-primary-hover) 0%, var(--prj-accent) 100%);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--prj-primary) 45%, transparent);
 }
 
 .search-box {
@@ -787,7 +837,7 @@ onMounted(reload)
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  color: var(--primary);
+  color: var(--prj-primary);
   font-weight: 400;
 }
 
@@ -835,13 +885,16 @@ onMounted(reload)
   padding: 14px;
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--prj-primary) 25%, transparent);
   border-radius: var(--radius);
   position: relative;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .project-card:hover {
-  border-color: var(--text-faint);
+  /* hover 时主题色淡边 + 轻微抬起,与 ToolsView 风格统一 */
+  border-color: color-mix(in srgb, var(--prj-primary) 35%, var(--border));
+  border-left-color: var(--prj-primary);
   box-shadow: var(--shadow-card);
 }
 
@@ -872,8 +925,9 @@ onMounted(reload)
 
 .project-card-alias {
   font-size: 11px;
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--prj-bg);
+  color: var(--prj-text);
+  border: 1px solid var(--prj-border);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
@@ -904,11 +958,11 @@ onMounted(reload)
 }
 /* Finder 图标:hover 显主题色 */
 .action-icon-finder {
-  color: var(--primary);
+  color: var(--prj-primary);
 }
 .action-icon-finder:hover {
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--prj-bg);
+  color: var(--prj-primary-hover);
 }
 /* 编辑图标:hover 用中性底色 */
 .action-icon-edit:hover {
@@ -991,9 +1045,9 @@ onMounted(reload)
   padding: 3px 4px 3px 8px;
   font-size: 11px;
   font-weight: 500;
-  background: var(--primary-dim);
-  color: var(--primary);
-  border: 1px solid transparent;
+  background: var(--prj-bg);
+  color: var(--prj-text);
+  border: 1px solid var(--prj-border);
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1001,7 +1055,9 @@ onMounted(reload)
 }
 
 .tool-chip:hover {
-  border-color: var(--primary);
+  border-color: var(--prj-primary);
+  color: var(--prj-primary-hover);
+  background: var(--prj-bg-strong);
 }
 
 .chip-label {
@@ -1009,8 +1065,8 @@ onMounted(reload)
 }
 
 .chip-count {
-  background: var(--primary);
-  color: var(--bg-card);
+  background: linear-gradient(135deg, var(--prj-primary) 0%, var(--prj-accent) 100%);
+  color: #ffffff;
   border-radius: 999px;
   padding: 0 6px;
   font-size: 10px;
