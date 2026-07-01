@@ -351,9 +351,10 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* 应用容器 */
+/* 应用容器 - 锁定视口高度,内部各自滚动,
+   避免内容多时撑高外层导致 sticky 侧栏跟着滚 */
 .app-container {
-  @apply flex min-h-screen;
+  @apply flex h-screen overflow-hidden;
   background: var(--bg);
   color: var(--text);
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -364,7 +365,11 @@ onUnmounted(() => {
    ============================================ */
 .sidebar {
   width: 260px;
-  position: relative;
+  flex-shrink: 0;            /* flex 容器里不被压窄,保持 sidebarWidth 给的宽度 */
+  align-self: stretch;        /* 占满父容器(app-container)高度 */
+  position: sticky;           /* 相对 app-container 锁定,不再跟随内容滚 */
+  top: 0;
+  height: 100vh;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-sidebar);
   box-shadow: var(--shadow-sidebar);
@@ -681,10 +686,10 @@ onUnmounted(() => {
 .stat-badge-emerald :deep(.iconify),
 .stat-badge-emerald strong { color: var(--accent-emerald); }
 
-/* 内容区域 - 不强制 overflow:auto,让内部子 view 自己决定滚不滚;
-   内部 .skills-layout 用 calc(100vh - topbar) 自取一屏高度 */
+/* 内容区域 - 内部滚动,让 sticky 侧栏相对 app-container 锁定
+   而不跟随 body/html 一起滚 */
 .content-area {
-  @apply flex-1 p-5;
+  @apply flex-1 p-5 overflow-y-auto;
   min-height: 0;
 }
 
