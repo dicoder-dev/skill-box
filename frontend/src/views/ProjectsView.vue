@@ -841,10 +841,13 @@ onMounted(reload)
   font-weight: 400;
 }
 
-/* 路径输入 + 重新选择按钮 */
+/* 路径输入 + 重新选择按钮:
+   - align-items: center 让 input 和 button 顶部/底部自然对齐(避免 stretch
+     时 button 高度跟着 input 走,内部 svg 视觉中心反而偏离)
+   - gap: 6px 保持按钮和输入框之间留 6px 间距 */
 .input-with-action {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 6px;
 }
 
@@ -857,8 +860,16 @@ onMounted(reload)
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: 35px;          /* 跟 input 内容+padding 后的视觉高度一致,确保同一水平线 */
   padding: 0 10px;
   flex-shrink: 0;
+}
+
+/* input 和 button 等高对齐(button 高度固定为 35px,跟 input padding+font 一致),
+   按钮内 svg 用 flex 自然居中。mdi folder-search 图标在 24×24 viewBox 内视觉中心
+   几乎就是几何中心(diff ≈ -0.3),不需要做 top 偏移。 */
+.icon-btn > svg {
+  display: block;
 }
 
 .spin {
