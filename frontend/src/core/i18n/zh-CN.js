@@ -417,6 +417,9 @@ const messages = {
       groupHint: '把 skill 落到这个分组下,空 = 根(未分组)。新分组可点 + 号现场创建。',
       groupEmpty: '分组路径不能为空',
       btnNewGroup: '新建',
+      // 2026-07-01 重构:移除 tools 多选,改为信息条(自动启用 5 个工具)
+      applyToTitle: '拉取后自动启用到本机全部 5 个工具:',
+      applyToHint: '如需关闭某个工具,可在「技能」页单独调整。',
       duplicateTitle: '「{name}」已存在于 skill-box 库',
       duplicateHint: '同名 skill 已在 skillbox 库中。请选择处理方式:',
       btnOverwrite: '覆盖',

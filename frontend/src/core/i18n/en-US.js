@@ -416,6 +416,9 @@ const messages = {
       groupHint: 'The skill will be saved under this group. Empty = root. Create a new group inline with the + button.',
       groupEmpty: 'Group path is required',
       btnNewGroup: 'New',
+      // 2026-07-01 refactor: remove tool multi-select, show read-only info instead
+      applyToTitle: 'After pull, will be auto-applied to all 5 tools on this machine:',
+      applyToHint: 'Disable individual tools later from the Skills page if needed.',
       duplicateTitle: '"{name}" already exists in skill-box',
       duplicateHint: 'A skill with the same name is already in the skillbox store. Pick a strategy:',
       btnOverwrite: 'Overwrite',

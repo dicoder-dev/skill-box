@@ -1,21 +1,20 @@
 <script setup>
-// MarketPullConfirm.vue - 三方市场"拉取"弹窗(2026-06-30 增;06-30 二改;2026-07-01 改名)。
+// MarketPullConfirm.vue - 三方市场"拉取"弹窗(2026-07-01 重构)。
 //
-// 复用 frontend/src/components/Modal.vue。三态:
-//   - 未冲突:scope 选择 + 分组选择 + tools 多选(默认全不勾) + 确认/取消
+// 复用 frontend/src/components/Modal.vue。两态:
+//   - 未冲突:scope 选择 + 分组选择 + 「将自动启用到」只读信息 + 确认/取消
 //   - 冲突:三按钮(覆盖 / 另存为 / 取消)
 //     "另存为" 展开一个 input,前端自动生成候选 name-2 → name-3 ...
 //
-// 2026-06-30 二改:
-//   - 默认 selectedTools = [] (用户主动勾选,不再默认全选)
-//   - 加 group_path 选择:从 useSkillTreeStore().tree 派生 option(optgroup 缩进展示嵌套),
-//     配合"新建分组"按钮可 inline 创建
-//   - 注意:group_path 修改的是 Manifest.GroupPath,store 落子目录;
+// 2026-07-01 重构(本版本):
+//   - 移除 tools 多选 + selectAll/selectNone:拉取时统一自动启用到本机全部 5 个工具
+//     (skilladapter.AllTools = codex/claude/opencode/cursor/trae),
+//     仍可在「技能」页按需关闭;原本"勾选工具"对三方市场这个场景收益不大,徒增噪音。
+//   - 弹窗整体卡片化、分区清晰:大号头部 + 描述卡 + 重复检测 + 作用域(segment control) +
+//     分组(行内 select + 按钮) + 「将自动启用到」信息条 + footer 大按钮。
+//   - 所有按钮 inline-flex + align-items: center + gap,图标文字水平对齐。
 //
-// 2026-07-01 改名:MarketInstallConfirm → MarketPullConfirm。"拉取"对应"从三方源
-// 拿到 skill-box 统一管理",比"安装"更准确。
-//
-// 用法:
+// 用法(未变):
 //   <MarketPullConfirm
 //     :item="marketSkill"
 //     :installed="market.installed"
@@ -30,6 +29,10 @@ import { Icon } from '@iconify/vue'
 import Modal from '@/components/Modal.vue'
 import { useSkillTreeStore } from '@/core/store/skill-tree'
 import { createGroup as apiCreateGroup } from '@/api/skillbox/skills'
+
+// 拉取时默认应用到的全部工具(与后端 skilladapter.AllTools 对齐)。
+// 顺序与后端定义保持一致,展示稳定。
+const ALL_TOOLS = ['codex', 'claude', 'opencode', 'cursor', 'trae']
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -46,9 +49,7 @@ const skillTree = useSkillTreeStore()
 // 状态
 const scope = ref('global') // global / project
 const projectId = ref(0)
-// 2026-06-30 二改:默认全不勾,让用户主动选
-const selectedTools = ref([])
-// 2026-06-30 增:分组路径(空 = 根)
+// 分组路径(空 = 根)
 const groupPath = ref('')
 const isDuplicate = computed(() => !!props.item && !!props.installed?.[props.item.name])
 
@@ -87,7 +88,7 @@ watch(
   () => props.item,
   (it) => {
     if (!it) return
-    strategy.value = isDuplicate.value ? 'overwrite' : 'overwrite'
+    strategy.value = 'overwrite'
     // 自动生成候选名
     let candidate = `${it.name}-2`
     let n = 2
@@ -96,11 +97,9 @@ watch(
       candidate = `${it.name}-${n}`
     }
     newName.value = candidate
-    // 重置 scope/tools/group
+    // 重置 scope/group
     scope.value = 'global'
     projectId.value = 0
-    // 2026-06-30 二改:默认全不勾
-    selectedTools.value = []
     groupPath.value = ''
     formError.value = ''
     newGroupOpen.value = false
@@ -121,23 +120,12 @@ const canConfirm = computed(() => {
   if (!props.item) return false
   if (isDuplicate.value && strategy.value === 'saveAs' && !newName.value.trim()) return false
   if (scope.value === 'project' && !projectId.value) return false
-  if (selectedTools.value.length === 0) return false
   return true
 })
 
-function toggleTool(tool) {
-  if (selectedTools.value.includes(tool)) {
-    selectedTools.value = selectedTools.value.filter((x) => x !== tool)
-  } else {
-    selectedTools.value = [...selectedTools.value, tool]
-  }
-}
-
-function selectAll() {
-  selectedTools.value = ['codex', 'claude', 'opencode', 'cursor', 'trae']
-}
-function deselectAll() {
-  selectedTools.value = []
+function setScope(v) {
+  scope.value = v
+  if (v === 'global') projectId.value = 0
 }
 
 function close() {
@@ -188,7 +176,9 @@ function onConfirm() {
     remoteId: props.item.remote_id,
     scope: scope.value,
     projectId: scope.value === 'project' ? projectId.value : 0,
-    tools: [...selectedTools.value],
+    // 2026-07-01 重构:统一传 5 个工具,移除 UI 上的勾选交互。
+    // 后端 PullV2 在 tools=[] 时只写盘不 apply,这里必须显式传非空数组。
+    tools: [...ALL_TOOLS],
     finalName: finalName.value,
     groupPath: groupPath.value || '',
   })
@@ -215,20 +205,29 @@ onMounted(() => {
     </template>
 
     <div v-if="item" class="pull-form">
-      <!-- 描述 -->
-      <p v-if="item.description" class="pull-desc">{{ item.description }}</p>
+      <!-- 描述卡 -->
+      <p v-if="item.description" class="pull-desc">
+        <Icon icon="mdi:text-box-outline" width="14" height="14" class="pull-desc-icon" />
+        <span>{{ item.description }}</span>
+      </p>
 
-      <!-- 重复检测提示 -->
-      <div v-if="isDuplicate" class="dup-warn">
-        <div class="dup-title">
-          <Icon icon="mdi:alert-outline" width="16" height="16" />
-          {{ t('market.pullDialog.duplicateTitle', { name: item.name }) }}
+      <!-- 重复检测卡片 -->
+      <div v-if="isDuplicate" class="dup-card">
+        <div class="dup-head">
+          <div class="dup-icon">
+            <Icon icon="mdi:alert-octagon-outline" width="16" height="16" />
+          </div>
+          <div class="dup-text">
+            <div class="dup-title">
+              {{ t('market.pullDialog.duplicateTitle', { name: item.name }) }}
+            </div>
+            <div class="dup-hint">{{ t('market.pullDialog.duplicateHint') }}</div>
+          </div>
         </div>
-        <div class="dup-hint">{{ t('market.pullDialog.duplicateHint') }}</div>
         <div class="dup-actions">
           <button
             type="button"
-            :class="['dup-btn', { active: strategy === 'overwrite' }]"
+            :class="['seg-btn', { active: strategy === 'overwrite' }]"
             @click="strategy = 'overwrite'"
           >
             <Icon icon="mdi:content-save-outline" width="14" height="14" />
@@ -236,7 +235,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            :class="['dup-btn', { active: strategy === 'saveAs' }]"
+            :class="['seg-btn', { active: strategy === 'saveAs' }]"
             @click="strategy = 'saveAs'"
           >
             <Icon icon="mdi:content-copy" width="14" height="14" />
@@ -245,36 +244,53 @@ onMounted(() => {
         </div>
         <div v-if="strategy === 'saveAs'" class="dup-saveas">
           <label class="saveas-label">{{ t('market.pullDialog.newNameLabel') }}</label>
-          <input v-model="newName" type="text" class="saveas-input" :placeholder="item.name + '-2'" />
+          <input
+            v-model="newName"
+            type="text"
+            class="saveas-input"
+            :placeholder="item.name + '-2'"
+          />
           <p class="saveas-hint">{{ t('market.pullDialog.saveAsHint') }}</p>
         </div>
       </div>
 
-      <!-- scope 选择 -->
-      <div class="form-row">
-        <label class="form-label">{{ t('market.pullDialog.scopeLabel') }}</label>
-        <div class="form-controls">
-          <label class="radio">
-            <input v-model="scope" type="radio" value="global" />
-            <span>{{ t('market.scopeGlobal') }}</span>
-          </label>
-          <label class="radio">
-            <input v-model="scope" type="radio" value="project" />
-            <span>{{ t('market.scopeProject') }}</span>
-          </label>
-          <select v-if="scope === 'project'" v-model="projectId" class="form-select">
-            <option :value="0" disabled>{{ t('market.projectPlaceholder') }}</option>
-            <option v-for="p in projects" :key="p.id" :value="p.id">
-              {{ p.name || p.alias || ('#' + p.id) }}
-            </option>
-          </select>
+      <!-- 作用域(segment control 风格) -->
+      <div class="field">
+        <label class="field-label">{{ t('market.pullDialog.scopeLabel') }}</label>
+        <div class="scope-seg">
+          <button
+            type="button"
+            :class="['seg-btn flex', { active: scope === 'global' }]"
+            @click="setScope('global')"
+          >
+            <Icon icon="mdi:earth" width="14" height="14" />
+            {{ t('market.scopeGlobal') }}
+          </button>
+          <button
+            type="button"
+            :class="['seg-btn flex', { active: scope === 'project' }]"
+            @click="setScope('project')"
+          >
+            <Icon icon="mdi:folder-account-outline" width="14" height="14" />
+            {{ t('market.scopeProject') }}
+          </button>
         </div>
+        <select
+          v-if="scope === 'project'"
+          v-model="projectId"
+          class="form-select mt"
+        >
+          <option :value="0" disabled>{{ t('market.projectPlaceholder') }}</option>
+          <option v-for="p in projects" :key="p.id" :value="p.id">
+            {{ p.name || p.alias || ('#' + p.id) }}
+          </option>
+        </select>
       </div>
 
-      <!-- 分组选择 (2026-06-30 增) -->
-      <div class="form-row">
-        <label class="form-label">{{ t('market.pullDialog.groupLabel') }}</label>
-        <div class="form-controls">
+      <!-- 分组 -->
+      <div class="field">
+        <label class="field-label">{{ t('market.pullDialog.groupLabel') }}</label>
+        <div class="group-row">
           <select v-model="groupPath" class="form-select">
             <option value="">{{ t('market.pullDialog.groupNone') }}</option>
             <option
@@ -285,7 +301,7 @@ onMounted(() => {
           </select>
           <button
             type="button"
-            class="ghost sm"
+            class="ghost sm inline-flex"
             :title="t('market.pullDialog.btnNewGroup')"
             @click="newGroupOpen = !newGroupOpen"
           >
@@ -301,10 +317,19 @@ onMounted(() => {
             :placeholder="t('market.pullDialog.groupPlaceholder')"
             @keyup.enter="createNewGroup"
           />
-          <button type="button" class="primary sm" :disabled="!newGroupInput.trim()" @click="createNewGroup">
+          <button
+            type="button"
+            class="primary sm inline-flex"
+            :disabled="!newGroupInput.trim()"
+            @click="createNewGroup"
+          >
             <Icon icon="mdi:check" width="12" height="12" />
           </button>
-          <button type="button" class="ghost sm" @click="newGroupOpen = false; newGroupInput = ''">
+          <button
+            type="button"
+            class="ghost sm inline-flex"
+            @click="newGroupOpen = false; newGroupInput = ''"
+          >
             <Icon icon="mdi:close" width="12" height="12" />
           </button>
         </div>
@@ -312,29 +337,17 @@ onMounted(() => {
         <p v-else class="form-hint">{{ t('market.pullDialog.groupHint') }}</p>
       </div>
 
-      <!-- tools 多选(2026-06-30 改:默认空) -->
-      <div class="form-row">
-        <label class="form-label">{{ t('market.pullDialog.toolsLabel') }}</label>
-        <div class="form-controls-col">
-          <div class="tools-list">
-            <label v-for="tool in ['codex', 'claude', 'opencode', 'cursor', 'trae']" :key="tool" class="tool-chip">
-              <input
-                type="checkbox"
-                :checked="selectedTools.includes(tool)"
-                @change="toggleTool(tool)"
-              />
-              <span>{{ tool }}</span>
-            </label>
+      <!-- 「将自动启用到」信息条(2026-07-01 重构:替代原多选) -->
+      <div class="apply-info">
+        <div class="apply-info-icon">
+          <Icon icon="mdi:rocket-launch-outline" width="14" height="14" />
+        </div>
+        <div class="apply-info-text">
+          <div class="apply-info-title">{{ t('market.pullDialog.applyToTitle') }}</div>
+          <div class="apply-info-tools">
+            <span v-for="tool in ALL_TOOLS" :key="tool" class="tool-badge">{{ tool }}</span>
           </div>
-          <div class="tools-actions">
-            <button type="button" class="ghost sm" @click="selectAll">
-              {{ t('market.pullDialog.selectAll') }}
-            </button>
-            <button type="button" class="ghost sm" @click="deselectAll">
-              {{ t('market.pullDialog.selectNone') }}
-            </button>
-          </div>
-          <p class="form-hint">{{ t('market.pullDialog.toolsHint') }}</p>
+          <div class="apply-info-hint">{{ t('market.pullDialog.applyToHint') }}</div>
         </div>
       </div>
 
@@ -342,10 +355,16 @@ onMounted(() => {
     </div>
 
     <template #footer>
-      <button type="button" class="ghost" :disabled="submitting" @click="close">
+      <button type="button" class="ghost inline-flex" :disabled="submitting" @click="close">
+        <Icon icon="mdi:close" width="14" height="14" />
         {{ t('market.pullDialog.btnCancel') }}
       </button>
-      <button type="button" class="primary" :disabled="!canConfirm || submitting" @click="onConfirm">
+      <button
+        type="button"
+        class="primary inline-flex"
+        :disabled="!canConfirm || submitting"
+        @click="onConfirm"
+      >
         <span v-if="submitting" class="spinner"></span>
         <Icon v-else icon="mdi:download" width="14" height="14" />
         {{ submitting ? t('market.pullDialog.pulling') : t('market.pullDialog.confirm') }}
@@ -358,83 +377,86 @@ onMounted(() => {
 .pull-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   font-size: 13px;
 }
 
+/* 描述卡 */
 .pull-desc {
   margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   color: var(--text-dim);
-  line-height: 1.5;
+  line-height: 1.55;
   padding: 10px 12px;
   background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 12px;
 }
+.pull-desc-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-faint);
+}
 
-/* 重复检测提示 */
-.dup-warn {
+/* 重复检测卡片(更醒目) */
+.dup-card {
   border: 1px solid var(--warning);
   background: var(--warning-dim);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.dup-title {
+.dup-head {
   display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.dup-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  background: var(--warning);
+  color: var(--bg-card);
+  border-radius: 50%;
+}
+.dup-text {
+  flex: 1;
+  min-width: 0;
+}
+.dup-title {
   font-weight: 600;
   color: var(--warning);
   font-size: 13px;
+  line-height: 1.4;
 }
-
 .dup-hint {
   color: var(--text-dim);
   font-size: 12px;
   line-height: 1.5;
+  margin-top: 2px;
 }
 
 .dup-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.dup-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 3px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-dim);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
 }
-
-.dup-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.dup-btn.active {
-  background: var(--warning);
-  color: var(--bg-card);
-  border-color: var(--warning);
-}
-
 .dup-saveas {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: 6px;
 }
 
 .saveas-label {
@@ -442,15 +464,19 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-dim);
 }
-
 .saveas-input {
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-card);
+  color: var(--text);
 }
-
+.saveas-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
 .saveas-hint {
   margin: 0;
   font-size: 11px;
@@ -458,35 +484,62 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-/* 表单行 */
-.form-row {
+/* 通用 field */
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-
-.form-label {
+.field-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
 }
 
-.form-controls {
-  display: flex;
+/* segment control(作用域) */
+.scope-seg {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  gap: 2px;
+}
+.seg-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.form-controls-col {
-  display: flex;
-  flex-direction: column;
+  justify-content: center;
   gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.seg-btn:hover:not(.active) {
+  background: var(--bg-card);
+  color: var(--text);
+}
+.seg-btn.active {
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.seg-btn.flex {
+  flex: 1;
 }
 
+/* 表单控件 */
 .form-select,
 .form-input {
-  padding: 6px 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -495,52 +548,104 @@ onMounted(() => {
   color: var(--text);
   font-family: inherit;
 }
+.form-select {
+  flex: 1;
+  min-width: 0;
+}
+.form-select:focus,
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.mt {
+  margin-top: 4px;
+}
 
-.form-input {
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-create {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.group-create .form-input {
   flex: 1;
   min-width: 0;
 }
 
-.radio {
+/* 「将自动启用到」信息卡 */
+.apply-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--primary-dim, rgba(99, 102, 241, 0.08));
+  border: 1px solid var(--primary-border, rgba(99, 102, 241, 0.25));
+  border-radius: var(--radius);
+}
+.apply-info-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
+  justify-content: center;
+  background: var(--primary);
+  color: var(--bg-card);
+  border-radius: 50%;
+}
+.apply-info-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.apply-info-title {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text);
-  cursor: pointer;
 }
-
-.tools-list {
+.apply-info-tools {
   display: flex;
-  gap: 6px;
   flex-wrap: wrap;
+  gap: 4px;
 }
-
-.tool-chip {
+.tool-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
+  padding: 2px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--primary-border, rgba(99, 102, 241, 0.25));
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  font-family: 'JetBrains Mono', monospace;
+}
+.apply-info-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
 }
 
-.tool-chip input {
-  margin: 0;
-}
-
-.tools-actions {
-  display: flex;
-  gap: 6px;
-}
-
+/* 通用按钮尺寸 */
 button.sm {
-  padding: 4px 10px;
+  padding: 6px 10px;
   font-size: 12px;
+}
+
+/* footer 按钮覆盖全局 ghost / primary 透明 + 居中 */
+button.inline-flex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .form-hint {
@@ -549,11 +654,9 @@ button.sm {
   color: var(--text-faint);
   line-height: 1.4;
 }
-
 .form-hint-error {
   color: var(--danger);
 }
-
 .form-error {
   font-size: 12px;
   color: var(--danger);
@@ -562,24 +665,16 @@ button.sm {
   border-radius: var(--radius-sm);
 }
 
-/* 分组新建 inline */
-.group-create {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
 .spinner {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--bg-card);
+  border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  opacity: 0.7;
 }
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
