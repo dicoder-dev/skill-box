@@ -185,11 +185,11 @@ onMounted(async () => {
       </div>
 
       <div class="toolbar-right">
-        <button class="ghost" :disabled="tools.reloading" @click="onReload">
+        <button class="ghost with-icon" :disabled="tools.reloading" @click="onReload">
           <Icon icon="mdi:refresh" width="14" height="14" />
           {{ t('tools.btnReload') }}
         </button>
-        <button class="primary" @click="tools.openCreate()">
+        <button class="primary with-icon" @click="tools.openCreate()">
           <Icon icon="mdi:plus" width="14" height="14" />
           {{ t('tools.btnNew') }}
         </button>
@@ -274,7 +274,7 @@ onMounted(async () => {
           </span>
           <div class="tool-card-actions" @click.stop>
             <Icon
-              icon="mdi:pencil-outline"
+              icon="mdi:square-edit-outline"
               class="action-icon action-icon-edit"
               :title="t('tools.btnEdit')"
               width="14"
@@ -283,7 +283,7 @@ onMounted(async () => {
             />
             <Icon
               v-if="!t_item.is_system"
-              icon="mdi:delete-outline"
+              icon="mdi:trash-can"
               class="action-icon action-icon-danger"
               :title="t('common.delete')"
               width="14"
@@ -320,7 +320,7 @@ onMounted(async () => {
     >
       <template #title-icon>
         <Icon
-          :icon="tools.formMode === 'create' ? 'mdi:plus-box-outline' : 'mdi:pencil-outline'"
+          :icon="tools.formMode === 'create' ? 'mdi:plus-box' : 'mdi:square-edit-outline'"
           width="18"
           height="18"
         />
@@ -420,7 +420,7 @@ onMounted(async () => {
             <h4>{{ t('tools.paths.title') }}</h4>
             <button
               type="button"
-              class="ghost small"
+              class="add-path-btn with-icon"
               :disabled="tools.saving"
               @click="tools.addPathRow()"
             >
@@ -467,7 +467,7 @@ onMounted(async () => {
                       :title="t('tools.paths.pickFolder')"
                       @click="pickPath(p)"
                     >
-                      <Icon icon="mdi:folder-search-outline" width="14" height="14" />
+                      <Icon icon="mdi:folder-open" width="14" height="14" />
                     </button>
                   </div>
                 </td>
@@ -480,7 +480,7 @@ onMounted(async () => {
                 </td>
                 <td class="paths-action-cell">
                   <Icon
-                    icon="mdi:close"
+                    icon="mdi:trash-can"
                     class="action-icon action-icon-danger"
                     :title="t('common.delete')"
                     width="14"
@@ -500,7 +500,7 @@ onMounted(async () => {
       <template #footer>
         <button
           type="button"
-          class="ghost"
+          class="ghost with-icon"
           :disabled="tools.saving"
           @click="tools.closeForm()"
         >
@@ -509,7 +509,7 @@ onMounted(async () => {
         </button>
         <button
           type="button"
-          class="primary"
+          class="primary with-icon"
           :disabled="tools.saving"
           @click="onSubmitForm"
         >
@@ -553,7 +553,7 @@ onMounted(async () => {
           @click="onConfirmDelete"
         >
           <span v-if="tools.removing" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:delete-outline" width="14" height="14" />
+          <Icon v-else icon="mdi:trash-can" width="14" height="14" />
           {{ tools.removing ? t('common.processing') : t('common.delete') }}
         </button>
       </template>
@@ -1001,8 +1001,8 @@ onMounted(async () => {
 .switch {
   position: relative;
   display: inline-block;
-  width: 40px;
-  height: 22px;
+  width: 44px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -1012,6 +1012,8 @@ onMounted(async () => {
   height: 0;
 }
 
+/* 滑轨:未选用低饱和的深灰底 + 内阴影,有"关闭"的实感;
+   选用主题渐变 + 外发光,一眼能区分。 */
 .switch-slider {
   position: absolute;
   cursor: pointer;
@@ -1019,31 +1021,40 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--border);
-  transition: 0.2s;
-  border-radius: 22px;
+  background-color: #cbd5e1;            /* 明显灰(slate-300),和深色页面拉开 */
+  border: 1px solid #94a3b8;            /* slate-400 描边增加边界感 */
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 24px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
+/* 圆点:大一点、亮一点,带阴影在滑轨上"浮"起来 */
 .switch-slider::before {
   position: absolute;
   content: "";
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background-color: var(--bg-card);
-  transition: 0.2s;
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #ffffff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .switch input:checked + .switch-slider {
-  /* 开启时:teal→emerald 渐变(与卡片左侧条带呼应) */
+  /* 开启:teal→emerald 渐变 + 外发光,与卡片左侧条带呼应 */
   background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  border-color: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-primary) 25%, transparent),
+              inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .switch input:checked + .switch-slider::before {
-  transform: translateX(18px);
+  /* 圆点位移 18 → 22,使开/关状态位移更明显 */
+  transform: translate(22px, -50%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .switch input:disabled + .switch-slider {
@@ -1175,6 +1186,44 @@ onMounted(async () => {
 button.small {
   padding: 5px 10px;
   font-size: 12px;
+}
+
+/* 带图标的按钮:全局 button 默认 inline-block,svg 与文字按基线对齐会不齐。
+   这里统一改成 flex 居中,顺带带 6px gap 让图标和文字有呼吸感。 */
+button.with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+}
+button.with-icon :deep(svg) {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* paths-section 的"添加路径"按钮:表单内的主动作,做成醒目的浅主题色按钮。
+   选 button.add-path-btn(0,1,1)而不是 .add-path-btn(0,1,0),
+   让特异性压过全局 button 规则 —— 否则全局 button 的 background/color
+   会盖过这里,按钮看起来白底+深色文字。 */
+button.add-path-btn {
+  /* 浅主题色底 + 主题色文字:亮环境清晰,深色主题下也保留对比 */
+  background: var(--tool-bg);
+  border: 1px solid var(--tool-primary);
+  color: var(--tool-text);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tool-primary) 20%, transparent);
+}
+button.add-path-btn:hover:not(:disabled) {
+  /* hover:底色加深一档,文字颜色再深一档,border 不变 */
+  background: var(--tool-bg-strong);
+  border-color: var(--tool-primary-hover);
+  color: var(--tool-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--tool-primary) 35%, transparent);
 }
 
 .paths-table {
