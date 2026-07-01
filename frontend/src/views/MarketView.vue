@@ -130,7 +130,7 @@ onMounted(async () => {
     <!-- 页面头部 -->
     <header class="view-header">
       <div class="view-title">
-        <div class="view-icon view-icon-orange">
+        <div class="view-icon view-icon-market">
           <Icon icon="mdi:cart-outline" width="24" height="24" />
         </div>
         <div>
@@ -369,13 +369,38 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* ============================================
+   市场主题色 - Indigo Marketplace
+   只在 .market 作用域内生效,不影响其他 view
+   亮色: indigo-500 主色 / violet-500 渐变收尾
+   暗色: indigo-400 提亮,violet-400 收尾
+   ============================================ */
 .market {
+  --mkt-primary: #6366f1;       /* indigo-500 */
+  --mkt-primary-hover: #4f46e5; /* indigo-600 */
+  --mkt-accent: #8b5cf6;        /* violet-500 */
+  --mkt-bg: #eef2ff;            /* indigo-50 浅底 */
+  --mkt-bg-strong: #e0e7ff;     /* indigo-100 */
+  --mkt-border: #c7d2fe;        /* indigo-200 */
+  --mkt-text: #4338ca;          /* indigo-700 深字 */
+
   display: flex;
   flex-direction: column;
   height: 100%;                  /* 占满 content-area(已被 app-container 锁为视口高度) */
   width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
+}
+
+/* 暗黑模式:用更亮的 indigo-400,深底用 950-tint */
+:global(html.dark) .market {
+  --mkt-primary: #818cf8;       /* indigo-400 */
+  --mkt-primary-hover: #a5b4fc; /* indigo-300 */
+  --mkt-accent: #a78bfa;        /* violet-400 */
+  --mkt-bg: #1e1b4b;            /* indigo-950 */
+  --mkt-bg-strong: #312e81;     /* indigo-900 */
+  --mkt-border: #4338ca;        /* indigo-700 */
+  --mkt-text: #c7d2fe;          /* indigo-200 浅字 */
 }
 
 /* 页面头部 - flex 子项,不收缩不滚动 */
@@ -402,8 +427,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.view-icon-orange {
-  background: var(--text-dim);
+.view-icon-market {
+  background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--mkt-primary) 40%, transparent);
 }
 
 .view-title h1 {
@@ -523,28 +550,30 @@ onMounted(async () => {
 }
 
 .source-tab:hover:not(.active) {
-  background: var(--bg-hover);
-  border-color: var(--text-faint);
-  color: var(--text);
+  background: var(--mkt-bg);
+  border-color: var(--mkt-border);
+  color: var(--mkt-text);
 }
 
 .source-tab.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--bg-card);
+  background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
 }
 
 .source-type {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.95);
   text-transform: uppercase;
 }
 
 .source-tab:not(.active) .source-type {
-  background: var(--bg-subtle);
-  color: var(--text-faint);
+  background: var(--mkt-bg);
+  color: var(--mkt-text);
 }
 
 .source-empty {
@@ -615,19 +644,31 @@ onMounted(async () => {
 }
 
 .market-card:hover {
-  border-color: var(--text-faint);
+  border-color: color-mix(in srgb, var(--mkt-primary) 35%, var(--border));
   box-shadow: inset 4px 0 0 transparent, var(--shadow-card);
 }
 
-/* 2026-07-01 修:已安装/未安装用 inset box-shadow 显示左侧条带,
-   替代 border-left(避免被 border-radius 圆角切割导致不可见)。
-   inset shadow 不会被 border-radius 裁剪,边角清晰。 */
+/* 已安装卡片 - 翠绿左侧条带(成功语义保留) */
 .market-card.is-installed {
   box-shadow: inset 4px 0 0 var(--success);
 }
 
+/* 已安装卡片 hover - 保留翠绿条带 + 增强阴影 */
 .market-card.is-installed:hover {
   box-shadow: inset 4px 0 0 var(--success), var(--shadow-card);
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
+}
+
+/* 未安装卡片 - 靛蓝灰细条带,与市场主题呼应,不再单调纯透明 */
+.market-card:not(.is-installed) {
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--mkt-primary) 25%, transparent);
+}
+
+.market-card:not(.is-installed):hover {
+  box-shadow:
+    inset 4px 0 0 var(--mkt-primary),
+    var(--shadow-card);
+  border-color: var(--mkt-border);
 }
 
 .market-card-top {
@@ -643,9 +684,9 @@ onMounted(async () => {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--bg-subtle);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--mkt-bg);
+  color: var(--mkt-primary);
+  border: 1px solid var(--mkt-border);
   flex-shrink: 0;
 }
 
@@ -670,8 +711,8 @@ onMounted(async () => {
 .market-card-id {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--mkt-bg);
+  color: var(--mkt-text);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   align-self: flex-start;
@@ -778,8 +819,8 @@ onMounted(async () => {
 }
 
 .action-icon-view:hover {
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--mkt-bg);
+  color: var(--mkt-primary);
 }
 
 .action-icon-jump:hover {
@@ -793,18 +834,20 @@ onMounted(async () => {
   gap: 4px;
   padding: 5px 12px;
   font-size: 12px;
-  font-weight: 500;
-  background: var(--text);
-  border: 1px solid var(--text);
-  color: var(--bg-card);
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
+  border: 1px solid transparent;
+  color: #ffffff;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--mkt-primary) 30%, transparent);
   transition: all 0.15s ease;
 }
 
 .market-card-pull:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: linear-gradient(135deg, var(--mkt-primary-hover) 0%, var(--mkt-accent) 100%);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
+  transform: translateY(-1px);
 }
 
 /* 标签 chips(卡片里也用) */
