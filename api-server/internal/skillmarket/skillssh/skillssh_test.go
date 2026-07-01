@@ -10,6 +10,7 @@ import (
 )
 
 // fakeRT 复用 skillhub 的实现,这里 inline 简化。
+// 2026-07-01 改:支持 query string 匹配(为 keyword 透传测试服务)。
 type fakeRT struct {
 	responses map[string]fakeResp
 }
@@ -22,7 +23,7 @@ type fakeResp struct {
 
 func (f *fakeRT) RoundTrip(r *http.Request) (*http.Response, error) {
 	for pattern, resp := range f.responses {
-		if matchPath(r.URL.Path, pattern) {
+		if matchPathQuery(r.URL.Path, r.URL.RawQuery, pattern) {
 			return &http.Response{
 				StatusCode: resp.status,
 				Body:       io.NopCloser(bytes.NewReader([]byte(resp.body))),
@@ -46,6 +47,30 @@ func matchPath(path, pattern string) bool {
 		return strings.HasPrefix(path, pattern[:i])
 	}
 	return path == pattern
+}
+
+// matchPathQuery 2026-07-01 增:支持 query string 包含检查。
+// pattern 形如 "/search?q=react" 或 "/path" (后者忽略 query)。
+func matchPathQuery(path, query, pattern string) bool {
+	pat := pattern
+	patPath := pat
+	patQuery := ""
+	if i := strings.Index(pat, "?"); i >= 0 {
+		patPath = pat[:i]
+		patQuery = pat[i+1:]
+	}
+	if patPath != path {
+		return false
+	}
+	if patQuery == "" {
+		return true
+	}
+	for _, part := range strings.Split(patQuery, "&") {
+		if !strings.Contains(query, part) {
+			return false
+		}
+	}
+	return true
 }
 
 func firstNonEmptyRT(s ...string) string {
@@ -180,7 +205,7 @@ func TestDiscover_ParseFromHTML(t *testing.T) {
 		},
 	}}
 	a := NewWithClient(&http.Client{Transport: rt})
-	items, err := a.Discover(context.Background(), "https://stub")
+	items, err := a.Discover(context.Background(), "https://stub", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +229,7 @@ func TestDiscover_FallbackOnError(t *testing.T) {
 		"/": {status: 500, body: "boom"},
 	}}
 	a := NewWithClient(&http.Client{Transport: rt})
-	items, err := a.Discover(context.Background(), "https://stub")
+	items, err := a.Discover(context.Background(), "https://stub", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,5 +316,100 @@ func TestNewWithClient_NilFallsBack(t *testing.T) {
 	a := NewWithClient(nil)
 	if a == nil || a.httpClient == nil {
 		t.Error("nil client should fall back to default")
+	}
+}
+
+// --- 2026-07-01 增:keyword 透传测试 ---
+
+// TestDiscover_Keyword_Empty_HitsHomepage 空 keyword 走 GET /(同现状)。
+func TestDiscover_Keyword_Empty_HitsHomepage(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/": {
+			status: 200,
+			body: `<html><body>
+<div>vercel-labs/agent-skills@vercel-react-best-practices</div>
+<div>obra/superpowers@brainstorming</div>
+</body></html>`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d (%+v)", len(items), items)
+	}
+}
+
+// TestDiscover_Keyword_HitsSearch 验证非空 keyword 走 GET /search?q=xxx。
+func TestDiscover_Keyword_HitsSearch(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/search?q=brainstorming": {
+			status: 200,
+			body: `<html><body>
+<div>obra/superpowers@brainstorming</div>
+<div>obra/superpowers@writing-plans</div>
+</body></html>`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "brainstorming")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].RemoteID != "obra/superpowers@brainstorming" {
+		t.Fatalf("expected only brainstorming hit, got %+v", items)
+	}
+}
+
+// TestDiscover_Keyword_SearchEmpty_FallbackSubstring 搜索页 404 → 走 fallback + substring 过滤。
+func TestDiscover_Keyword_SearchEmpty_FallbackSubstring(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/search?q=react": {status: 404, body: "no search page"},
+		"/":               {status: 404, body: "no homepage"},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "react")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 期望:knownCatalogFallback 里有 react 命中的条目(react-best-practices 等)
+	hit := false
+	for _, it := range items {
+		if strings.Contains(strings.ToLower(it.RemoteID), "react") {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		t.Errorf("expected fallback substring match on 'react', got %+v", items)
+	}
+}
+
+// TestDiscover_Keyword_FilterItemsByKeyword 防御性:HTML 解析后做 substring 二次过滤。
+func TestDiscover_Keyword_FilterItemsByKeyword(t *testing.T) {
+	// mock /search?q=react 返一批条目,其中部分不含 react
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/search?q=react": {
+			status: 200,
+			body: `<html><body>
+<a href="/vercel-labs/agent-skills/vercel-react-best-practices">react</a>
+<a href="/ComposioHQ/awesome-claude-skills/code-explain">code-explain</a>
+<a href="/obra/superpowers/brainstorming">brainstorming</a>
+</body></html>`,
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	items, err := a.Discover(context.Background(), "https://stub", "react")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 二次过滤后,只剩含 react 的
+	for _, it := range items {
+		low := strings.ToLower(it.RemoteID)
+		if !strings.Contains(low, "react") {
+			t.Errorf("expected filter to remove %q", it.RemoteID)
+		}
 	}
 }

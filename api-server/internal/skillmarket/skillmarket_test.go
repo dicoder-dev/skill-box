@@ -29,7 +29,7 @@ type stubAdapter struct {
 func (s *stubAdapter) SourceID() string    { return s.id }
 func (s *stubAdapter) DisplayName() string { return s.display }
 func (s *stubAdapter) BaseURL() string     { return "https://stub" }
-func (s *stubAdapter) Discover(ctx context.Context, baseURL string) ([]skillmarket.MarketItem, error) {
+func (s *stubAdapter) Discover(ctx context.Context, baseURL, keyword string) ([]skillmarket.MarketItem, error) {
 	atomic.AddInt32(&s.discoverOK, 1)
 	return s.items, nil
 }
@@ -179,11 +179,13 @@ func matchPathRT(path, pattern string) bool {
 }
 
 // TestSkillHubAdapter_E2E_DiscoverDownload 走 mock transport 测一遍完整 Discover → Download 链路。
+//
+// 2026-07-01 改:对接新 API — Discover 走 /api/skills,Download 走单文件 fallback /api/v1/skills/{slug}/skill.md。
 func TestSkillHubAdapter_E2E_DiscoverDownload(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
-		"/api/v1/skills": {
+		"/api/skills": {
 			status: 200,
-			body:   `[{"id":"x","name":"X","version":"0.1.0"}]`,
+			body: `{"code":0,"data":{"skills":[{"slug":"x","name":"X","version":"0.1.0","description":"x","ownerName":"alice","tags":[],"homepage":"https://x","updated_at":1782878868630}],"total":1}}`,
 		},
 		"/api/v1/skills/x/skill.md": {
 			status: 200,
@@ -199,7 +201,7 @@ triggers: [x]
 		},
 	}}
 	ad := skillhub.NewWithClient(&http.Client{Transport: rt})
-	items, err := ad.Discover(context.Background(), "https://stub")
+	items, err := ad.Discover(context.Background(), "https://stub", "")
 	if err != nil {
 		t.Fatal(err)
 	}

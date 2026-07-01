@@ -3,6 +3,10 @@
 > 本文档基于 https://skillhub.cn 网站实际抓包分析得出
 > 抓包日期：2026-07-01
 > 所有接口均通过浏览器 Network 面板验证
+>
+> 2026-07-01:已对接 skill-box 适配器(`api-server/internal/skillmarket/skillhub/skillhub.go`),
+> 作为真实数据源替代旧 HTML 兜底。`Discover` 走 `/api/skills`(支持 keyword/sortBy/pageSize),
+> `Detail` 走 `/api/v1/skills/{slug}`(免鉴权,完整字段),`Download` 走 `/api/v1/download?slug=...` 302→COS zip。
 
 ---
 

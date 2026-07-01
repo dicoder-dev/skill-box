@@ -20,8 +20,13 @@ export function listMarketSkills(params = {}) {
   return http.get('/api/skillbox/market/skills', params)
 }
 
-export function refreshSource(sourceId) {
-  return http.post('/api/skillbox/market/refresh', { source_id: sourceId })
+// 触发三方源刷新(2026-07-01 改:支持 keyword 透传到三方源搜索)。
+// opts.keyword: 空 = 拉全量目录;非空 = 三方源搜索语义。
+export function refreshSource(sourceId, opts = {}) {
+  return http.post('/api/skillbox/market/refresh', {
+    source_id: sourceId,
+    keyword: opts.keyword || '',
+  })
 }
 
 // 旧 install 端点(2026-06-30 标 deprecated):只写盘不 apply。生产请改用 pullMarketSkillV2。

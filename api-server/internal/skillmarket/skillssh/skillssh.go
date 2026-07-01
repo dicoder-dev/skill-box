@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -81,9 +82,10 @@ type Adapter struct {
 }
 
 // New 构造 Adapter。
+// 2026-07-01 改:timeout 20s → 30s(与 skillhub 保持一致;真实页面 + search 页面解析更慢)。
 func New() *Adapter {
 	return &Adapter{
-		httpClient: &http.Client{Timeout: 20 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -117,17 +119,32 @@ func (a *Adapter) BaseURL() string     { return defaultBaseURL }
 // 2026-07-01 改:三段式 — 先抓 HTML,再跑两个解析器(老版 @ 文本 + 新版 href 链接),
 // 合并去重。两者都为空才走 knownCatalogFallback。修复之前只跑 owner@repo 正则
 // 拿不到新版目录的问题。
-func (a *Adapter) Discover(ctx context.Context, baseURL string) ([]skillmarket.MarketItem, error) {
+//
+// 2026-07-01 增:keyword 参数处理。
+//   - 空 keyword:走 GET /,解析首页
+//   - 非空 keyword:走 GET /search?q=<encoded> 解析搜索结果页(经验路径);
+//     拿不到或解析为空时,降级到 knownCatalogFallback + substring 过滤(remote_id/name 命中),
+//     保证 UI 不空白。
+func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skillmarket.MarketItem, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
-	url := strings.TrimRight(baseURL, "/") + "/"
-	body, err := a.fetchBody(ctx, url)
+	kw := strings.TrimSpace(keyword)
+
+	// 1) 抓 HTML
+	var targetURL string
+	if kw == "" {
+		targetURL = strings.TrimRight(baseURL, "/") + "/"
+	} else {
+		targetURL = strings.TrimRight(baseURL, "/") + "/search?q=" + url.QueryEscape(kw)
+	}
+	body, err := a.fetchBody(ctx, targetURL)
 	if err != nil {
 		logger.Warn("skillssh discover: %v; falling back to known catalog", err)
-		return parseCatalog(knownCatalogFallback, baseURL), nil
+		return filterCatalogByKeyword(knownCatalogFallback, baseURL, kw), nil
 	}
-	// 合并两个解析器:老版纯文本 owner/repo@skill + 新版 href 链接。
+
+	// 2) 合并两个解析器:老版纯文本 owner/repo@skill + 新版 href 链接。
 	// 任一有结果就用并集(去重 by RemoteID),不再只看 owner@repo。
 	seen := map[string]bool{}
 	out := make([]skillmarket.MarketItem, 0, 64)
@@ -142,8 +159,16 @@ func (a *Adapter) Discover(ctx context.Context, baseURL string) ([]skillmarket.M
 	}
 	add(parseOwnerRepoAtBody(body, baseURL))
 	add(parseHTMLLinks(body, baseURL))
+
+	// 3) 关键词二次过滤(防御解析器拿到但不含 kw 的条目;
+	//    例如首页目录被搜索引擎收录了无关词)
+	if kw != "" {
+		out = filterItemsByKeyword(out, kw)
+	}
+
+	// 4) HTML 解析为空 → 走 knownCatalogFallback + substring 过滤
 	if len(out) == 0 {
-		return parseCatalog(knownCatalogFallback, baseURL), nil
+		return filterCatalogByKeyword(knownCatalogFallback, baseURL, kw), nil
 	}
 	return out, nil
 }
@@ -371,6 +396,42 @@ func extractFirstParagraph(body string) string {
 		return line
 	}
 	return ""
+}
+
+// filterCatalogByKeyword 对 fallback 列表做 substring 匹配(case-insensitive)。
+//
+// 2026-07-01 增:keyword 透传到 fallback 时,按 name / remote_id 子串命中过滤;
+// 空 keyword = 全量。匹配为空时仍返回空切片(调用方已知道这是 fallback 状态)。
+func filterCatalogByKeyword(text, baseURL, kw string) []skillmarket.MarketItem {
+	base := parseCatalog(text, baseURL)
+	if kw == "" {
+		return base
+	}
+	out := make([]skillmarket.MarketItem, 0, len(base))
+	lk := strings.ToLower(kw)
+	for _, it := range base {
+		if strings.Contains(strings.ToLower(it.RemoteID), lk) ||
+			strings.Contains(strings.ToLower(it.Name), lk) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// filterItemsByKeyword 对真实 HTML 解析后的 items 做 substring 二次过滤。
+//
+// 2026-07-01 增:防御性 — 即使 HTML 解析器匹配到条目,业务上仍按 keyword 收敛,
+// 避免用户输入"react"却看到首页全部 30 条。
+func filterItemsByKeyword(items []skillmarket.MarketItem, kw string) []skillmarket.MarketItem {
+	lk := strings.ToLower(kw)
+	out := make([]skillmarket.MarketItem, 0, len(items))
+	for _, it := range items {
+		if strings.Contains(strings.ToLower(it.RemoteID), lk) ||
+			strings.Contains(strings.ToLower(it.Name), lk) {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // 注册到默认 registry。

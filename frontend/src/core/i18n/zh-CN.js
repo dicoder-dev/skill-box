@@ -343,6 +343,13 @@ const messages = {
     btnSearch: '搜索',
     btnRefresh: '刷新源',
     refreshing: '刷新中…',
+    // 2026-07-01 增:工具栏拆两个按钮,loading 互不冲突
+    btnRefreshAll: '拉取全部',
+    btnRefreshCurrent: '刷新当前搜索',
+    refreshingAll: '拉取全量中…',
+    refreshingCurrent: '刷新搜索中…',
+    errRefreshAll: '拉取全量失败: {msg}',
+    errRefreshCurrent: '刷新搜索失败: {msg}',
     noSources: '没有可用的源',
     lastRefresh: '上次刷新:拉取 {pulled} · 新增 {inserted} · 更新 {updated}',
     errLoadSources: '源加载失败: {msg}',

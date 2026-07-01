@@ -3,6 +3,10 @@
 > 本文档基于 https://www.skills.sh 网站实际抓包分析 + 官方 API 文档整理
 > 抓包日期：2026-07-01
 > Skills.sh 是 Vercel Labs 维护的 AI Agent Skills 目录网站
+>
+> 2026-07-01:已对接 skill-box 适配器(`api-server/internal/skillmarket/skillssh/skillssh.go`)。
+> 由于公共 API(`/api/audits/{page}`)字段缺 description/version/tags,实际仍走 HTML 解析(首页 + 搜索页),
+> 失败时降级到 knownCatalogFallback。`keyword` 透传到 `/search?q=`(经验路径,失败时子串过滤 fallback)。
 
 ---
 

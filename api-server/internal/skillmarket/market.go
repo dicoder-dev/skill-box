@@ -60,7 +60,10 @@ type RefreshResult struct {
 
 // RefreshFromSource 拉一个源(走 adapter.Discover),把结果 upsert 到 market_skills。
 // 同一 sourceID 短时间内并发触发会被 ignore(防止"刷新风暴")。
-func (o *Orchestrator) RefreshFromSource(ctx context.Context, sourceID uint) (*RefreshResult, error) {
+//
+// 2026-07-01 增:keyword 参数,透传到 adapter.Discover。三方源按自己的语义搜索;
+// 空 keyword = 拉全量目录(走 adapter 默认排序)。
+func (o *Orchestrator) RefreshFromSource(ctx context.Context, sourceID uint, keyword string) (*RefreshResult, error) {
 	if sourceID == 0 {
 		return nil, ErrSourceNotFound
 	}
@@ -95,7 +98,7 @@ func (o *Orchestrator) RefreshFromSource(ctx context.Context, sourceID uint) (*R
 		return res, fmt.Errorf("%w: type=%s", ErrSourceNotImpl, src.Type)
 	}
 	baseURL := resolveBaseFromConfig(src.ConfigJSON, ad.BaseURL())
-	items, derr := ad.Discover(ctx, baseURL)
+	items, derr := ad.Discover(ctx, baseURL, strings.TrimSpace(keyword))
 	if derr != nil {
 		res.FinishedAt = time.Now()
 		res.Error = derr.Error()

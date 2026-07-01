@@ -18,7 +18,9 @@ const appBus = inject('appBus', null)
 // 状态
 const error = computed(() => market.lastError)
 const loading = computed(() => market.loading)
-const refreshing = computed(() => market.refreshing)
+// 2026-07-01 改:refreshing 拆成 all / current 两个独立 flag,两个按钮 loading 互不冲突。
+const refreshingAll = computed(() => market.refreshingAll)
+const refreshingCurrent = computed(() => market.refreshingCurrent)
 
 // 列表
 const items = computed(() => market.skills)
@@ -45,12 +47,23 @@ function onSelectSource(id) {
   market.loadSkills()
 }
 
-async function onRefresh() {
+async function onRefreshAll() {
   try {
-    await market.refreshActive()
+    await market.refreshAll()
     toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh || {}) })
   } catch (e) {
-    toast.push({ type: 'error', message: t('market.errRefresh', { msg: e?.message || e }) })
+    toast.push({ type: 'error', message: t('market.errRefreshAll', { msg: e?.message || e }) })
+  }
+}
+
+async function onRefreshCurrent() {
+  // 先把输入框 keyword 推入 store(让 refreshCurrent 用它),再触发刷新
+  market.setKeyword(keyword.value)
+  try {
+    await market.refreshCurrent()
+    toast.push({ type: 'success', message: t('market.lastRefresh', market.lastRefresh || {}) })
+  } catch (e) {
+    toast.push({ type: 'error', message: t('market.errRefreshCurrent', { msg: e?.message || e }) })
   }
 }
 
@@ -164,10 +177,18 @@ onMounted(async () => {
             <Icon icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
           </button>
-          <button class="primary" :disabled="refreshing || !activeSourceId" @click="onRefresh">
-            <span v-if="refreshing" class="spinner"></span>
+          <!-- 2026-07-01 改:工具栏拆两个按钮,loading 互不冲突
+               - 「拉取全部」(ghost):keyword 强制空,即使搜索框有值
+               - 「刷新当前搜索」(primary):用搜索框当前 keyword 透传到三方源 -->
+          <button class="ghost" :disabled="refreshingAll || refreshingCurrent || !activeSourceId" @click="onRefreshAll">
+            <span v-if="refreshingAll" class="spinner"></span>
+            <Icon v-else icon="mdi:download-multiple" width="14" height="14" />
+            {{ refreshingAll ? t('market.refreshingAll') : t('market.btnRefreshAll') }}
+          </button>
+          <button class="primary" :disabled="refreshingAll || refreshingCurrent || !activeSourceId" @click="onRefreshCurrent">
+            <span v-if="refreshingCurrent" class="spinner"></span>
             <Icon v-else icon="mdi:refresh" width="14" height="14" />
-            {{ refreshing ? t('market.refreshing') : t('market.btnRefresh') }}
+            {{ refreshingCurrent ? t('market.refreshingCurrent') : t('market.btnRefreshCurrent') }}
           </button>
         </div>
       </div>

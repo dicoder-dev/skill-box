@@ -135,11 +135,13 @@ func (s *Service) ListSkills(q ListSkillsQuery) (*ListSkillsResult, error) {
 }
 
 // RefreshSource 触发一个源的刷新(走 orchestrator → adapter → upsert)。
-func (s *Service) RefreshSource(ctx context.Context, sourceID uint) (*skillmarket.RefreshResult, error) {
+//
+// 2026-07-01 增:keyword 参数,透传到三方源搜索。空 keyword = 拉全量目录。
+func (s *Service) RefreshSource(ctx context.Context, sourceID uint, keyword string) (*skillmarket.RefreshResult, error) {
 	if sourceID == 0 {
 		return nil, ErrSourceNotFound
 	}
-	return s.orchestrator().RefreshFromSource(ctx, sourceID)
+	return s.orchestrator().RefreshFromSource(ctx, sourceID, keyword)
 }
 
 // PullInput 拉取到 store 的入参(2026-07-01 改名:InstallInput → PullInput)。

@@ -72,7 +72,9 @@ type MarketAdapter interface {
 	BaseURL() string
 
 	// Discover 拉目录(轻量字段,适合列表展示)。
-	Discover(ctx context.Context, baseURL string) ([]MarketItem, error)
+	// keyword 空 = 全量目录(走默认排序);非空 = 三方源搜索语义(由 adapter 决定如何透传)。
+	// 2026-07-01 增:keyword 参数,前端搜索框透传到三方源(替代之前 SQL LIKE)。
+	Discover(ctx context.Context, baseURL, keyword string) ([]MarketItem, error)
 
 	// Detail 拉详情(包含 canonical 或 canonical 所需文件清单)。
 	Detail(ctx context.Context, baseURL, remoteID string) (*MarketDetail, error)

@@ -13,8 +13,11 @@ import (
 )
 
 // RequestRefreshMarket 刷新请求。
+//
+// 2026-07-01 增:Keyword 字段,前端搜索框透传到三方源;空 keyword = 拉全量目录。
 type RequestRefreshMarket struct {
-	SourceID uint `json:"source_id" form:"source_id"`
+	SourceID uint   `json:"source_id" form:"source_id"`
+	Keyword  string `json:"keyword" form:"keyword"`
 }
 
 // RespondRefreshMarket 刷新响应。
@@ -30,9 +33,10 @@ func RefreshMarket(c *ginp.ContextPlus, req *RequestRefreshMarket) {
 		c.JSON(400, gin.H{"error": "source_id 必填"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 2026-07-01 改:30s → 60s(skillhub pageSize=100 单页慢,多页拉满需要更长时间)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, err := svc.RefreshSource(ctx, req.SourceID)
+	out, err := svc.RefreshSource(ctx, req.SourceID, req.Keyword)
 	if err != nil {
 		// 业务错误:source busy / not found / not impl 都返 4xx/409
 		switch {

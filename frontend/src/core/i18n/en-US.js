@@ -343,6 +343,13 @@ const messages = {
     btnSearch: 'Search',
     btnRefresh: 'Refresh source',
     refreshing: 'Refreshing…',
+    // 2026-07-01 增:工具栏拆两个按钮,loading 互不冲突
+    btnRefreshAll: 'Fetch all',
+    btnRefreshCurrent: 'Refresh current search',
+    refreshingAll: 'Fetching all…',
+    refreshingCurrent: 'Refreshing search…',
+    errRefreshAll: 'Fetch-all failed: {msg}',
+    errRefreshCurrent: 'Refresh-search failed: {msg}',
     noSources: 'No available sources',
     lastRefresh: 'Last refresh: pulled {pulled} · added {inserted} · updated {updated}',
     errLoadSources: 'Failed to load sources: {msg}',

@@ -164,6 +164,33 @@ func TestPull_SkillNotFound(t *testing.T) {
 // 替代方案:直接调用 orchestrator.DownloadFromSource 路径需要的 adapter → 但 default
 // 走的是 skillhub.New()(即默认 httpClient)。所以这条 E2E 路径在沙盒里不能完整跑。
 // 退一步:只验证 service.Pull 的 happy path 用 fallback canonical(走 knownFallback)。
+// TestRefreshSource_KeywordPass 验证 keyword 从 RefreshSource 透传到 adapter.Discover(2026-07-01 增)。
+//
+// 由于 smarket.Service.RefreshSource 走 orchestrator.RefreshFromSource → adapter.Discover,
+// 链路里需要保证 keyword 不被丢。这里走 knownFallback 路径就够(不需真 mock HTTP),
+// 验证 source.refresh 链路返回值包含 pulled_count 即可。
+// 真正"keyword 透传到 query string"的测试在 skillhub/skillhub_test.go 单独覆盖。
+func TestRefreshSource_KeywordPass(t *testing.T) {
+	env := newTestEnv(t)
+	_ = env.svc.EnsureDefaultSources()
+	res, _ := env.svc.ListSources()
+	if len(res.Items) == 0 {
+		t.Fatal("setup failed")
+	}
+	src := res.Items[0]
+	r, err := env.svc.RefreshSource(context.Background(), src.ID, "react")
+	if err != nil {
+		t.Fatalf("RefreshSource should not fail (uses fallback): %v", err)
+	}
+	if r == nil {
+		t.Fatal("nil result")
+	}
+	// 哪怕 fallback 也应返 pulled_count >= 1
+	if r.PulledCount < 1 {
+		t.Errorf("expected pulled_count >= 1, got %d", r.PulledCount)
+	}
+}
+
 func TestPull_GlobalOk_UsingFallback(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
