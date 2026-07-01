@@ -15,6 +15,12 @@
 
 import { http } from '@/core/utils/requests'
 
+// 2026-07-01 改:listMarketSkillsRemote 超时对齐后端 45s。
+// 后端 ctx 超时 45s(见 list_skills_remote.a.go),前端 15s 默认太短会被 fetch
+// 先杀,看到的就是"网络异常"而不是后端真实返回。统一 45s 让两端窗口一致,
+// 用户感知到的就是"远端比较慢"而不是前端假死/后端未响应。
+const MARKET_REMOTE_TIMEOUT_MS = 45_000
+
 export function listSources() {
   return http.get('/api/skillbox/market/sources')
 }
@@ -48,8 +54,13 @@ export function listMarketSkillsWithInstalled(params = {}) {
 // 返回 schema 与 listMarketSkillsWithInstalled 一致(沿用 installed map)。
 // skillhub 走 /api/skills?keyword= 真实搜索语义;
 // skills.sh 走 50 页 /api/audits + substring(API 无搜索参数)。
+//
+// 2026-07-01 改:显式传 45s timeout,覆盖 http 客户端默认 15s。
+// 见 MARKET_REMOTE_TIMEOUT_MS 注释 — 对齐后端 ctx 超时窗口。
 export function listMarketSkillsRemote(params = {}) {
-  return http.get('/api/skillbox/market/skills-remote', params)
+  return http.get('/api/skillbox/market/skills-remote', params, {
+    timeout: MARKET_REMOTE_TIMEOUT_MS,
+  })
 }
 
 // 一键拉取:写盘 + apply(2026-07-01 改名:installMarketSkillV2 → pullMarketSkillV2)。

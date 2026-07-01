@@ -33,14 +33,16 @@ type RespondListMarketSkillsRemote = smarket.ListSkillsWithInstalledResult
 // skills.sh:走 /api/audits/0..49 + substring(API 无搜索参数,只能 substring 过滤);
 // installed 二次扫本地 store,不影响主列表。
 //
-// 60s 超时:skills.sh 拉 50 页 × 50 = 2500 条需要 ~5-15s;skillhub 100 条 ~2-5s;
-// 留余量到 60s 防偶发抖动。
+// 2026-07-01 改:60s → 45s。
+// 现状:skillhub 100 条 ~2-5s;skills.sh 拉 50 页 × 50 = 2500 条 ~5-15s。
+// 45s 仍然留足余量防偶发抖动,同时让前端超时窗口对齐,避免 60s 后端超时
+// 已触发而前端还在傻等。
 func ListMarketSkillsRemote(c *ginp.ContextPlus, req *RequestListMarketSkillsRemote) {
 	if req.SourceID == 0 {
 		c.JSON(400, gin.H{"error": "source_id 必填"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	svc := newService()
 	out, err := svc.ListSkillsRemote(ctx, smarket.ListSkillsQuery{
