@@ -612,7 +612,7 @@ const messages = {
     filterAll: 'All',
     filterSystem: 'System',
     filterUser: 'User',
-    btnNew: '+ New',
+    btnNew: 'New',
     btnEdit: 'Edit',
     btnReload: 'Reload',
     systemBadge: 'System',
@@ -653,14 +653,14 @@ const messages = {
     // paths sub-table
     paths: {
       title: 'Paths',
-      add: '+ Add path',
+      add: 'Add path',
       scope: 'Scope',
       category: 'Category',
       path: 'Path',
       order: 'Order',
       pathHint: 'absolute path, ~/ supported',
       pickFolder: 'Pick a folder',
-      empty: 'No paths yet. Click "+ Add path" above to start',
+      empty: 'No paths yet. Click "Add path" above to start',
       hint: 'scope: global|project; category: user|system. (scope, category, path) is unique.',
     },
 

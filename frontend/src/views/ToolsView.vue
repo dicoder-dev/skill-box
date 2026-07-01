@@ -1038,6 +1038,19 @@ onMounted(async () => {
   color: var(--text-dim);
 }
 
+/* 锁 select 行高与 input 一致:macOS Chrome native select 会比 input 多 2-3px,
+   同时 min-height + height 双锁避免被全局 input 规则的 padding 撑高 */
+.form-field select,
+.form-field input {
+  height: 36px;
+  min-height: 36px;
+  line-height: 1.4;
+}
+
+.form-field textarea {
+  min-height: 60px;
+}
+
 .form-field-switch {
   display: flex;
   flex-direction: row;

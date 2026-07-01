@@ -614,14 +614,14 @@ const messages = {
     filterAll: '全部',
     filterSystem: '系统',
     filterUser: '用户',
-    btnNew: '+ 新建',
+    btnNew: '新建',
     btnEdit: '编辑',
     btnReload: '重新加载',
     systemBadge: '系统',
     systemLocked: '系统工具不可删',
     pathCount: '{n} 个路径',
     empty: '当前作用域下还没有工具',
-    emptyHint: '点右上角「+ 新建」开始;系统工具(9 个)由 seed 自动注入',
+    emptyHint: '点右上角「新建」开始;系统工具(9 个)由 seed 自动注入',
     loading: '加载中…',
 
     // maturity 三选一
@@ -655,14 +655,14 @@ const messages = {
     // paths 子表
     paths: {
       title: '路径(Paths)',
-      add: '+ 添加路径',
+      add: '添加路径',
       scope: '作用域',
       category: '类别',
       path: '路径',
       order: '顺序',
       pathHint: '绝对路径,支持 ~/',
       pickFolder: '选择本地目录',
-      empty: '还没有路径,点上方「+ 添加路径」开始',
+      empty: '还没有路径,点上方「添加路径」开始',
       hint: 'scope: global|project;category: user|system。同一 (scope, category, path) 唯一。',
     },
 
