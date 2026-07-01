@@ -237,14 +237,17 @@ onMounted(async () => {
             </div>
 
             <footer class="market-card-bottom">
+              <!-- 眼睛按钮:靠左,独立子项配合 space-between -->
+              <Icon
+                icon="mdi:eye-outline"
+                :title="t('market.btnViewSkill')"
+                class="action-icon action-icon-view"
+                @click="openDetail(it)"
+              />
+              <!-- spacer:占满中间,把右侧推到底 -->
               <span class="market-card-bottom-spacer"></span>
+              <!-- 右侧 actions:跳转(可选)+ 拉取按钮 -->
               <div class="market-card-actions">
-                <Icon
-                  icon="mdi:eye-outline"
-                  :title="t('market.btnViewSkill')"
-                  class="action-icon action-icon-view"
-                  @click="openDetail(it)"
-                />
                 <Icon
                   v-if="installed[it.name]"
                   icon="mdi:open-in-new"
