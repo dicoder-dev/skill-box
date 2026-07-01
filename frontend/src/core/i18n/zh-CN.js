@@ -17,6 +17,8 @@ export default {
     nav: {
       skills: { label: '技能' },
       projects: { label: '项目' },
+      // 2026-07-01 增:工具元数据管理
+      tools: { label: '工具' },
       market: { label: '市场' },
       onboarding: { label: '导入技能' },
       audit: { label: '审计' },
@@ -503,6 +505,15 @@ export default {
     subtitle: '桌面端偏好(通知 / 全局快捷键 / 启动行为)。Web 端这部分是只读占位。',
     webOnlyHint: '桌面端偏好仅在桌面应用里可见。请用桌面端 / 系统托盘来打开设置。',
 
+    general: {
+      title: '通用偏好',
+      subtitle: '通用设置',
+      language: '界面语言',
+      languageHint: '切换后立即生效,刷新或下次打开仍会保留',
+      langZhCN: '简体中文',
+      langEnUS: 'English',
+    },
+
     desktop: {
       title: '桌面端偏好',
       subtitle: '需要重启桌面应用生效',
@@ -531,5 +542,82 @@ export default {
     notifySent: '通知已发送',
 
     prefsUnavailable: '偏好服务不可用(可能后端未启动或 prefs 存储未就绪)',
+  },
+
+  // 2026-07-01 增:工具元数据管理(对应 /api/skillbox/tools)
+  tools: {
+    title: '工具',
+    subtitle: '共 {total} 个工具(系统 {system} + 用户 {user})。可启停 / 改字段 / 增删;改完点「重新加载」让 adapter 立刻生效。',
+    searchPlaceholder: '按名称或 ID 过滤',
+    filterAll: '全部',
+    filterSystem: '系统',
+    filterUser: '用户',
+    btnNew: '+ 新建',
+    btnEdit: '编辑',
+    btnReload: '重新加载',
+    systemBadge: '系统',
+    systemLocked: '系统工具不可删',
+    pathCount: '{n} 个路径',
+    empty: '当前作用域下还没有工具',
+    emptyHint: '点右上角「+ 新建」开始;系统工具(9 个)由 seed 自动注入',
+    loading: '加载中…',
+
+    // maturity 三选一
+    maturity: {
+      stable: '稳定',
+      experimental: '实验',
+      deprecated: '已弃用',
+    },
+
+    // 字段 / 提示
+    field: {
+      toolId: '工具 ID',
+      displayName: '展示名',
+      mdiIcon: '图标',
+      maturity: '成熟度',
+      sortOrder: '排序',
+      enabled: '启用',
+      note: '备注',
+    },
+    hint: {
+      toolId: 'canonical 短 ID,如 claude',
+      toolIdLocked: 'tool_id 在创建后不可修改',
+      displayName: 'UI 显示名',
+      mdiIcon: '必须以 mdi: 开头,如 mdi:robot-outline',
+      note: '可选,内部备注',
+    },
+    formNewTitle: '新建工具',
+    formEditTitle: '编辑「{name}」',
+    formHint: '新建工具 is_system 强制为 false;Paths 用「覆盖式」语义,保存后整组替换。',
+
+    // paths 子表
+    paths: {
+      title: '路径(Paths)',
+      add: '+ 添加路径',
+      scope: '作用域',
+      category: '类别',
+      path: '路径',
+      order: '顺序',
+      pathHint: '绝对路径,支持 ~/',
+      pickFolder: '选择本地目录',
+      empty: '还没有路径,点上方「+ 添加路径」开始',
+      hint: 'scope: global|project;category: user|system。同一 (scope, category, path) 唯一。',
+    },
+
+    // 反馈
+    reloadedOk: '已重新加载',
+    reloadFailed: '重新加载失败:{msg}',
+    savedOk: '已保存',
+    saveFailed: '保存失败:{msg}',
+    enabledOk: '已启用',
+    disabledOk: '已停用',
+    toggleFailed: '启停切换失败:{msg}',
+    deletedOk: '已删除',
+    deleteFailed: '删除失败:{msg}',
+    pickFolderFailed: '选择目录失败:{msg}',
+
+    // 删除确认
+    confirmDeleteTitle: '删除工具',
+    confirmDeleteMsg: '确定删除「{name}」吗?该操作不可恢复,工具表行 + 全部 path 都会一并删除。',
   },
 }

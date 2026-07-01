@@ -14,6 +14,8 @@ export default {
     nav: {
       skills: { label: 'Skills' },
       projects: { label: 'Projects' },
+      // 2026-07-01 new: tool metadata management
+      tools: { label: 'Tools' },
       market: { label: 'Market' },
       onboarding: { label: 'Import skills' },
       audit: { label: 'Audit' },
@@ -500,6 +502,15 @@ export default {
     subtitle: 'Desktop preferences (notifications / global shortcuts / startup). On Web, this section is a read-only placeholder.',
     webOnlyHint: 'Desktop preferences are only visible in the desktop app. Use the system tray to open Settings.',
 
+    general: {
+      title: 'General',
+      subtitle: 'Common preferences',
+      language: 'Display language',
+      languageHint: 'Takes effect immediately. Your choice is remembered across reloads and sessions.',
+      langZhCN: '简体中文',
+      langEnUS: 'English',
+    },
+
     desktop: {
       title: 'Desktop preferences',
       subtitle: 'Requires a desktop app restart to take effect',
@@ -528,5 +539,82 @@ export default {
     notifySent: 'Notification sent',
 
     prefsUnavailable: 'Preferences service unavailable (backend may not be running or prefs store not initialized)',
+  },
+
+  // 2026-07-01 new: tool metadata management (talks to /api/skillbox/tools)
+  tools: {
+    title: 'Tools',
+    subtitle: '{total} tools total ({system} system + {user} user). Toggle / edit / add / delete; click "Reload" to make changes effective for adapters immediately.',
+    searchPlaceholder: 'Filter by name or id',
+    filterAll: 'All',
+    filterSystem: 'System',
+    filterUser: 'User',
+    btnNew: '+ New',
+    btnEdit: 'Edit',
+    btnReload: 'Reload',
+    systemBadge: 'System',
+    systemLocked: 'System tools cannot be deleted',
+    pathCount: '{n} paths',
+    empty: 'No tools in the current scope',
+    emptyHint: 'Click "+ New" at the top right to start; the 9 system tools are auto-seeded',
+    loading: 'Loading…',
+
+    // maturity options
+    maturity: {
+      stable: 'Stable',
+      experimental: 'Experimental',
+      deprecated: 'Deprecated',
+    },
+
+    // fields / hints
+    field: {
+      toolId: 'Tool ID',
+      displayName: 'Display name',
+      mdiIcon: 'Icon',
+      maturity: 'Maturity',
+      sortOrder: 'Order',
+      enabled: 'Enabled',
+      note: 'Note',
+    },
+    hint: {
+      toolId: 'canonical short id, e.g. claude',
+      toolIdLocked: 'tool_id is immutable after creation',
+      displayName: 'UI display name',
+      mdiIcon: 'Must start with mdi:, e.g. mdi:robot-outline',
+      note: 'optional, internal note',
+    },
+    formNewTitle: 'New tool',
+    formEditTitle: 'Edit "{name}"',
+    formHint: 'New tools are forced to is_system=false; Paths use overwrite semantics (saving replaces the whole group).',
+
+    // paths sub-table
+    paths: {
+      title: 'Paths',
+      add: '+ Add path',
+      scope: 'Scope',
+      category: 'Category',
+      path: 'Path',
+      order: 'Order',
+      pathHint: 'absolute path, ~/ supported',
+      pickFolder: 'Pick a folder',
+      empty: 'No paths yet. Click "+ Add path" above to start',
+      hint: 'scope: global|project; category: user|system. (scope, category, path) is unique.',
+    },
+
+    // feedback
+    reloadedOk: 'Reloaded',
+    reloadFailed: 'Reload failed: {msg}',
+    savedOk: 'Saved',
+    saveFailed: 'Save failed: {msg}',
+    enabledOk: 'Enabled',
+    disabledOk: 'Disabled',
+    toggleFailed: 'Toggle failed: {msg}',
+    deletedOk: 'Deleted',
+    deleteFailed: 'Delete failed: {msg}',
+    pickFolderFailed: 'Pick folder failed: {msg}',
+
+    // delete confirm
+    confirmDeleteTitle: 'Delete tool',
+    confirmDeleteMsg: 'Delete "{name}"? This cannot be undone; the tool row and all its paths will be removed.',
   },
 }

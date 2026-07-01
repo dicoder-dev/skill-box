@@ -7,6 +7,8 @@ import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
 import AuditView from './views/AuditView.vue'
 import SettingsView from './views/SettingsView.vue'
+// 2026-07-01 增:工具元数据管理视图
+import ToolsView from './views/ToolsView.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
@@ -166,6 +168,8 @@ onMounted(refreshStats)
 const navItems = computed(() => [
   { key: 'skills',      label: t('app.nav.skills.label'),      icon: 'mdi:book-open-variant' },
   { key: 'projects',   label: t('app.nav.projects.label'),    icon: 'mdi:folder-multiple-outline' },
+  // 2026-07-01 增:工具元数据管理(放在 projects 之后,影响 projects 扫描的依赖项)
+  { key: 'tools',      label: t('app.nav.tools.label'),       icon: 'mdi:tools' },
   { key: 'market',     label: t('app.nav.market.label'),      icon: 'mdi:cart-outline' },
   { key: 'audit',      label: t('app.nav.audit.label'),       icon: 'mdi:script-text-outline' },
   { key: 'settings',    label: t('app.nav.settings.label'),   icon: 'mdi:cog-outline' },
@@ -333,6 +337,7 @@ onUnmounted(() => {
       <!-- 内容区域 -->
       <div class="content-area">
         <ProjectsView v-if="tab === 'projects'" />
+        <ToolsView v-else-if="tab === 'tools'" />
         <SkillsView v-else-if="tab === 'skills'" />
         <MarketView v-else-if="tab === 'market'" />
         <AuditView v-else-if="tab === 'audit'" />
