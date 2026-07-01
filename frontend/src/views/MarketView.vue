@@ -184,94 +184,96 @@ onMounted(async () => {
         <span v-if="!sources.length && !loading" class="source-empty">{{ t('market.noSources') }}</span>
       </nav>
 
-      <!-- 错误提示 -->
-      <div v-if="error" class="message message-error">
-        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
-        {{ error }}
-      </div>
-      <!-- 2026-07-01 改:全走 API 后,refresh 端点不再被前端调用,
-           lastRefresh banner 失去意义,已删除。失败用上面 error banner + toast 即可。 -->
+      <!-- 中部可滚动主体:网格/空态/加载态;
+           内部 overflow-y:auto 让卡片多时只滚这一段,分页栏固定在下方 -->
+      <div class="market-body">
+        <!-- 错误提示 -->
+        <div v-if="error" class="message message-error">
+          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          {{ error }}
+        </div>
 
-      <!-- 2026-07-01 改:列表用卡片网格(原表格) -->
-      <div v-if="items.length > 0" class="market-grid">
-        <article
-          v-for="it in items"
-          :key="it.remote_id"
-          class="market-card"
-          :class="{ 'is-installed': installed[it.name] }"
-        >
-          <header class="market-card-top">
-            <div class="market-card-icon">
-              <Icon icon="mdi:puzzle-outline" width="22" height="22" />
+        <!-- 2026-07-01 改:列表用卡片网格(原表格) -->
+        <div v-if="items.length > 0" class="market-grid">
+          <article
+            v-for="it in items"
+            :key="it.remote_id"
+            class="market-card"
+            :class="{ 'is-installed': installed[it.name] }"
+          >
+            <header class="market-card-top">
+              <div class="market-card-icon">
+                <Icon icon="mdi:puzzle-outline" width="22" height="22" />
+              </div>
+              <div class="market-card-titles">
+                <h3 class="market-card-name" :title="it.name">{{ it.name }}</h3>
+                <code class="market-card-id">{{ it.remote_id }}</code>
+              </div>
+              <span v-if="installed[it.name]" class="badge badge-installed">
+                <Icon icon="mdi:check-circle" width="10" height="10" />
+                {{ t('market.installedChip') }}
+              </span>
+              <span v-else class="badge badge-not-installed">
+                <Icon icon="mdi:circle-outline" width="10" height="10" />
+                {{ t('market.notInstalledChip') }}
+              </span>
+            </header>
+
+            <div class="market-card-meta">
+              <span class="meta-item">
+                <Icon icon="mdi:tag-outline" width="12" height="12" />
+                {{ it.version || t('common.dash') }}
+              </span>
+              <span class="meta-item">
+                <Icon icon="mdi:account-outline" width="12" height="12" />
+                {{ it.author || t('common.dash') }}
+              </span>
             </div>
-            <div class="market-card-titles">
-              <h3 class="market-card-name" :title="it.name">{{ it.name }}</h3>
-              <code class="market-card-id">{{ it.remote_id }}</code>
+
+            <p class="market-card-desc" :title="it.description">{{ it.description || t('common.dash') }}</p>
+
+            <div v-if="it.tags" class="market-card-tags">
+              <span v-for="tg in String(it.tags).split(',').filter(Boolean)" :key="tg" class="tag">{{ tg }}</span>
             </div>
-            <span v-if="installed[it.name]" class="badge badge-installed">
-              <Icon icon="mdi:check-circle" width="10" height="10" />
-              {{ t('market.installedChip') }}
-            </span>
-            <span v-else class="badge badge-not-installed">
-              <Icon icon="mdi:circle-outline" width="10" height="10" />
-              {{ t('market.notInstalledChip') }}
-            </span>
-          </header>
 
-          <div class="market-card-meta">
-            <span class="meta-item">
-              <Icon icon="mdi:tag-outline" width="12" height="12" />
-              {{ it.version || t('common.dash') }}
-            </span>
-            <span class="meta-item">
-              <Icon icon="mdi:account-outline" width="12" height="12" />
-              {{ it.author || t('common.dash') }}
-            </span>
-          </div>
+            <footer class="market-card-bottom">
+              <span class="market-card-bottom-spacer"></span>
+              <div class="market-card-actions">
+                <Icon
+                  icon="mdi:eye-outline"
+                  :title="t('market.btnViewSkill')"
+                  class="action-icon action-icon-view"
+                  @click="openDetail(it)"
+                />
+                <Icon
+                  v-if="installed[it.name]"
+                  icon="mdi:open-in-new"
+                  :title="t('market.btnViewSkill')"
+                  class="action-icon action-icon-jump"
+                  @click="viewSkill(it.name)"
+                />
+                <button class="market-card-pull" :disabled="market.pulling" @click="openInstall(it)">
+                  <Icon icon="mdi:download" width="13" height="13" />
+                  {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
+                </button>
+              </div>
+            </footer>
+          </article>
+        </div>
 
-          <p class="market-card-desc" :title="it.description">{{ it.description || t('common.dash') }}</p>
+        <div v-else-if="refreshing || loading" class="loading-state">
+          <span class="spinner"></span>
+          <p>{{ t('market.btnRemoteLoading') }}</p>
+        </div>
 
-          <div v-if="it.tags" class="market-card-tags">
-            <span v-for="tg in String(it.tags).split(',').filter(Boolean)" :key="tg" class="tag">{{ tg }}</span>
-          </div>
-
-          <footer class="market-card-bottom">
-            <span class="market-card-bottom-spacer"></span>
-            <div class="market-card-actions">
-              <Icon
-                icon="mdi:eye-outline"
-                :title="t('market.btnViewSkill')"
-                class="action-icon action-icon-view"
-                @click="openDetail(it)"
-              />
-              <Icon
-                v-if="installed[it.name]"
-                icon="mdi:open-in-new"
-                :title="t('market.btnViewSkill')"
-                class="action-icon action-icon-jump"
-                @click="viewSkill(it.name)"
-              />
-              <button class="market-card-pull" :disabled="market.pulling" @click="openInstall(it)">
-                <Icon icon="mdi:download" width="13" height="13" />
-                {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
-              </button>
-            </div>
-          </footer>
-        </article>
+        <div v-else class="empty-state">
+          <Icon icon="mdi:radio-tower" width="48" height="48" />
+          <p class="empty-title">{{ t('market.emptyAfter') }}</p>
+          <p class="empty-hint">{{ t('market.emptyAfterHint') }}</p>
+        </div>
       </div>
 
-      <div v-else-if="refreshing || loading" class="loading-state">
-        <span class="spinner"></span>
-        <p>{{ t('market.btnRemoteLoading') }}</p>
-      </div>
-
-      <div v-else class="empty-state">
-        <Icon icon="mdi:radio-tower" width="48" height="48" />
-        <p class="empty-title">{{ t('market.emptyAfter') }}</p>
-        <p class="empty-hint">{{ t('market.emptyAfterHint') }}</p>
-      </div>
-
-      <!-- 分页 -->
+      <!-- 分页 - 固定在卡片容器底部,不随内容滚动 -->
       <footer v-if="totalPages > 1" class="pager">
         <button :disabled="page <= 1" @click="market.page--; market.loadSkills()">
           <Icon icon="mdi:chevron-left" width="14" height="14" />
@@ -365,15 +367,19 @@ onMounted(async () => {
 
 <style scoped>
 .market {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 40px);   /* 视口高度减去 content-area 的上下 padding(各 20px) */
   max-width: 1100px;
   margin: 0 auto;
   color: var(--text);
   transition: color 0.3s ease;
 }
 
-/* 页面头部 */
+/* 页面头部 - flex 子项,不收缩不滚动 */
 .view-header {
   margin-bottom: 24px;
+  flex-shrink: 0;
 }
 
 .view-title {
@@ -413,8 +419,13 @@ onMounted(async () => {
   transition: color 0.3s ease;
 }
 
-/* 卡片 */
+/* 卡片 - flex:1 占满 .market 剩余高度,内部三段(工具栏/网格/分页)各自负责
+   min-height:0 让子项能正常收缩触发内部 overflow 滚动 */
 .card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -429,8 +440,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .toolbar-left, .toolbar-center, .toolbar-right {
@@ -485,10 +497,11 @@ onMounted(async () => {
 .source-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .source-tab {
@@ -562,6 +575,16 @@ onMounted(async () => {
   color: var(--text-faint);
   font-size: 11px;
   margin-left: 4px;
+}
+
+/* 卡片网格 - 中部可滚动容器,卡片多时只滚这一段,
+   分页栏(.pager)在外层,flex-shrink:0 固定在卡片底部 */
+.market-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 卡片网格 */
@@ -828,13 +851,14 @@ onMounted(async () => {
   gap: 6px;
 }
 
-/* 分页器 */
+/* 分页器 - flex-shrink:0 让卡片滚动时分页栏始终在底部不被压掉 */
 .pager {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 20px auto 0;
+  flex-shrink: 0;
+  margin: 16px auto 0;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
