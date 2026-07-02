@@ -91,10 +91,17 @@ go func() {
 
 ## How to apply
 
-- 新加桌面端"按屏幕自适应尺寸 / 位置 / 居中打开"功能时,直接复用本模式。
-- 用 Wails 给的 `GetScreen()` / `SetSize()` / `SetMinSize()` 即可,alpha.60 全部已 stable
-  (虽然带 alpha 后缀,但窗口控制 API 是稳定的)。
-- 不要在 `NewApp` 阻塞阶段调 `GetScreen`,否则会卡。需要异步,且要在 sleep 之后。
+- 新加桌面端"按屏幕自适应尺寸 / 位置 / 居中打开"功能时,**优先用 macOS
+  `system_profiler SPDisplaysDataType` 同步取屏幕尺寸**;不要依赖 wails 的 GetScreen / SetSize。
+- 实测证明:alpha.60 的 `Window.SetSize()` 即便在 startupAsync 协程里 sleep 后调,
+  也不生效(用户报告"两次都不生效")。**wails 的 alpha API 在时序敏感场景下并不可靠**。
+- 同步路径实测可用:`exec.Command("system_profiler", "SPDisplaysDataType").Output()`
+  1-3 秒返回,正则 `Resolution:\s+(\d+)\s+x\s+(\d+)` 拿宽高。直接灌进
+  `WebviewWindowOptions.Width/Height`,让窗口天生就是大尺寸。
+- Retina 缩放下 Resolution 给的是 DIP 值(跟 `WebviewWindowOptions.Width` 同单位),
+  不用再除 ScaleFactor。多屏时只取第一个匹配(主屏)。
+- 跨平台注意:Windows / Linux 桌面包目前不需要这套(本项目桌面端只发布 darwin/windows,
+  但目前主战场是 macOS 开发)。如果未来要适配 windows,需要切换到 win32 EnumDisplayMonitors。
 
 ## `AppConfig.AutoSizeByScreen` 模式
 

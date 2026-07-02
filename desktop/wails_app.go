@@ -8,7 +8,11 @@ import (
 	"math"
 	"net"
 	"os"
+	"os/exec"
+	"regexp"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"ginp-api/cmd/bootstrap"
@@ -39,6 +43,51 @@ const (
 	minPrimarySizeFloorWidth  = 960
 	minPrimarySizeFloorHeight = 600
 )
+
+// screenResolutionRE 匹配 system_profiler SPDisplaysDataType 输出里的
+// "Resolution: 1920 x 1080 (...)" 一行,捕获宽高两个数字。
+// 例:"Resolution: 1920 x 1080 (1080p FHD)" → matches=["1920", "1080"]
+var screenResolutionRE = regexp.MustCompile(`Resolution:\s+(\d+)\s+x\s+(\d+)`)
+
+// detectScreenDIPSize 通过 macOS 原生的 system_profiler 拿主屏物理像素分辨率,
+// 作为 wails v3 alpha.60 Window.GetScreen() 在启动时序拿不到值时的兜底来源。
+//
+// 为什么不用 wails 自己的 GetScreen:
+//   - alpha.60 的 ScreenManager.primaryScreen 由 native 回调填充,
+//     在 application.New 阶段是空的。
+//   - 在 startupAsync 协程里 sleep 后调 GetScreen(),实测在用户机器上得到的尺寸不可靠
+//     (用户报告:窗口看起来远小于预期,SetSize 没生效)。
+//   - macOS 的 system_profiler 是同步输出,可以放心在 NewApp 阻塞阶段调一次,
+//     并把结果直接灌进 WebviewWindowOptions.Width/Height,完全绕开 SetSize 路径。
+//
+// 输出文本格式约定:多屏时 system_profiler 会列多个 Resolution,只取第一个
+// (主屏在最前)。非 darwin 平台或 system_profiler 失败时返回 (0, 0)。
+//
+// Retina 缩放说明:这条 Resolution 行给出的是"UI Looks like"等同的 DIP 值
+// (例如 MBP 14" 内屏原生 3024×1965,缩放后是 1512×982),
+// 跟 wails WebviewWindowOptions.Width 期望的 DIP 单位一致,直接用即可。
+func detectScreenDIPSize() (int, int) {
+	if runtime.GOOS != "darwin" {
+		return 0, 0
+	}
+	out, err := exec.Command("system_profiler", "SPDisplaysDataType").Output()
+	if err != nil {
+		log.Printf("desktop: system_profiler failed: %v", err)
+		return 0, 0
+	}
+	matches := screenResolutionRE.FindStringSubmatch(string(out))
+	if len(matches) < 3 {
+		log.Printf("desktop: screen resolution not found in system_profiler output")
+		return 0, 0
+	}
+	w, errW := strconv.Atoi(strings.TrimSpace(matches[1]))
+	h, errH := strconv.Atoi(strings.TrimSpace(matches[2]))
+	if errW != nil || errH != nil || w <= 0 || h <= 0 {
+		log.Printf("desktop: invalid screen resolution W=%q H=%q", matches[1], matches[2])
+		return 0, 0
+	}
+	return w, h
+}
 
 // AppConfig 描述桌面端 Wails 应用的全部配置。
 // 调用方在 main.go 构造并传给 NewApp,NewApp 内部完成 Wails 全部组装并返回 *App。
@@ -99,21 +148,49 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	if cfg.Description == "" {
 		cfg.Description = "桌面端 + Web 端双部署"
 	}
+	// 默认尺寸：在 NewApp 阻塞阶段就能拿屏幕尺寸的兜底来源，优先用 macOS 原生
+	// system_profiler 拿主屏分辨率（同步可执行，不依赖 Wails 主循环 ready），
+	// 然后按 90% × 90% 灌给 cfg.Width/Height，让窗口天生就是大的。
+	//
+	// 注意：调用方在 main.go 显式给 cfg.Width / cfg.Height 时，下面这段兜底会跳过，
+	// 那时 startupAsync 阶段的 resizePrimaryToScreenRatio 也被 autoResize=false 关掉。
+	detectSw, detectSh := detectScreenDIPSize()
 	if cfg.Width == 0 {
-		// 兜底:AutoSizeByScreen=true 时,startupAsync 会再按屏幕 DIP 宽高各 90% 重置一次,
-		// 这里给一个 1280 的初始值避免窗口先以最小尺寸闪现再被放大。
-		// AutoSizeByScreen=false 但 Width=0 的兜底则保留原 1280,兼容旧用法。
-		cfg.Width = 1280
+		if detectSw > 0 {
+			cfg.Width = int(math.Round(float64(detectSw) * defaultPrimaryWidthRatio))
+		} else {
+			cfg.Width = fallbackPrimaryWidth
+		}
 	}
 	if cfg.Height == 0 {
-		cfg.Height = 800
+		if detectSh > 0 {
+			cfg.Height = int(math.Round(float64(detectSh) * defaultPrimaryHeightRatio))
+		} else {
+			cfg.Height = fallbackPrimaryHeight
+		}
 	}
 	if cfg.MinWidth == 0 {
-		cfg.MinWidth = 960
+		if detectSw > 0 {
+			cfg.MinWidth = int(math.Round(float64(detectSw) * minPrimaryWidthRatio))
+			if cfg.MinWidth < minPrimarySizeFloorWidth {
+				cfg.MinWidth = minPrimarySizeFloorWidth
+			}
+		} else {
+			cfg.MinWidth = minPrimarySizeFloorWidth
+		}
 	}
 	if cfg.MinHeight == 0 {
-		cfg.MinHeight = 600
+		if detectSh > 0 {
+			cfg.MinHeight = int(math.Round(float64(detectSh) * minPrimaryWidthRatio))
+			if cfg.MinHeight < minPrimarySizeFloorHeight {
+				cfg.MinHeight = minPrimarySizeFloorHeight
+			}
+		} else {
+			cfg.MinHeight = minPrimarySizeFloorHeight
+		}
 	}
+	log.Printf("desktop: primary window initial size = %dx%d (detected screen %dx%d DIP from system_profiler), min = %dx%d",
+		cfg.Width, cfg.Height, detectSw, detectSh, cfg.MinWidth, cfg.MinHeight)
 	if cfg.BackgroundColour == [3]uint8{} {
 		cfg.BackgroundColour = [3]uint8{27, 38, 54}
 	}
