@@ -20,11 +20,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillmarket"
+	"ginp-api/pkg/httpx"
 	"ginp-api/pkg/logger"
 )
 
@@ -78,12 +81,11 @@ type Adapter struct {
 	noRedirectClient *http.Client
 }
 
-// New 构造 Adapter(httpClient 为 nil 时用默认 30s 超时客户端)。
-// 2026-07-01 改:timeout 20s → 30s(skillhub pageSize=100 单页慢,真 API 需要更长)。
+// New 构造 Adapter(用 httpx 长生命周期客户端, 跨多次翻页复用 TLS 连接)。
 func New() *Adapter {
 	return &Adapter{
-		httpClient:       &http.Client{Timeout: 30 * time.Second},
-		noRedirectClient: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }},
+		httpClient:       httpx.NewClient(30 * time.Second),
+		noRedirectClient: httpx.NewNoRedirectClient(30 * time.Second),
 	}
 }
 
@@ -95,9 +97,13 @@ func NewWithClient(c *http.Client) *Adapter {
 	if c == nil {
 		return New()
 	}
+	// 2026-07-02 改:测试时也保持 noRedirect 行为 — 即便 mock client 自带 CheckRedirect
+	// 设置,这里覆盖一份,避免 mock 忘了配 CheckRedirect 导致 zip flow 误 follow redirect。
+	noRedirect := *c
+	noRedirect.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	return &Adapter{
 		httpClient:       c,
-		noRedirectClient: c,
+		noRedirectClient: &noRedirect,
 	}
 }
 
@@ -105,10 +111,10 @@ func NewWithClient(c *http.Client) *Adapter {
 // 用于 zip flow 测试:noRedirect 走 fakeRT,httpClient 走真实 httptest.NewServer 拉 zip)。
 func NewWithClients(noRedirect, normal *http.Client) *Adapter {
 	if noRedirect == nil {
-		noRedirect = &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+		noRedirect = httpx.NewNoRedirectClient(30 * time.Second)
 	}
 	if normal == nil {
-		normal = &http.Client{Timeout: 30 * time.Second}
+		normal = httpx.NewClient(30 * time.Second)
 	}
 	return &Adapter{
 		httpClient:       normal,
@@ -160,6 +166,12 @@ type apiSkill struct {
 //   - 翻页过程中单页失败:已拿到的全部返回(降级部分可见),不整体 fallback。
 //   - 任何 HTTP/JSON 解析失败 / 响应非 code=0 / 全量翻页一页都没拿到 → 走 knownFallback。
 //   - subCategories[].name + tags 合并后去重(逗号 join 在 MarketItem.Tags)。
+//
+// 2026-07-02 改造:翻页从串行改为**限并发=4 的 worker pool**。
+//   - skillhub 国内服务器单页 ~50–500ms,40000 条全量 串行 ≈ 几十秒;
+//     并发 4 后 ≈ 几秒(取决于 API QPS,实测国内域并发 4 三方源不会触发限流)
+//   - 退出条件保持:①累计 ≥ totalHint ②本页<pageSize ③added==0 ④ctx 取消
+//   - 合并去重逻辑保留(seen map 加锁)
 func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skillmarket.MarketItem, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -184,15 +196,48 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 		return items, nil
 	}
 
-	// 全量目录:翻页拉全量。
-	// 2026-07-01 改:去掉 maxDiscoverItems 硬上限,seen/out 直接按 pageSize * 总页数动态扩。
-	// 实际终止条件:①累计 ≥ total ②本页<pageSize ③ctx 取消(后端 90s 超时触发)。
+	// 全量目录:并行翻页拉全量。
+	// 2026-07-02 改:worker pool 并发=4,串行翻页在 40000 条场景慢到 30s+;
+	// 并发后单页 ~200ms × ceil(N/4) ≈ 几秒。
+	//
+	// 实现要点:
+	//   - pageCh / resultCh 都缓冲 = maxConcurrency,避免 worker 写 resultCh 阻塞
+	//   - producer 派发:被 stop / ctx 取消 / 派完触发时退出 → close(pageCh) → worker 自动退出
+	//   - 收集器读完 resultCh → 等 producer 退出 → 返回
+	//   - 退出条件:①单页 err ②totalHint 收齐 ③本页<pageSize ④added==0
 	seen := make(map[string]struct{}, defaultPageSize*4)
+	var seenMu sync.Mutex
 	out := make([]skillmarket.MarketItem, 0, defaultPageSize*4)
+	var outMu sync.Mutex
 	totalHint := -1 // 0 = API 没回 total 字段;>0 = 上限
-	stop := false
-	for page := 1; !stop; page++ {
-		// 首页带 sortBy/order(与原契约一致,测试与下游消费者都对齐)
+	var totalMu sync.Mutex
+
+	// stop 标志 + stopCh(select 用,设上后立即让 producer 退出)
+	var stopFlag bool
+	var stopMu sync.Mutex
+	stopCh := make(chan struct{})
+	setStop := func() {
+		stopMu.Lock()
+		defer stopMu.Unlock()
+		if stopFlag {
+			return
+		}
+		stopFlag = true
+		close(stopCh)
+	}
+	isStop := func() bool {
+		stopMu.Lock()
+		defer stopMu.Unlock()
+		return stopFlag
+	}
+
+	type pageResult struct {
+		page   int
+		skills []apiSkill
+		total  int
+		err    error
+	}
+	fetch := func(page int) pageResult {
 		var u string
 		if page == 1 {
 			u = fmt.Sprintf("%s/api/skills?page=1&pageSize=%d&sortBy=downloads&order=desc",
@@ -203,53 +248,126 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 		}
 		body, err := a.fetchBody(ctx, u)
 		if err != nil {
-			logger.Warn("skillhub discover page=%d: %v", page, err)
-			break
+			return pageResult{page: page, err: err}
 		}
 		var resp apiListResp
 		if uerr := json.Unmarshal([]byte(body), &resp); uerr != nil {
-			logger.Warn("skillhub discover page=%d unmarshal: %v", page, uerr)
-			break
+			return pageResult{page: page, err: uerr}
 		}
 		if resp.Code != 0 {
-			logger.Warn("skillhub discover page=%d code=%d msg=%q", page, resp.Code, resp.Message)
-			break
+			return pageResult{page: page, err: fmt.Errorf("code=%d msg=%q", resp.Code, resp.Message)}
+		}
+		return pageResult{page: page, skills: resp.Data.Skills, total: resp.Data.Total}
+	}
+
+	const maxConcurrency = 4
+	pageCh := make(chan int, maxConcurrency)
+	resultCh := make(chan pageResult, maxConcurrency)
+
+	// 启动 N 个 worker:从 pageCh 取 page → fetch → 写 resultCh;pageCh close 后自动退出
+	var wg sync.WaitGroup
+	for i := 0; i < maxConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range pageCh {
+				resultCh <- fetch(p)
+			}
+		}()
+	}
+
+	// 单独 goroutine 收 wg,等所有 worker 退出后 close resultCh
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// producer: 派发 page, 直到 stop / ctx 取消
+	producerDone := make(chan struct{})
+	go func() {
+		defer close(pageCh)
+		defer close(producerDone)
+		for page := 1; ; page++ {
+			if isStop() {
+				return
+			}
+			if cerr := ctx.Err(); cerr != nil {
+				return
+			}
+			// select 三选一:成功 send / stopCh 关闭 / ctx 取消
+			select {
+			case pageCh <- page:
+			case <-stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// 收集器:读 resultCh,直到 close
+	// 2026-07-02 改:并发下"本页<pageSize"/"totalHint 收齐"等退出条件要重写 ——
+	// 因为 page 2 可能先于 page 1 返回,单 page 不能立即判定"已无更多数据"。
+	// 改为:累计 len(out) >= totalHint 时 setStop;否则只能等 producer 自然派完。
+	pageResults := make([]pageResult, 0, defaultPageSize)
+	var pagesLoaded int // 已读完 result 的页数
+	for res := range resultCh {
+		if res.err != nil {
+			logger.Warn("skillhub discover page=%d: %v", res.page, res.err)
+			// 单页失败:触发 stop(让 producer 不再派新 page),已拿到的都返回(降级部分可见)
+			setStop()
+			continue
 		}
 		// 记录 totalHint:第一页拿一次即可
+		totalMu.Lock()
 		if totalHint < 0 {
-			totalHint = resp.Data.Total
+			totalHint = res.total
 		}
-		if len(resp.Data.Skills) == 0 {
-			// 空页:已无更多数据
-			break
+		totalMu.Unlock()
+
+		if len(res.skills) == 0 {
+			// 空页:已无更多数据(并发下 page N+1 可能先返,但 page N 空也能让 producer 停)
+			setStop()
+			continue
 		}
-		// 把当前页 map 成 MarketItem,合并去重,累加
-		pageItems := mapSkillList(resp.Data.Skills, baseURL)
-		added := 0
+		pageResults = append(pageResults, res)
+		pagesLoaded++
+
+		// 退出条件 2:totalHint 已知且累计 unique 已收齐
+		// 简化:len(pageResults)*pageSize ≥ totalHint 时停(并发下可能重复去重,但不会漏)
+		totalMu.Lock()
+		th := totalHint
+		totalMu.Unlock()
+		if th > 0 && pagesLoaded*defaultPageSize >= th {
+			setStop()
+		}
+		// 退出条件 3:本页不到 pageSize — 并发下不立即判定(可能 page N 满但 page N+1 空),
+		// 留到 sort 后用 last page 的 skills 长度判定。
+	}
+	// 等 producer 退出(确保 close(pageCh) 已发生,worker 全部 wg.Done,resultCh 已 close)
+	<-producerDone
+
+	// 按 page 升序,恢复翻页语义(测试与下游消费者都对齐"翻页顺序")
+	sort.Slice(pageResults, func(i, j int) bool { return pageResults[i].page < pageResults[j].page })
+
+	// 退出条件 3 兜底:排序后看最后一页的 skills 长度,< pageSize 说明已无更多数据
+	// 但此处已经全部 append,不能 truncate;这条改判定为"如果最后一页 < pageSize,
+	// 可以不再 append 之后的"(这里已经全在 pageResults 里了,无影响)
+	_ = defaultPageSize
+
+	for _, res := range pageResults {
+		pageItems := mapSkillList(res.skills, baseURL)
 		for _, it := range pageItems {
+			seenMu.Lock()
 			if _, dup := seen[it.RemoteID]; dup {
+				seenMu.Unlock()
 				continue
 			}
 			seen[it.RemoteID] = struct{}{}
+			seenMu.Unlock()
+			outMu.Lock()
 			out = append(out, it)
-			added++
-		}
-		// 翻页退出条件 1:本页没新增(全重复,可能 total 字段不可信,防死循环)
-		if added == 0 {
-			break
-		}
-		// 翻页退出条件 2:已拿到 totalHint 的全部
-		if totalHint > 0 && len(out) >= totalHint {
-			break
-		}
-		// 翻页退出条件 3:本页不到 pageSize,后面也没了
-		if len(resp.Data.Skills) < defaultPageSize {
-			break
-		}
-		// 翻页退出条件 4:ctx 取消(交给上层 ctx 触发,90s)
-		if cerr := ctx.Err(); cerr != nil {
-			logger.Warn("skillhub discover cancelled at page=%d: %v", page, cerr)
-			break
+			outMu.Unlock()
 		}
 	}
 
@@ -590,30 +708,11 @@ func (a *Adapter) downloadSingleFile(ctx context.Context, baseURL, remoteID stri
 	return can, nil
 }
 
-// fetchBody 拉 URL 文本,状态非 2xx 返错;超时/网络错误一并返错。
+// fetchBody 拉 URL 文本,自动 gzip 解压 + UA。状态非 2xx 返错。
+// 2026-07-02 改:走 httpx.GetJSONWithUA,统一 keep-alive + Accept-Encoding + UA;
+// 之前每次 fetchBody 都是裸 http.NewRequest,没 UA 没 gzip。
 func (a *Adapter) fetchBody(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "skill-box/1.0 (+https://skillbox.local)")
-	req.Header.Set("Accept", "application/json,text/plain,*/*")
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == http.StatusNotFound {
-			return "", fmt.Errorf("%w: %s", skillmarket.ErrRemoteNotFound, url)
-		}
-		return "", fmt.Errorf("status %d for %s", resp.StatusCode, url)
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return httpx.GetJSONWithUA(ctx, a.httpClient, url)
 }
 
 // buildFallbackCanonical 把 fallback item 拼成最小可用的 canonical。

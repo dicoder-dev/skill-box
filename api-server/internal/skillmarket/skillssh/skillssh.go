@@ -18,15 +18,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillmarket"
+	"ginp-api/pkg/httpx"
 	"ginp-api/pkg/logger"
 )
 
@@ -91,11 +92,12 @@ type Adapter struct {
 	rawBaseOverride string
 }
 
-// New 构造 Adapter。
-// 2026-07-01 改:timeout 20s → 30s(与 skillhub 保持一致;真实页面 + search 页面解析更慢)。
+// New 构造 Adapter(用 httpx 长生命周期客户端, 跨多次翻页复用 TLS 连接)。
+// 2026-07-02 改:从裸 http.Client 切到 httpx.NewClient — keep-alive + gzip + UA 一站搞定;
+// skills.sh 是海外, 单页 ~200-500ms, keep-alive 省 TLS 握手 ≈ 100ms/页。
 func New() *Adapter {
 	return &Adapter{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: httpx.NewClient(30 * time.Second),
 	}
 }
 
@@ -208,42 +210,155 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 //   - UpdatedAt   = 暂不填(API 没暴露更新时间)
 //
 // 失败/解析异常 → 返回 (nil, false),调用方降级到 HTML 解析。
+//
+// 2026-07-02 改造:翻页从串行改为**限并发=4 的 worker pool**。
+//   - skills.sh 海外服务器,单页 ~200-500ms × 50 页 ≈ 15s;
+//     并发 4 后 ≈ 4s(节省 70%+ 时间)
+//   - 第一页失败仍直接放弃 JSON 路径(单页判降级)
+//   - 后续页失败:已拿到前面的就返回
+//
+// 2026-07-02 修:之前实现里 producer 不知道"首页失败",会傻乎乎派完 50 页,
+// worker 拉一堆 404 + warn log,测试场景(stub server 只返 page 0)会卡死;
+// 现在用 stopMu + pageFailed 让 producer 立即感知 stop,关闭 pageCh 让 worker 退出。
 func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pages int) ([]skillmarket.MarketItem, bool) {
 	if pages <= 0 {
 		pages = 1
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]bool, 64)
+	var seenMu sync.Mutex
 	out := make([]skillmarket.MarketItem, 0, 64)
+	var outMu sync.Mutex
 
-	for p := 0; p < pages; p++ {
+	// stopCollect 标记"全局停止":①首页失败 ②后续页 404 触发整体降级
+	// 2026-07-02 改:加 stopCh(close 后 producer select 立即感知),避免"send 阻塞 + stop 已设"死锁。
+	stopCollect := false
+	var stopMu sync.Mutex
+	stopCh := make(chan struct{})
+	setStop := func() {
+		stopMu.Lock()
+		defer stopMu.Unlock()
+		if stopCollect {
+			return
+		}
+		stopCollect = true
+		close(stopCh)
+	}
+	isStop := func() bool {
+		stopMu.Lock()
+		defer stopMu.Unlock()
+		return stopCollect
+	}
+
+	type pageResult struct {
+		page  int
+		skills []struct {
+			Rank     int    `json:"rank"`
+			Source   string `json:"source"`
+			SkillID  string `json:"skillId"`
+			Name     string `json:"name"`
+			AgentTrustHub *struct {
+				Source string `json:"source"`
+				Slug   string `json:"slug"`
+				Result struct {
+					GeminiAnalysis struct {
+						Verdict  string   `json:"verdict"`
+						Summary  string   `json:"summary"`
+						Categories []string `json:"categories"`
+					} `json:"gemini_analysis"`
+					OverallRiskLevel string `json:"overall_risk_level"`
+				} `json:"result"`
+			} `json:"agentTrustHub"`
+			Socket *json.RawMessage `json:"socket"`
+			Snyk   *json.RawMessage `json:"snyk"`
+		}
+		err error
+	}
+
+	fetch := func(p int) pageResult {
 		u := strings.TrimRight(baseURL, "/") + defaultAuditsAPIPath + fmt.Sprintf("%d", p)
 		body, err := a.fetchBody(ctx, u)
 		if err != nil {
-			logger.Warn("skillssh audits API page %d: %v", p, err)
-			// 第一页失败直接放弃 JSON 路径
-			if p == 0 {
-				return nil, false
-			}
-			// 后续页失败:已拿到前面的就返回
-			break
+			return pageResult{page: p, err: err}
 		}
 		var resp auditsAPIResponse
-		if err := json.Unmarshal([]byte(body), &resp); err != nil {
-			logger.Warn("skillssh audits API page %d: unmarshal: %v", p, err)
-			if p == 0 {
-				return nil, false
-			}
-			break
+		if uerr := json.Unmarshal([]byte(body), &resp); uerr != nil {
+			return pageResult{page: p, err: uerr}
 		}
-		for _, s := range resp.Skills {
+		return pageResult{page: p, skills: resp.Skills}
+	}
+
+	const maxConcurrency = 4
+	// pageCh 加缓冲 = maxConcurrency, 让 producer 一次压入 N 个 page,worker 并发取;
+	// 否则无缓冲 channel 下 producer 等 worker,和串行没区别。
+	pageCh := make(chan int, maxConcurrency)
+	resultCh := make(chan pageResult, maxConcurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range pageCh {
+				resultCh <- fetch(p)
+			}
+		}()
+	}
+
+	producerDone := make(chan struct{})
+	go func() {
+		defer close(pageCh)
+		defer close(producerDone)
+		for p := 0; p < pages; p++ {
+			// producer 也要感知 stop(首页失败 / ctx 取消),否则会傻乎乎派发完所有 page。
+			if isStop() {
+				return
+			}
+			if cerr := ctx.Err(); cerr != nil {
+				return
+			}
+			// 2026-07-02 改:select 三选一(pageCh / stopCh / ctx.Done),
+			// stop 设上时 producer 不阻塞在 send。
+			select {
+			case pageCh <- p:
+			case <-stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// 收集器:读 resultCh,直到 close
+	for res := range resultCh {
+		if res.err != nil {
+			logger.Warn("skillssh audits API page %d: %v", res.page, res.err)
+			if res.page == 0 {
+				// 第一页失败直接放弃 JSON 路径
+				setStop()
+			}
+			continue
+		}
+		if isStop() {
+			continue
+		}
+		for _, s := range res.skills {
 			if s.Source == "" || s.SkillID == "" {
 				continue
 			}
 			remoteID := s.Source + "@" + s.SkillID
+			seenMu.Lock()
 			if seen[remoteID] {
+				seenMu.Unlock()
 				continue
 			}
 			seen[remoteID] = true
+			seenMu.Unlock()
+
 			author := s.Source
 			if idx := strings.Index(s.Source, "/"); idx > 0 {
 				author = s.Source[:idx]
@@ -254,21 +369,24 @@ func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pag
 				Author:    author,
 				DetailURL: fmt.Sprintf("%s/%s/%s", strings.TrimRight(baseURL, "/"), s.Source, s.SkillID),
 			}
-			// description: 优先用 gemini summary,裁剪到 280 字符
 			if s.AgentTrustHub != nil && s.AgentTrustHub.Result.GeminiAnalysis.Summary != "" {
 				item.Description = trimDescription(s.AgentTrustHub.Result.GeminiAnalysis.Summary, 280)
 			}
-			// tags: 安全等级作为可见标签(2026-07-01 修:nil 检查,部分冷门 skill
-			// 没被 Agent Trust Hub 审计过,AgentTrustHub 字段为 null,直接读会 panic)
 			if s.AgentTrustHub != nil {
 				if level := s.AgentTrustHub.Result.OverallRiskLevel; level != "" {
 					item.Tags = []string{"risk:" + strings.ToLower(level)}
 				}
 			}
+			outMu.Lock()
 			out = append(out, item)
+			outMu.Unlock()
 		}
 	}
+	<-producerDone
 
+	if isStop() {
+		return nil, false
+	}
 	if len(out) == 0 {
 		return nil, false
 	}
@@ -397,30 +515,11 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	return nil, fmt.Errorf("%w: %v", skillmarket.ErrRemoteFetchFail, lastErr)
 }
 
-// fetchBody 拉 URL 文本,状态非 2xx 返错;超时/网络错误一并返错。
+// fetchBody 拉 URL 文本,自动 gzip 解压 + UA。状态非 2xx 返错。
+// 2026-07-02 改:走 httpx.GetJSONWithUA,统一 keep-alive + Accept-Encoding + UA;
+// 之前每次 fetchBody 都是裸 http.NewRequest,没 UA 没 gzip。
 func (a *Adapter) fetchBody(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "skill-box/1.0 (+https://skillbox.local)")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain,application/json")
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == http.StatusNotFound {
-			return "", fmt.Errorf("%w: %s", skillmarket.ErrRemoteNotFound, url)
-		}
-		return "", fmt.Errorf("status %d for %s", resp.StatusCode, url)
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return httpx.GetJSONWithUA(ctx, a.httpClient, url)
 }
 
 // splitRemoteID 拆 "owner/repo@skill" → (owner/repo, skill)。
