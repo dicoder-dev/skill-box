@@ -111,8 +111,8 @@ go func() {
 ```go
 app := desktop.NewApp(desktop.AppConfig{
     Size: desktop.WindowSizeConfig{
-        Mode: "ratio",                                // "ratio" | "fixed"
-        WidthRatio:  0.9,                             // Mode=="ratio" 时用
+        Mode:        desktop.WindowSizeModeRatio, // 而非字符串 "ratio"
+        WidthRatio:  0.9,
         HeightRatio: 0.9,
         MinWidth:    960,
         MinHeight:   540,
@@ -127,10 +127,17 @@ app := desktop.NewApp(desktop.AppConfig{
   行为,**完全向后兼容**。
 
 两种模式选择规则:
-- `Mode == "fixed"`:窗口 = `Size.Width × Size.Height`,不随屏幕变(打包场景)。
-- `Mode == "ratio"` 或 `""`:窗口 = 屏幕 × WidthRatio / 屏幕 × HeightRatio,
+- `Mode == desktop.WindowSizeModeFixed`(常量 `"fixed"`):窗口 = `Size.Width × Size.Height`,不随屏幕变(打包场景)。
+- `Mode == desktop.WindowSizeModeRatio`(常量 `"ratio"`)或 `""`:窗口 = 屏幕 × WidthRatio / 屏幕 × HeightRatio,
   留 0 走 const 默认值。配 `AspectRatio="16:9"` 时高度按宽度反推,
   任何屏幕下都锁 16:9。
+
+**重要:Mode 字符串必须用常量 `WindowSizeModeRatio` / `WindowSizeModeFixed`,
+不要直接写 `"ratio"` / `"fixed"` 字面值**。常量集中在 `desktop/wails_app.go` 顶部,
+switch 与默认行为都在 desktop 包内部完成。AspectRatio 仍是自由字符串("16:9" 这种),
+因为它是比例值不是枚举。
+
+未来加新模式(如 `WindowSizeModeFollowFocus`)只需在 const 块加一行,不用改 API 形状。
 
 ## `AppConfig.AutoSizeByScreen` 模式(向下兼容路径)
 

@@ -44,6 +44,20 @@ const (
 	minPrimarySizeFloorHeight = 600
 )
 
+// WindowSizeConfig.Mode 的合法值(2026-07-02 增,集中常量)。
+//
+// 调用方写 `Mode: WindowSizeModeRatio` 而不是 `Mode: "ratio"`,避免散落硬编码
+// 与拼写漂移。switch 与 default 行为都在 desktop 包内部完成,外部只引用常量。
+//
+// 设计取舍:用 string 而不是 bool,便于未来加新模式(如 `WindowSizeModeFollowFocus`)
+// 不破 API 形状;switch 仍以空字符串兼容旧调用方(等同于 ratio)。
+const (
+	// WindowSizeModeRatio 按屏幕比例算窗口尺寸(WidthRatio × screenW 等)。
+	WindowSizeModeRatio = "ratio"
+	// WindowSizeModeFixed 使用固定 Width × Height,不随屏幕变化。
+	WindowSizeModeFixed = "fixed"
+)
+
 // ParseAspectRatio 解析 "W:H" 形式的宽高比字符串(2026-07-02 增),返回 (w, h)。
 // 不合法返 (0, 0)。允许写法:"16:9"、"4:3"、"21:9"、" 16 : 9 "。
 //
@@ -119,10 +133,10 @@ func detectScreenDIPSize() (int, int) {
 // 后续 NewApp 沿用 cfg.Width/Height 灌给 WebviewWindowOptions。
 //
 // 两种模式:
-//   - "fixed":沿用 Size.Width/Size.Height,屏幕尺寸不参与计算。
-//   - "ratio" 或空(老默认值):沿用 Size.WidthRatio/Size.HeightRatio,
+//   - WindowSizeModeFixed:沿用 Size.Width/Size.Height,屏幕尺寸不参与计算。
+//   - WindowSizeModeRatio 或空(老默认值):沿用 Size.WidthRatio/Size.HeightRatio,
 //     留 0 时用 const 默认 0.9 × 0.9。可选 AspectRatio 锁宽高比。
-//   - 其他值:log warning,降级到 ratio 模式 + const 默认。
+//   - 其他值:log warning,降级到 WindowSizeModeRatio + const 默认。
 //
 // detectSw/detectSh 是 system_profiler 拿到的屏幕 DIP 分辨率,0 表示拿不到,
 // 此时 ratio 模式降级到 const 默认值。
@@ -133,7 +147,7 @@ func applyWindowSizeConfig(cfg *AppConfig, detectSw, detectSh int) {
 	}
 
 	switch cfg.Size.Mode {
-	case "", "ratio":
+	case "", WindowSizeModeRatio:
 		// 比例模式
 		wr := cfg.Size.WidthRatio
 		if wr <= 0 {
@@ -162,7 +176,7 @@ func applyWindowSizeConfig(cfg *AppConfig, detectSw, detectSh int) {
 			cfg.Height = fallbackPrimaryHeight
 		}
 
-	case "fixed":
+	case WindowSizeModeFixed:
 		// 固定尺寸模式:沿用 Size.Width/Size.Height,缺失降级到 fallback
 		if cfg.Size.Width <= 0 {
 			cfg.Width = fallbackPrimaryWidth
@@ -313,54 +327,54 @@ type AppConfig struct {
 // **新代码推荐使用本结构,语义更清晰**。
 //
 // 两种模式:
-//   - "ratio"(默认):窗口 = 屏幕宽 × WidthRatio、屏幕高 × HeightRatio;
+//   - WindowSizeModeRatio(默认):窗口 = 屏幕宽 × WidthRatio、屏幕高 × HeightRatio;
 //     Width/Height 被忽略。适用桌面端日常使用,跟屏幕尺寸走。
-//   - "fixed":窗口 = 固定 Width × Height,不随屏幕变化;
+//   - WindowSizeModeFixed:窗口 = 固定 Width × Height,不随屏幕变化;
 //     WidthRatio/HeightRatio 被忽略。适用打包统一规格。
 //
 // 字段语义:
-//   - Mode: 选哪种算法。"ratio" 或 "fixed",空字符串等同 "ratio" 兼容旧行为。
-//   - Width/Height:    Mode=="fixed" 时使用;Mode=="ratio" 时无效。
-//   - WidthRatio/HeightRatio: Mode=="ratio" 时使用;Mode=="fixed" 时无效。
+//   - Mode: 选哪种算法。WindowSizeModeRatio 或 WindowSizeModeFixed,空字符串等同 WindowSizeModeRatio 兼容旧行为。
+//   - Width/Height:    Mode==WindowSizeModeFixed 时使用;Mode==WindowSizeModeRatio 时无效。
+//   - WidthRatio/HeightRatio: Mode==WindowSizeModeRatio 时使用;Mode==WindowSizeModeFixed 时无效。
 //     留空(0)时 NewApp 内部用 const 默认值兜底(0.9 × 0.9)。
 //   - MinWidth/MinHeight: 共用,留 0 时按 minPrimaryWidthRatio(0.6)+Floor 兜底。
-//   - AspectRatio: 可选,锁宽高比("16:9" 等),仅 Mode=="ratio" 时生效;
+//   - AspectRatio: 可选,锁宽高比(如 16:9),仅 Mode==WindowSizeModeRatio 时生效;
 //     非空时 Height 按"Width × H/W"反推。
 //
 // 使用示例(main.go):
 //
 //	desktop.NewApp(desktop.AppConfig{
 //	    Size: desktop.WindowSizeConfig{
-//	        Mode:        "ratio",
-//	        WidthRatio:  0.9,
-//	        HeightRatio: 0.9,
+//	        Mode:         desktop.WindowSizeModeRatio,
+//	        WidthRatio:   0.9,
+//	        HeightRatio:  0.9,
 //	    },
 //	}, backend)
 //
 //	// 或固定尺寸:
 //	desktop.NewApp(desktop.AppConfig{
 //	    Size: desktop.WindowSizeConfig{
-//	        Mode:   "fixed",
+//	        Mode:   desktop.WindowSizeModeFixed,
 //	        Width:  1280,
 //	        Height: 800,
 //	    },
 //	}, backend)
 type WindowSizeConfig struct {
-	// Mode 选哪种算法。可选 "ratio" 或 "fixed"。空字符串等同 "ratio"。
+	// Mode 选哪种算法。可取 WindowSizeModeRatio 或 WindowSizeModeFixed。空字符串等同 WindowSizeModeRatio。
 	Mode string
-	// Width / Height Mode=="fixed" 时使用,Mode=="ratio" 时无效。
+	// Width / Height Mode==WindowSizeModeFixed 时使用,Mode==WindowSizeModeRatio 时无效。
 	Width, Height int
-	// WidthRatio / HeightRatio Mode=="ratio" 时使用(0~1);Mode=="fixed" 时无效。
+	// WidthRatio / HeightRatio Mode==WindowSizeModeRatio 时使用(0~1);Mode==WindowSizeModeFixed 时无效。
 	// 留空(0)NewApp 内部用 const 默认值兜底,推荐显式给值以免新人不清楚默认。
 	WidthRatio, HeightRatio float64
 	// MinWidth / MinHeight 留 0 时 NewApp 内部按 minPrimaryWidthRatio + Floor 兜底。
 	MinWidth, MinHeight int
-	// AspectRatio 可选,锁宽高比("16:9" 等),仅 Mode=="ratio" 时生效。
+	// AspectRatio 可选,锁宽高比(如 16:9),仅 Mode==WindowSizeModeRatio 时生效。
 	AspectRatio string
 }
 
 // configured 标记 WindowSizeConfig 是否被显式配过(非零值)。
-// 区别于空值与默认值,避免顶层字段完全没填时误判为 "fixed"。
+// 区别于空值与默认值,避免顶层字段完全没填时误判为 WindowSizeModeFixed。
 // 当前实现:Mode 非空、Width/Height 任一非零、WidthRatio/HeightRatio 任一非零,
 //
 //	或 MinWidth/MinHeight 任一非零、AspectRatio 非空 → 都算被显式配置过。
