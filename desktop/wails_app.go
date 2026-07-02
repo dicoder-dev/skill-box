@@ -113,6 +113,157 @@ func detectScreenDIPSize() (int, int) {
 	return w, h
 }
 
+// applyWindowSizeConfig 按 cfg.Size 显式配置计算 WindowSize。
+//
+// 计算出的最终值会写入 cfg.Width/cfg.Height/cfg.MinWidth/cfg.MinHeight,
+// 后续 NewApp 沿用 cfg.Width/Height 灌给 WebviewWindowOptions。
+//
+// 两种模式:
+//   - "fixed":沿用 Size.Width/Size.Height,屏幕尺寸不参与计算。
+//   - "ratio" 或空(老默认值):沿用 Size.WidthRatio/Size.HeightRatio,
+//     留 0 时用 const 默认 0.9 × 0.9。可选 AspectRatio 锁宽高比。
+//   - 其他值:log warning,降级到 ratio 模式 + const 默认。
+//
+// detectSw/detectSh 是 system_profiler 拿到的屏幕 DIP 分辨率,0 表示拿不到,
+// 此时 ratio 模式降级到 const 默认值。
+func applyWindowSizeConfig(cfg *AppConfig, detectSw, detectSh int) {
+	// 把可能写在 cfg.AspectRatio 的也镜像到 Size.AspectRatio,便于单一来源读取
+	if cfg.Size.AspectRatio == "" && cfg.AspectRatio != "" {
+		cfg.Size.AspectRatio = cfg.AspectRatio
+	}
+
+	switch cfg.Size.Mode {
+	case "", "ratio":
+		// 比例模式
+		wr := cfg.Size.WidthRatio
+		if wr <= 0 {
+			wr = defaultPrimaryWidthRatio
+		}
+		hr := cfg.Size.HeightRatio
+		if hr <= 0 {
+			hr = defaultPrimaryHeightRatio
+		}
+		if detectSw > 0 {
+			cfg.Width = int(math.Round(float64(detectSw) * wr))
+		} else {
+			cfg.Width = fallbackPrimaryWidth
+		}
+		aspectW, aspectH := ParseAspectRatio(cfg.Size.AspectRatio)
+		if aspectW > 0 && aspectH > 0 && cfg.Width > 0 {
+			derived := int(math.Round(float64(cfg.Width) * float64(aspectH) / float64(aspectW)))
+			if derived > 0 {
+				cfg.Height = derived
+			} else {
+				cfg.Height = fallbackPrimaryHeight
+			}
+		} else if detectSh > 0 {
+			cfg.Height = int(math.Round(float64(detectSh) * hr))
+		} else {
+			cfg.Height = fallbackPrimaryHeight
+		}
+
+	case "fixed":
+		// 固定尺寸模式:沿用 Size.Width/Size.Height,缺失降级到 fallback
+		if cfg.Size.Width <= 0 {
+			cfg.Width = fallbackPrimaryWidth
+		} else {
+			cfg.Width = cfg.Size.Width
+		}
+		if cfg.Size.Height <= 0 {
+			cfg.Height = fallbackPrimaryHeight
+		} else {
+			cfg.Height = cfg.Size.Height
+		}
+
+	default:
+		log.Printf("desktop: unknown Size.Mode=%q, falling back to ratio mode", cfg.Size.Mode)
+		cfg.Width = fallbackPrimaryWidth
+		cfg.Height = fallbackPrimaryHeight
+	}
+
+	// MinWidth/MinHeight 共用:留 0 走 const 兜底
+	if cfg.Size.MinWidth > 0 {
+		cfg.MinWidth = cfg.Size.MinWidth
+	} else if detectSw > 0 {
+		cfg.MinWidth = int(math.Round(float64(detectSw) * minPrimaryWidthRatio))
+		if cfg.MinWidth < minPrimarySizeFloorWidth {
+			cfg.MinWidth = minPrimarySizeFloorWidth
+		}
+	} else {
+		cfg.MinWidth = minPrimarySizeFloorWidth
+	}
+
+	if cfg.Size.MinHeight > 0 {
+		cfg.MinHeight = cfg.Size.MinHeight
+	} else if detectSh > 0 {
+		derivedFromMinW := int(math.Round(float64(cfg.MinWidth) * defaultPrimaryHeightRatio))
+		if derivedFromMinW > 0 {
+			cfg.MinHeight = derivedFromMinW
+		} else {
+			cfg.MinHeight = int(math.Round(float64(detectSh) * minPrimaryWidthRatio))
+		}
+		if cfg.MinHeight < minPrimarySizeFloorHeight {
+			cfg.MinHeight = minPrimarySizeFloorHeight
+		}
+	} else {
+		cfg.MinHeight = minPrimarySizeFloorHeight
+	}
+}
+
+// applyLegacySizeDefaults 老路径(顶层 Width/Height + AutoSizeByScreen)兜底,
+// 当 cfg.Size 未显式配置时调用,行为与改前完全一致。
+func applyLegacySizeDefaults(cfg *AppConfig, detectSw, detectSh int) {
+	aspectW, aspectH := ParseAspectRatio(cfg.AspectRatio)
+	if cfg.Width == 0 {
+		if detectSw > 0 {
+			cfg.Width = int(math.Round(float64(detectSw) * defaultPrimaryWidthRatio))
+		} else {
+			cfg.Width = fallbackPrimaryWidth
+		}
+	}
+	if cfg.Height == 0 {
+		if aspectW > 0 && aspectH > 0 && cfg.Width > 0 {
+			derived := int(math.Round(float64(cfg.Width) * float64(aspectH) / float64(aspectW)))
+			if derived > 0 {
+				cfg.Height = derived
+			} else {
+				cfg.Height = fallbackPrimaryHeight
+			}
+		} else if detectSh > 0 {
+			cfg.Height = int(math.Round(float64(detectSh) * defaultPrimaryHeightRatio))
+		} else {
+			cfg.Height = fallbackPrimaryHeight
+		}
+	}
+	if cfg.MinWidth == 0 {
+		if detectSw > 0 {
+			cfg.MinWidth = int(math.Round(float64(detectSw) * minPrimaryWidthRatio))
+			if cfg.MinWidth < minPrimarySizeFloorWidth {
+				cfg.MinWidth = minPrimarySizeFloorWidth
+			}
+		} else {
+			cfg.MinWidth = minPrimarySizeFloorWidth
+		}
+	}
+	if cfg.MinHeight == 0 {
+		if aspectW > 0 && aspectH > 0 && cfg.MinWidth > 0 {
+			derived := int(math.Round(float64(cfg.MinWidth) * float64(aspectH) / float64(aspectW)))
+			if derived >= minPrimarySizeFloorHeight {
+				cfg.MinHeight = derived
+			} else {
+				cfg.MinHeight = minPrimarySizeFloorHeight
+			}
+		} else if detectSh > 0 {
+			cfg.MinHeight = int(math.Round(float64(detectSh) * minPrimaryWidthRatio))
+			if cfg.MinHeight < minPrimarySizeFloorHeight {
+				cfg.MinHeight = minPrimarySizeFloorHeight
+			}
+		} else {
+			cfg.MinHeight = minPrimarySizeFloorHeight
+		}
+	}
+}
+
 // AppConfig 描述桌面端 Wails 应用的全部配置。
 // 调用方在 main.go 构造并传给 NewApp,NewApp 内部完成 Wails 全部组装并返回 *App。
 type AppConfig struct {
@@ -137,6 +288,13 @@ type AppConfig struct {
 	// 不传或格式非法都被视为空;调用方应在 NewApp 之前用 ParseAspectRatio 预校验。
 	// 注意:仅在 AutoSizeByScreen=true 时生效;显式指定 Width/Height 时忽略。
 	AspectRatio string
+	// Size 主窗口尺寸配置(2026-07-02 增,显式两模式选择)。
+	// **新代码推荐使用本字段,语义比顶层 Width/Height + AutoSizeByScreen 更清晰。**
+	// 通过 WindowSizeConfig.configured() 判断是否被显式配置:
+	//   - 已配置:走 Size.Mode 决定 ratio / fixed;
+	//   - 未配置:回落到顶层 Width/Height + AutoSizeByScreen 行为(向后兼容)。
+	// 详见 WindowSizeConfig 注释。
+	Size WindowSizeConfig
 	// BackgroundColour 主窗口背景色(R,G,B),各分量 0-255。
 	BackgroundColour [3]uint8
 	// FrontendURL 可选:自定义前端入口 URL。非空时 Webview 加载此 URL,
@@ -149,6 +307,71 @@ type AppConfig struct {
 	FrontendURL string
 }
 
+// WindowSizeConfig 主窗口尺寸配置(2026-07-02 增,显式模式选择)。
+//
+// 旧接口(顶层 Width/Height/MinWidth/MinHeight/AutoSizeByScreen)继续保留,行为不变;
+// **新代码推荐使用本结构,语义更清晰**。
+//
+// 两种模式:
+//   - "ratio"(默认):窗口 = 屏幕宽 × WidthRatio、屏幕高 × HeightRatio;
+//     Width/Height 被忽略。适用桌面端日常使用,跟屏幕尺寸走。
+//   - "fixed":窗口 = 固定 Width × Height,不随屏幕变化;
+//     WidthRatio/HeightRatio 被忽略。适用打包统一规格。
+//
+// 字段语义:
+//   - Mode: 选哪种算法。"ratio" 或 "fixed",空字符串等同 "ratio" 兼容旧行为。
+//   - Width/Height:    Mode=="fixed" 时使用;Mode=="ratio" 时无效。
+//   - WidthRatio/HeightRatio: Mode=="ratio" 时使用;Mode=="fixed" 时无效。
+//     留空(0)时 NewApp 内部用 const 默认值兜底(0.9 × 0.9)。
+//   - MinWidth/MinHeight: 共用,留 0 时按 minPrimaryWidthRatio(0.6)+Floor 兜底。
+//   - AspectRatio: 可选,锁宽高比("16:9" 等),仅 Mode=="ratio" 时生效;
+//     非空时 Height 按"Width × H/W"反推。
+//
+// 使用示例(main.go):
+//
+//	desktop.NewApp(desktop.AppConfig{
+//	    Size: desktop.WindowSizeConfig{
+//	        Mode:        "ratio",
+//	        WidthRatio:  0.9,
+//	        HeightRatio: 0.9,
+//	    },
+//	}, backend)
+//
+//	// 或固定尺寸:
+//	desktop.NewApp(desktop.AppConfig{
+//	    Size: desktop.WindowSizeConfig{
+//	        Mode:   "fixed",
+//	        Width:  1280,
+//	        Height: 800,
+//	    },
+//	}, backend)
+type WindowSizeConfig struct {
+	// Mode 选哪种算法。可选 "ratio" 或 "fixed"。空字符串等同 "ratio"。
+	Mode string
+	// Width / Height Mode=="fixed" 时使用,Mode=="ratio" 时无效。
+	Width, Height int
+	// WidthRatio / HeightRatio Mode=="ratio" 时使用(0~1);Mode=="fixed" 时无效。
+	// 留空(0)NewApp 内部用 const 默认值兜底,推荐显式给值以免新人不清楚默认。
+	WidthRatio, HeightRatio float64
+	// MinWidth / MinHeight 留 0 时 NewApp 内部按 minPrimaryWidthRatio + Floor 兜底。
+	MinWidth, MinHeight int
+	// AspectRatio 可选,锁宽高比("16:9" 等),仅 Mode=="ratio" 时生效。
+	AspectRatio string
+}
+
+// configured 标记 WindowSizeConfig 是否被显式配过(非零值)。
+// 区别于空值与默认值,避免顶层字段完全没填时误判为 "fixed"。
+// 当前实现:Mode 非空、Width/Height 任一非零、WidthRatio/HeightRatio 任一非零,
+//
+//	或 MinWidth/MinHeight 任一非零、AspectRatio 非空 → 都算被显式配置过。
+func (s WindowSizeConfig) configured() bool {
+	return s.Mode != "" ||
+		s.Width > 0 || s.Height > 0 ||
+		s.WidthRatio > 0 || s.HeightRatio > 0 ||
+		s.MinWidth > 0 || s.MinHeight > 0 ||
+		s.AspectRatio != ""
+}
+
 // App 包装 *application.App,提供 Quit 优雅退出。
 //
 // 注意:本结构体只关心 Wails UI 相关的状态,后端 server 由调用方在 NewApp 之前
@@ -159,9 +382,9 @@ type App struct {
 	backend    *bootstrap.Backend
 	notifier   *Notifier
 	shortcut   *ShortcutManager
-	autoResize bool   // startupAsync 里按屏幕 DIP 宽高各 90% 重置主窗口尺寸
-	aspectW    int    // 2026-07-02 增:锁宽高比(W),autoResize=true 时生效
-	aspectH    int    // 2026-07-02 增:锁宽高比(H),autoResize=true 时生效
+	autoResize bool // startupAsync 里按屏幕 DIP 宽高各 90% 重置主窗口尺寸
+	aspectW    int  // 2026-07-02 增:锁宽高比(W),autoResize=true 时生效
+	aspectH    int  // 2026-07-02 增:锁宽高比(H),autoResize=true 时生效
 }
 
 // NewApp 构造并完整组装桌面端 Wails 应用:
@@ -182,75 +405,30 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	}
 	// 默认尺寸：在 NewApp 阻塞阶段就能拿屏幕尺寸的兜底来源，优先用 macOS 原生
 	// system_profiler 拿主屏分辨率（同步可执行，不依赖 Wails 主循环 ready），
-	// 然后按 90% × 90% 灌给 cfg.Width/Height，让窗口天生就是大的。
+	// 然后按选定模式灌给 cfg.Width/Height,让窗口天生就是大尺寸。
+	//
+	// 模式分发(2026-07-02 增):
+	//   - cfg.Size 被显式配过（Mode/W/H/Ratio 任一非零）→ 走 WindowSizeConfig 路径
+	//   - 否则 → 走顶层 Width/Height + AutoSizeByScreen 老路径(向后兼容)
 	//
 	// 注意：调用方在 main.go 显式给 cfg.Width / cfg.Height 时，下面这段兜底会跳过，
 	// 那时 startupAsync 阶段的 resizePrimaryToScreenRatio 也被 autoResize=false 关掉。
 	detectSw, detectSh := detectScreenDIPSize()
-	// 2026-07-02 增:在 NewApp 阻塞阶段也尊重 AspectRatio —— 先按 widthRatio 算宽,
-	// 再按 aspect 反推高;若 aspect 非法或算出的高超过 screenH × 0.95,降级到
-	// heightRatio 独立算。这样 NewApp 阶段算出的初始尺寸就是 16:9,startupAsync
-	// 协程只做"按当前 screen 再校准一次",不会从别的比例跳到 16:9 闪一下。
-	aspectW, aspectH := ParseAspectRatio(cfg.AspectRatio)
-	if cfg.Width == 0 {
-		if detectSw > 0 {
-			cfg.Width = int(math.Round(float64(detectSw) * defaultPrimaryWidthRatio))
-		} else {
-			cfg.Width = fallbackPrimaryWidth
-		}
+	if cfg.Size.configured() {
+		applyWindowSizeConfig(&cfg, detectSw, detectSh)
+	} else {
+		// 老路径(顶层 Width/Height + AutoSizeByScreen)
+		applyLegacySizeDefaults(&cfg, detectSw, detectSh)
 	}
-	if cfg.Height == 0 {
-		if aspectW > 0 && aspectH > 0 && cfg.Width > 0 {
-			// 按 aspect 反推,优先走"锁比例"路径
-			derived := int(math.Round(float64(cfg.Width) * float64(aspectH) / float64(aspectW)))
-			if derived > 0 {
-				cfg.Height = derived
-			} else {
-				cfg.Height = fallbackPrimaryHeight
-			}
-		} else if detectSh > 0 {
-			cfg.Height = int(math.Round(float64(detectSh) * defaultPrimaryHeightRatio))
-		} else {
-			cfg.Height = fallbackPrimaryHeight
-		}
-	}
-	if cfg.MinWidth == 0 {
-		if detectSw > 0 {
-			cfg.MinWidth = int(math.Round(float64(detectSw) * minPrimaryWidthRatio))
-			if cfg.MinWidth < minPrimarySizeFloorWidth {
-				cfg.MinWidth = minPrimarySizeFloorWidth
-			}
-		} else {
-			cfg.MinWidth = minPrimarySizeFloorWidth
-		}
-	}
-	if cfg.MinHeight == 0 {
-		// MinHeight 与 Height 一致,锁宽高比时也按相同逻辑推
-		if aspectW > 0 && aspectH > 0 && cfg.MinWidth > 0 {
-			derived := int(math.Round(float64(cfg.MinWidth) * float64(aspectH) / float64(aspectW)))
-			if derived >= minPrimarySizeFloorHeight {
-				cfg.MinHeight = derived
-			} else {
-				cfg.MinHeight = minPrimarySizeFloorHeight
-			}
-		} else if detectSh > 0 {
-			cfg.MinHeight = int(math.Round(float64(detectSh) * minPrimaryWidthRatio))
-			if cfg.MinHeight < minPrimarySizeFloorHeight {
-				cfg.MinHeight = minPrimarySizeFloorHeight
-			}
-		} else {
-			cfg.MinHeight = minPrimarySizeFloorHeight
-		}
-	}
-	log.Printf("desktop: primary window initial size = %dx%d (detected screen %dx%d DIP from system_profiler, aspect=%s), min = %dx%d",
-		cfg.Width, cfg.Height, detectSw, detectSh, cfg.AspectRatio, cfg.MinWidth, cfg.MinHeight)
+	log.Printf("desktop: primary window initial size = %dx%d (mode=%s, detected screen %dx%d DIP from system_profiler), min = %dx%d",
+		cfg.Width, cfg.Height, cfg.Size.Mode, detectSw, detectSh, cfg.MinWidth, cfg.MinHeight)
 	if cfg.BackgroundColour == [3]uint8{} {
 		cfg.BackgroundColour = [3]uint8{27, 38, 54}
 	}
 	_ = cfg.BackgroundColour
 
-	// AutoSizeByScreen 默认 true,除非调用方显式指定了 Width 或 Height。
-	// 显式给固定尺寸时(打包场景/调试场景)自动关掉,本次启动严格用调用方配置。
+	// AutoSizeByScreen 旧字段同步路由(顶层级)——固定尺寸模式下保持 false,
+	// ratio 模式下保持 true 给 startupAsync 异步校准兜底。
 	if cfg.Width != 0 || cfg.Height != 0 {
 		cfg.AutoSizeByScreen = false
 	}

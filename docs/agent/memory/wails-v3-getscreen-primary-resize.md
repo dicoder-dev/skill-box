@@ -103,11 +103,42 @@ go func() {
 - 跨平台注意:Windows / Linux 桌面包目前不需要这套(本项目桌面端只发布 darwin/windows,
   但目前主战场是 macOS 开发)。如果未来要适配 windows,需要切换到 win32 EnumDisplayMonitors。
 
-## `AppConfig.AutoSizeByScreen` 模式
+## `WindowSizeConfig` 配置模式(2026-07-02 增)
+
+`AppConfig.Size` 是显式的窗口尺寸配置入口,替代早期散落在 const + 顶层字段
+(`Width/Height/AutoSizeByScreen/AspectRatio`)的隐式逻辑。所有尺寸相关参数集中在一处:
+
+```go
+app := desktop.NewApp(desktop.AppConfig{
+    Size: desktop.WindowSizeConfig{
+        Mode: "ratio",                                // "ratio" | "fixed"
+        WidthRatio:  0.9,                             // Mode=="ratio" 时用
+        HeightRatio: 0.9,
+        MinWidth:    960,
+        MinHeight:   540,
+        // AspectRatio: "16:9",  // 可选,锁宽高比
+    },
+}, backend)
+```
+
+调用方通过 `WindowSizeConfig.configured()` 判断是否被显式配置:
+- **已配置**:走 `applyWindowSizeConfig`,按 Mode 派发 ratio / fixed 算法。
+- **未配置**:回落到 `applyLegacySizeDefaults`,沿用改前的顶层 Width/Height 等字段
+  行为,**完全向后兼容**。
+
+两种模式选择规则:
+- `Mode == "fixed"`:窗口 = `Size.Width × Size.Height`,不随屏幕变(打包场景)。
+- `Mode == "ratio"` 或 `""`:窗口 = 屏幕 × WidthRatio / 屏幕 × HeightRatio,
+  留 0 走 const 默认值。配 `AspectRatio="16:9"` 时高度按宽度反推,
+  任何屏幕下都锁 16:9。
+
+## `AppConfig.AutoSizeByScreen` 模式(向下兼容路径)
 
 Wails v3 alpha.60 没有"窗口尺寸记忆"的内建开关。
-要兼顾"按屏幕比例自适应"与"调用方显式给固定尺寸",用一个 `AutoSizeByScreen bool` 字段做开关:
+早期版本用 `AppConfig.AutoSizeByScreen bool` 区分两种行为;**新代码优先用
+`WindowSizeConfig`**(见上),老字段保留向下兼容:
 
-- main.go 默认不传 Width/Height → `AutoSizeByScreen` 走默认 true 路径
-- main.go 显式给 `Width=1600, Height=1000` → `NewApp` 自动把 `AutoSizeByScreen=false`,
-  本次启动走固定尺寸;同时要把 `autoResize bool` 透传到 `App` 让 startupAsync 知道
+- main.go 不传 Width/Height → 老 `AutoSizeByScreen` 走默认 true 路径
+- main.go 显式给 `Width=1600, Height=1000` → 老 `NewApp` 自动把
+  `AutoSizeByScreen=false`,本次启动走固定尺寸;同时要把 `autoResize bool`
+  透传到 `App` 让 startupAsync 知道

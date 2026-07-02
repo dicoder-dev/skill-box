@@ -66,14 +66,23 @@ func main() {
 	// dev 模式:wails3 dev 启动前会自动注入 WAILS_VITE_PORT(默认 9245)。
 	// 这里读出来后把 Webview 切到 Vite dev server,前端代码改动由 Vite HMR
 	// 直接热替换,Go 进程不需要重启。否则按原逻辑加载 backend 内置 gin + embed.FS。
+	// 2026-07-02 增:窗口尺寸配置改用 WindowSizeConfig,显式两模式选择:
+	//   - Mode="ratio"(默认):窗口按屏幕比例,WidthRatio/HeightRatio 生效(0 用 const 兜底 0.9 × 0.9)。
+	//   - Mode="fixed":窗口固定 W×H,不随屏幕变(打包/调试场景)。
+	//   - AspectRatio 可选,锁宽高比,如 "16:9"。
+	// 上一次"两次不生效"的原因已经定位为 alpha.60 Window.SetSize 不可靠;
+	// 现在用 system_profiler 同步拿屏在 NewApp 阶段直接灌大尺寸,完全不依赖 SetSize。
 	app := desktop.NewApp(desktop.AppConfig{
 		Name: "Skill Box",
-		// 2026-07-02 增:用户可在代码里自行配置是否锁宽高比。
-		//   - 不传(默认)/传空:走"宽 90% × 高 90%"的独立比例,屏幕 4K 时窗口不是整数比。
-		//   - 传 "16:9":窗口宽按 widthRatio 算,高按"宽 × 9/16"反推,无论屏幕如何都是 16:9。
-		//   - 其它常见值:"4:3"、"21:9"、"1:1"。
-		//   - 解析失败(非法字符串)会被 ParseAspectRatio 兜底为 (0,0),行为与不传一致。
-		// AspectRatio: "16:9",
+		Size: desktop.WindowSizeConfig{
+			Mode:         "ratio",
+			WidthRatio:   0.9,
+			HeightRatio:  0.9,
+			AspectRatio:  "16:9", // 宽高比锁 16:9,无论屏幕如何窗口都是 16:9
+			MinWidth:     960,
+			MinHeight:    540,
+		},
+		// 老顶层字段(Width/Height/AutoSizeByScreen)继续兼容,但 Size 配置过时被忽略。
 		FrontendURL: desktop.NewFrontendURLFromEnv("", 0),
 	}, backend)
 
