@@ -17,14 +17,19 @@ import (
 //   - 必须先 snapshot 目标目录状态,再 apply;失败立刻用 snapshot 回滚
 //   - 写 SkillApply 行由 service 层负责(本包只负责落盘 + 拍照)
 //   - v1 文件落盘用 os.WriteFile(文本),二进制 P1 补
+//   - 2026-07-02 增:Mode 决定走 copy(原行为)还是 symlink(整目录软链接到源);
+//     切换时由 service 层根据 settings.apply_mode 注入,默认 copy 保持向后兼容。
 type Applier struct {
 	registry *skilladapter.Registry
 	now      func() time.Time // 测试用
+	// Mode apply 落盘模式;空时按 ModeCopy 处理,避免 nil 误判。
+	// 字段对调用方可写(测试和迁移场景直接覆盖)。
+	Mode string
 }
 
 // NewApplier 构造 Applier;registry=nil 时用默认全局。
 func NewApplier(registry *skilladapter.Registry) *Applier {
-	return &Applier{registry: registry, now: time.Now}
+	return &Applier{registry: registry, now: time.Now, Mode: ModeCopy}
 }
 
 // NewApplierWithClock 测试用 - 注入 clock。
@@ -48,6 +53,15 @@ func (a *Applier) resolveRegistry() *skilladapter.Registry {
 	return skilladapter.DefaultRegistry()
 }
 
+// resolveMode 取出实际使用的 mode;空或非法值退化到 copy。
+func (a *Applier) resolveMode() string {
+	m := strings.ToLower(strings.TrimSpace(a.Mode))
+	if m != ModeCopy && m != ModeSymlink {
+		return ModeCopy
+	}
+	return m
+}
+
 // ApplyResult 单 tool 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
 type ApplyResult struct {
 	Tool        string       `json:"tool"`
@@ -64,6 +78,11 @@ type ApplyResult struct {
 //
 // 失败语义:即使 apply 失败,PreSnapshot 也会带回(部分文件可能已落),
 // service 写 DB 时 status=failed + 仍存 pre_snapshot,方便排查。
+//
+// 2026-07-02 增:落盘按 a.resolveMode() 走 copy 或 symlink;symlink 模式下:
+//   - snapshot 只记"target 之前是否存在"(是否会被覆盖);
+//   - PostFiles 记 targetDir 本身(撤销时直接 os.Remove);
+//   - PreSnapshot.Files 留空,避免大 canonical 把 DB 撑爆。
 func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	if in.Canonical == nil {
 		return nil, fmt.Errorf("%w: canonical nil", ErrEmptySkill)
@@ -90,12 +109,13 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	pre, snapErr := snapshotDir(targetDir)
+	mode := a.resolveMode()
+	pre, snapErr := snapshotDir(targetDir, mode)
 	if snapErr != nil {
 		return nil, fmt.Errorf("skillapp: snapshot %s: %w", targetDir, snapErr)
 	}
 	started := a.now()
-	if err := ad.Apply(*in.Canonical, targetDir); err != nil {
+	if err := applyByMode(ad, in.Canonical, targetDir, mode); err != nil {
 		_ = restoreFromSnapshot(targetDir, pre)
 		finished := a.now()
 		return &ApplyResult{
@@ -108,13 +128,7 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 			FinishedAt:  finished,
 		}, fmt.Errorf("skillapp: apply %s to %s: %w", in.Canonical.Manifest.Name, toolID, err)
 	}
-	post := make([]string, 0, len(in.Canonical.Files))
-	for _, f := range in.Canonical.Files {
-		if f.Path == "" {
-			continue
-		}
-		post = append(post, f.Path)
-	}
+	post := buildPostFiles(in.Canonical, targetDir, mode)
 	pre.PostFiles = post
 	finished := a.now()
 	return &ApplyResult{
@@ -125,6 +139,42 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 		StartedAt:   started,
 		FinishedAt:  finished,
 	}, nil
+}
+
+// applyByMode 根据 mode 调 adapter 的 copy 或 symlink 入口。
+//
+// 设计:Adapter interface 没有显式 ApplyLink,这里用 type assert 兼容"老 adapter
+// 只实现 Apply"的情况 —— 不支持 symlink 时,返明确 error,让 controller
+// 弹 4xx 提示用户(而不是静默回退到 copy,那样会出"用户选了 symlink 但还是
+// 拷贝"的事故)。
+func applyByMode(ad skilladapter.Adapter, c *skilladapter.Canonical, targetDir, mode string) error {
+	if mode == ModeSymlink {
+		linker, ok := ad.(interface {
+			ApplyLink(skilladapter.Canonical, string) error
+		})
+		if !ok {
+			return fmt.Errorf("skillapp: tool %s does not support symlink mode (missing ApplyLink)", ad.ToolID())
+		}
+		return linker.ApplyLink(*c, targetDir)
+	}
+	return ad.Apply(*c, targetDir)
+}
+
+// buildPostFiles 返回 apply 后的文件清单,Undo 用。
+// copy 模式:列 canonical 的相对路径列表(同旧行为);
+// symlink 模式:只列 targetDir 自身(撤销时 os.Remove 即可,无需 walk 文件)。
+func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string {
+	if mode == ModeSymlink {
+		return []string{targetDir}
+	}
+	out := make([]string, 0, len(c.Files))
+	for _, f := range c.Files {
+		if f.Path == "" {
+			continue
+		}
+		out = append(out, f.Path)
+	}
+	return out
 }
 
 // resolveTargetDir 把 (tool + scope + project_id + project_root + name) 拼到具体目录。
@@ -169,8 +219,32 @@ func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope 
 }
 
 // snapshotDir 拍目录快照:列出所有文本文件 + 读内容。v1 假设都是文本。
-func snapshotDir(dir string) (*PreSnapshot, error) {
+//
+// 2026-07-02 改造:增加 mode 参数。
+//   - copy 模式(默认):行为不变,递归读所有文本文件,用于 Undo 时回写。
+//   - symlink 模式:targetDir 本身就是一个 symlink,我们只关心它"apply 前是否
+//     已存在"(决定要不要在 PreSnapshot 里备份原内容),不再 walk 文件
+//     (避免大 canonical 把 DB 撑爆,以及跟随 symlink 误读到源端文件)。
+//     注意:这里必须用 Lstat 而不是 Stat,Stat 会跟随 symlink 解析到源端目录,
+//     os.ReadFile 读 dir 会返 "is a directory" 错误。
+func snapshotDir(dir string, mode string) (*PreSnapshot, error) {
 	snap := &PreSnapshot{PostFiles: nil}
+	// 任何模式下,先 Lstat 判断 target 是不是 symlink:Stat 会跟随 symlink
+	// 解析到源端目录,os.ReadFile 读 dir 时返 "is a directory" 错误,这个
+	// 错误会传染到 snapshot 让整个 apply 失败。正确做法:symlink 视为"原
+	// target 是外部安装的 skill",只标存在不 walk 文件 —— 撤销时直接 Remove
+	// 这个链接。
+	if linfo, lerr := os.Lstat(dir); lerr == nil && linfo != nil {
+		if linfo.Mode()&os.ModeSymlink != 0 {
+			snap.TargetExisted = true
+			snap.TargetWasSymlink = true
+			return snap, nil
+		}
+	} else if os.IsNotExist(lerr) {
+		return snap, nil
+	} else {
+		return nil, lerr
+	}
 	info, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -222,8 +296,24 @@ func snapshotDir(dir string) (*PreSnapshot, error) {
 // restoreFromSnapshot 从快照恢复目录。
 // - pre 里的 file:写回原 content(覆盖 apply 写的)
 // - post_files 不在 pre 里的:删除(apply 加进去的)
+//
+// 2026-07-02 增:检测 apply 是否为 symlink 模式 —— 当 target 当前是 symlink 且
+// PostFiles 只包含 targetDir 自身(而非具体文件),直接 os.Remove(targetDir)
+// 就完事;不要 walk 文件(那样会把 symlink 指向的源 skill 也"删"了,
+// 因为 filepath.Walk 默认跟随 symlink)。
 func restoreFromSnapshot(dir string, pre *PreSnapshot) error {
 	if pre == nil {
+		return nil
+	}
+	// symlink 模式:target 应该是软链接。直接 Remove(Lstat 路径)删链接本身。
+	// 失败(比如 Lstat 已经不存在)视为 noop。
+	if linfo, err := os.Lstat(dir); err == nil && linfo != nil && linfo.Mode()&os.ModeSymlink != 0 {
+		// 注意:这里不读 pre.Files(symlink 模式不存),也不 walk 源端,
+		// 单纯把链接断掉,源 skill 物理文件不动。
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("restore: remove symlink %s: %w", dir, err)
+		}
+		_ = removeEmptyParents(filepath.Dir(dir), filepath.Dir(dir))
 		return nil
 	}
 	preSet := map[string]bool{}

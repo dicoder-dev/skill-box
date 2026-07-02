@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"ginp-api/internal/gapi/entity"
 	msetting "ginp-api/internal/gapi/model/skillbox/msetting"
@@ -116,4 +117,44 @@ func (s *Service) GetAll() (*Snapshot, error) {
 		out.Items[row.Key] = row.Value
 	}
 	return out, nil
+}
+
+// ApplyMode apply 落盘模式(2026-07-02 增)。
+//
+//   - copy:    沿用旧行为,把 canonical 文件逐个拷贝到目标目录(占空间,文件副本独立)。
+//   - symlink: 把目标目录做成一个软链接指向 skillstore 里的真实 skill 根(零占用,
+//              改源文件后目标端即时生效)。
+//
+// 默认 copy —— 不破坏任何已 apply 的记录,迁移是显式由用户发起。
+const (
+	ApplyModeCopy    = "copy"
+	ApplyModeSymlink = "symlink"
+
+	// KeyApplyMode 通用偏好里 apply_mode 的存储键。
+	// 放在 settings 表(走 settings.Service),而不是 SkillApply 行,这样:
+	//   - 用户切换一次,后续 apply 都按新模式;
+	//   - SkillApply 行只记录"当时用的是什么模式",便于迁移时回查。
+	KeyApplyMode = "skillbox.apply_mode"
+)
+
+// GetApplyMode 读取当前 apply_mode;不存在或非法值时返回 fallback(默认 copy)。
+func (s *Service) GetApplyMode() string {
+	v, ok, err := s.Get(KeyApplyMode)
+	if err != nil || !ok {
+		return ApplyModeCopy
+	}
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v != ApplyModeCopy && v != ApplyModeSymlink {
+		return ApplyModeCopy
+	}
+	return v
+}
+
+// SetApplyMode 写入 apply_mode;值不合法返回 error(便于 controller 弹 4xx)。
+func (s *Service) SetApplyMode(mode string) error {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode != ApplyModeCopy && mode != ApplyModeSymlink {
+		return fmt.Errorf("settings: invalid apply_mode %q (allowed: copy/symlink)", mode)
+	}
+	return s.Set(KeyApplyMode, mode)
 }

@@ -596,6 +596,22 @@ const messages = {
       globalHotkeyPh: '如 Cmd+Shift+S',
     },
 
+    // 2026-07-02 增:apply 模式(通用偏好,Web / 桌面端均可见)。
+    applyMode: {
+      title: '应用方式',
+      subtitle: '技能应用到目标工具时的存在形式',
+      copy: '复制',
+      copyHint: '把 skill 源文件逐个拷贝到目标目录(占磁盘空间,源文件修改后需重新应用)',
+      symlink: '软链接',
+      symlinkHint: '在目标位置创建软链接指向源 skill(零占用,源文件修改后自动同步)',
+      switchCopyToSymlinkConfirm: '把 {total} 条已应用的 skill 改为软链接形式?\n\n软链接方式下,源文件修改后目标端会立即生效,无需重新应用;但删除或移动源文件会让目标端失效。',
+      switchSymlinkToCopyConfirm: '把 {total} 条已应用的 skill 改为独立副本?\n\n改为副本后,源文件修改不再影响目标端,目标端是独立的文件副本。',
+      switchMigrating: '正在迁移 {total} 条 skill...',
+      switchSuccess: '迁移完成:成功 {ok} 条,跳过 {skipped} 条,失败 {failed} 条',
+      switchFailedDetail: '迁移失败:\n{detail}',
+      switchCancelled: '已取消',
+    },
+
     testNotify: '测试通知',
     testNotifyHint: '向系统通知中心发一条测试横幅,验证授权 / 显示',
     btnTestNotify: '测试通知',

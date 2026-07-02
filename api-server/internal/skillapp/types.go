@@ -37,6 +37,23 @@ const (
 	StatusFailed     = "failed"
 )
 
+// ApplyMode 落盘模式(2026-07-02 增)。
+//
+//   - ModeCopy:    把 canonical 逐文件拷贝到目标目录(原行为,占磁盘空间)。
+//   - ModeSymlink: 目标目录整体做成软链接,指向 skillstore 源 skill 根(零占用,
+//                  改源即生效)。具体落盘由 adapter 的 ApplyLink 实现。
+//
+// 与 settings.ApplyMode 常量值一致(都是 "copy"/"symlink"),便于跨包统一判断。
+const (
+	ModeCopy    = "copy"
+	ModeSymlink = "symlink"
+)
+
+// IsModeValid 校验 mode 字符串合法。
+func IsModeValid(m string) bool {
+	return m == ModeCopy || m == ModeSymlink
+}
+
 // ApplyStatus 状态值集合(校验用)。
 var allStatuses = map[string]bool{
 	StatusApplied:    true,
@@ -53,9 +70,13 @@ type FileSnapshot struct {
 }
 
 // PreSnapshot apply 前的快照。
+// 2026-07-02 增:TargetWasSymlink 用于 symlink 模式,记录 apply 前 targetDir
+// 是否本身就是 symlink —— 切回 copy 模式或 Undo 时,需判断"原 target 是普通
+// 目录(含原内容)还是软链(可能是外部安装,不该被覆盖)"。
 type PreSnapshot struct {
-	TargetExisted bool           `json:"target_existed"` // 目标目录 apply 前是否存在
-	Files         []FileSnapshot `json:"files"`          // apply 前存在的文件
+	TargetExisted    bool           `json:"target_existed"`     // 目标目录 apply 前是否存在
+	TargetWasSymlink bool           `json:"target_was_symlink"` // 目标 apply 前是否为 symlink(symlink 模式专用)
+	Files            []FileSnapshot `json:"files"`              // apply 前存在的文件(copy 模式填)
 	// PostFiles apply 后的文件清单(为 Undo 时知道"apply 加了哪些"用)
 	PostFiles []string `json:"post_files"`
 }

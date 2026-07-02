@@ -36,6 +36,11 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 	if f.touched != nil {
 		*f.touched = append(*f.touched, targetDir)
 	}
+	// 真实 BaseAdapter 行为:覆盖式,先清旧 target(symlink / 目录 / 文件)
+	// —— 这样 copy / symlink 模式切换时能正常替换。
+	if linfo, lerr := os.Lstat(targetDir); lerr == nil && linfo != nil {
+		_ = os.RemoveAll(targetDir)
+	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return err
 	}
@@ -48,6 +53,25 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 		}
 	}
 	return nil
+}
+
+// ApplyLink 软链接实现(2026-07-02 增):用 Canonical.SourceDir 作 symlink 目标。
+// 真实 BaseAdapter 行为一致;这里测的是 Applier 在 symlink 模式下选 ApplyLink。
+func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) error {
+	if f.applyErr != nil {
+		return f.applyErr
+	}
+	if c.SourceDir == "" {
+		return errors.New("fake: ApplyLink requires non-empty SourceDir")
+	}
+	if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
+		return err
+	}
+	// 清理旧 target
+	if linfo, lerr := os.Lstat(targetDir); lerr == nil && linfo != nil {
+		_ = os.RemoveAll(targetDir)
+	}
+	return os.Symlink(c.SourceDir, targetDir)
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
@@ -250,4 +274,174 @@ func TestSnapshotDir_NonExistent(t *testing.T) {
 	}
 }
 
+// TestApplyOne_SymlinkMode_CreatesSymlink(2026-07-02):
+// Applier.Mode=symlink 时,target 应该是软链接指向 canonical.SourceDir,
+// 而非普通目录。同时 PreSnapshot 应该识别 target 之前是 symlink(用于撤销判断)。
+func TestApplyOne_SymlinkMode_CreatesSymlink(t *testing.T) {
+	root := t.TempDir()
+	fa := &fakeAdapter{id: "fake", root: root}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg)
+	ap.Mode = skillapp.ModeSymlink
+
+	canon := sampleCanon("delta")
+	canon.SourceDir = t.TempDir() // 模拟 skillstore 源端
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"fake"},
+		Canonical: ptrCanon(canon),
+	})
+	if err != nil {
+		t.Fatalf("apply symlink: %v", err)
+	}
+	// 1) target 是 symlink
+	linfo, lerr := os.Lstat(res.TargetPath)
+	if lerr != nil {
+		t.Fatalf("lstat target: %v", lerr)
+	}
+	if linfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("target %s is not a symlink (mode=%v)", res.TargetPath, linfo.Mode())
+	}
+	// 2) 链到的真实目录就是 canonical.SourceDir
+	got, _ := os.Readlink(res.TargetPath)
+	if got != canon.SourceDir {
+		t.Errorf("symlink dst = %q, want %q", got, canon.SourceDir)
+	}
+	// 3) 第一次 apply,snapshot 应标 target 不存在
+	if res.PreSnapshot == nil || res.PreSnapshot.TargetExisted {
+		t.Errorf("expected fresh symlink snapshot, got %+v", res.PreSnapshot)
+	}
+	// 4) PostFiles 应只有 target 自身
+	if len(res.PreSnapshot.PostFiles) != 1 || res.PreSnapshot.PostFiles[0] != res.TargetPath {
+		t.Errorf("post_files = %v, want only target", res.PreSnapshot.PostFiles)
+	}
+}
+
+// TestApplyOne_SymlinkMode_UndoRemovesLink(2026-07-02):
+// 第二次 apply 同样 source,target 已是 symlink;snapshot 应该标
+// TargetWasSymlink=true;UndoWithSnapshot 应该只 Remove 链接,不会把源端文件删了。
+func TestApplyOne_SymlinkMode_UndoRemovesLink(t *testing.T) {
+	root := t.TempDir()
+	fa := &fakeAdapter{id: "fake", root: root}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg)
+	ap.Mode = skillapp.ModeSymlink
+
+	canon := sampleCanon("epsilon")
+	canon.SourceDir = t.TempDir()
+	target := filepath.Join(root, canon.Manifest.Name)
+
+	// 预置一个 symlink(target → 源端),模拟"已 apply 过一次"
+	if err := os.Symlink(canon.SourceDir, target); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"fake"},
+		Canonical: ptrCanon(canon),
+	})
+	if err != nil {
+		t.Fatalf("re-apply: %v", err)
+	}
+	if res.PreSnapshot == nil || !res.PreSnapshot.TargetWasSymlink {
+		t.Errorf("expected TargetWasSymlink=true, got %+v", res.PreSnapshot)
+	}
+	// 验证撤销:只 Remove 链接,源端目录还在
+	if err := skillapp.UndoWithSnapshot(res.TargetPath, res.PreSnapshot.Marshal()); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	if _, err := os.Lstat(res.TargetPath); !os.IsNotExist(err) {
+		t.Errorf("target should be gone, lstat err=%v", err)
+	}
+	if _, err := os.Stat(canon.SourceDir); err != nil {
+		t.Errorf("source dir should still exist: %v", err)
+	}
+}
+
+// TestApplyOne_CopyMode_Default(2026-07-02):
+// 不设 Mode 时,默认走 copy(老行为,兼容性兜底)。
+func TestApplyOne_CopyMode_Default(t *testing.T) {
+	root := t.TempDir()
+	fa := &fakeAdapter{id: "fake", root: root}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg) // Mode 空 → 走 copy
+	canon := sampleCanon("zeta")
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"fake"},
+		Canonical: ptrCanon(canon),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	linfo, _ := os.Lstat(res.TargetPath)
+	if linfo.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("default mode should NOT be symlink")
+	}
+	// 文件应在
+	if _, err := os.Stat(filepath.Join(res.TargetPath, "SKILL.md")); err != nil {
+		t.Errorf("SKILL.md missing in copy mode: %v", err)
+	}
+}
+
 func ptrCanon(c skilladapter.Canonical) *skilladapter.Canonical { return &c }
+
+// TestApplyOne_SymlinkMode_RealDisk(2026-07-02):
+// 端到端落盘验证:在 tmp dir 准备"源 skill 目录" + 目标 root,跑 symlink 模式
+// apply,验证 target 真的是 symlink,且 readlink 指向源端;再跑 copy 模式
+// apply 同名 skill,验证 target 被替换成普通目录(且 SKILL.md 存在)。
+func TestApplyOne_SymlinkMode_RealDisk(t *testing.T) {
+	root := t.TempDir()
+	// 准备源 skill(SKILL.md + 一个子文件)
+	src := filepath.Join(t.TempDir(), "src-skill")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fa := &fakeAdapter{id: "fake", root: root}
+	reg := newReg(t, fa)
+
+	canon := sampleCanon("omega")
+	canon.SourceDir = src
+
+	// 1) symlink 模式 apply
+	ap1 := skillapp.NewApplier(reg)
+	ap1.Mode = skillapp.ModeSymlink
+	res1, err := ap1.ApplyOne(skillapp.ApplyInput{
+		Scope: skilladapter.ScopeGlobal, Tools: []string{"fake"}, Canonical: ptrCanon(canon),
+	})
+	if err != nil {
+		t.Fatalf("symlink apply: %v", err)
+	}
+	linfo, _ := os.Lstat(res1.TargetPath)
+	if linfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("phase1: target is not a symlink")
+	}
+	// 2) copy 模式 apply(切换 mode 后再 ApplyOne)。fakeAdapter 在 Apply 内部
+	//    先 RemoveAll 旧 target,模拟真实 BaseAdapter 的"覆盖式"行为。
+	ap2 := skillapp.NewApplier(reg)
+	ap2.Mode = skillapp.ModeCopy
+	// 先把 fakeAdapter 的 Apply 升级:复制标准 BaseAdapter 的"清理旧 target"
+	// 行为,这样从 symlink 切到 copy 时,旧 symlink 会被先删,新 copy 才生效。
+	res2, err := ap2.ApplyOne(skillapp.ApplyInput{
+		Scope: skilladapter.ScopeGlobal, Tools: []string{"fake"}, Canonical: ptrCanon(canon),
+	})
+	if err != nil {
+		t.Fatalf("copy apply: %v", err)
+	}
+	linfo2, _ := os.Lstat(res2.TargetPath)
+	if linfo2.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("phase2: target should be a regular dir, but is symlink")
+	}
+	// 3) 文件应在(走的是 Apply 的 fakeAdapter 写文件逻辑)
+	if _, err := os.Stat(filepath.Join(res2.TargetPath, "SKILL.md")); err != nil {
+		t.Errorf("phase2: SKILL.md should exist in copy mode: %v", err)
+	}
+	// 4) 源端物理文件没被破坏
+	if _, err := os.Stat(filepath.Join(src, "SKILL.md")); err != nil {
+		t.Errorf("source SKILL.md should be untouched: %v", err)
+	}
+}

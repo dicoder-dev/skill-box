@@ -594,6 +594,22 @@ const messages = {
       globalHotkeyPh: 'e.g. Cmd+Shift+S',
     },
 
+    // 2026-07-02 add: apply mode (common preference, visible on both Web and Desktop).
+    applyMode: {
+      title: 'Apply mode',
+      subtitle: 'How skills are placed on the target tool',
+      copy: 'Copy',
+      copyHint: 'Copy every source file to the target directory (uses disk space, requires re-apply after source changes)',
+      symlink: 'Symlink',
+      symlinkHint: 'Create a symlink at the target pointing to the source skill (zero disk usage, changes propagate automatically)',
+      switchCopyToSymlinkConfirm: 'Convert {total} applied skills to symlinks?\n\nSymlinks reflect source changes immediately, but moving or deleting the source will break the target.',
+      switchSymlinkToCopyConfirm: 'Convert {total} applied skills to independent copies?\n\nAfter the conversion, target files are independent and no longer follow source changes.',
+      switchMigrating: 'Migrating {total} skills...',
+      switchSuccess: 'Migration done: {ok} ok, {skipped} skipped, {failed} failed',
+      switchFailedDetail: 'Migration failures:\n{detail}',
+      switchCancelled: 'Cancelled',
+    },
+
     testNotify: 'Test notification',
     testNotifyHint: 'Send a test banner to the system notification center to verify authorization / display',
     btnTestNotify: 'Test notification',

@@ -297,6 +297,56 @@ func (b *BaseAdapter) Apply(c Canonical, targetDir string) error {
 	return nil
 }
 
+// ApplyLink 把 targetDir 整体替换为指向 canonical 真实路径的软链接(2026-07-02 增)。
+//
+// 适用场景:用户偏好"软链接模式"时,所有 apply 都不再拷贝文件,而是在目标位置
+// 创建一个 symlink,指向 skillstore 里的源 skill 根(canonical.SourceDir,
+// 已 EvalSymlinks 规范化,见 readSkillDir)。这样:
+//   - 零磁盘占用(目标端就是源端的一个引用,文件物理只存一份);
+//   - 用户编辑源文件后,目标工具立刻读到最新内容,无需重新 apply;
+//   - 撤销只需 os.Remove(targetDir),比 restoreFromSnapshot 简单且无副作用。
+//
+// 实现要点:
+//   - 若 targetDir 已存在(目录 / 文件 / 损坏 symlink 任意一种),先 RemoveAll
+//     清干净,再 Symlink,避免 "file exists" 错误或残留半成品。
+//   - SourceDir 为空时(理论上 readSkillDir 一定填了)返 error,让上层报错。
+//   - 不跟随中间目录创建:targetDir 的父目录(如 ~/.claude/skills/)仍由
+//     applier 在外层 MkdirAll 创建;本函数只负责"挂 symlink 本身"。
+func (b *BaseAdapter) ApplyLink(c Canonical, targetDir string) error {
+	if c.SourceDir == "" {
+		return fmt.Errorf("%s: symlink apply: empty source_dir for skill %q", b.ID, c.Manifest.Name)
+	}
+	// 拿真实路径,避免链式 symlink 在某些工具下被读两次。
+	src, err := filepath.EvalSymlinks(c.SourceDir)
+	if err != nil {
+		// 源端 symlink 损坏,仍可按原路径链(让用户看到问题,而不是静默回退)
+		src = c.SourceDir
+	}
+	// 父目录若不存在(用户首次 apply),替调用方兜底创建一下。
+	if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
+		return fmt.Errorf("%s: symlink apply: mkdir %s: %w", b.ID, filepath.Dir(targetDir), err)
+	}
+	// 清理旧 target:可能是目录 / 损坏 symlink / 普通文件。
+	// 损坏 symlink Lstat 成功但 Stat 失败,需走 os.Remove(Lstat 后的 path)。
+	if linfo, lerr := os.Lstat(targetDir); lerr == nil && linfo != nil {
+		// 损坏 symlink:直接 os.Remove(link) 即可
+		if linfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(targetDir); err != nil {
+				return fmt.Errorf("%s: symlink apply: remove old link %s: %w", b.ID, targetDir, err)
+			}
+		} else {
+			// 普通目录 / 文件:递归删
+			if err := os.RemoveAll(targetDir); err != nil {
+				return fmt.Errorf("%s: symlink apply: remove %s: %w", b.ID, targetDir, err)
+			}
+		}
+	}
+	if err := os.Symlink(src, targetDir); err != nil {
+		return fmt.Errorf("%s: symlink apply: symlink %s -> %s: %w", b.ID, targetDir, src, err)
+	}
+	return nil
+}
+
 // readDirFiles 递归扫 dir 下所有文件,产出 File 列表(Path 用正斜杠,已排序)。
 // dir 可能是 symlink(外部工具的 skill 经常用 symlink 链到 ~/.agents/skills/xxx),
 // 内部用 EvalSymlinks 解析真实路径后再 WalkDir,避免 WalkDir 默认不跟随 symlink

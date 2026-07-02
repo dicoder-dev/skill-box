@@ -8,6 +8,7 @@ import (
 	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
+	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -67,6 +68,7 @@ func init() {
 //
 // 2026-06-29 增:WithProjectService — scope=project 的 apply 需要 sproject 查
 // entity.Project.RootPath,把 project_id 解析成真实项目根传给 applier。
+// 2026-07-02 增:WithSettings — 让 apply 按 settings.apply_mode 切换 copy/symlink。
 func newService() *sskillapp.Service {
 	ww := dbs.GetWriteDb()
 	rr := dbs.GetReadDb()
@@ -76,5 +78,7 @@ func newService() *sskillapp.Service {
 			return nil, err
 		}
 		return sskill.New(store), nil
-	}).WithProjectService(sproject.New(ww, rr))
+	}).
+		WithProjectService(sproject.New(ww, rr)).
+		WithSettings(settings.New(ww, rr))
 }

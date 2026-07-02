@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
 import { setLocale, getLocale } from '@/core/i18n'
+import { migrateApplyMode, listApplies } from '@/api/skillbox/skill_apply.js'
 
 const { t, locale } = useI18n()
 
@@ -35,15 +36,30 @@ const desktopPrefs = reactive({
   global_hotkey: 'Cmd+Shift+S',
 })
 
+// 2026-07-02 增:apply 模式(copy / symlink)。值用 'copy' / 'symlink' 字符串,
+// 与后端 settings.apply_mode 一致,直接通过 platform.prefs 读写。
+// applyModeSupported: web 端 platform.prefs 在 web 实现里返空,允许 UI 仍展示
+// 但切换后端不会落盘,降级为"仅本会话生效"。这里通过首次读取的 snap 是否
+// 拿到 key 来判断;首屏读不到时仍允许用户点,后端会忽略非空 key 之外的值。
+const applyMode = ref('copy') // 'copy' | 'symlink'
+const applyModeHint = ref('')
+const applyModeBusy = ref(false)
+const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿到 keys 判断)
+
 async function loadPrefs() {
   if (!isDesktop.value) return
   try {
     const snap = await platform.prefs.getAll()
+    applyModeSupported.value = snap && typeof snap === 'object'
+    if (snap && snap['skillbox.apply_mode']) {
+      applyMode.value = snap['skillbox.apply_mode'] === 'symlink' ? 'symlink' : 'copy'
+    }
     for (const k of Object.keys(desktopPrefs)) {
       if (snap[k] != null) desktopPrefs[k] = snap[k]
     }
   } catch (e) {
     prefsSupported.value = false
+    applyModeSupported.value = false
   }
 }
 
@@ -55,6 +71,76 @@ async function savePref(key, value) {
     setTimeout(() => (saveHint.value = ''), 1500)
   } catch (e) {
     saveHint.value = t('settings.errSave', { msg: e?.message || e })
+  }
+}
+
+// 2026-07-02 增:apply 模式切换。
+// 流程:用户点 segmented 切到新模式 → 弹 confirm(展示受影响 skill 数)
+//       → 用户确认 → 调 /api/skillbox/skills/apply/migrate-mode 迁移所有
+//       已 apply 的行 → 写 settings.apply_mode → toast 结果。
+// 注意:applyModeSupported=false(web 端 prefs 不持久化)时,本次会话仍能切,
+// 但刷新后回到 copy — 提示文案对此做了说明。
+async function countApplied() {
+  // 简单做法:通过 listApplies 拉所有 applied,只取 total。
+  // 失败时返 0,前端 confirm 会按"0 条"展示(其实 0 条时后端 migrate 也无副作用)。
+  try {
+    const r = await listApplies({ status: 'applied', page: 1, size: 1 })
+    return r?.total || 0
+  } catch (e) {
+    return 0
+  }
+}
+
+async function onApplyModeChange(newMode) {
+  if (applyModeBusy.value) return
+  if (newMode === applyMode.value) return
+  if (!isDesktop.value) {
+    // Web 端:平台层 prefs 不持久化,直接改本地 ref + 提示。
+    applyMode.value = newMode
+    applyModeHint.value = t('settings.applyMode.saved' /* fallback */) || t('settings.saved')
+    setTimeout(() => (applyModeHint.value = ''), 1500)
+    return
+  }
+  const total = await countApplied()
+  const confirmKey = newMode === 'symlink'
+    ? 'settings.applyMode.switchCopyToSymlinkConfirm'
+    : 'settings.applyMode.switchSymlinkToCopyConfirm'
+  const ok = window.confirm(t(confirmKey, { total }))
+  if (!ok) {
+    applyModeHint.value = t('settings.applyMode.switchCancelled')
+    setTimeout(() => (applyModeHint.value = ''), 1500)
+    return
+  }
+  applyModeBusy.value = true
+  applyModeHint.value = t('settings.applyMode.switchMigrating', { total })
+  try {
+    const res = await migrateApplyMode({ mode: newMode })
+    if (res && res.total === 0) {
+      // 没 applied 行,settings 还是要写(后端 migrate 已写)
+      applyMode.value = newMode
+    } else {
+      applyMode.value = newMode
+    }
+    applyModeHint.value = t('settings.applyMode.switchSuccess', {
+      ok: res?.ok ?? 0,
+      skipped: res?.skipped ?? 0,
+      failed: res?.failed ?? 0,
+    })
+    // 失败明细额外拼到 hint 后面(非阻塞)
+    if (res && res.failed > 0) {
+      const failedEntries = (res.entries || []).filter((e) => !e.ok && !e.skipped)
+      const detail = failedEntries
+        .map((e) => `  • ${e.name} (${e.tool}): ${e.error}`)
+        .join('\n')
+      if (detail) {
+        applyModeHint.value += '\n' + t('settings.applyMode.switchFailedDetail', { detail })
+      }
+    }
+  } catch (e) {
+    applyModeHint.value = t('settings.errSave', { msg: e?.message || e })
+  } finally {
+    applyModeBusy.value = false
+    setTimeout(() => (applyModeHint.value = ''), 6000)
   }
 }
 
@@ -144,12 +230,48 @@ onMounted(loadPrefs)
             </button>
           </div>
         </div>
+
+        <!-- 2026-07-02 增:Skill 应用方式(copy / symlink)。Web / 桌面端均可见。 -->
+        <div class="pref-item">
+          <div class="pref-info">
+            <div class="pref-label">{{ t('settings.applyMode.title') }}</div>
+            <div class="pref-hint">
+              {{ applyMode === 'symlink'
+                ? t('settings.applyMode.symlinkHint')
+                : t('settings.applyMode.copyHint') }}
+            </div>
+          </div>
+          <div class="lang-segmented">
+            <button
+              type="button"
+              :class="['lang-btn', applyMode === 'copy' ? 'lang-active' : '']"
+              :disabled="applyModeBusy"
+              @click="onApplyModeChange('copy')"
+            >
+              <Icon icon="mdi:content-copy" width="14" height="14" v-if="applyMode === 'copy'" />
+              {{ t('settings.applyMode.copy') }}
+            </button>
+            <button
+              type="button"
+              :class="['lang-btn', applyMode === 'symlink' ? 'lang-active' : '']"
+              :disabled="applyModeBusy"
+              @click="onApplyModeChange('symlink')"
+            >
+              <Icon icon="mdi:link-variant" width="14" height="14" v-if="applyMode === 'symlink'" />
+              {{ t('settings.applyMode.symlink') }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 切换提示 -->
       <div v-if="langHint" class="hint-box lang-hint">
         <Icon icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
         <span>{{ langHint }}</span>
+      </div>
+      <div v-if="applyModeHint" class="hint-box lang-hint apply-mode-hint">
+        <Icon icon="mdi:information" width="14" height="14" class="hint-icon" />
+        <span style="white-space: pre-line">{{ applyModeHint }}</span>
       </div>
     </section>
 

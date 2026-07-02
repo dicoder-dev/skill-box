@@ -8,6 +8,7 @@ import (
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
+	"ginp-api/internal/settings"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillapp"
 	"ginp-api/internal/skillstore"
@@ -36,6 +37,10 @@ func (f *fakeAdapter) Scan(dir string) ([]skilladapter.Canonical, error) {
 func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 	return nil // 不必真正写,Service 层只验证链路
 }
+// 2026-07-02 增:为 MigrateMode 测试支持 symlink 落盘。
+func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) error {
+	return nil
+}
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
 func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
@@ -57,6 +62,7 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 		&entity.SkillApply{},
 		&entity.MarketSkill{},
 		&entity.AuditLog{},
+		&entity.Setting{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +71,8 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 	reg := &skilladapter.Registry{}
 	reg.Register(&fakeAdapter{id: "fake", root: t.TempDir()})
 	appSvc.WithAdapterRegistry(reg)
+	// 2026-07-02 增:注入 settings,让 Apply / MigrateMode 走 settings.apply_mode。
+	appSvc.WithSettings(settings.New(db, db))
 	return appSvc, ssvc, store, reg
 }
 
@@ -286,5 +294,71 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 	}
 	if !items[0].UpdateAvailable {
 		t.Errorf("expected update available; got %+v", items[0])
+	}
+}
+
+// 2026-07-02 增:验证 MigrateMode 把 settings.apply_mode 切换 + 给每条
+// status=applied 行重新落盘的能力。这里 fakeAdapter.Apply/ApplyLink 都返 nil,
+// 所以 Entries 里都是 OK,但 settings 已被切到新模式 + SkillApply.ApplyMode 字段
+// 也同步更新。
+func TestMigrateMode_SwitchCopyToSymlink(t *testing.T) {
+	svc, ssvc, _, _ := newTestSvc(t)
+	// 1) 建一个 skill
+	_, err := ssvc.Create(&sskill.WriteInput{
+		Scope: skilladapter.ScopeGlobal,
+		Manifest: skilladapter.Manifest{
+			Name: "mig-skill", Version: "0.1.0", Description: "d", Triggers: []string{"x"},
+		},
+		Files: []skilladapter.File{{Path: "SKILL.md", Content: "x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2) apply 一次(默认 copy 模式)
+	_, err = svc.Apply(&sskillapp.ApplyInput{
+		Scope: skilladapter.ScopeGlobal,
+		Name:  "mig-skill",
+		Tools: []string{"fake"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 3) 切到 symlink
+	res, err := svc.MigrateMode(skillapp.ModeSymlink)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if res.FromMode != skillapp.ModeCopy || res.ToMode != skillapp.ModeSymlink {
+		t.Errorf("from/to = %q/%q, want copy/symlink", res.FromMode, res.ToMode)
+	}
+	if res.Total != 1 || res.OK != 1 || res.Failed != 0 {
+		t.Errorf("entries = %+v, want total=1 ok=1 failed=0", res)
+	}
+	// 4) 二次切(已 symlink → symlink),Total=0
+	res2, err := svc.MigrateMode(skillapp.ModeSymlink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Total != 0 {
+		t.Errorf("idempotent re-migrate: total = %d, want 0", res2.Total)
+	}
+	// 5) 切回 copy
+	res3, err := svc.MigrateMode(skillapp.ModeCopy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res3.FromMode != skillapp.ModeSymlink || res3.ToMode != skillapp.ModeCopy {
+		t.Errorf("back to copy: from/to = %q/%q", res3.FromMode, res3.ToMode)
+	}
+	if res3.Total != 1 || res3.OK != 1 {
+		t.Errorf("back to copy: entries = %+v", res3)
+	}
+}
+
+func TestMigrateMode_InvalidMode(t *testing.T) {
+	svc, _, _, _ := newTestSvc(t)
+	_, err := svc.MigrateMode("nonsense")
+	if err == nil {
+		t.Error("expected error for invalid mode")
 	}
 }
