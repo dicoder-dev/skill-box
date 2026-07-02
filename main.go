@@ -67,7 +67,13 @@ func main() {
 	// 这里读出来后把 Webview 切到 Vite dev server,前端代码改动由 Vite HMR
 	// 直接热替换,Go 进程不需要重启。否则按原逻辑加载 backend 内置 gin + embed.FS。
 	app := desktop.NewApp(desktop.AppConfig{
-		Name:        "Skill Box",
+		Name: "Skill Box",
+		// 2026-07-02 增:用户可在代码里自行配置是否锁宽高比。
+		//   - 不传(默认)/传空:走"宽 90% × 高 90%"的独立比例,屏幕 4K 时窗口不是整数比。
+		//   - 传 "16:9":窗口宽按 widthRatio 算,高按"宽 × 9/16"反推,无论屏幕如何都是 16:9。
+		//   - 其它常见值:"4:3"、"21:9"、"1:1"。
+		//   - 解析失败(非法字符串)会被 ParseAspectRatio 兜底为 (0,0),行为与不传一致。
+		// AspectRatio: "16:9",
 		FrontendURL: desktop.NewFrontendURLFromEnv("", 0),
 	}, backend)
 
