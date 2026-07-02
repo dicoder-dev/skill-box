@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -17,6 +18,25 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+// 主窗口自适应屏幕比例的默认值。
+// 启动后 Window.GetScreen() 返回 *Screen,里面 Size/Bounds 都是 DIP 宽度,
+// alpha.60 的 Window option.Width/Height 也是 DIP,无需再手动除 ScaleFactor。
+const (
+	// defaultPrimaryWidthRatio 主窗口初始宽度占屏幕 DIP 宽度的比例(80%)。
+	defaultPrimaryWidthRatio = 0.8
+	// defaultPrimaryHeightRatio 主窗口初始高度占宽度的比例(16:10 = 0.625)、
+	// 保持与原 1280×800 近似的视觉比例。
+	defaultPrimaryHeightRatio = 0.625
+	// minPrimaryWidthRatio 主窗口最小宽度占屏幕 DIP 宽度的下限比例(60%)。
+	minPrimaryWidthRatio = 0.6
+	// fallbackPrimaryWidth / Height 当屏幕尺寸获取失败时,降级到固定的初始值。
+	fallbackPrimaryWidth  = 1280
+	fallbackPrimaryHeight = 800
+	// minPrimarySizeFloor 最小的兜底 MinWidth/MinHeight,避免小屏幕比例算出 0/太小。
+	minPrimarySizeFloorWidth  = 960
+	minPrimarySizeFloorHeight = 600
+)
+
 // AppConfig 描述桌面端 Wails 应用的全部配置。
 // 调用方在 main.go 构造并传给 NewApp,NewApp 内部完成 Wails 全部组装并返回 *App。
 type AppConfig struct {
@@ -25,9 +45,16 @@ type AppConfig struct {
 	// Description 应用描述,部分系统会用到。
 	Description string
 	// Width / Height 主窗口初始尺寸。
+	// 留空时优先按 AutoSizeByScreen 走"屏幕宽度 80% + 16:10 高",失败再降级到 1280×800。
+	// 显式给定时,AutoSizeByScreen 自动关掉,本次启动固定用这个尺寸。
 	Width, Height int
 	// MinWidth / MinHeight 主窗口最小尺寸。
+	// AutoSizeByScreen=true 时,默认按"屏幕宽度 60% + 16:10 高"算(且不低于 960×600 兜底)。
 	MinWidth, MinHeight int
+	// AutoSizeByScreen 是否把主窗口初始尺寸按当前屏幕 DIP 宽度的 80% 自动算。
+	// 默认 true(Widht 与 Height 都是 0 时),main.go 显式设置 Width/Height 时会被自动改成 false。
+	// 关掉后保持调用方传的固定尺寸,常用于打包时写死统一窗口规格。
+	AutoSizeByScreen bool
 	// BackgroundColour 主窗口背景色(R,G,B),各分量 0-255。
 	BackgroundColour [3]uint8
 	// FrontendURL 可选:自定义前端入口 URL。非空时 Webview 加载此 URL,
@@ -46,10 +73,11 @@ type AppConfig struct {
 // 通过 bootstrap.Boot 启动并 Serve 阻塞。后端生命周期跟 App 解耦 ——
 // App 只在退出时通知 Wails,后端 server 由 main 的 Serve 阻塞在另一个 goroutine。
 type App struct {
-	app       *application.App
-	backend   *bootstrap.Backend
-	notifier  *Notifier
-	shortcut  *ShortcutManager
+	app        *application.App
+	backend    *bootstrap.Backend
+	notifier   *Notifier
+	shortcut   *ShortcutManager
+	autoResize bool // startupAsync 里按屏幕 DIP 宽度 80% 重置主窗口尺寸
 }
 
 // NewApp 构造并完整组装桌面端 Wails 应用:
@@ -69,6 +97,9 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 		cfg.Description = "桌面端 + Web 端双部署"
 	}
 	if cfg.Width == 0 {
+		// 兜底:AutoSizeByScreen=true 时,startupAsync 会再按屏幕 DIP 宽度 80% 重置一次,
+		// 这里给一个 1280 的初始值避免窗口先以最小尺寸闪现再被放大。
+		// AutoSizeByScreen=false 但 Width=0 的兜底则保留原 1280,兼容旧用法。
 		cfg.Width = 1280
 	}
 	if cfg.Height == 0 {
@@ -84,6 +115,12 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 		cfg.BackgroundColour = [3]uint8{27, 38, 54}
 	}
 	_ = cfg.BackgroundColour
+
+	// AutoSizeByScreen 默认 true,除非调用方显式指定了 Width 或 Height。
+	// 显式给固定尺寸时(打包场景/调试场景)自动关掉,本次启动严格用调用方配置。
+	if cfg.Width != 0 || cfg.Height != 0 {
+		cfg.AutoSizeByScreen = false
+	}
 
 	windowMgr := NewWindowManager()
 	appSvc := services.NewAppService(backend)
@@ -252,37 +289,108 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	}
 
 	return &App{
-		app:      app,
-		backend:  backend,
-		notifier: notifier,
-		shortcut: shortcut,
+		app:        app,
+		backend:    backend,
+		notifier:   notifier,
+		shortcut:   shortcut,
+		autoResize: cfg.AutoSizeByScreen,
 	}
 }
 
-// Run 阻塞运行 Wails 应用,直到 app.Quit / 关闭窗口被触发。
+// Run 阻塞运行 Wails 应用，直到 app.Quit / 关闭窗口被触发。
 // 返回值为 Wails 内部退出码。
 func (a *App) Run() error {
 	if a == nil || a.app == nil {
 		return nil
 	}
-	// Startup 钩子里:通知授权 + 启用全局快捷键 + 应用 start_minimized。
-	// wails v3 alpha.60 没有 OnStartup 字段,改成在 Run() 之前开 goroutine
-	// 异步跑(等 Wails 主循环 ready 后再调系统 API;最差情况是头几次点通知没反应)。
-	a.startupAsync()
+	// Startup 钩子里:通知授权 + 启用全局快捷键 + 应用 start_minimized + 按屏幕比例调整尺寸。
+	// wails v3 alpha.60 没有 OnStartup 字段，改成在 Run() 之前开 goroutine
+	// 异步跑（等 Wails 主循环 ready 后再调系统 API；最差情况是头几次点通知没反应）。
+	a.startupAsync(a.autoResize)
 	return a.app.Run()
+}
+
+// resizePrimaryToScreenRatio 按当前屏幕 DIP 宽度自适应主窗口尺寸。
+//
+// 调用时机:Wails 主循环 ready 后（startupAsync 协程 sleep 完再调），
+// 此时 GetScreen() / SetSize() 才有意义。
+//
+// 算法:
+//   - 屏宽 W = Screen.Size.Width(DIP)
+//   - 窗口宽 = round(W × widthRatio)
+//   - 窗口高 = round(窗口宽 × defaultPrimaryHeightRatio,即 16:10)
+//   - MinWidth = round(W × minPrimaryWidthRatio),且不低于 minPrimarySizeFloorWidth
+//   - MinHeight = round(MinWidth × defaultPrimaryHeightRatio),且不低于 ...FloorHeight
+//
+// 屏幕尺寸获取失败时（多发生在无 GUI 或启动太早）记 warning,不动窗口,
+// 由 NewApp 的兜底 Width/Height 顶住。
+func (a *App) resizePrimaryToScreenRatio(widthRatio float64) {
+	if a == nil || a.app == nil {
+		return
+	}
+	w := a.app.Window.Current()
+	if w == nil {
+		log.Printf("desktop: resizePrimaryToScreenRatio skipped, no primary window")
+		return
+	}
+	screen, err := w.GetScreen()
+	if err != nil || screen == nil {
+		log.Printf("desktop: GetScreen failed (%v), keep fallback window size", err)
+		return
+	}
+	screenW := screen.Size.Width
+	if screenW <= 0 {
+		// PhysicalBounds 作为兜底（某些平台 Size 是 0）
+		screenW = screen.Bounds.Width
+	}
+	if screenW <= 0 {
+		log.Printf("desktop: screen width unavailable (Size=%dx%d, Bounds=%dx%d), keep fallback window size",
+			screen.Size.Width, screen.Size.Height, screen.Bounds.Width, screen.Bounds.Height)
+		return
+	}
+
+	newW := int(math.Round(float64(screenW) * widthRatio))
+	if newW <= 0 {
+		return
+	}
+	newH := int(math.Round(float64(newW) * defaultPrimaryHeightRatio))
+	if newH <= 0 {
+		return
+	}
+	minW := int(math.Round(float64(screenW) * minPrimaryWidthRatio))
+	if minW < minPrimarySizeFloorWidth {
+		minW = minPrimarySizeFloorWidth
+	}
+	minH := int(math.Round(float64(minW) * defaultPrimaryHeightRatio))
+	if minH < minPrimarySizeFloorHeight {
+		minH = minPrimarySizeFloorHeight
+	}
+
+	w.SetSize(newW, newH)
+	w.SetMinSize(minW, minH)
+	log.Printf("desktop: primary window resized by screen ratio: width=%d (%d%% of %d DIP), height=%d (16:10), min=%dx%d",
+		newW, int(widthRatio*100), screenW, newH, minW, minH)
 }
 
 // startupAsync 在 Run() 阻塞前异步跑启动期副作用。
 // 用 goroutine + 小 sleep 错开 Wails 主循环初始化,避免和 macOS app delegate 抢线程。
-func (a *App) startupAsync() {
+//
+// autoResize=true 时，在读取偏好前先按屏幕 DIP 宽度 80% 重置尺寸，
+// 避免 start_minimized=false 时窗口先以 1280 兜底闪现再被放大。
+func (a *App) startupAsync(autoResize bool) {
 	go func() {
+		// 0) 主窗口按屏幕比例调整（最优先,要在 start_minimized 之前做完）
+		if autoResize {
+			a.resizePrimaryToScreenRatio(defaultPrimaryWidthRatio)
+		}
+
 		time.Sleep(500 * time.Millisecond)
 
 		// 1) 读偏好
 		var (
-			notifyEnabled  = true
+			notifyEnabled   = true
 			shortcutEnabled = true
-			startMinimized = false
+			startMinimized  = false
 		)
 		if a.backend != nil {
 			prefs := a.backend.NewSettings()
