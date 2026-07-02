@@ -21,12 +21,15 @@ import (
 // 主窗口自适应屏幕比例的默认值。
 // 启动后 Window.GetScreen() 返回 *Screen,里面 Size/Bounds 都是 DIP 宽度,
 // alpha.60 的 Window option.Width/Height 也是 DIP,无需再手动除 ScaleFactor。
+//
+// 选 90% × 90% 的理由：用户反馈之前的 80% × 16:10 不够"大",这次宽高都按 90%。
+// 注意 100% 会把任务栏覆盖(且 SetSize 计算会偏 1px);0.9 在主流屏上视觉接近最大化
+// 但仍保留边距。
 const (
-	// defaultPrimaryWidthRatio 主窗口初始宽度占屏幕 DIP 宽度的比例(80%)。
-	defaultPrimaryWidthRatio = 0.8
-	// defaultPrimaryHeightRatio 主窗口初始高度占宽度的比例(16:10 = 0.625)、
-	// 保持与原 1280×800 近似的视觉比例。
-	defaultPrimaryHeightRatio = 0.625
+	// defaultPrimaryWidthRatio 主窗口初始宽度占屏幕 DIP 宽度的比例(90%)。
+	defaultPrimaryWidthRatio = 0.9
+	// defaultPrimaryHeightRatio 主窗口初始高度占屏幕 DIP 高度的比例(90%)。
+	defaultPrimaryHeightRatio = 0.9
 	// minPrimaryWidthRatio 主窗口最小宽度占屏幕 DIP 宽度的下限比例(60%)。
 	minPrimaryWidthRatio = 0.6
 	// fallbackPrimaryWidth / Height 当屏幕尺寸获取失败时,降级到固定的初始值。
@@ -45,13 +48,13 @@ type AppConfig struct {
 	// Description 应用描述,部分系统会用到。
 	Description string
 	// Width / Height 主窗口初始尺寸。
-	// 留空时优先按 AutoSizeByScreen 走"屏幕宽度 80% + 16:10 高",失败再降级到 1280×800。
+	// 留空时优先按 AutoSizeByScreen 走"屏幕宽度 90% + 高度 90%",失败再降级到 1280×800。
 	// 显式给定时,AutoSizeByScreen 自动关掉,本次启动固定用这个尺寸。
 	Width, Height int
 	// MinWidth / MinHeight 主窗口最小尺寸。
-	// AutoSizeByScreen=true 时,默认按"屏幕宽度 60% + 16:10 高"算(且不低于 960×600 兜底)。
+	// AutoSizeByScreen=true 时,默认按"屏幕宽高 60%"算(且不低于 960×600 兜底)。
 	MinWidth, MinHeight int
-	// AutoSizeByScreen 是否把主窗口初始尺寸按当前屏幕 DIP 宽度的 80% 自动算。
+	// AutoSizeByScreen 是否把主窗口初始尺寸按当前屏幕 DIP 宽高各 90% 自动算。
 	// 默认 true(Widht 与 Height 都是 0 时),main.go 显式设置 Width/Height 时会被自动改成 false。
 	// 关掉后保持调用方传的固定尺寸,常用于打包时写死统一窗口规格。
 	AutoSizeByScreen bool
@@ -77,7 +80,7 @@ type App struct {
 	backend    *bootstrap.Backend
 	notifier   *Notifier
 	shortcut   *ShortcutManager
-	autoResize bool // startupAsync 里按屏幕 DIP 宽度 80% 重置主窗口尺寸
+	autoResize bool // startupAsync 里按屏幕 DIP 宽高各 90% 重置主窗口尺寸
 }
 
 // NewApp 构造并完整组装桌面端 Wails 应用:
@@ -97,7 +100,7 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 		cfg.Description = "桌面端 + Web 端双部署"
 	}
 	if cfg.Width == 0 {
-		// 兜底:AutoSizeByScreen=true 时,startupAsync 会再按屏幕 DIP 宽度 80% 重置一次,
+		// 兜底:AutoSizeByScreen=true 时,startupAsync 会再按屏幕 DIP 宽高各 90% 重置一次,
 		// 这里给一个 1280 的初始值避免窗口先以最小尺寸闪现再被放大。
 		// AutoSizeByScreen=false 但 Width=0 的兜底则保留原 1280,兼容旧用法。
 		cfg.Width = 1280
@@ -310,21 +313,22 @@ func (a *App) Run() error {
 	return a.app.Run()
 }
 
-// resizePrimaryToScreenRatio 按当前屏幕 DIP 宽度自适应主窗口尺寸。
+// resizePrimaryToScreenRatio 按当前屏幕 DIP 宽高自适应主窗口尺寸。
 //
 // 调用时机:Wails 主循环 ready 后（startupAsync 协程 sleep 完再调），
 // 此时 GetScreen() / SetSize() 才有意义。
 //
 // 算法:
 //   - 屏宽 W = Screen.Size.Width(DIP)
+//   - 屏高 H = Screen.Size.Height(DIP)
 //   - 窗口宽 = round(W × widthRatio)
-//   - 窗口高 = round(窗口宽 × defaultPrimaryHeightRatio,即 16:10)
+//   - 窗口高 = round(H × heightRatio)
 //   - MinWidth = round(W × minPrimaryWidthRatio),且不低于 minPrimarySizeFloorWidth
-//   - MinHeight = round(MinWidth × defaultPrimaryHeightRatio),且不低于 ...FloorHeight
+//   - MinHeight = round(H × minPrimaryWidthRatio),且不低于 minPrimarySizeFloorHeight
 //
-// 屏幕尺寸获取失败时（多发生在无 GUI 或启动太早）记 warning,不动窗口,
+// 屏幕尺寸获取失败时(多发生在无 GUI 或启动太早)记 warning,不动窗口,
 // 由 NewApp 的兜底 Width/Height 顶住。
-func (a *App) resizePrimaryToScreenRatio(widthRatio float64) {
+func (a *App) resizePrimaryToScreenRatio(widthRatio, heightRatio float64) {
 	if a == nil || a.app == nil {
 		return
 	}
@@ -343,8 +347,12 @@ func (a *App) resizePrimaryToScreenRatio(widthRatio float64) {
 		// PhysicalBounds 作为兜底（某些平台 Size 是 0）
 		screenW = screen.Bounds.Width
 	}
-	if screenW <= 0 {
-		log.Printf("desktop: screen width unavailable (Size=%dx%d, Bounds=%dx%d), keep fallback window size",
+	screenH := screen.Size.Height
+	if screenH <= 0 {
+		screenH = screen.Bounds.Height
+	}
+	if screenW <= 0 || screenH <= 0 {
+		log.Printf("desktop: screen size unavailable (Size=%dx%d, Bounds=%dx%d), keep fallback window size",
 			screen.Size.Width, screen.Size.Height, screen.Bounds.Width, screen.Bounds.Height)
 		return
 	}
@@ -353,7 +361,7 @@ func (a *App) resizePrimaryToScreenRatio(widthRatio float64) {
 	if newW <= 0 {
 		return
 	}
-	newH := int(math.Round(float64(newW) * defaultPrimaryHeightRatio))
+	newH := int(math.Round(float64(screenH) * heightRatio))
 	if newH <= 0 {
 		return
 	}
@@ -361,30 +369,31 @@ func (a *App) resizePrimaryToScreenRatio(widthRatio float64) {
 	if minW < minPrimarySizeFloorWidth {
 		minW = minPrimarySizeFloorWidth
 	}
-	minH := int(math.Round(float64(minW) * defaultPrimaryHeightRatio))
+	minH := int(math.Round(float64(screenH) * minPrimaryWidthRatio))
 	if minH < minPrimarySizeFloorHeight {
 		minH = minPrimarySizeFloorHeight
 	}
 
 	w.SetSize(newW, newH)
 	w.SetMinSize(minW, minH)
-	log.Printf("desktop: primary window resized by screen ratio: width=%d (%d%% of %d DIP), height=%d (16:10), min=%dx%d",
-		newW, int(widthRatio*100), screenW, newH, minW, minH)
+	log.Printf("desktop: primary window resized by screen ratio: size=%dx%d (%d%% × %d%% of %dx%d DIP), min=%dx%d",
+		newW, newH, int(widthRatio*100), int(heightRatio*100), screenW, screenH, minW, minH)
 }
 
 // startupAsync 在 Run() 阻塞前异步跑启动期副作用。
 // 用 goroutine + 小 sleep 错开 Wails 主循环初始化,避免和 macOS app delegate 抢线程。
 //
-// autoResize=true 时，在读取偏好前先按屏幕 DIP 宽度 80% 重置尺寸，
-// 避免 start_minimized=false 时窗口先以 1280 兜底闪现再被放大。
+// autoResize=true 时,等 Wails 主循环 ready 后(500ms 后)按屏幕 DIP 宽高 90% 重置尺寸。
+// 注意:resize 不能放在 sleep 前 — alpha.60 的 GetScreen() 走 InvokeSync,
+// 在主循环没起来时会卡死 / 拿不到值。
 func (a *App) startupAsync(autoResize bool) {
 	go func() {
+		time.Sleep(500 * time.Millisecond)
+
 		// 0) 主窗口按屏幕比例调整（最优先,要在 start_minimized 之前做完）
 		if autoResize {
-			a.resizePrimaryToScreenRatio(defaultPrimaryWidthRatio)
+			a.resizePrimaryToScreenRatio(defaultPrimaryWidthRatio, defaultPrimaryHeightRatio)
 		}
-
-		time.Sleep(500 * time.Millisecond)
 
 		// 1) 读偏好
 		var (
