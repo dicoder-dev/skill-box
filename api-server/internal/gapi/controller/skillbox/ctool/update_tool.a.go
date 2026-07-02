@@ -19,6 +19,7 @@ type RequestUpdateTool struct {
 	ToolID      string              `json:"tool_id"` // locator,不可改
 	DisplayName *string             `json:"display_name,omitempty"`
 	MdiIcon     *string             `json:"mdi_icon,omitempty"`
+	IconFile    *string             `json:"icon_file,omitempty"`
 	Maturity    *string             `json:"maturity,omitempty"`
 	Note        *string             `json:"note,omitempty"`
 	Enabled     *bool               `json:"enabled,omitempty"`
@@ -33,6 +34,7 @@ func UpdateTool(c *ginp.ContextPlus, req *RequestUpdateTool) {
 		ToolID:      req.ToolID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
+		IconFile:    req.IconFile,
 		Maturity:    req.Maturity,
 		Note:        req.Note,
 		Enabled:     req.Enabled,
@@ -49,6 +51,7 @@ func UpdateTool(c *ginp.ContextPlus, req *RequestUpdateTool) {
 			c.JSON(404, gin.H{"error": err.Error()})
 		case errors.Is(err, stool.ErrEmptyDisplay),
 			errors.Is(err, stool.ErrEmptyMdi),
+			errors.Is(err, stool.ErrBadIconFile),
 			errors.Is(err, stool.ErrBadMaturity),
 			errors.Is(err, stool.ErrBadCategory),
 			errors.Is(err, stool.ErrBadScope),

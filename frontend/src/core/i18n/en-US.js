@@ -655,7 +655,8 @@ const messages = {
     field: {
       toolId: 'Tool ID',
       displayName: 'Display name',
-      mdiIcon: 'Icon',
+      mdiIcon: 'Icon (mdi)',
+      customIcon: 'Custom icon',
       maturity: 'Maturity',
       sortOrder: 'Order',
       enabled: 'Enabled',
@@ -665,12 +666,17 @@ const messages = {
       toolId: 'canonical short id, e.g. claude',
       toolIdLocked: 'tool_id is immutable after creation',
       displayName: 'UI display name',
-      mdiIcon: 'Must start with mdi:, e.g. mdi:robot-outline',
+      mdiIcon: 'Resolved by Iconify at runtime, e.g. mdi:robot-outline. Cleared when "Custom icon" takes precedence.',
+      customIcon: 'Upload a local png/svg/ico (≤ 256KB). Takes precedence over the mdi icon above.',
       note: 'optional, internal note',
     },
     formNewTitle: 'New tool',
     formEditTitle: 'Edit "{name}"',
     formHint: 'New tools are forced to is_system=false; Paths use overwrite semantics (saving replaces the whole group).',
+    btnUploadIcon: 'Upload custom',
+    btnClearIcon: 'Clear',
+    uploadIconOk: 'Icon uploaded',
+    uploadIconFailed: 'Icon upload failed: {msg}',
 
     // paths sub-table
     paths: {

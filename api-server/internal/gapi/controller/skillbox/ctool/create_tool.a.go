@@ -19,6 +19,7 @@ type RequestCreateTool struct {
 	ToolID      string                  `json:"tool_id"`
 	DisplayName string                  `json:"display_name"`
 	MdiIcon     string                  `json:"mdi_icon"`
+	IconFile    string                  `json:"icon_file"`
 	Maturity    string                  `json:"maturity"`
 	Note        string                  `json:"note"`
 	Enabled     bool                    `json:"enabled"`
@@ -41,6 +42,7 @@ func CreateTool(c *ginp.ContextPlus, req *RequestCreateTool) {
 		ToolID:      req.ToolID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
+		IconFile:    req.IconFile,
 		Maturity:    req.Maturity,
 		Note:        req.Note,
 		Enabled:     req.Enabled,
@@ -53,6 +55,7 @@ func CreateTool(c *ginp.ContextPlus, req *RequestCreateTool) {
 		case errors.Is(err, stool.ErrEmptyToolID),
 			errors.Is(err, stool.ErrEmptyDisplay),
 			errors.Is(err, stool.ErrEmptyMdi),
+			errors.Is(err, stool.ErrBadIconFile),
 			errors.Is(err, stool.ErrBadMaturity),
 			errors.Is(err, stool.ErrBadCategory),
 			errors.Is(err, stool.ErrBadScope),

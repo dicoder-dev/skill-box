@@ -657,7 +657,8 @@ const messages = {
     field: {
       toolId: '工具 ID',
       displayName: '展示名',
-      mdiIcon: '图标',
+      mdiIcon: '图标 (mdi)',
+      customIcon: '自定义图标',
       maturity: '成熟度',
       sortOrder: '排序',
       enabled: '启用',
@@ -667,12 +668,17 @@ const messages = {
       toolId: 'canonical 短 ID,如 claude',
       toolIdLocked: 'tool_id 在创建后不可修改',
       displayName: 'UI 显示名',
-      mdiIcon: '必须以 mdi: 开头,如 mdi:robot-outline',
+      mdiIcon: '走 Iconify 在线解析,形如 mdi:robot-outline;清空时由「自定义图标」补位',
+      customIcon: '上传本地 png/svg/ico 等(≤ 256KB)。优先级高于 mdi 图标。',
       note: '可选,内部备注',
     },
     formNewTitle: '新建工具',
     formEditTitle: '编辑「{name}」',
     formHint: '新建工具 is_system 强制为 false;Paths 用「覆盖式」语义,保存后整组替换。',
+    btnUploadIcon: '上传自定义',
+    btnClearIcon: '清除',
+    uploadIconOk: '图标已上传',
+    uploadIconFailed: '图标上传失败:{msg}',
 
     // paths 子表
     paths: {

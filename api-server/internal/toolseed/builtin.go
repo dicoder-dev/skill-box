@@ -23,6 +23,9 @@ type builtinTool struct {
 	ToolID      string
 	DisplayName string
 	MdiIcon     string
+	// IconFile seed 阶段同时写到 ~/.skill-box/tool-icons/<IconFile>,让前端能立即拿到。
+	// 留空 = 仅 mdi_icon。
+	IconFile    string
 	Maturity    string
 	Note        string
 	SortOrder   int
@@ -34,12 +37,16 @@ type builtinTool struct {
 // 来源:2026-06-30 第一波 toolspecs/specs/*.yaml 9 个文件同等内容,迁移到
 // Go 常量。每条注释保留原 yaml 文件头里的"为什么这样配"信息,方便后续
 // 维护时直接对照理解。
+//
+// 2026-07-02:加 IconFile 字段,指向 builtin-icons/ 下的真实图标文件;
+// seed 时同步写到 ~/.skill-box/tool-icons/ 让前端能立即显示真实 logo。
 var builtins = []builtinTool{
 	// ── 5 个老工具(2026-06 之前就有,稳定)────────────────────────────
 	{
 		ToolID:      "claude",
 		DisplayName: "Claude Code",
 		MdiIcon:     "mdi:robot-outline",
+		IconFile:    "claude.ico",
 		Maturity:    "stable",
 		SortOrder:   10,
 		Note:        "Anthropic 推行的 Agent Skills 标准;写盘根 ~/.agents/skills(共享标准),项目级 .claude/skills。",
@@ -53,6 +60,7 @@ var builtins = []builtinTool{
 		ToolID:      "codex",
 		DisplayName: "Codex",
 		MdiIcon:     "mdi:console",
+		IconFile:    "codex.png",
 		Maturity:    "stable",
 		SortOrder:   20,
 		Note:        "OpenAI Codex;写盘根 ~/.agents/skills(共享标准),系统级含 .system + vendor_imports/.curated。",
@@ -67,6 +75,7 @@ var builtins = []builtinTool{
 		ToolID:      "cursor",
 		DisplayName: "Cursor",
 		MdiIcon:     "mdi:cursor-default-click-outline",
+		IconFile:    "cursor.png",
 		Maturity:    "stable",
 		SortOrder:   30,
 		Note:        "Cursor 走自己的 ~/.cursor/skills,不走 Agent Skills 标准。",
@@ -79,6 +88,7 @@ var builtins = []builtinTool{
 		ToolID:      "opencode",
 		DisplayName: "OpenCode",
 		MdiIcon:     "mdi:code-tags",
+		IconFile:    "opencode.png",
 		Maturity:    "stable",
 		SortOrder:   40,
 		Note:        "OpenCode 走自己的 ~/.config/opencode/skills。",
@@ -91,6 +101,7 @@ var builtins = []builtinTool{
 		ToolID:      "trae",
 		DisplayName: "Trae",
 		MdiIcon:     "mdi:leaf",
+		IconFile:    "trae.png",
 		Maturity:    "stable",
 		SortOrder:   50,
 		Note:        "Trae 全局入口 ~/.trae/skills 实际是 symlink,写盘走 ~/.agents/skills(共享标准);项目级 .trae/skills。",
@@ -105,6 +116,7 @@ var builtins = []builtinTool{
 		ToolID:      "antigravity",
 		DisplayName: "Antigravity",
 		MdiIcon:     "mdi:rocket-launch-outline",
+		IconFile:    "antigravity.png",
 		Maturity:    "stable",
 		SortOrder:   60,
 		Note:        "Google Antigravity IDE(Gemini 3 一同发布);官方标准路径 ~/.gemini/antigravity/skills。",
@@ -117,6 +129,7 @@ var builtins = []builtinTool{
 		ToolID:      "cline",
 		DisplayName: "Cline",
 		MdiIcon:     "mdi:file-document-outline",
+		IconFile:    "cline.png",
 		Maturity:    "stable",
 		SortOrder:   70,
 		Note:        "Cline VSCode 插件;同时支持 ~/.agents/skills(共享标准) + ~/.cline/skills(自用目录)。",
@@ -130,6 +143,7 @@ var builtins = []builtinTool{
 		ToolID:      "codebuddy",
 		DisplayName: "CodeBuddy",
 		MdiIcon:     "mdi:buddy",
+		IconFile:    "codebuddy.svg",
 		Maturity:    "experimental",
 		SortOrder:   80,
 		Note:        "腾讯云 CodeBuddy;官方 SKILL.md 规范未公开,路径为占位 ~/.codebuddy/skills,用户实测后可改。",
@@ -142,6 +156,7 @@ var builtins = []builtinTool{
 		ToolID:      "jetbrains",
 		DisplayName: "JetBrains AI",
 		MdiIcon:     "mdi:language-java",
+		IconFile:    "jetbrains.ico",
 		Maturity:    "experimental",
 		SortOrder:   90,
 		Note:        "JetBrains AI Assistant;官方 SKILL.md 规范未公开,路径为占位 ~/.jetbrains/skills,用户实测后可改。",

@@ -6,6 +6,7 @@ const (
 	FieldToolID      = "tool_id"
 	FieldDisplayName = "display_name"
 	FieldMdiIcon     = "mdi_icon"
+	FieldIconFile    = "icon_file"
 	FieldMaturity    = "maturity"
 	FieldNote        = "note"
 	FieldIsSystem    = "is_system"

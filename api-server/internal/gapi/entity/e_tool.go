@@ -24,7 +24,11 @@ type Tool struct {
 	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id,omitempty"`
 	ToolID      string    `gorm:"type:varchar(32);column:tool_id;uniqueIndex;comment:canonical 工具 ID(全局唯一)" json:"tool_id,omitempty"`
 	DisplayName string    `gorm:"type:varchar(64);column:display_name;comment:UI 显示名" json:"display_name,omitempty"`
-	MdiIcon     string    `gorm:"type:varchar(64);column:mdi_icon;comment:前端 mdi 图标(mdi:xxx)" json:"mdi_icon,omitempty"`
+	MdiIcon     string    `gorm:"type:varchar(64);column:mdi_icon;comment:前端 mdi 图标(mdi:xxx);与 icon_file 二选一" json:"mdi_icon,omitempty"`
+	// IconFile 用户上传/前端嵌入的自定义图标文件名(纯 basename,如 claude.png)。
+	// 空字符串 = 用 mdi_icon。为避免路径穿越,前端只接受 basename,
+	// 后端读文件时拼到 ~/.skill-box/tool-icons/<basename> 兜底校验。
+	IconFile    string    `gorm:"type:varchar(128);column:icon_file;comment:自定义图标文件名(basename),存于 ~/.skill-box/tool-icons/;空则用 mdi_icon" json:"icon_file,omitempty"`
 	Maturity    string    `gorm:"type:varchar(16);column:maturity;comment:stable|experimental|deprecated" json:"maturity,omitempty"`
 	Note        string    `gorm:"type:text;column:note;comment:自由文本说明,前端不展示" json:"note,omitempty"`
 	IsSystem    bool      `gorm:"column:is_system;index;comment:系统工具:tool_id 不可改,行不可删" json:"is_system,omitempty"`

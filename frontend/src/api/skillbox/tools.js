@@ -8,12 +8,14 @@
 //   POST /api/skillbox/tools/paths/add             - 给工具追加一条 path
 //   POST /api/skillbox/tools/paths/delete          - 按 id 删一条 path
 //   POST /api/skillbox/tools/reload                - 把 DB 重新拉到 skilladapter.Registry
+//   POST /api/skillbox/tools/upload-icon           - 上传工具自定义图标(multipart)
+//   GET  /api/files/tool-icons/<name>              - 静态服务用户/seed 的图标
 //
 // 业务规则(后端兜底,前端不重复校验,只做"友好提示"):
 //   - is_system=true:tool_id / is_system 不可改,整行不可删;其他字段可改
 //   - is_system=false:全部可改 + 可删
 //   - maturity ∈ stable | experimental | deprecated
-//   - mdi_icon 必须以 mdi: 开头
+//   - icon_file 和 mdi_icon 至少要有一个非空;两者可同时存在(icon_file 优先)
 //   - paths 每条:scope ∈ global|project;category ∈ user|system;path 非空
 //
 // 字段命名严格跟后端 RequestCreateTool / RequestUpdateTool 一致(snake_case),
@@ -24,7 +26,7 @@ import { http } from '@/core/utils/requests'
 /**
  * 列出所有 AI 编程工具元数据(含每条 path)。
  * 返回:Promise<{ items: ToolView[] }>
- *   ToolView = { id, tool_id, display_name, mdi_icon, maturity, note,
+ *   ToolView = { id, tool_id, display_name, mdi_icon, icon_file, maturity, note,
  *                is_system, enabled, sort_order,
  *                paths: [{ scope, category, path, path_order }],
  *                created_at, updated_at }
@@ -36,9 +38,9 @@ export function listTools() {
 /**
  * 新建一个用户工具(is_system 后端强制 false)。
  * @param {object} payload - 字段同后端 RequestCreateTool:
- *   { tool_id, display_name, mdi_icon, maturity, note, enabled, sort_order,
+ *   { tool_id, display_name, mdi_icon, icon_file, maturity, note, enabled, sort_order,
  *     paths: [{ scope, category, path, path_order }] }
- *   paths 字段可省略 / 空数组;其余必填字段非空。
+ *   paths 字段可省略 / 空数组;icon_file 和 mdi_icon 至少有一个非空。
  * @returns {Promise<ToolView>} 新建的工具视图(含后端分配的 id)。
  */
 export function createTool(payload) {
@@ -49,7 +51,7 @@ export function createTool(payload) {
  * 改一个工具的元数据。空值表示"不改";paths 非 null = 整组覆盖。
  * @param {object} payload - 字段同后端 RequestUpdateTool:
  *   { tool_id (locator, 不可改),
- *     display_name?, mdi_icon?, maturity?, note?, enabled?, sort_order?,
+ *     display_name?, mdi_icon?, icon_file?, maturity?, note?, enabled?, sort_order?,
  *     paths?: [{ scope, category, path, path_order }] }
  * @returns {Promise<ToolView>} 更新后的工具视图。
  */
@@ -88,4 +90,19 @@ export function deleteToolPath(path_id) {
  */
 export function reloadTools() {
   return http.post('/api/skillbox/tools/reload', {})
+}
+
+/**
+ * 上传工具自定义图标。
+ * @param {File} file - HTML <input type="file"> 选中的图片文件
+ * @returns {Promise<{name:string,url:string}>}
+ *   - name: basename,如 "claude_1719300123.png";前端再把它写到 tool.icon_file
+ *   - url: 服务地址,如 "/api/files/tool-icons/claude_1719300123.png"
+ */
+export function uploadToolIcon(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  return http.post('/api/skillbox/tools/upload-icon', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }

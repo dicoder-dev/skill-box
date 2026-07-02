@@ -20,6 +20,7 @@ import (
 
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/model/skillbox/mtool"
+	"ginp-api/internal/gapi/service/tool/toolicon"
 	"ginp-api/internal/skilladapter/toolspecs"
 	"ginp-api/pkg/where"
 
@@ -33,7 +34,9 @@ var (
 	ErrNotFound         = errors.New("tool: not found")
 	ErrSystemToolFrozen = errors.New("tool: system tool cannot be deleted or have tool_id changed")
 	ErrEmptyDisplay     = errors.New("tool: display_name is empty")
-	ErrEmptyMdi         = errors.New("tool: mdi_icon must start with mdi:")
+	// ErrEmptyMdi 仅在"没有 icon_file 兜底"时报 — 即 mdi_icon 和 icon_file 都为空时,必须有 mdi_icon。
+	ErrEmptyMdi         = errors.New("tool: mdi_icon and icon_file cannot both be empty")
+	ErrBadIconFile      = errors.New("tool: icon_file must be basename with allowed extension (.png/.svg/.jpg/.jpeg/.webp/.ico)")
 	ErrBadMaturity      = errors.New("tool: maturity must be stable|experimental|deprecated")
 	ErrBadCategory      = errors.New("tool: category must be user|system")
 	ErrBadScope         = errors.New("tool: scope must be global|project")
@@ -57,7 +60,8 @@ func (s *Service) pathM() *mtool.ToolPathModel { return mtool.NewToolPathModel(s
 type CreateInput struct {
 	ToolID      string
 	DisplayName string
-	MdiIcon     string
+	MdiIcon     string // 可空 — 若 IconFile 非空则允许为空
+	IconFile    string // 可空 — 自定义图标文件名(basename),存于 ~/.skill-box/tool-icons/
 	Maturity    string
 	Note        string
 	Enabled     bool
@@ -75,7 +79,7 @@ type PathInput struct {
 
 // Create 新建一个用户工具(is_system 强制 false)。
 func (s *Service) Create(in *CreateInput) (*entity.Tool, error) {
-	if err := validateBase(in.ToolID, in.DisplayName, in.MdiIcon, in.Maturity); err != nil {
+	if err := validateBase(in.ToolID, in.DisplayName, in.MdiIcon, in.IconFile, in.Maturity); err != nil {
 		return nil, err
 	}
 	for i, p := range in.Paths {
@@ -91,6 +95,7 @@ func (s *Service) Create(in *CreateInput) (*entity.Tool, error) {
 		ToolID:      strings.TrimSpace(in.ToolID),
 		DisplayName: strings.TrimSpace(in.DisplayName),
 		MdiIcon:     strings.TrimSpace(in.MdiIcon),
+		IconFile:    strings.TrimSpace(in.IconFile),
 		Maturity:    in.Maturity,
 		Note:        in.Note,
 		IsSystem:    false, // 用户新建,永远非系统工具
@@ -112,6 +117,7 @@ type UpdateInput struct {
 	ToolID      string // locator,不改
 	DisplayName *string
 	MdiIcon     *string
+	IconFile    *string
 	Maturity    *string
 	Note        *string
 	Enabled     *bool
@@ -129,6 +135,7 @@ func (s *Service) Update(in *UpdateInput) (*entity.Tool, error) {
 	upd := &entity.Tool{
 		DisplayName: cur.DisplayName,
 		MdiIcon:     cur.MdiIcon,
+		IconFile:    cur.IconFile,
 		Maturity:    cur.Maturity,
 		Note:        cur.Note,
 		Enabled:     cur.Enabled,
@@ -140,11 +147,22 @@ func (s *Service) Update(in *UpdateInput) (*entity.Tool, error) {
 		}
 		upd.DisplayName = strings.TrimSpace(*in.DisplayName)
 	}
+	// mdi_icon 和 icon_file 至少要有一个非空;如果 client 同时清空两者,拒绝。
 	if in.MdiIcon != nil {
-		if !strings.HasPrefix(strings.TrimSpace(*in.MdiIcon), "mdi:") {
-			return nil, fmt.Errorf("%w: %q", ErrEmptyMdi, *in.MdiIcon)
+		mdi := strings.TrimSpace(*in.MdiIcon)
+		// 允许空串(清空 mdi_icon),但若新的 mdi_icon 为空且 icon_file 也空/被清空 → 报错
+		upd.MdiIcon = mdi
+	}
+	if in.IconFile != nil {
+		icon := strings.TrimSpace(*in.IconFile)
+		if icon != "" && !toolicon.ValidIconFileName(icon) {
+			return nil, fmt.Errorf("%w: %q", ErrBadIconFile, icon)
 		}
-		upd.MdiIcon = strings.TrimSpace(*in.MdiIcon)
+		upd.IconFile = icon
+	}
+	// 终态校验:改完后 mdi_icon + icon_file 不能都为空
+	if upd.MdiIcon == "" && upd.IconFile == "" {
+		return nil, ErrEmptyMdi
 	}
 	if in.Maturity != nil {
 		if !validMaturity(*in.Maturity) {
@@ -162,7 +180,7 @@ func (s *Service) Update(in *UpdateInput) (*entity.Tool, error) {
 		upd.SortOrder = *in.SortOrder
 	}
 	cols := []string{
-		mtool.FieldDisplayName, mtool.FieldMdiIcon, mtool.FieldMaturity, mtool.FieldNote,
+		mtool.FieldDisplayName, mtool.FieldMdiIcon, mtool.FieldIconFile, mtool.FieldMaturity, mtool.FieldNote,
 		mtool.FieldEnabled, mtool.FieldSortOrder,
 	}
 	if err := s.toolM().Update(where.New(mtool.FieldID, "=", cur.ID).Conditions(), upd, cols...); err != nil {
@@ -190,7 +208,7 @@ func (s *Service) Delete(toolID string) error {
 	if cur.IsSystem {
 		return fmt.Errorf("%w: %s", ErrSystemToolFrozen, toolID)
 	}
-	return s.dbWrite.Transaction(func(tx *gorm.DB) error {
+	err = s.dbWrite.Transaction(func(tx *gorm.DB) error {
 		pathM := mtool.NewToolPathModel(tx, tx)
 		if err := pathM.DeleteByToolID(cur.ID); err != nil {
 			return fmt.Errorf("tool: delete paths: %w", err)
@@ -201,6 +219,15 @@ func (s *Service) Delete(toolID string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// 级联删除自定义图标文件(若指定)。失败不报错 — icon_file 文件不存在
+	// 只是孤儿,不影响业务;但要确保 basename 校验过,防止越界删除任意文件。
+	if cur.IconFile != "" && toolicon.ValidIconFileName(cur.IconFile) {
+		_ = toolicon.Delete(cur.IconFile) // best-effort:清理用户上传的图标
+	}
+	return nil
 }
 
 // List 列出所有工具(给前端用,含 path)。
@@ -230,7 +257,8 @@ func (s *Service) List() ([]ToolView, error) {
 			})
 		}
 		out = append(out, ToolView{
-			ID: t.ID, ToolID: t.ToolID, DisplayName: t.DisplayName, MdiIcon: t.MdiIcon,
+			ID: t.ID, ToolID: t.ToolID, DisplayName: t.DisplayName,
+			MdiIcon: t.MdiIcon, IconFile: t.IconFile,
 			Maturity: t.Maturity, Note: t.Note, IsSystem: t.IsSystem, Enabled: t.Enabled,
 			SortOrder: t.SortOrder, Paths: views,
 			CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
@@ -269,15 +297,26 @@ func (s *Service) replacePaths(toolID uint, paths []PathInput) error {
 	})
 }
 
-func validateBase(toolID, display, mdi, maturity string) error {
+func validateBase(toolID, display, mdi, iconFile, maturity string) error {
 	if strings.TrimSpace(toolID) == "" {
 		return ErrEmptyToolID
 	}
 	if strings.TrimSpace(display) == "" {
 		return ErrEmptyDisplay
 	}
-	if !strings.HasPrefix(strings.TrimSpace(mdi), "mdi:") {
+	// mdi_icon 和 icon_file 至少要有一个
+	mdiT := strings.TrimSpace(mdi)
+	iconT := strings.TrimSpace(iconFile)
+	if mdiT == "" && iconT == "" {
+		return ErrEmptyMdi
+	}
+	// 若给了 mdi_icon,必须以 mdi: 开头(走 Iconify 解析)
+	if mdiT != "" && !strings.HasPrefix(mdiT, "mdi:") {
 		return fmt.Errorf("%w: %q", ErrEmptyMdi, mdi)
+	}
+	// 若给了 icon_file,必须是合法 basename
+	if iconT != "" && !toolicon.ValidIconFileName(iconT) {
+		return fmt.Errorf("%w: %q", ErrBadIconFile, iconFile)
 	}
 	if maturity != "" && !validMaturity(maturity) {
 		return ErrBadMaturity
@@ -314,6 +353,7 @@ type ToolView struct {
 	ToolID      string     `json:"tool_id"`
 	DisplayName string     `json:"display_name"`
 	MdiIcon     string     `json:"mdi_icon"`
+	IconFile    string     `json:"icon_file"`
 	Maturity    string     `json:"maturity"`
 	Note        string     `json:"note"`
 	IsSystem    bool       `json:"is_system"`

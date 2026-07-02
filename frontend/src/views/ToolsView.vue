@@ -29,6 +29,8 @@ import { Icon } from '@iconify/vue'
 import { useToolsStore } from '@/core/store/tools'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
+import { uploadToolIcon } from '@/api/skillbox/tools'
 import { formatRelative } from '@/core/utils/time.js'
 import { platform } from '@/platform'
 
@@ -107,6 +109,55 @@ function maturityIcon(m) {
   if (m === 'experimental') return 'mdi:flask-outline'
   if (m === 'deprecated') return 'mdi:archive-arrow-down-outline'
   return 'mdi:help-circle-outline'
+}
+
+// 选择图标文件按钮(隐藏 <input>,点"上传自定义"按钮触发);
+// uploadingToolFlag 防重复点击。
+const iconFileInput = ref(null)
+const uploadingToolFlag = ref(false)
+
+function pickIconFile() {
+  if (iconFileInput.value) iconFileInput.value.click()
+}
+
+async function onIconFileChosen(e) {
+  const file = e.target.files && e.target.files[0]
+  // 允许清空(重新选) — 只看是否拿到 file
+  if (file) {
+    uploadingToolFlag.value = true
+    try {
+      const res = await uploadToolIcon(file)
+      if (res && res.name) {
+        tools.form.icon_file = res.name
+        toast.success(t('tools.uploadIconOk'))
+      }
+    } catch (err) {
+      toast.error(t('tools.uploadIconFailed', { msg: err?.message || err }))
+    } finally {
+      uploadingToolFlag.value = false
+      // 重置 input,允许选同一文件
+      if (iconFileInput.value) iconFileInput.value.value = ''
+    }
+  } else {
+    if (iconFileInput.value) iconFileInput.value.value = ''
+  }
+}
+
+function clearIconFile() {
+  tools.form.icon_file = ''
+}
+
+// 给预览图拼基础 URL
+function resolveBaseURL() {
+  if (typeof window === 'undefined') return ''
+  const cfg = window.__APP_CONFIG__
+  if (cfg && typeof cfg.baseURL === 'string') return cfg.baseURL.replace(/\/$/, '')
+  if (window.location) return `${window.location.protocol}//${window.location.host}`
+  return ''
+}
+function iconPreviewURL(name) {
+  if (!name) return ''
+  return `${resolveBaseURL()}/api/files/tool-icons/${name}`
 }
 
 // 取 store 计算结果(用 computed 是为了响应式跟随 state 变化)
@@ -220,11 +271,7 @@ onMounted(async () => {
         <!-- 顶部 -->
         <header class="tool-card-top">
           <div class="tool-card-icon">
-            <Icon
-              :icon="t_item.mdi_icon || 'mdi:cog-outline'"
-              width="22"
-              height="22"
-            />
+            <ToolIcon :tool="t_item" :size="22" />
           </div>
           <div class="tool-card-titles">
             <h3 class="tool-card-name" :title="t_item.display_name">
@@ -364,14 +411,68 @@ onMounted(async () => {
           <div class="form-field">
             <label>
               {{ t('tools.field.mdiIcon') }}
-              <span class="required">*</span>
             </label>
             <input
               v-model="tools.form.mdi_icon"
-              placeholder="mdi:tools"
+              :placeholder="t('tools.hint.mdiIcon')"
               :disabled="tools.saving"
             />
             <p class="field-hint">{{ t('tools.hint.mdiIcon') }}</p>
+          </div>
+
+          <!-- 自定义图标上传区块 -->
+          <div class="form-field form-field-full">
+            <label>{{ t('tools.field.customIcon') }}</label>
+            <div class="icon-upload-row">
+              <div class="icon-preview">
+                <img
+                  v-if="tools.form.icon_file"
+                  :src="iconPreviewURL(tools.form.icon_file)"
+                  alt="icon"
+                  class="icon-preview-img"
+                />
+                <Icon
+                  v-else
+                  icon="mdi:image-off-outline"
+                  width="22"
+                  height="22"
+                  class="icon-preview-empty"
+                />
+              </div>
+              <div class="icon-upload-controls">
+                <button
+                  type="button"
+                  class="ghost with-icon"
+                  :disabled="tools.saving || uploadingToolFlag"
+                  @click="pickIconFile"
+                >
+                  <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
+                  <Icon v-else icon="mdi:upload" width="14" height="14" />
+                  {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
+                </button>
+                <button
+                  v-if="tools.form.icon_file"
+                  type="button"
+                  class="ghost icon-only-btn"
+                  :disabled="tools.saving"
+                  :title="t('tools.btnClearIcon')"
+                  @click="clearIconFile"
+                >
+                  <Icon icon="mdi:close" width="14" height="14" />
+                </button>
+                <code v-if="tools.form.icon_file" class="icon-file-name">
+                  {{ tools.form.icon_file }}
+                </code>
+                <input
+                  ref="iconFileInput"
+                  type="file"
+                  accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
+                  class="hidden-input"
+                  @change="onIconFileChosen"
+                />
+              </div>
+            </div>
+            <p class="field-hint">{{ t('tools.hint.customIcon') }}</p>
           </div>
 
           <div class="form-field">
@@ -1332,5 +1433,66 @@ button.add-path-btn:hover:not(:disabled) {
   .toolbar-right {
     width: 100%;
   }
+}
+
+/* ===== 自定义图标上传 ===== */
+.icon-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.icon-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.icon-preview-empty {
+  color: var(--text-faint);
+}
+
+.icon-upload-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.icon-only-btn {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.icon-file-name {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  background: var(--bg-subtle);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hidden-input {
+  display: none;
 }
 </style>

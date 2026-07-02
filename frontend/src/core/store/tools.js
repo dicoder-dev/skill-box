@@ -41,6 +41,7 @@ function emptyForm() {
     tool_id: '',
     display_name: '',
     mdi_icon: 'mdi:',
+    icon_file: '', // 新增:自定义图标文件名(basename);非空时优先于 mdi_icon
     maturity: 'stable',
     note: '',
     enabled: true,
@@ -184,6 +185,7 @@ export const useToolsStore = defineStore('tools', {
         tool_id: t.tool_id || '',
         display_name: t.display_name || '',
         mdi_icon: t.mdi_icon || 'mdi:',
+        icon_file: t.icon_file || '',
         // 后端如果没设 maturity 返 "" → 前端默认 stable,提交时也允许 ""
         maturity: t.maturity || 'stable',
         note: t.note || '',
@@ -338,8 +340,13 @@ export const useToolsStore = defineStore('tools', {
       if (!String(f.display_name || '').trim()) {
         return 'display_name 不能为空'
       }
-      const icon = String(f.mdi_icon || '').trim()
-      if (!icon.startsWith('mdi:')) {
+      const mdi = String(f.mdi_icon || '').trim()
+      const ico = String(f.icon_file || '').trim()
+      // mdi_icon 和 icon_file 至少要有一个非空;mdi_icon 必须以 mdi: 开头
+      if (!mdi && !ico) {
+        return 'mdi_icon / custom icon 不能同时为空'
+      }
+      if (mdi && !mdi.startsWith('mdi:')) {
         return 'mdi_icon 必须以 mdi: 开头'
       }
       if (f.maturity && !ALLOWED_MATURITY.includes(f.maturity)) {
@@ -362,13 +369,15 @@ export const useToolsStore = defineStore('tools', {
 
     /**
      * 把当前表单打包成 update / create 用的 payload。
-     * update 语义:paths 字段总是带上(非 null = 整组覆盖,后端会清空再写)。
+     * update 语义:paths 字段总是带上(非 null = 整组覆盖,后端会清空再写);
+     * mdi_icon 和 icon_file 也总是带上,后端会对比处理(都是空就报错)。
      */
     buildPayload() {
       const f = this.form
       return {
         display_name: f.display_name.trim(),
         mdi_icon: f.mdi_icon.trim(),
+        icon_file: f.icon_file.trim(),
         maturity: f.maturity || 'stable',
         note: f.note || '',
         enabled: !!f.enabled,
