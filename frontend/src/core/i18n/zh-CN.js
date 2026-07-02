@@ -604,8 +604,13 @@ const messages = {
       copyHint: '把 skill 源文件逐个拷贝到目标目录(占磁盘空间,源文件修改后需重新应用)',
       symlink: '软链接',
       symlinkHint: '在目标位置创建软链接指向源 skill(零占用,源文件修改后自动同步)',
-      switchCopyToSymlinkConfirm: '把 {total} 条已应用的 skill 改为软链接形式?\n\n软链接方式下,源文件修改后目标端会立即生效,无需重新应用;但删除或移动源文件会让目标端失效。',
-      switchSymlinkToCopyConfirm: '把 {total} 条已应用的 skill 改为独立副本?\n\n改为副本后,源文件修改不再影响目标端,目标端是独立的文件副本。',
+      // 2026-07-02 改:两阶段 confirm —— 用户已点 segmented 触发切换,
+      // 模式已写入 settings,现在单独问"是否把现有 {total} 条已应用 skill 重新落盘"。
+      applyExistingToSymlinkConfirm: '检测到当前有 {total} 条已应用的 skill。\n\n是否同时把这些已应用 skill 改为软链接形式?\n\n选"是" = 重新落盘(后续修改源文件立即同步)\n选"否" = 保持原样(只影响未来新 apply)',
+      applyExistingToCopyConfirm: '检测到当前有 {total} 条已应用的 skill。\n\n是否同时把这些已应用 skill 改为独立副本?\n\n选"是" = 重新落盘为目标端独立文件\n选"否" = 保持原样(只影响未来新 apply)',
+      // 模式已切,迁移结果汇总
+      modeChanged: '已切换到「{mode}」模式,新 apply 将按此方式落盘',
+      modeChangedNoMigrate: '已切换到「{mode}」模式,{total} 条已应用的 skill 保持原样',
       switchMigrating: '正在迁移 {total} 条 skill...',
       switchSuccess: '迁移完成:成功 {ok} 条,跳过 {skipped} 条,失败 {failed} 条',
       switchFailedDetail: '迁移失败:\n{detail}',

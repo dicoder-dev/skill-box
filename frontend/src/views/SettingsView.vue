@@ -91,42 +91,70 @@ async function countApplied() {
   }
 }
 
+// 2026-07-02 增:apply 模式切换(改:两阶段 confirm)。
+//
+// 流程:
+//   1) 立即把 settings.apply_mode 切到 newMode(未来的 apply 立刻按新模式走)。
+//   2) 若当前有 total 条 status=applied 的 skill,弹一个**独立的二次确认**
+//      "是否同时把已应用的 N 条 skill 重新落盘?",让用户单独选择是否迁移
+//      现有数据(用户可能只想改未来行为,不动现有)。
+//   3) 用户同意 → 调 /migrate-mode;拒绝 / 失败 → 模式已切但不动旧数据,toast 说明。
 async function onApplyModeChange(newMode) {
   if (applyModeBusy.value) return
   if (newMode === applyMode.value) return
   if (!isDesktop.value) {
     // Web 端:平台层 prefs 不持久化,直接改本地 ref + 提示。
     applyMode.value = newMode
-    applyModeHint.value = t('settings.applyMode.saved' /* fallback */) || t('settings.saved')
+    applyModeHint.value = t('settings.saved')
     setTimeout(() => (applyModeHint.value = ''), 1500)
     return
   }
-  const total = await countApplied()
-  const confirmKey = newMode === 'symlink'
-    ? 'settings.applyMode.switchCopyToSymlinkConfirm'
-    : 'settings.applyMode.switchSymlinkToCopyConfirm'
-  const ok = window.confirm(t(confirmKey, { total }))
-  if (!ok) {
-    applyModeHint.value = t('settings.applyMode.switchCancelled')
-    setTimeout(() => (applyModeHint.value = ''), 1500)
-    return
-  }
+  // 1) 先把模式切到 settings(后续 apply 立刻按新模式)
   applyModeBusy.value = true
+  try {
+    await platform.prefs.set('skillbox.apply_mode', newMode)
+    applyMode.value = newMode
+    applyModeHint.value = t('settings.applyMode.modeChanged', { mode: t(
+      newMode === 'symlink' ? 'settings.applyMode.symlink' : 'settings.applyMode.copy',
+    ) })
+  } catch (e) {
+    applyModeHint.value = t('settings.errSave', { msg: e?.message || e })
+    applyModeBusy.value = false
+    setTimeout(() => (applyModeHint.value = ''), 3000)
+    return
+  }
+
+  // 2) 拉已应用数量,弹二次确认(独立选择"是否应用到现有 skill")
+  const total = await countApplied()
+  if (total === 0) {
+    // 没已应用 skill,直接收尾
+    applyModeBusy.value = false
+    setTimeout(() => (applyModeHint.value = ''), 3000)
+    return
+  }
+  const migrateKey = newMode === 'symlink'
+    ? 'settings.applyMode.applyExistingToSymlinkConfirm'
+    : 'settings.applyMode.applyExistingToCopyConfirm'
+  const migrate = window.confirm(t(migrateKey, { total }))
+  if (!migrate) {
+    applyModeHint.value = t('settings.applyMode.modeChangedNoMigrate', {
+      mode: t(newMode === 'symlink' ? 'settings.applyMode.symlink' : 'settings.applyMode.copy'),
+      total,
+    })
+    applyModeBusy.value = false
+    setTimeout(() => (applyModeHint.value = ''), 4000)
+    return
+  }
+
+  // 3) 用户同意迁移 → 调 /migrate-mode
   applyModeHint.value = t('settings.applyMode.switchMigrating', { total })
   try {
     const res = await migrateApplyMode({ mode: newMode })
-    if (res && res.total === 0) {
-      // 没 applied 行,settings 还是要写(后端 migrate 已写)
-      applyMode.value = newMode
-    } else {
-      applyMode.value = newMode
-    }
     applyModeHint.value = t('settings.applyMode.switchSuccess', {
       ok: res?.ok ?? 0,
       skipped: res?.skipped ?? 0,
       failed: res?.failed ?? 0,
     })
-    // 失败明细额外拼到 hint 后面(非阻塞)
     if (res && res.failed > 0) {
       const failedEntries = (res.entries || []).filter((e) => !e.ok && !e.skipped)
       const detail = failedEntries
@@ -241,24 +269,26 @@ onMounted(loadPrefs)
                 : t('settings.applyMode.copyHint') }}
             </div>
           </div>
-          <div class="lang-segmented">
+          <div class="mode-segmented">
             <button
               type="button"
-              :class="['lang-btn', applyMode === 'copy' ? 'lang-active' : '']"
+              :class="['mode-btn', applyMode === 'copy' ? 'mode-btn-active' : '']"
               :disabled="applyModeBusy"
               @click="onApplyModeChange('copy')"
             >
-              <Icon icon="mdi:content-copy" width="14" height="14" v-if="applyMode === 'copy'" />
-              {{ t('settings.applyMode.copy') }}
+              <Icon icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'copy'" />
+              <Icon icon="mdi:content-copy-outline" width="16" height="16" class="mode-btn-icon" v-else />
+              <span class="mode-btn-label">{{ t('settings.applyMode.copy') }}</span>
             </button>
             <button
               type="button"
-              :class="['lang-btn', applyMode === 'symlink' ? 'lang-active' : '']"
+              :class="['mode-btn', applyMode === 'symlink' ? 'mode-btn-active' : '']"
               :disabled="applyModeBusy"
               @click="onApplyModeChange('symlink')"
             >
-              <Icon icon="mdi:link-variant" width="14" height="14" v-if="applyMode === 'symlink'" />
-              {{ t('settings.applyMode.symlink') }}
+              <Icon icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'symlink'" />
+              <Icon icon="mdi:link-variant" width="16" height="16" class="mode-btn-icon" v-else />
+              <span class="mode-btn-label">{{ t('settings.applyMode.symlink') }}</span>
             </button>
           </div>
         </div>
@@ -639,6 +669,69 @@ onMounted(loadPrefs)
 
 .lang-hint {
   margin-top: 16px;
+}
+
+/* 2026-07-02 增:apply mode segmented(独立样式,与 lang 共用一套太低调)。
+ * 选中态用主色填充 + 阴影 + check 图标,跟未选中态形成强对比,避免
+ * 用户看不清当前模式。颜色用 --primary 蓝(主色),不踩紫色禁条。
+ */
+.mode-segmented {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.mode-btn:hover:not(:disabled):not(.mode-btn-active) {
+  color: var(--text);
+  background: var(--bg-card);
+}
+
+.mode-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mode-btn-icon {
+  flex-shrink: 0;
+}
+
+.mode-btn-label {
+  line-height: 1;
+}
+
+/* 选中态:主色背景 + 白字 + 阴影 + 描边,跟未选中态明显区分。 */
+.mode-btn.mode-btn-active {
+  background: var(--primary);
+  color: var(--primary-contrast, #fff);
+  border-color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  font-weight: 600;
+}
+
+.mode-btn.mode-btn-active .mode-btn-icon {
+  color: var(--primary-contrast, #fff);
 }
 
 /* 提示框 */
