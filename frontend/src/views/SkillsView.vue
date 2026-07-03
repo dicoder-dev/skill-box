@@ -1253,18 +1253,13 @@ function onSkillContextMenu({ node, event }) {
   ctxMenu.open = true
 }
 
-// 分组右键:新建子分组 / 重命名 / 在文件夹打开 / 删除
+// 分组右键:重命名 / 在文件夹打开 / 删除
+// 2026-07-03 改:首页分组只支持单级,移除"新建子分组"项。
 function onGroupContextMenu({ node, event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
   const groupPath = node.path || ''
   ctxMenu.items = [
-    {
-      key: 'new-sub',
-      label: t('skills.list.ctxNewSubgroup'),
-      icon: 'mdi:folder-plus-outline',
-      onClick: () => openNewGroupDialog(groupPath),
-    },
     {
       key: 'rename',
       label: t('skills.list.ctxRename'),

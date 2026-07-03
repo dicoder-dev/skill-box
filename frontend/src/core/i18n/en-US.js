@@ -239,8 +239,9 @@ const messages = {
       ctxTag: 'Add tag',
       ctxDelete: 'Delete',
       ctxMoveTo: 'Move to…',
-      groupNamePrompt: 'Enter group name (use / for nested, e.g. frontend/react)',
-      groupNamePromptSub: 'Enter sub-group name',
+      // 2026-07-03: home groups are single-level only.
+      groupNamePrompt: 'Enter group name (single level only, no / allowed)',
+      groupNamePromptSub: 'Enter group name (single level only, no / allowed)',
       groupInvalid: 'Invalid group name (no .., no leading/trailing /)',
       groupCreateFailed: 'Create group failed: {msg}',
       groupDeleteConfirm: 'Delete group "{name}"?',

@@ -239,8 +239,10 @@ const messages = {
       ctxTag: '打标签',
       ctxDelete: '删除',
       ctxMoveTo: '移动到…',
-      groupNamePrompt: '请输入分组名(可多级,用 / 分隔,如 frontend/react)',
-      groupNamePromptSub: '请输入子分组名',
+      // 2026-07-03 改:首页分组只支持单级,不再支持多级。groupNamePrompt
+      // 提示从"可多级,用 / 分隔"改为"只支持单级,不能含 /"。
+      groupNamePrompt: '请输入分组名(只支持单级,不能含 /)',
+      groupNamePromptSub: '请输入分组名(只支持单级,不能含 /)',
       groupInvalid: '分组名非法(不能含 .. 或 / 开头/结尾)',
       groupCreateFailed: '新建分组失败: {msg}',
       groupDeleteConfirm: '确定删除分组「{name}」吗?',
