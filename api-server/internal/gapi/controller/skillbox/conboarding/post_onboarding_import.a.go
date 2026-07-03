@@ -69,14 +69,19 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 			} else {
 				// SourcePath 读不到(用户在 scan 后手动删了)—— 兜底用轻量字段,
 				// 让 caller 至少能看到一条占位结果而不是整条 import 失败。
+				// 透传 SourcePath 到 SourceDir:即便后续走 symlink 模式 ApplyLink
+				// 也会因为源路径不存在而给出明确报错(而不是先撞 "empty source_dir")。
 				c = skilladapter.Canonical{
 					Manifest: skilladapter.Manifest{
 						Name:    f.Name,
 						Version: f.Version,
 					},
+					SourceDir: f.SourcePath,
 				}
 			}
 		} else {
+			// SourcePath 本身就为空(扫描阶段就未找到),SourceDir 留空,
+			// importer 会走 copy 模式,无需 SourceDir。
 			c = skilladapter.Canonical{
 				Manifest: skilladapter.Manifest{
 					Name:    f.Name,

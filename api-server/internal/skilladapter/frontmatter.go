@@ -315,16 +315,22 @@ func ReadSkillDir(dir string) (Canonical, error) {
 	if err != nil {
 		return Canonical{}, err
 	}
-	// 装齐所有文件
+	// 装齐所有文件。dir 可能是 symlink(外部工具的 skill 经常用 symlink 链到
+	// ~/.agents/skills/xxx),先用 EvalSymlinks 解析真实路径再 WalkDir,
+	// 避免 WalkDir 默认不跟随 symlink 导致附属文件被漏掉。
+	realDir := dir
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		realDir = real
+	}
 	var files []File
-	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(realDir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(realDir, path)
 		if err != nil {
 			return err
 		}
@@ -341,5 +347,14 @@ func ReadSkillDir(dir string) (Canonical, error) {
 	// SKILL.md 一定存在(已 ReadFile 过一次),不需要兜底补
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	c.Files = files
+	// 与 base.go readSkillDir 对齐:用 EvalSymlinks 解析真实路径,避免链式 symlink
+	// 让 source_path 在前端展示时跳来跳去;解析失败时降级用原 dir 兜底。
+	// 不设 SourceDir 会让后续 symlink 模式 ApplyLink 触发 "empty source_dir" 错误
+	// (因为 BaseAdapter.ApplyLink 校验 c.SourceDir != "")。
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		c.SourceDir = real
+	} else {
+		c.SourceDir = dir
+	}
 	return *c, nil
 }
