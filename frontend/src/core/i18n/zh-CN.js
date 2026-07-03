@@ -117,6 +117,15 @@ const messages = {
       errTriggersEmpty: '触发词至少填一个',
     },
 
+    // 2026-07-03 增:apply / batch 响应的统一判定 toast 文案(全文件复用)。
+    // 之前 skills.editor.applyPartialFailed 是 editor 内的兜底,新的 skills.apply
+    // 命名空间用于跨页面(首页 doApplyOne、编辑保存同步、创建时勾选工具)的
+    // 统一"部分失败"展示,带 {detail} 多行失败明细。
+    apply: {
+      allOk: '已成功应用到 {n} 个工具',
+      partialFailed: '{ok}/{total} 个工具启用成功,失败明细:\n{detail}',
+    },
+
     applyHistory: {
       title: '最近应用历史',
       count: '{count} 条',

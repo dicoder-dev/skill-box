@@ -63,15 +63,21 @@ func (a *Applier) resolveMode() string {
 }
 
 // ApplyResult 单 tool 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
+//
+// 2026-07-03 增:PartialFailure 显式标"调用失败但 Service.Apply 仍返 200"的场景
+// (Service.Apply 设计为宽容语义,逐 tool 失败不阻断其他 tool,最终返 out+nil;
+// 这里用 PartialFailure 给前端一个明确信号,前端读 res.partial_failure 弹
+// partial_failed toast,而不是只看 res.all_ok 推断)。
 type ApplyResult struct {
-	Tool        string       `json:"tool"`
-	TargetPath  string       `json:"target_path"`
-	Status      string       `json:"status"` // applied / failed
-	ApplyID     uint         `json:"apply_id,omitempty"` // service 写完 DB 后回填
-	PreSnapshot *PreSnapshot `json:"-"`      // 不进 JSON,只走 service 内部
-	Error       string       `json:"error,omitempty"`
-	StartedAt   time.Time    `json:"started_at"`
-	FinishedAt  time.Time    `json:"finished_at"`
+	Tool           string       `json:"tool"`
+	TargetPath     string       `json:"target_path"`
+	Status         string       `json:"status"` // applied / failed
+	ApplyID        uint         `json:"apply_id,omitempty"` // service 写完 DB 后回填
+	PreSnapshot    *PreSnapshot `json:"-"`      // 不进 JSON,只走 service 内部
+	Error          string       `json:"error,omitempty"`
+	PartialFailure bool         `json:"partial_failure,omitempty"` // 与 Status=failed 同步设 true,Service.Apply 宽容路径用
+	StartedAt      time.Time    `json:"started_at"`
+	FinishedAt     time.Time    `json:"finished_at"`
 }
 
 // ApplyOne 把 canonical 落到 in.Tools[0](单 tool);批量由 caller 循环调。
@@ -119,25 +125,26 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 		_ = restoreFromSnapshot(targetDir, pre)
 		finished := a.now()
 		return &ApplyResult{
-			Tool:        toolID,
-			TargetPath:  targetDir,
-			Status:      StatusFailed,
-			PreSnapshot: pre,
-			Error:       err.Error(),
-			StartedAt:   started,
-			FinishedAt:  finished,
+			Tool:           toolID,
+			TargetPath:     targetDir,
+			Status:         StatusFailed,
+			PreSnapshot:    pre,
+			Error:          err.Error(),
+			PartialFailure: true,
+			StartedAt:      started,
+			FinishedAt:     finished,
 		}, fmt.Errorf("skillapp: apply %s to %s: %w", in.Canonical.Manifest.Name, toolID, err)
 	}
 	post := buildPostFiles(in.Canonical, targetDir, mode)
 	pre.PostFiles = post
 	finished := a.now()
 	return &ApplyResult{
-		Tool:        toolID,
-		TargetPath:  targetDir,
-		Status:      StatusApplied,
-		PreSnapshot: pre,
-		StartedAt:   started,
-		FinishedAt:  finished,
+		Tool:           toolID,
+		TargetPath:     targetDir,
+		Status:         StatusApplied,
+		PreSnapshot:    pre,
+		StartedAt:      started,
+		FinishedAt:     finished,
 	}, nil
 }
 

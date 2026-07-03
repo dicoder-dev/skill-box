@@ -11,13 +11,16 @@
 // 2026-06-29 改:左侧从扁平列表升级为多级分组树,新增右键菜单 + 拖拽 + 级联删除。
 // 详情区(右侧 / 弹窗 / 编辑器)逻辑保持不变,只从"通过 name 定位"改为"通过 path 定位"。
 
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
+// 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
+// (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
+import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 import AIPanel from '@/components/AIPanel.vue'
 import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
@@ -130,22 +133,39 @@ async function saveInlineEdit() {
     // 所以前端只要"再调一次 apply"就完成同步。
     // 失败不阻断(主保存已成功),统一在末尾弹 toast 汇总。
     if (existingApplies.length) {
-      const failList = []
+      // 2026-07-03 改:Service.Apply 即便逐 tool 失败也返 200,所以这里不能只 catch
+      // HTTP 异常,还要 inspectApplyResult 读 res.all_ok / res.partial_failure,把
+      // "HTTP 200 但磁盘落盘失败"的隐藏失败也累加到 failItems。
+      const failItems = []
       for (const a of existingApplies) {
         try {
-          await applySkill({
+          const res = await applySkill({
             name: targetSkill.name,
             scope: a.scope,
             project_id: a.project_id,
             tools: [a.tool_id],
           })
-        } catch (e) { failList.push({ tool: a.tool_id, scope: a.scope, project_id: a.project_id, msg: e?.message || String(e) }) }
+          const ins = inspectApplyResult(res)
+          if (!ins.allOk) {
+            // 失败明细从 res 抽 (可能多个 tool 失败,但单 apply 单 tool,所以一般 0~1 条)
+            failItems.push(...ins.failedItems.map((f) => ({
+              tool: f.tool || a.tool_id,
+              scope: a.scope,
+              msg: f.error,
+            })))
+          }
+        } catch (e) {
+          failItems.push({ tool: a.tool_id, scope: a.scope, msg: e?.message || String(e) })
+        }
       }
-      if (failList.length) {
-        toast.error(t('skills.editor.syncPartialFailed', {
-          ok: existingApplies.length - failList.length,
+      if (failItems.length) {
+        // 失败明细用 partial_failed key(2026-07-03 新增),带多行 detail。
+        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
+        toast.error(t('skills.apply.partialFailed', {
+          ok: existingApplies.length - failItems.length,
           total: existingApplies.length,
-        }))
+          detail,
+        }), 6000)
       } else {
         toast.success(t('skills.editor.syncAllSuccess', { n: existingApplies.length }))
       }
@@ -437,7 +457,10 @@ async function doApplyOne(h) {
   // 导致后续 patch 找错列表项。
   const targetSkill = current.value ? { ...current.value } : null
   try {
-    await applySkill({
+    // 2026-07-03 改:Service.Apply 即便单 tool 失败也返 200,所以拿响应后必须
+    // 用 inspectApplyResult 读 res.all_ok / res.partial_failure 才能区分
+    // 真正成功 vs 后端把失败静默吞掉的场景。
+    const res = await applySkill({
       name: targetSkill.name,
       scope: h.scope,
       project_id: h.project_id || 0,
@@ -450,9 +473,23 @@ async function doApplyOne(h) {
     const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
     flashTarget(targetKey)
     const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
-    toast.success(t('skills.list.applySuccess', {
-      path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
-    }))
+    const ins = inspectApplyResult(res)
+    if (ins.allOk) {
+      toast.success(t('skills.list.applySuccess', {
+        path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
+      }))
+    } else {
+      // 单 tool apply 时 res.all_ok=false 等同于该 tool 落盘失败,
+      // 弹 partial_failed toast 告知用户具体哪个 tool + 错误。
+      const detail = formatFailedDetail(ins.failedItems)
+      toast.error(t('skills.apply.partialFailed', {
+        ok: (res?.applies?.length || 0) - ins.failedItems.length,
+        total: res?.applies?.length || 0,
+        detail,
+      }), 6000)
+      // scope 区小字也同步展示错误,便于用户立刻定位。
+      scopeError.value = detail
+    }
   } catch (e) {
     toast.error(t('skills.list.applyFailed', { msg: e?.message || String(e) }))
     scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
@@ -963,23 +1000,32 @@ async function submit() {
     // 2026-06-26 增:创建/更新后,遍历勾选的工具调 apply 让 skill 在目标工具生效
     // 失败不阻断保存(apply 是"额外"动作),但要弹 toast 提示
     if (draft.applyTools.length) {
-      const failList = []
+      // 2026-07-03 改:同 doApplyOne —— Service.Apply 宽容路径下 HTTP 200 也可能
+      // 落盘失败,要 inspectApplyResult 读 res.partial_failure 显式判定。
+      const failItems = []
       for (const tid of draft.applyTools) {
         try {
-          await applySkill({
+          const res = await applySkill({
             name: draft.name,
             scope: draft.scope,
             project_id: draft.project_id || 0,
             tools: [tid],
           })
-        } catch (e) { failList.push({ tool: tid, msg: e?.message || String(e) }) }
+          const ins = inspectApplyResult(res)
+          if (!ins.allOk) {
+            failItems.push(...ins.failedItems.map((f) => ({ tool: f.tool || tid, msg: f.error })))
+          }
+        } catch (e) {
+          failItems.push({ tool: tid, msg: e?.message || String(e) })
+        }
       }
-      if (failList.length) {
-        toast.error(t('skills.editor.applyPartialFailed', {
-          ok: draft.applyTools.length - failList.length,
+      if (failItems.length) {
+        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
+        toast.error(t('skills.apply.partialFailed', {
+          ok: draft.applyTools.length - failItems.length,
           total: draft.applyTools.length,
-          fails: failList.map((f) => f.tool).join(', '),
-        }))
+          detail,
+        }), 6000)
       } else {
         toast.success(t('skills.editor.applyAllSuccess', { n: draft.applyTools.length }))
       }
@@ -1614,8 +1660,31 @@ function onContainerDragLeave(e) {
 const lastHighlightedPath = ref('')
 const rootDropHover = ref(false)
 
+// 2026-07-03 增:跨页通知 —— 监听 SettingsView 在 migrate 完成后 emit 的
+// 'skills:refresh' 事件,触发 loadScopeStatus({ silent: true }) 静默重拉
+// 当前选中 skill 的 scope-status,让用户切回首页时立刻看到新的磁盘形态
+// (copy → symlink 或反向)而无需手动点 chip 触发 silent 刷新。
+//
+// appBus 由 App.vue 行 22-39 provide;window event 兜底兼容 web 端
+// (无 inject 上下文)和未来跨 webview 场景。
+const appBus = inject('appBus', null)
+function onSkillsRefresh() {
+  // 仅在已选 skill 时刷新;未选时由 reload 在下次切 skill 时自然覆盖。
+  if (current.value) {
+    loadScopeStatus({ silent: true })
+  }
+}
+
 onMounted(() => {
   reload()
+  appBus?.on?.('skills:refresh', onSkillsRefresh)
+  // 兜底:与 MarketView 跳 tab 的兼容写法对齐(行 119 dispatchEvent)
+  window.addEventListener('skillbox:skills-refresh', onSkillsRefresh)
+})
+
+onUnmounted(() => {
+  appBus?.off?.('skills:refresh', onSkillsRefresh)
+  window.removeEventListener('skillbox:skills-refresh', onSkillsRefresh)
 })
 </script>
 

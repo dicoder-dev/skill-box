@@ -117,6 +117,12 @@ const messages = {
       errTriggersEmpty: 'at least one trigger is required',
     },
 
+    // 2026-07-03 增:unified toast text for apply / batch partial-failure handling.
+    apply: {
+      allOk: 'Successfully applied to {n} tools',
+      partialFailed: '{ok}/{total} tools applied successfully. Failures:\n{detail}',
+    },
+
     applyHistory: {
       title: 'Recent apply history',
       count: '{count} entries',

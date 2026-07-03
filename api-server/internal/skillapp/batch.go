@@ -35,10 +35,15 @@ type BatchItem struct {
 }
 
 // BatchOutput 批量结果。
+//
+// 2026-07-03 增:PartialFailure 显式标"批量中至少一条失败但 Service.BatchApply
+// 仍返 200"的场景(同 ApplyResult.PartialFailure 语义),前端可据此弹 partial_failed
+// toast,不必再用 !all_ok 推断。
 type BatchOutput struct {
-	Items   []BatchItemResult `json:"items"`
-	AllOK   bool              `json:"all_ok"`
-	RolledBack bool           `json:"rolled_back"`
+	Items          []BatchItemResult `json:"items"`
+	AllOK          bool              `json:"all_ok"`
+	RolledBack     bool              `json:"rolled_back"`
+	PartialFailure bool              `json:"partial_failure,omitempty"` // !AllOK 时显式标 true
 }
 
 // BatchItemResult 单条结果。
@@ -73,9 +78,13 @@ func (b *BatchApplier) Apply(items []BatchItem, atomic bool) *BatchOutput {
 		if err != nil && atomic {
 			// 整体回滚已成功的
 			out.RolledBack = b.rollback(out.Items, successIdx)
+			out.PartialFailure = !out.AllOK
 			return out
 		}
 	}
+	// 2026-07-03:循环结束后显式标 PartialFailure,前端可读 res.partial_failure
+	// 弹 partial_failed toast,而不是只看 res.all_ok 推断。
+	out.PartialFailure = !out.AllOK
 	return out
 }
 

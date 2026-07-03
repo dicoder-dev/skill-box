@@ -387,6 +387,60 @@ func TestApplyOne_CopyMode_Default(t *testing.T) {
 
 func ptrCanon(c skilladapter.Canonical) *skilladapter.Canonical { return &c }
 
+// TestApplyOne_PartialFailure_OnApplyError(2026-07-03):
+// Service.Apply 走宽容语义,即便 ApplyOne 出错仍返 200 给 controller。
+// 这里验证 ApplyResult.PartialFailure 字段在失败/成功路径下被正确赋值:
+//   - 失败时 res.PartialFailure=true + Status=StatusFailed + Error 非空
+//   - 成功时 res.PartialFailure=false + Status=StatusApplied + Error 空
+// 前端 readApplyResult 依赖这两个字段判定是否弹 partial_failed toast。
+func TestApplyOne_PartialFailure_OnApplyError(t *testing.T) {
+	root := t.TempDir()
+	fa := &fakeAdapter{id: "fake", root: root, applyErr: errors.New("simulated symlink failure")}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg)
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"fake"},
+		Canonical: ptrCanon(sampleCanon("theta")),
+	})
+	if err == nil {
+		t.Fatal("expected apply error from simulated failure")
+	}
+	if res == nil {
+		t.Fatal("expected result with PartialFailure info")
+	}
+	if res.Status != skillapp.StatusFailed {
+		t.Errorf("status = %q, want failed", res.Status)
+	}
+	if !res.PartialFailure {
+		t.Errorf("PartialFailure = false, want true (Service.Apply 宽容路径必须显式标记)")
+	}
+	if res.Error == "" {
+		t.Errorf("Error empty, want simulated error message")
+	}
+}
+
+func TestApplyOne_PartialFailure_OnSuccess(t *testing.T) {
+	root := t.TempDir()
+	fa := &fakeAdapter{id: "fake", root: root}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg)
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"fake"},
+		Canonical: ptrCanon(sampleCanon("iota")),
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if res.Status != skillapp.StatusApplied {
+		t.Errorf("status = %q, want applied", res.Status)
+	}
+	if res.PartialFailure {
+		t.Errorf("PartialFailure = true, want false on success")
+	}
+}
+
 // TestApplyOne_SymlinkMode_RealDisk(2026-07-02):
 // 端到端落盘验证:在 tmp dir 准备"源 skill 目录" + 目标 root,跑 symlink 模式
 // apply,验证 target 真的是 symlink,且 readlink 指向源端;再跑 copy 模式

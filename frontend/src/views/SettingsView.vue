@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
@@ -45,6 +45,18 @@ const applyMode = ref('copy') // 'copy' | 'symlink'
 const applyModeHint = ref('')
 const applyModeBusy = ref(false)
 const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿到 keys 判断)
+
+// 2026-07-03 增:跨页通知 — migrate-mode 成功后 emit 'skills:refresh',
+// 让 SkillsView 静默重拉当前选中 skill 的 scope-status,以反映新的磁盘形态。
+// appBus 由 App.vue 行 22-39 provide;window event 兜底兼容 web 端(无 inject)。
+const appBus = inject('appBus', null)
+function emitSkillsRefresh(payload) {
+  if (appBus?.emit) {
+    appBus.emit('skills:refresh', payload)
+  }
+  // 兼容写法:与 MarketView 行 119 的 dispatchEvent 兜底一致
+  window.dispatchEvent(new CustomEvent('skillbox:skills-refresh', { detail: payload }))
+}
 
 async function loadPrefs() {
   if (!isDesktop.value) return
@@ -164,6 +176,16 @@ async function onApplyModeChange(newMode) {
         applyModeHint.value += '\n' + t('settings.applyMode.switchFailedDetail', { detail })
       }
     }
+    // 2026-07-03 增:通知 SkillsView 刷新 scope-status —— 磁盘形态从 copy
+    // 切到 symlink(或反向)后,首页 chip 只反映"是否存在",由 scope-status
+    // 后端扫描给出形态;不通知的话用户切回首页看到的是旧磁盘快照。
+    // 即便 res.ok=0 也要通知,因为可能某些条目虽然失败但 target_dir 已变更。
+    emitSkillsRefresh({
+      from: res?.from_mode,
+      to: res?.to_mode,
+      ok: res?.ok ?? 0,
+      failed: res?.failed ?? 0,
+    })
   } catch (e) {
     applyModeHint.value = t('settings.errSave', { msg: e?.message || e })
   } finally {
