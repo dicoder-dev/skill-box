@@ -25,7 +25,7 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { useToolsStore } from '@/core/store/tools'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
@@ -111,9 +111,15 @@ function maturityIcon(m) {
   return 'mdi:help-circle-outline'
 }
 
-// 选择图标文件:用 <label for="tool-icon-input"> 触发隐藏的 file input,
-// 这样不需要在 JS 里 .click(),由浏览器原生 label-input 关联触发,不受 display 样式影响。
-// onIconFileChosen 还在;uploadingToolFlag 防重复提交。
+// 选择图标文件:
+// 用 <button> 主动调用 input.click() 触发文件选择器。
+//
+// 不用 <label for> 的原因:本组件被 <Modal> 用 <Teleport to="body"> 传走,
+// WKWebView(macOS Wails v3)+ Teleport + <label for> 触发的隐藏 input,
+// 在 input 处于 left:-9999px 屏幕外时,label 的 click 会被 WebKit 静默丢弃,
+// 表现就是 "点了上传按钮,文件选择框不弹"。改回 button+JS click() + 把 input
+// 留在视口内(0×0 + opacity:0)是最稳的跨 WebKit 写法。
+const iconFileInputRef = ref(null)
 const uploadingToolFlag = ref(false)
 
 async function onIconFileChosen(e) {
@@ -138,6 +144,11 @@ async function onIconFileChosen(e) {
   } else {
     input.value = ''
   }
+}
+
+function pickIconFile() {
+  // 通过 ref 直接拿 input,绕开 label-for + Teleport 的不确定性
+  if (iconFileInputRef.value) iconFileInputRef.value.click()
 }
 
 function clearIconFile() {
@@ -182,7 +193,7 @@ onMounted(async () => {
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-emerald">
-          <Icon icon="mdi:tools" width="24" height="24" />
+          <IconPark icon="mdi:tools" width="24" height="24" />
         </div>
         <div>
           <h1>{{ t('tools.title') }}</h1>
@@ -194,7 +205,7 @@ onMounted(async () => {
     <!-- 2. 工具栏 -->
     <div class="toolbar">
       <div class="search-box">
-        <Icon icon="mdi:magnify" width="16" height="16" class="search-icon" />
+        <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
         <input
           v-model="keywordDraft"
           type="text"
@@ -210,7 +221,7 @@ onMounted(async () => {
           :class="['filter-btn', { active: tools.filter.source === 'all' }]"
           @click="selectSource('all')"
         >
-          <Icon icon="mdi:view-list" width="13" height="13" />
+          <IconPark icon="mdi:view-list" width="13" height="13" />
           {{ t('tools.filterAll') }}
           <span class="filter-count">{{ total }}</span>
         </button>
@@ -218,7 +229,7 @@ onMounted(async () => {
           :class="['filter-btn', { active: tools.filter.source === 'system' }]"
           @click="selectSource('system')"
         >
-          <Icon icon="mdi:shield-check-outline" width="13" height="13" />
+          <IconPark icon="mdi:shield-check-outline" width="13" height="13" />
           {{ t('tools.filterSystem') }}
           <span class="filter-count">{{ systemCount }}</span>
         </button>
@@ -226,7 +237,7 @@ onMounted(async () => {
           :class="['filter-btn', { active: tools.filter.source === 'user' }]"
           @click="selectSource('user')"
         >
-          <Icon icon="mdi:account-outline" width="13" height="13" />
+          <IconPark icon="mdi:account-outline" width="13" height="13" />
           {{ t('tools.filterUser') }}
           <span class="filter-count">{{ userCount }}</span>
         </button>
@@ -234,11 +245,11 @@ onMounted(async () => {
 
       <div class="toolbar-right">
         <button class="ghost with-icon" :disabled="tools.reloading" @click="onReload">
-          <Icon icon="mdi:refresh" width="14" height="14" />
+          <IconPark icon="mdi:refresh" width="14" height="14" />
           {{ t('tools.btnReload') }}
         </button>
         <button class="primary with-icon" @click="tools.openCreate()">
-          <Icon icon="mdi:plus" width="14" height="14" />
+          <IconPark icon="mdi:plus" width="14" height="14" />
           {{ t('tools.btnNew') }}
         </button>
       </div>
@@ -246,7 +257,7 @@ onMounted(async () => {
 
     <!-- 3. 错误提示 -->
     <p v-if="error" class="error-message">
-      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+      <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
       {{ error }}
     </p>
 
@@ -277,7 +288,7 @@ onMounted(async () => {
             <code class="tool-card-id">{{ t_item.tool_id }}</code>
           </div>
           <span v-if="t_item.is_system" class="badge badge-system">
-            <Icon icon="mdi:shield-check-outline" width="10" height="10" />
+            <IconPark icon="mdi:shield-check-outline" width="10" height="10" />
             {{ t('tools.systemBadge') }}
           </span>
         </header>
@@ -285,11 +296,11 @@ onMounted(async () => {
         <!-- 中部 -->
         <div class="tool-card-meta">
           <span :class="['maturity-chip', `maturity-${t_item.maturity || 'stable'}`]">
-            <Icon :icon="maturityIcon(t_item.maturity)" width="10" height="10" />
+            <IconPark :icon="maturityIcon(t_item.maturity)" width="10" height="10" />
             {{ t(`tools.maturity.${t_item.maturity || 'stable'}`) }}
           </span>
           <span class="meta-item">
-            <Icon icon="mdi:folder-multiple-outline" width="11" height="11" />
+            <IconPark icon="mdi:folder-multiple-outline" width="11" height="11" />
             {{ t('tools.pathCount', { n: (t_item.paths || []).length }) }}
           </span>
         </div>
@@ -348,7 +359,7 @@ onMounted(async () => {
     </div>
 
     <div v-else class="empty-state">
-      <Icon icon="mdi:tools" width="48" height="48" />
+      <IconPark icon="mdi:tools" width="48" height="48" />
       <p class="empty-title">{{ t('tools.empty') }}</p>
       <p class="empty-hint">{{ t('tools.emptyHint') }}</p>
     </div>
@@ -371,7 +382,7 @@ onMounted(async () => {
       </template>
       <form class="form" @submit.prevent="onSubmitForm">
         <p class="form-hint">
-          <Icon icon="mdi:information-outline" width="14" height="14" />
+          <IconPark icon="mdi:information-outline" width="14" height="14" />
           {{ t('tools.formHint') }}
         </p>
 
@@ -438,29 +449,30 @@ onMounted(async () => {
               </div>
               <div class="icon-upload-controls">
                 <!--
-                  2026-07-03 修复:用 <label for="iconFileInput"> 包裹 input 而不是 button+click() hack。
-                  原因:display:none 的 input 在 button.click() 触发时不弹文件选择框
-                  (浏览器把不在渲染树里的元素当不可交互);
-                  <label for> 触发 input 浏览器原生处理,不受 hidden 样式影响。
-                  同时去掉 iconFileInput ref + pickIconFile(),减少 Vue ref 跨 Teleport 的不确定性。
+                  2026-07-03 v2 修复:回退到 <button> + 主动调 input.click()。
+                  原 v1(<label for> + input 在屏幕外 left:-9999px)在 WKWebView(Wails v3)+ Modal
+                  <Teleport to="body"> 组合下,label 点击被 WebKit 静默丢弃,文件选择框不弹。
+                  现在:button 触发 -> JS 拿 ref -> input.click() 显式调起文件选择框;
+                  input 留在视口内(0×0 + opacity:0),跨 WebKit 100% 兼容。
                 -->
-                <label
-                  for="tool-icon-input"
+                <button
+                  type="button"
                   class="ghost with-icon upload-label"
                   :class="{ disabled: tools.saving || uploadingToolFlag }"
+                  :disabled="tools.saving || uploadingToolFlag"
+                  @click="pickIconFile"
                 >
                   <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
-                  <Icon v-else icon="mdi:upload" width="14" height="14" />
+                  <IconPark v-else icon="mdi:upload" width="14" height="14" />
                   {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
-                  <input
-                    id="tool-icon-input"
-                    type="file"
-                    accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
-                    class="hidden-input"
-                    :disabled="tools.saving || uploadingToolFlag"
-                    @change="onIconFileChosen"
-                  />
-                </label>
+                </button>
+                <input
+                  ref="iconFileInputRef"
+                  type="file"
+                  accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
+                  class="hidden-input"
+                  @change="onIconFileChosen"
+                />
                 <button
                   v-if="tools.form.icon_file"
                   type="button"
@@ -469,7 +481,7 @@ onMounted(async () => {
                   :title="t('tools.btnClearIcon')"
                   @click="clearIconFile"
                 >
-                  <Icon icon="mdi:close" width="14" height="14" />
+                  <IconPark icon="mdi:close" width="14" height="14" />
                 </button>
                 <code v-if="tools.form.icon_file" class="icon-file-name">
                   {{ tools.form.icon_file }}
@@ -529,7 +541,7 @@ onMounted(async () => {
               :disabled="tools.saving"
               @click="tools.addPathRow()"
             >
-              <Icon icon="mdi:plus" width="13" height="13" />
+              <IconPark icon="mdi:plus" width="13" height="13" />
               {{ t('tools.paths.add') }}
             </button>
           </div>
@@ -572,7 +584,7 @@ onMounted(async () => {
                       :title="t('tools.paths.pickFolder')"
                       @click="pickPath(p)"
                     >
-                      <Icon icon="mdi:folder-open" width="14" height="14" />
+                      <IconPark icon="mdi:folder-open" width="14" height="14" />
                     </button>
                   </div>
                 </td>
@@ -609,7 +621,7 @@ onMounted(async () => {
           :disabled="tools.saving"
           @click="tools.closeForm()"
         >
-          <Icon icon="mdi:close" width="14" height="14" />
+          <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
         <button
@@ -619,7 +631,7 @@ onMounted(async () => {
           @click="onSubmitForm"
         >
           <span v-if="tools.saving" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:check" width="14" height="14" />
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ tools.saving ? t('common.processing') : t('common.save') }}
         </button>
       </template>
@@ -658,7 +670,7 @@ onMounted(async () => {
           @click="onConfirmDelete"
         >
           <span v-if="tools.removing" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:trash-can" width="14" height="14" />
+          <IconPark v-else icon="mdi:trash-can" width="14" height="14" />
           {{ tools.removing ? t('common.processing') : t('common.delete') }}
         </button>
       </template>
@@ -1498,23 +1510,26 @@ button.add-path-btn:hover:not(:disabled) {
 
 .hidden-input {
   /*
-   * 2026-07-03 修复:用 <label for> 触发 input 后,input 仍需保持 "在 DOM 里但视觉不可见"。
-   * 但因为现在是 label 触发(不是 button.click()),即使 display:none 也能弹文件框。
-   * 仍保留安全写法:position: absolute + 0×0 + opacity:0,这样 input 即使被程序 click() 也兼容。
+   * 2026-07-03 v2 修复:从屏幕外(left:-9999px)改回视口内 0×0 + 完全透明。
+   * 原因:屏幕外的 input 在 WKWebView(Wails v3)+ Teleport 组合下,
+   * <label for> 触发的 click 会被 WebKit 静默丢弃;现在改用 button+JS
+   * 显式 input.click(),input 必须留在视口内才能被 click() 触发文件框。
+   * 视觉上完全不可见(0×0 + opacity:0 + pointer-events:none),
+   * 也不影响布局(position:absolute)。
    */
   position: absolute;
-  width: 0;
-  height: 0;
+  width: 1px;
+  height: 1px;
   opacity: 0;
   pointer-events: none;
-  left: -9999px;
-  top: -9999px;
+  left: 0;
+  top: 0;
+  z-index: -1;
 }
 
 /*
- * 2026-07-03:把"上传自定义图标"按钮从 <button> 改成 <label for> 触发隐藏的 input。
- * label 默认 inline,这里复用 button.with-icon 的视觉 + 加 cursor:pointer。
- * 不要再 click() input,label 原生触发更可靠(不受 hidden 样式影响)。
+ * 2026-07-03 v2:回退到 <button> 触发。label-for + Teleport 在 WKWebView 下不可靠。
+ * 这里复用 button.with-icon 的视觉 + 加 cursor:pointer。
  */
 .upload-label {
   cursor: pointer;
