@@ -164,3 +164,110 @@ func TestSave_Concurrent(t *testing.T) {
 
 // 避免 unused import 警告
 var _ = filepath.Join
+
+// 2026-07-03 增:多级分组(2026-06-29)后,旧 API(Load/Exists/Delete)只查根下
+// 直接子目录,漏掉 aa/debug-helper 这种嵌套 skill → apply 链路返 404。
+// 新增 LoadByName / ExistsByName / DeleteByName 全树按 name 找,这里回归验证。
+func TestLoadByName_FindsNestedSkill(t *testing.T) {
+	s := newTestStore(t)
+
+	// 1) 先建一个"根下" skill(对照组)
+	rootC := validCanonical()
+	rootC.Manifest.Name = "root-skill"
+	if err := s.Save(rootC); err != nil {
+		t.Fatalf("Save root: %v", err)
+	}
+
+	// 2) 建一个"嵌套在分组 aa 下"的 skill(回归目标)
+	// 注:Save 自身不自动建分组父目录(需要先 CreateGroupDir),这里走公共
+	// API 建好父目录,顺带验证嵌套 save 路径可用。
+	if err := s.CreateGroupDir("aa"); err != nil {
+		t.Fatalf("CreateGroupDir: %v", err)
+	}
+	nestedC := validCanonical()
+	nestedC.Manifest.Name = "debug-helper"
+	nestedC.Manifest.GroupPath = "aa"
+	if err := s.Save(nestedC); err != nil {
+		t.Fatalf("Save nested: %v", err)
+	}
+
+	// 3) 老 Load(name) 只能查根下 — 验证它确实漏掉嵌套(这就是 bug 现场)
+	if _, err := s.Load("debug-helper"); err == nil {
+		t.Errorf("old Load unexpectedly succeeded for nested skill (bug should reproduce here)")
+	}
+
+	// 4) 新 LoadByName 必须能找到嵌套 skill
+	got, err := s.LoadByName("debug-helper")
+	if err != nil {
+		t.Fatalf("LoadByName: %v", err)
+	}
+	if got.Manifest.Name != "debug-helper" {
+		t.Errorf("name = %q want debug-helper", got.Manifest.Name)
+	}
+	if got.Manifest.GroupPath != "aa" {
+		t.Errorf("groupPath = %q want aa", got.Manifest.GroupPath)
+	}
+
+	// 5) ExistsByName / DeleteByName 同样工作
+	if !s.ExistsByName("debug-helper") {
+		t.Errorf("ExistsByName should find nested skill")
+	}
+	if err := s.DeleteByName("debug-helper"); err != nil {
+		t.Fatalf("DeleteByName: %v", err)
+	}
+	if s.ExistsByName("debug-helper") {
+		t.Errorf("DeleteByName did not remove the skill")
+	}
+	// 幂等:再删一次返 nil
+	if err := s.DeleteByName("debug-helper"); err != nil {
+		t.Errorf("DeleteByName should be idempotent, got %v", err)
+	}
+
+	// 6) 根下的 skill 仍然能被 LoadByName 找到(浅层优先)
+	if _, err := s.LoadByName("root-skill"); err != nil {
+		t.Errorf("LoadByName should find root skill: %v", err)
+	}
+}
+
+// 浅层优先:同名 skill 同时存在根下和分组里时,LoadByName 返根下的那条。
+func TestLoadByName_ShallowFirst(t *testing.T) {
+	s := newTestStore(t)
+
+	rootC := validCanonical()
+	rootC.Manifest.Name = "dup-skill"
+	rootC.Manifest.Description = "root one"
+	if err := s.Save(rootC); err != nil {
+		t.Fatalf("Save root: %v", err)
+	}
+
+	if err := s.CreateGroupDir("aa"); err != nil {
+		t.Fatalf("CreateGroupDir: %v", err)
+	}
+	nestedC := validCanonical()
+	nestedC.Manifest.Name = "dup-skill"
+	nestedC.Manifest.Description = "nested one"
+	nestedC.Manifest.GroupPath = "aa"
+	if err := s.Save(nestedC); err != nil {
+		t.Fatalf("Save nested: %v", err)
+	}
+
+	got, err := s.LoadByName("dup-skill")
+	if err != nil {
+		t.Fatalf("LoadByName: %v", err)
+	}
+	if got.Manifest.Description != "root one" {
+		t.Errorf("shallow-first failed: got description %q, want %q", got.Manifest.Description, "root one")
+	}
+	if got.Manifest.GroupPath != "" {
+		t.Errorf("shallow-first: expected root groupPath, got %q", got.Manifest.GroupPath)
+	}
+}
+
+// 找不到时返 ErrNotFound(与 Load 行为一致,便于上层 service.Is 判断)。
+func TestLoadByName_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	_, err := s.LoadByName("nope")
+	if err != ErrNotFound {
+		t.Errorf("err = %v want ErrNotFound", err)
+	}
+}

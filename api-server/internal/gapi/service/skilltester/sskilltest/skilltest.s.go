@@ -89,7 +89,10 @@ func (s *Service) Run(req *RunRequest) (*RunResult, error) {
 	}
 
 	// 1) 读 canonical(从 store 直接拿,不再查 mskill 表)
-	c, err := s.store.Load(name)
+	//
+	// 2026-07-03 改:用 LoadByName,支持 aa/debug-helper 这种多级分组下嵌套的 skill
+	// (Load 只查根下直接子目录,会漏)。
+	c, err := s.store.LoadByName(name)
 	if err != nil {
 		return nil, ErrStoreLoad
 	}

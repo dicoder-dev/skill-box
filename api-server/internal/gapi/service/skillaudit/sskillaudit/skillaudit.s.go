@@ -100,7 +100,8 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidTag, err)
 	}
 	// 从 store 读 canonical
-	c, err := s.store.Load(in.Name)
+	// 2026-07-03 改:用 LoadByName,支持多级分组下嵌套的 skill(Load 只查根)。
+	c, err := s.store.LoadByName(in.Name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrSkillNotFound, err)
 	}
@@ -266,10 +267,11 @@ func (s *Service) Diff(in *DiffInput) (*DiffOutput, error) {
 	return out, nil
 }
 
-// loadView 0 = "current"(走 store.Load),>0 = 该 tag 的 file_snapshots。
+// loadView 0 = "current"(走 store.LoadByName),>0 = 该 tag 的 file_snapshots。
 func (s *Service) loadView(name string, tagID uint) ([]skillaudit.FileSnap, error) {
 	if tagID == 0 {
-		c, err := s.store.Load(name)
+		// 2026-07-03 改:Load → LoadByName,支持多级分组。
+		c, err := s.store.LoadByName(name)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrSkillNotFound, err)
 		}
@@ -360,7 +362,8 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		return nil, err
 	}
 	// 3) 重建 manifest:用当前 skill 的 manifest + target 的 file 列表
-	cur, err := s.store.Load(tag.Name)
+	// 2026-07-03 改:Load → LoadByName,支持多级分组。
+	cur, err := s.store.LoadByName(tag.Name)
 	if err != nil {
 		s.audit("rollback_failed", 0, map[string]any{
 			"name":   tag.Name,

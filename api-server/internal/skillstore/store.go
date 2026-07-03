@@ -279,6 +279,106 @@ func (s *Store) ExistsByPath(groupPath string, name string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// findByName 在 store 树里按叶子 name(目录名 == skill name)找到第一条匹配,
+// 返回其绝对目录路径和 groupPath(供 LoadByPath / ExistsByPath / DeleteByPath
+// 复用)。找不到返 ("", "", ErrNotFound)。
+//
+// 2026-07-03 增:为兼容旧 API 语义(只按 name 定位,不要求 caller 给 groupPath),
+// 在多级分组下也能找到 aa/debug-helper 这种嵌套 skill。设计要点:
+//   - 浅层优先:根下的 skill 优先于分组里的同名 skill(便于后续真出现重名时,
+//     行为可预测 — 旧 store 没有多级时就是只走根)。
+//   - 唯一性:全树扫描发现多个同名 → 仍返浅层第一个(根 → aa → aa/bb → …),
+//     避免静默歧义。
+func (s *Store) findByName(name string) (absDir, groupPath string, err error) {
+	if strings.TrimSpace(name) == "" {
+		return "", "", ErrNotFound
+	}
+	// 浅层优先:用 BFS 走 root → 第一层子目录 → 第二层 → …,碰到 name 即停。
+	type qitem struct {
+		absDir    string
+		groupPath string
+	}
+	queue := []qitem{{absDir: s.root, groupPath: ""}}
+	for len(queue) > 0 {
+		head := queue[0]
+		queue = queue[1:]
+		entries, err := os.ReadDir(head.absDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			en := e.Name()
+			if strings.HasPrefix(en, ".") {
+				continue
+			}
+			child := filepath.Join(head.absDir, en)
+			// 自身有 SKILL.md → 视为叶子,目录名 == skill name 才算命中
+			if _, err := os.Stat(filepath.Join(child, "SKILL.md")); err == nil {
+				if en == name {
+					rel, rerr := filepath.Rel(s.root, child)
+					if rerr == nil {
+						rel = filepath.ToSlash(rel)
+						gp := ""
+						if rel != "." && rel != "" {
+							gp = filepath.Dir(rel)
+							if gp == "." {
+								gp = ""
+							}
+						}
+						return child, gp, nil
+					}
+				}
+				continue
+			}
+			// 否则是分组中间层,加入队列继续 BFS
+			childGP := en
+			if head.groupPath != "" {
+				childGP = head.groupPath + "/" + en
+			}
+			queue = append(queue, qitem{absDir: child, groupPath: childGP})
+		}
+	}
+	return "", "", ErrNotFound
+}
+
+// LoadByName 在全树按 name 找 skill,自动解析 groupPath 后 Load。
+// 找不到返 ErrNotFound。多级分组改造后,旧 API(只给 name)需要这层桥接。
+//
+// 2026-07-03 增。
+func (s *Store) LoadByName(name string) (*skilladapter.Canonical, error) {
+	dir, _, err := s.findByName(name)
+	if err != nil {
+		return nil, err
+	}
+	return s.loadFromDir(dir)
+}
+
+// ExistsByName 全树按 name 判断 skill 是否存在。
+//
+// 2026-07-03 增。
+func (s *Store) ExistsByName(name string) bool {
+	dir, _, err := s.findByName(name)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !info.IsDir()
+}
+
+// DeleteByName 全树按 name 找 skill 并物理删除(整目录)。找不到返 nil(幂等)。
+//
+// 2026-07-03 增。
+func (s *Store) DeleteByName(name string) error {
+	dir, _, err := s.findByName(name)
+	if err != nil {
+		return nil // 幂等
+	}
+	return s.deleteDir(dir)
+}
+
 // MoveGroupPath 把 skill 从 srcGroupPath 移动到 dstGroupPath 下(叶子 name 不变)。
 //
 // 2026-06-29 增:支持多级分组,实现策略 —

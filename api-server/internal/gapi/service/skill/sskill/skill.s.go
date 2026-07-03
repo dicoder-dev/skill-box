@@ -113,12 +113,17 @@ func (s *Service) List(keyword string) ([]SkillListItem, error) {
 }
 
 // Get 拿一条 canonical(无 files 列表,只读 manifest)。
+//
+// 2026-07-03 改:多级分组(2026-06-29)后,caller 只给 name 不给 groupPath 时,
+// 旧 store.Load 只查"根下直接子目录",漏掉 aa/debug-helper 这种嵌套 skill
+// → apply 链路返 404 skill not found。改走 store.LoadByName,自动 BFS 全树
+// 找第一条匹配(浅层优先,根下同名 skill 覆盖分组里的)。
 func (s *Service) Get(name string) (*skilladapter.Canonical, error) {
 	name = skilladapter.NormalizeName(name)
 	if name == "" {
 		return nil, ErrEmptyName
 	}
-	c, err := s.store.Load(name)
+	c, err := s.store.LoadByName(name)
 	if err != nil {
 		if errors.Is(err, skillstore.ErrNotFound) {
 			return nil, ErrNotFound
@@ -155,12 +160,15 @@ func (s *Service) Create(in *WriteInput) (*skilladapter.Canonical, error) {
 }
 
 // Update 按 name 覆盖更新。store.Save 覆盖式。
+//
+// 2026-07-03 改:同 Get — Exists 改用 ExistsByName,让 aa/debug-helper 这种
+// 嵌套 skill 也能被正确命中(避免误报 "skill not found")。
 func (s *Service) Update(name string, in *WriteInput) (*skilladapter.Canonical, error) {
 	name = skilladapter.NormalizeName(name)
 	if name == "" {
 		return nil, ErrEmptyName
 	}
-	if !s.store.Exists(name) {
+	if !s.store.ExistsByName(name) {
 		return nil, ErrNotFound
 	}
 	// Update 时 scope 缺省兜底为 global(2026-06-24:让 sskillaudit.Rollback 之类的
@@ -181,12 +189,15 @@ func (s *Service) Update(name string, in *WriteInput) (*skilladapter.Canonical, 
 }
 
 // Delete 物理删;幂等(无 key 时 nil)。
+//
+// 2026-07-03 改:同 Get — Delete 改用 DeleteByName,让 aa/debug-helper 这种
+// 嵌套 skill 也能被正确删掉(而不是报 not found)。
 func (s *Service) Delete(name string) error {
 	name = skilladapter.NormalizeName(name)
 	if name == "" {
 		return ErrEmptyName
 	}
-	if err := s.store.Delete(name); err != nil {
+	if err := s.store.DeleteByName(name); err != nil {
 		return fmt.Errorf("skill: store delete: %w", err)
 	}
 	return nil
