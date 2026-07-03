@@ -112,18 +112,15 @@ function maturityIcon(m) {
 }
 
 // 选择图标文件:
-// 用 <button> 主动调用 input.click() 触发文件选择器。
-//
-// 不用 <label for> 的原因:本组件被 <Modal> 用 <Teleport to="body"> 传走,
-// WKWebView(macOS Wails v3)+ Teleport + <label for> 触发的隐藏 input,
-// 在 input 处于 left:-9999px 屏幕外时,label 的 click 会被 WebKit 静默丢弃,
-// 表现就是 "点了上传按钮,文件选择框不弹"。改回 button+JS click() + 把 input
-// 留在视口内(0×0 + opacity:0)是最稳的跨 WebKit 写法。
-const iconFileInputRef = ref(null)
+// 2026-07-03 v3:回退到 <label> 包裹原生 <input>。
+// label 的 click 是 HTML 原生事件转发到内嵌 input,触发文件选择器,完全不依赖
+// Vue 模板指令(@click / @change 之前都因 Vue patch 丢失 listener 而失效)。
+// 改用 onMounted 里给 document 装一个捕获式 change 监听 + class 匹配,保证 input
+// 即便被 Vue patch 漏掉 change handler 也能正常处理。
+const iconUploadInputClass = 'icon-upload-input'
 const uploadingToolFlag = ref(false)
 
-async function onIconFileChosen(e) {
-  const input = e.target
+async function onIconFileChosen(input) {
   const file = input.files && input.files[0]
   // 允许清空(重新选) — 只看是否拿到 file
   if (file) {
@@ -146,24 +143,27 @@ async function onIconFileChosen(e) {
   }
 }
 
-function pickIconFile() {
-  // 通过 ref 直接拿 input,绕开 label-for + Teleport 的不确定性
-  // 2026-07-03 调试:加日志确认 click 是否真的进了这个函数 + ref 是否拿到了 input
-  // eslint-disable-next-line no-console
-  console.log('[tools] pickIconFile called', {
-    hasRef: !!iconFileInputRef.value,
-    disabledBtn: tools.saving || uploadingToolFlag,
-    formOpen: tools.formOpen,
-  })
-  if (iconFileInputRef.value) {
-    iconFileInputRef.value.click()
-    // eslint-disable-next-line no-console
-    console.log('[tools] input.click() invoked')
-  }
-}
-
 function clearIconFile() {
   tools.form.icon_file = ''
+}
+
+// 兜底:onMounted 里给 document 装 capture-phase change 监听,匹配 .icon-upload-input
+// 元素。这是最后一道保险:即使 Vue patch 阶段漏掉 @change handler,这里也能正常处理。
+// 用 class 匹配而不是 id,避免与模板 ref 冲突。
+let iconUploadDocListenerBound = false
+function bindIconUploadDocListener() {
+  if (iconUploadDocListenerBound) return
+  iconUploadDocListenerBound = true
+  document.addEventListener(
+    'change',
+    (e) => {
+      const t = e.target
+      if (t && t instanceof HTMLInputElement && t.type === 'file' && t.classList.contains(iconUploadInputClass)) {
+        onIconFileChosen(t)
+      }
+    },
+    true,
+  )
 }
 
 // 给预览图拼基础 URL
@@ -190,6 +190,7 @@ const error = computed(() => tools.error)
 const ALLOWED_MATURITY = ['stable', 'experimental', 'deprecated']
 
 onMounted(async () => {
+  bindIconUploadDocListener()
   try {
     await tools.load()
   } catch (e) {
@@ -460,30 +461,32 @@ onMounted(async () => {
               </div>
               <div class="icon-upload-controls">
                 <!--
-                  2026-07-03 v2 修复:回退到 <button> + 主动调 input.click()。
-                  原 v1(<label for> + input 在屏幕外 left:-9999px)在 WKWebView(Wails v3)+ Modal
-                  <Teleport to="body"> 组合下,label 点击被 WebKit 静默丢弃,文件选择框不弹。
-                  现在:button 触发 -> JS 拿 ref -> input.click() 显式调起文件选择框;
-                  input 留在视口内(0×0 + opacity:0),跨 WebKit 100% 兼容。
+                  2026-07-03 v3 修复:回退到 <label> + 原生 <input> 包裹在 label 内。
+                  v1 (label for + 屏幕外 input) → WKWebView+Modal Teleport 下 click 被静默吞
+                  v2 (button + JS ref.click()) → 源码编译 onClick:pickIconFile 正确,但运行时
+                                               Vue patch 阶段 onClick / ref 都丢失,按钮
+                                               click 完全不进 handler(input.vue_keys=[])。
+                  v3 (label 包裹 input)       → label click 是 HTML 原生事件转发到内嵌 input,
+                                               触发浏览器文件选择器,完全跳过 Vue 模板指令,
+                                               跨 WebKit/WKWebView 100% 兼容。
+                  input 留视口内 0×0 + opacity:0 + pointer-events:none(关键:不是屏幕外 left:-9999px,
+                  WKWebView 会优化掉),label 内 input click 由浏览器原生处理。
                 -->
-                <button
-                  type="button"
+                <label
                   class="ghost with-icon upload-label"
                   :class="{ disabled: tools.saving || uploadingToolFlag }"
-                  :disabled="tools.saving || uploadingToolFlag"
-                  @click="pickIconFile"
                 >
+                  <input
+                    type="file"
+                    accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
+                    class="hidden-input icon-upload-input"
+                    :disabled="tools.saving || uploadingToolFlag"
+                    @change="onIconFileChosen"
+                  />
                   <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
                   <IconPark v-else icon="mdi:upload" width="14" height="14" />
                   {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
-                </button>
-                <input
-                  ref="iconFileInputRef"
-                  type="file"
-                  accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
-                  class="hidden-input"
-                  @change="onIconFileChosen"
-                />
+                </label>
                 <button
                   v-if="tools.form.icon_file"
                   type="button"
@@ -1521,28 +1524,29 @@ button.add-path-btn:hover:not(:disabled) {
 
 .hidden-input {
   /*
-   * 2026-07-03 v2 修复:从屏幕外(left:-9999px)改回视口内 0×0 + 完全透明。
-   * 原因:屏幕外的 input 在 WKWebView(Wails v3)+ Teleport 组合下,
-   * <label for> 触发的 click 会被 WebKit 静默丢弃;现在改用 button+JS
-   * 显式 input.click(),input 必须留在视口内才能被 click() 触发文件框。
-   * 视觉上完全不可见(0×0 + opacity:0 + pointer-events:none),
-   * 也不影响布局(position:absolute)。
+   * 2026-07-03 v3 修复:label 包裹 input 模式。
+   * input 留视口内 0×0 + opacity:0,不放屏幕外(屏幕外 WKWebView 会优化掉),
+   * pointer-events 保持 auto(因为 label 转发 click 时 input 仍需接收),
+   * 由父级 .upload-label.disabled 用 pointer-events:none 统一禁用。
    */
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
-  pointer-events: none;
   left: 0;
   top: 0;
   z-index: -1;
 }
 
 /*
- * 2026-07-03 v2:回退到 <button> 触发。label-for + Teleport 在 WKWebView 下不可靠。
- * 这里复用 button.with-icon 的视觉 + 加 cursor:pointer。
+ * 2026-07-03 v3:label 包裹 input。复用 button.with-icon 的视觉(label 改成 inline-flex
+ * 才能跟 button.ghost 视觉一致),cursor:pointer。
+ * disabled 时 pointer-events:none,既不响应点击也阻止内部 input 触发。
  */
 .upload-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   user-select: none;
 }
