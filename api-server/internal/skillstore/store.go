@@ -220,6 +220,15 @@ func (s *Store) loadFromDir(dir string) (*skilladapter.Canonical, error) {
 	if !hasMain {
 		c.Files = append([]skilladapter.File{{Path: "SKILL.md", Content: string(content)}}, c.Files...)
 	}
+	// 把"技能磁盘根"写到 SourceDir,与 skilladapter.BaseAdapter.readSkillDir
+	// 保持一致:用 EvalSymlinks 解析真实路径(避免 symlink 链上 path 在 ~/.claude/skills
+	// 与 ~/.agents/skills/xxx 之间漂移)。home 端从 store load 的 skill 走
+	// ApplyLink 时必须依赖 SourceDir(SourceDir == "" 会触发 "empty source_dir")。
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		c.SourceDir = real
+	} else {
+		c.SourceDir = dir
+	}
 	return c, nil
 }
 

@@ -271,3 +271,77 @@ func TestLoadByName_NotFound(t *testing.T) {
 		t.Errorf("err = %v want ErrNotFound", err)
 	}
 }
+
+// Load / LoadByName / LoadByPath 三个入口都该把"磁盘根真实路径"写到 c.SourceDir,
+// 否则 apply 链路走 ApplyLink 时会触发 "empty source_dir" 错误
+// (参见 BaseAdapter.ApplyLink 的 SourceDir 空检查)。
+func TestLoad_PopulatesSourceDir(t *testing.T) {
+	s := newTestStore(t)
+	c := validCanonical()
+	if err := s.Save(c); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// 1) Load 路径
+	got, err := s.Load(c.Manifest.Name)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.SourceDir == "" {
+		t.Fatalf("Load: SourceDir should be populated, got empty")
+	}
+	if !strings.HasSuffix(got.SourceDir, string(filepath.Separator)+c.Manifest.Name) {
+		t.Errorf("Load: SourceDir %q should end with /%s", got.SourceDir, c.Manifest.Name)
+	}
+
+	// 2) LoadByName 路径(同一物理目录,SourceDir 应一致)
+	byName, err := s.LoadByName(c.Manifest.Name)
+	if err != nil {
+		t.Fatalf("LoadByName: %v", err)
+	}
+	if byName.SourceDir == "" {
+		t.Fatalf("LoadByName: SourceDir should be populated, got empty")
+	}
+	if byName.SourceDir != got.SourceDir {
+		t.Errorf("LoadByName: SourceDir %q != Load: %q", byName.SourceDir, got.SourceDir)
+	}
+
+	// 3) LoadByPath 路径
+	byPath, err := s.LoadByPath("", c.Manifest.Name)
+	if err != nil {
+		t.Fatalf("LoadByPath: %v", err)
+	}
+	if byPath.SourceDir == "" {
+		t.Fatalf("LoadByPath: SourceDir should be populated, got empty")
+	}
+	if byPath.SourceDir != got.SourceDir {
+		t.Errorf("LoadByPath: SourceDir %q != Load: %q", byPath.SourceDir, got.SourceDir)
+	}
+}
+
+// 嵌套 skill 走 LoadByName 时,SourceDir 仍写到 EvalSymlinks 后的真实路径(2026-07-03)。
+// 即:用户在 store 里把 skill 放进分组 <root>/aa/unit-test-gen,SourceDir 应指向
+// <root>/aa/unit-test-gen 真实路径,供 ApplyLink 当 symlink 目标用。
+func TestLoadByName_PopulatesSourceDir_Nested(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.CreateGroupDir("aa"); err != nil {
+		t.Fatalf("CreateGroupDir: %v", err)
+	}
+	c := validCanonical()
+	c.Manifest.Name = "unit-test-gen"
+	c.Manifest.GroupPath = "aa"
+	if err := s.Save(c); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.LoadByName("unit-test-gen")
+	if err != nil {
+		t.Fatalf("LoadByName: %v", err)
+	}
+	if got.SourceDir == "" {
+		t.Fatalf("LoadByName: SourceDir should be populated for nested skill")
+	}
+	if !strings.HasSuffix(got.SourceDir, string(filepath.Separator)+"unit-test-gen") {
+		t.Errorf("SourceDir %q should end with /unit-test-gen", got.SourceDir)
+	}
+}
