@@ -45,8 +45,8 @@ export const MDI_TO_ICONPARK = {
   'folder-search-outline':        'FolderSearch',
 
   // 文件夹
-  'folder-outline':               'Folder',
-  'folder-open-outline':          'FolderOpen',
+  'folder-outline':               'FolderClose',     // 默认/收起态:闭合文件夹(语义"折叠分组")
+  'folder-open-outline':          'FolderOpen',      // 展开态:打开文件夹
   'folder-open':                  'FolderOpen',
   'folder-plus-outline':          'FolderPlus',
   'folder-remove-outline':        'FolderMinus',
