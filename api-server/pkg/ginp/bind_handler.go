@@ -2,8 +2,10 @@ package ginp
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // 将其转换成我们自定义的扩展
@@ -78,14 +80,33 @@ func BindParamsHandler(handler interface{}, paramTypes ...interface{}) gin.Handl
 			}
 
 			// 绑定参数
+			//
+			// 2026-07-03 修: 之前 POST/PUT/PATCH 全部走 ShouldBindJSON,
+			// 导致 multipart/form-data(图片上传)也被当 JSON 解析,
+			// 报 "invalid character '-' in numeric literal"。
+			//
+			// 新规则:
+			//   - Content-Type = multipart/form-data → ShouldBindWith(form 绑定器)
+			//     让 struct 上的 form:"name" 标签正常工作
+			//   - Content-Type = application/json      → ShouldBindJSON
+			//   - 其它 (兜底)                           → ShouldBind(根据 Content-Type 自动选)
 			var err error
-			switch c.Request.Method {
-			case "POST", "PUT", "PATCH":
+			contentType := strings.SplitN(c.GetHeader("Content-Type"), ";", 2)[0]
+			contentType = strings.TrimSpace(strings.ToLower(contentType))
+			switch {
+			case contentType == "multipart/form-data":
+				err = c.ShouldBindWith(paramInstance, binding.Form)
+			case contentType == "application/json":
 				err = c.ShouldBindJSON(paramInstance)
-			case "GET":
-				err = c.ShouldBindQuery(paramInstance)
 			default:
-				err = c.ShouldBindJSON(paramInstance)
+				switch c.Request.Method {
+				case "POST", "PUT", "PATCH":
+					err = c.ShouldBind(paramInstance)
+				case "GET":
+					err = c.ShouldBindQuery(paramInstance)
+				default:
+					err = c.ShouldBind(paramInstance)
+				}
 			}
 
 			// 参数绑定失败，直接返回错误

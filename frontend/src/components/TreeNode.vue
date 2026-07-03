@@ -31,33 +31,6 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 
-// 2026-07-03 改:首页分组只支持单级,不再递归嵌套。函数式地把"多级 children"
-// 拍平到当前组下面:后端若仍返回嵌套 group(后端没动),前端兜底把深层
-// group 的 children 直接合并到所在的最外层 group,深层 group 节点本身
-// 丢弃(避免"看到的还是嵌套")。这只是个前端渲染兼容,不是新功能。
-function flattenSingleLevel(nodes) {
-  const out = []
-  for (const n of nodes || []) {
-    if (!n) continue
-    if (n.is_group) {
-      // 收集该 group 下的"所有层级的叶子 skill",作为单层 children
-      const flatChildren = []
-      const collect = (list) => {
-        for (const c of list || []) {
-          if (!c) continue
-          if (c.is_group) collect(c.children)
-          else flatChildren.push(c)
-        }
-      }
-      collect(n.children)
-      out.push({ ...n, children: flatChildren })
-    } else {
-      out.push(n)
-    }
-  }
-  return out
-}
-
 const props = defineProps({
   // 当前节点的 children 列表(从树根传入)
   nodes: { type: Array, default: () => [] },
@@ -73,6 +46,11 @@ const props = defineProps({
   depth: { type: Number, default: 0 },
   // 父路径(根为空)— 用于构建完整 path
   parentPath: { type: String, default: '' },
+  // 2026-07-03 增:工具元数据映射 { [tool_id]: { mdi_icon, icon_file, display_name, ... } }
+  // 用于把首页 skill 树 chip 前的图标从硬编码 mdi 改成"icon_file 优先 + mdi 兜底",
+  // 跟 ToolsView 的 ToolIcon 组件保持一致的视觉。
+  // 父组件(SkillsView)传整个 useToolsStore.items,TreeNode 内部按 tool_id 查。
+  toolsById: { type: Object, default: () => ({}) },
 })
 
 // 2026-07-03 改:首页分组只支持单级,走单级拍平函数,把后端可能仍返回的
@@ -176,6 +154,27 @@ const TOOL_ICON_MAP = {
 }
 function toolIcon(tid) { return TOOL_ICON_MAP[tid] || 'mdi:puzzle-outline' }
 
+// 2026-07-03 增:tool 的 icon_file 优先级 > mdi。
+// chip 上有 icon_file 就走 <img :src="/api/files/tool-icons/<basename>">,
+// 否则走原来 toolIcon(tid) 拿 mdi 字符串。
+function toolIconFile(tid) {
+  const t = props.toolsById && props.toolsById[tid]
+  return t && t.icon_file ? t.icon_file : ''
+}
+
+// 给 chip 的 <img> 拼绝对 URL(同 ToolIcon 组件的逻辑,baseURL 由 main.js 注入)
+function resolveBaseURL() {
+  if (typeof window === 'undefined') return ''
+  const cfg = window.__APP_CONFIG__
+  if (cfg && typeof cfg.baseURL === 'string') return cfg.baseURL.replace(/\/$/, '')
+  if (window.location) return `${window.location.protocol}//${window.location.host}`
+  return ''
+}
+function toolIconURL(name) {
+  if (!name) return ''
+  return `${resolveBaseURL()}/api/files/tool-icons/${name}`
+}
+
 // 是否 drop 目标 = 当前节点
 function isDropTarget(node) {
   return props.dropTargetPath && props.dropTargetPath === fullPath(node)
@@ -184,8 +183,11 @@ function isDropTarget(node) {
 
 <template>
   <ul class="tree" role="tree">
+    <!-- 2026-06-29 改:删除原 .tree-root-blank 占位 li(根区域右键事件已上移到
+         SkillsView 的 .tree-container 元素上 — 那里覆盖整个左侧,无论是否有节点 / 折叠) -->
+
     <li
-      v-for="node in displayNodes"
+      v-for="node in nodes"
       :key="fullPath(node)"
       role="treeitem"
       :class="[
@@ -255,20 +257,41 @@ function isDropTarget(node) {
               class="tree-tool-chip"
               :title="tid"
             >
-              <Icon :icon="toolIcon(tid)" width="10" height="10" />
+              <!--
+                2026-07-03 改:优先用 icon_file 真 logo,回退 mdi。
+                注意 <img> 直接放 chip 里 10x10 看起来小,但 chip 高度有限,
+                让用户能看清 logo 比保留大尺寸更重要。
+              -->
+              <img
+                v-if="toolIconFile(tid)"
+                :src="toolIconURL(toolIconFile(tid))"
+                :alt="tid"
+                width="10"
+                height="10"
+                class="tree-tool-chip-img"
+              />
+              <Icon v-else :icon="toolIcon(tid)" width="10" height="10" />
               <span>{{ toolShort(tid) }}</span>
             </span>
           </div>
         </div>
       </div>
 
-      <!--
-        2026-07-03 改:首页分组只支持单级,递归子树这里整段删除。
-        旧版会把 node.children 喂给递归 <TreeNode>,从而支持无限层级;
-        现在 children 已经在上方 displayNodes 里被 flattenSingleLevel 拍平
-        到当前 group 的一层(后端没动,前端兜底),所以无需再递归。
-        即便 props.nodes 直接传嵌套结构,这里也不会再展开,起到"硬保险"作用。
-      -->
+      <!-- 递归子节点(仅分组,展开时) -->
+      <TreeNode
+        v-if="node.is_group && !isCollapsed(node) && (node.children || []).length"
+        :nodes="node.children"
+        :selected-path="selectedPath"
+        :collapsed-paths="collapsedPaths"
+        :drop-target-path="dropTargetPath"
+        :depth="depth + 1"
+        :parent-path="fullPath(node)"
+        @select-skill="(n) => emit('select-skill', n)"
+        @context-menu-skill="(p) => emit('context-menu-skill', p)"
+        @context-menu-group="(p) => emit('context-menu-group', p)"
+        @context-menu-root="(p) => emit('context-menu-root', p)"
+        @toggle-collapse="(p) => emit('toggle-collapse', p)"
+      />
     </li>
   </ul>
 </template>
@@ -417,6 +440,17 @@ function isDropTarget(node) {
   border: 1px solid var(--border);
   font-size: 10px;
   line-height: 1;
+}
+
+/* 2026-07-03 加:chip 前的 icon_file 真 logo 渲染样式。
+   10x10 像素很小,只确保不被拉伸/模糊,不抢主体字色。 */
+.tree-tool-chip-img {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  object-fit: contain;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* 选中态(skill 卡片):蓝色边框 */

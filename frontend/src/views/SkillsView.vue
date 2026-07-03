@@ -35,6 +35,10 @@ import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 import { useToastStore } from '@/core/store/toast'
 // 2026-06-29 增:skill 树形 store — 集中管理 tree / 选中 / 折叠 / drop 目标
 import { useSkillTreeStore } from '@/core/store/skill-tree'
+// 2026-07-03 增:tools store — 给 TreeNode 注入工具元数据,
+  // 让首页 skill 树 chip 前的图标用真 logo (icon_file 优先 + mdi 兜底),
+  // 而不是硬编码的 mdi 字符串。
+import { useToolsStore } from '@/core/store/tools'
 
 const { t } = useI18n()
 
@@ -231,6 +235,18 @@ function flashTarget(key) {
 
 // 全局 toast
 const toast = useToastStore()
+
+// 2026-07-03 增:工具元数据 store,给 TreeNode 注入 logo。
+// load() 在 onMounted 启动时已经由 ToolsView 跑过一次,但 SkillsView 进入时可能 store 还没填,
+// 这里兜底:首次进入时调一次 load()。
+const toolsStore = useToolsStore()
+const toolsById = computed(() => {
+  const m = {}
+  for (const t of toolsStore.items || []) {
+    if (t && t.tool_id) m[t.tool_id] = t
+  }
+  return m
+})
 
 // 工具名 → 显示名(优先用后端 tools 数组;缺省时退化到 tool_id 本身)
 const toolDisplay = computed(() => {
@@ -1680,6 +1696,12 @@ onMounted(() => {
   appBus?.on?.('skills:refresh', onSkillsRefresh)
   // 兜底:与 MarketView 跳 tab 的兼容写法对齐(行 119 dispatchEvent)
   window.addEventListener('skillbox:skills-refresh', onSkillsRefresh)
+  // 2026-07-03 增:首次进入时拉工具列表,让 TreeNode 的 chip icon 有数据。
+  // 如果用户先进 ToolsView 再进首页,这里 load() 会复用 store.items 缓存,
+  // 实际不发请求(items.length > 0)。
+  if (!toolsStore.items || toolsStore.items.length === 0) {
+    toolsStore.load().catch(() => { /* 失败也不影响 skill 列表渲染 */ })
+  }
 })
 
 onUnmounted(() => {
@@ -1751,6 +1773,7 @@ onUnmounted(() => {
           :collapsed-paths="skillTree.collapsedPaths"
           :drop-target-path="skillTree.dropTargetPath"
           :depth="0"
+          :tools-by-id="toolsById"
           @select-skill="selectItem"
           @context-menu-skill="onSkillContextMenu"
           @context-menu-group="onGroupContextMenu"
