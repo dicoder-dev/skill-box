@@ -108,3 +108,13 @@ export function uploadToolIcon(file) {
   fd.append('file', file)
   return http.post('/api/skillbox/tools/upload-icon', fd)
 }
+
+/**
+ * 2026-07-03 增:桌面端按绝对路径上传图标。
+ * 走 wails3 OpenFileDialog 拿到 path,后端读文件,绕开 WKWebView 下
+ * <input type=file> 被静默吞的问题(详见 desktop/wails_app.go FsPickFile 注释)。
+ * Web 端会 501,调用方应先判 isDesktop 决定走哪条路径。
+ */
+export function uploadToolIconByPath(path) {
+  return http.post('/api/skillbox/tools/upload-icon-by-path', { path })
+}

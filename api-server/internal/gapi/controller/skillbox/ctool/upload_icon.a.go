@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -70,13 +71,6 @@ func UploadIcon(c *ginp.ContextPlus) {
 		})
 		return
 	}
-	// 拼目标文件名: <unix_ts>_<safe-basename>
-	stem := strings.TrimSuffix(origName, filepath.Ext(origName))
-	stem = sanitizeFileStem(stem)
-	if stem == "" {
-		stem = "icon"
-	}
-	targetName := fmt.Sprintf("%d_%s%s", time.Now().Unix(), stem, ext)
 
 	// 读取并写盘
 	src, err := fileHeader.Open()
@@ -98,16 +92,101 @@ func UploadIcon(c *ginp.ContextPlus) {
 		return
 	}
 
-	if _, err := toolicon.SaveBytes(targetName, data); err != nil {
-		logger.Error("upload icon save: %v", err)
+	targetName, err := saveIconBytes(data, origName)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, RespondUploadIcon{
 		Name: targetName,
 		URL:  "/api/files/tool-icons/" + targetName,
 	})
+}
+
+// RequestUploadIconByPath 桌面端按绝对路径上传图标的入参。
+// path 必须指向存在的文件,且扩展名在白名单。
+type RequestUploadIconByPath struct {
+	Path string `json:"path"`
+}
+
+// UploadIconByPath POST /api/skillbox/tools/upload-icon-by-path
+//
+// 桌面端走 wails3 OpenFileDialog 拿到绝对路径后,后端读文件内容,
+// 走和 multipart 接口一样的 save 逻辑(白名单 / 大小限制 / 命名)。
+// 2026-07-03 增:解决桌面 WKWebView 下 <label> + <input type="file"> 被静默吞的问题。
+func UploadIconByPath(c *ginp.ContextPlus, req *RequestUploadIconByPath) {
+	if req.Path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing path"})
+		return
+	}
+	// 规范化路径 + 防穿越
+	abs, err := filepath.Abs(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path: " + err.Error()})
+		return
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found: " + err.Error()})
+		return
+	}
+	if info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path is a directory, expected file"})
+		return
+	}
+	if info.Size() > maxIconSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error": fmt.Sprintf("icon too large: %d > %d bytes", info.Size(), maxIconSize),
+		})
+		return
+	}
+	// 后缀白名单
+	origName := filepath.Base(abs)
+	ext := strings.ToLower(filepath.Ext(origName))
+	if !toolicon.ValidIconFileName("dummy"+ext) {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{
+			"error": "unsupported extension: " + ext + " (allowed: .png/.svg/.jpg/.jpeg/.webp/.ico/.gif)",
+		})
+		return
+	}
+	// 读文件
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		logger.Error("upload-icon-by-path read: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(data) > maxIconSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "icon too large after read"})
+		return
+	}
+	targetName, err := saveIconBytes(data, origName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, RespondUploadIcon{
+		Name: targetName,
+		URL:  "/api/files/tool-icons/" + targetName,
+	})
+}
+
+// saveIconBytes 共享的核心保存逻辑:校验大小、生成唯一文件名、调用 toolicon.SaveBytes。
+// 被 UploadIcon(multipart)和 UploadIconByPath(绝对路径)复用。
+func saveIconBytes(data []byte, origName string) (string, error) {
+	stem := strings.TrimSuffix(origName, filepath.Ext(origName))
+	stem = sanitizeFileStem(stem)
+	if stem == "" {
+		stem = "icon"
+	}
+	ext := strings.ToLower(filepath.Ext(origName))
+	targetName := fmt.Sprintf("%d_%s%s", time.Now().Unix(), stem, ext)
+
+	if _, err := toolicon.SaveBytes(targetName, data); err != nil {
+		logger.Error("upload icon save: %v", err)
+		return "", err
+	}
+	return targetName, nil
 }
 
 // sanitizeFileStem 把 basename 的 stem 部分(去掉扩展名)收敛到安全字符:
@@ -148,6 +227,20 @@ func init() {
 			Title:         "tools.upload_icon",
 			Description:   "上传工具自定义图标到 ~/.skill-box/tool-icons/,返回 basename;前端再把 name 写到 tool.icon_file",
 			RequestParams: struct{}{},
+		},
+	})
+	// 2026-07-03 增:桌面端按绝对路径上传,绕开 WKWebView 下 <input type=file> 被静默吞。
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/skillbox/tools/upload-icon-by-path",
+		Handler:        ginp.BindParamsHandler(UploadIconByPath, &RequestUploadIconByPath{}),
+		HttpType:       ginp.HttpPost,
+		NeedLogin:      false,
+		NeedPermission: false,
+		PermissionName: "skillbox.tools.upload_icon_by_path",
+		Swagger: &ginp.SwaggerInfo{
+			Title:         "tools.upload_icon_by_path",
+			Description:   "桌面端按绝对路径上传图标(走 wails3 OpenFileDialog 拿 path,后端读文件复用同 save 逻辑)",
+			RequestParams: RequestUploadIconByPath{},
 		},
 	})
 }

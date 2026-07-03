@@ -591,6 +591,36 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 					CanCreateDirectories(true).
 					PromptForSingleSelection()
 			},
+			// FsPickFile 弹系统文件选择对话框,走 wails v3 的 OpenFileDialog。
+			// accept 是可选后缀过滤列表(如 []string{".png", ".ico"}),
+			// 通过 wails 的 AddFilter 注册;空切片 = 不过滤。
+			// 2026-07-03 增:工具编辑弹窗"上传自定义图标"在桌面 WKWebView 下
+			// <label> + <input type="file"> 触发文件选择器被静默吞,改走原生 dialog。
+			FsPickFile: func(accept []string) (string, error) {
+				if app == nil {
+					return "", fmt.Errorf("wails app not initialized")
+				}
+				dlg := app.Dialog.OpenFile().
+					CanChooseFiles(true).
+					CanChooseDirectories(false).
+					SetTitle("选择图标文件")
+				for _, ext := range accept {
+					// wails v3 AddFilter pattern 用 "*.png" 形式;
+					// 入参可能是 ".png" 或 "png",统一补星号
+					pattern := ext
+					if !strings.HasPrefix(pattern, "*") {
+						if strings.HasPrefix(pattern, ".") {
+							pattern = "*" + pattern
+						} else {
+							pattern = "*." + pattern
+						}
+					}
+					// displayName 直接用后缀,如 "PNG";小写转大写看着更官方
+					dn := strings.TrimPrefix(strings.ToUpper(pattern), "*.")
+					dlg = dlg.AddFilter(dn, pattern)
+				}
+				return dlg.PromptForSingleSelection()
+			},
 			WindowShow:              showPrimary,
 			WindowToggleAlwaysOnTop: windowMgr.ToggleAlwaysOnTop,
 			WindowToggleMaximise:    windowMgr.ToggleMaximise,

@@ -30,7 +30,7 @@ import { useToolsStore } from '@/core/store/tools'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
-import { uploadToolIcon } from '@/api/skillbox/tools'
+import { uploadToolIcon, uploadToolIconByPath } from '@/api/skillbox/tools'
 import { formatRelative } from '@/core/utils/time.js'
 import { platform } from '@/platform'
 
@@ -119,6 +119,41 @@ function maturityIcon(m) {
 // 即便被 Vue patch 漏掉 change handler 也能正常处理。
 const iconUploadInputClass = 'icon-upload-input'
 const uploadingToolFlag = ref(false)
+
+// 2026-07-03 v4 修复:桌面端走 wails3 原生 OpenFileDialog,web 端走 <input type=file>。
+// 桌面 WKWebView 下 <label> 包裹 <input> 触发文件选择器会被静默吞(根因:webview
+// 的合成 click 事件流与 label-for 转发冲突),完全绕开 webkit file picker。
+// isDesktop 从 window.__APP_RUNTIME__.runMode 解析,跟 platform.isDesktop 一致。
+const isDesktopRun = typeof window !== 'undefined' && window.__APP_RUNTIME__?.runMode === 'desktop'
+
+// 桌面端:点按钮 → 调 wails3 OpenFileDialog → 拿到 path → 调新接口 upload-by-path。
+// 完全不依赖 <input type="file">,跟 ProjectsView 的"导入项目"(pickFolder)走同套机制。
+async function pickIconFileByDesktop() {
+  uploadingToolFlag.value = true
+  try {
+    const path = await platform.fs.pickFile()
+    if (!path) return // 用户取消
+    const res = await uploadToolIconByPath(path)
+    if (res && res.name) {
+      tools.form.icon_file = res.name
+      toast.success(t('tools.uploadIconOk'))
+    }
+  } catch (err) {
+    toast.error(t('tools.uploadIconFailed', { msg: err?.message || err }))
+  } finally {
+    uploadingToolFlag.value = false
+  }
+}
+
+// web 端:点 label → 浏览器原生转发 click 到 <input type=file> → 触发文件选择器。
+// label+input 是 HTML 原生最稳的写法,跨浏览器 100% 兼容。
+function pickIconFileByWeb() {
+  // 这个函数挂到 label 的 click 上,label 的 click 会自动转发到内嵌 input;
+  // 这里其实只是占位,真正的触发由浏览器原生完成。
+  // 但为了避免 label click 在某些环境下不转发,这里也提供 JS 兜底(找 input click)。
+  const input = document.querySelector(`.${iconUploadInputClass}`)
+  if (input) input.click()
+}
 
 async function onIconFileChosen(input) {
   const file = input.files && input.files[0]
@@ -461,20 +496,30 @@ onMounted(async () => {
               </div>
               <div class="icon-upload-controls">
                 <!--
-                  2026-07-03 v3 修复:回退到 <label> + 原生 <input> 包裹在 label 内。
+                  2026-07-03 v4 修复(桌面端):走 wails3 原生 OpenFileDialog,完全绕开 webkit file picker。
                   v1 (label for + 屏幕外 input) → WKWebView+Modal Teleport 下 click 被静默吞
-                  v2 (button + JS ref.click()) → 源码编译 onClick:pickIconFile 正确,但运行时
-                                               Vue patch 阶段 onClick / ref 都丢失,按钮
-                                               click 完全不进 handler(input.vue_keys=[])。
-                  v3 (label 包裹 input)       → label click 是 HTML 原生事件转发到内嵌 input,
-                                               触发浏览器文件选择器,完全跳过 Vue 模板指令,
-                                               跨 WebKit/WKWebView 100% 兼容。
-                  input 留视口内 0×0 + opacity:0 + pointer-events:none(关键:不是屏幕外 left:-9999px,
-                  WKWebView 会优化掉),label 内 input click 由浏览器原生处理。
+                  v2 (button + JS ref.click()) → Vue patch 阶段 onClick / ref 丢失
+                  v3 (label 包裹 input)       → 在 chromium web 端 OK,桌面 WKWebView 仍不可靠
+                  v4 (按平台分支)              → 桌面端 button → platform.fs.pickFile() 调 wails3
+                                                原生 dialog,web 端保留 v3 label+input 走浏览器选择器
                 -->
-                <label
+                <button
+                  v-if="isDesktopRun"
+                  type="button"
                   class="ghost with-icon upload-label"
                   :class="{ disabled: tools.saving || uploadingToolFlag }"
+                  :disabled="tools.saving || uploadingToolFlag"
+                  @click="pickIconFileByDesktop"
+                >
+                  <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
+                  <IconPark v-else icon="mdi:upload" width="14" height="14" />
+                  {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
+                </button>
+                <label
+                  v-else
+                  class="ghost with-icon upload-label"
+                  :class="{ disabled: tools.saving || uploadingToolFlag }"
+                  @click.prevent="pickIconFileByWeb"
                 >
                   <input
                     type="file"
