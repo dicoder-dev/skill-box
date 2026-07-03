@@ -21,15 +21,29 @@ var builtinIconsFS embed.FS
 
 // builtinIconNames 内置图标的文件名 — 与 builtin.go 中内置工具的 IconFile 字段对应。
 // 任何修改这里都要同步改 builtin.go 中 bt.IconFile 字段。
+//
+// 2026-07-03 更新:从临时占位图标换成联网搜集到的官方源:
+//   - claude.ico    Anthropic 官方
+//   - codex.png     OpenAI 官方(Codex 是 OpenAI 产品)
+//   - cursor.ico    cursor.com 官方 favicon(多尺寸)
+//   - opencode.svg  sst/opencode 仓库 brand 资源(嵌套方框)
+//   - trae.ico      trae.com.cn 国内 CDN favicon
+//   - antigravity.ico antigravity.google 官方 favicon
+//   - cline.png     cline/cline 仓库 assets/icons/icon.png
+//   - codebuddy.png + .svg  codebuddy.tencent.com 真 favicon
+//   - jetbrains.ico jetbrains.com 官方 favicon
+//
+// codebuddy 同时保留 svg 和 png(原计划二选一,实际两个都放,seed 时工具
+// 视图用 svg,png 兜底/将来备查)。
 var builtinIconNames = []string{
 	"claude.ico",
 	"codex.png",
-	"cursor.png",
-	"opencode.png",
-	"trae.png",
-	"antigravity.png",
+	"cursor.ico",
+	"opencode.svg",
+	"trae.ico",
+	"antigravity.ico",
 	"cline.png",
-	"codebuddy.svg", // codebuddy.svg + codebuddy.png 二选一,seed 只放 svg
+	"codebuddy.svg",
 	"codebuddy.png",
 	"jetbrains.ico",
 }

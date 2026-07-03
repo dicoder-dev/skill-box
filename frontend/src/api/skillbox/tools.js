@@ -98,11 +98,13 @@ export function reloadTools() {
  * @returns {Promise<{name:string,url:string}>}
  *   - name: basename,如 "claude_1719300123.png";前端再把它写到 tool.icon_file
  *   - url: 服务地址,如 "/api/files/tool-icons/claude_1719300123.png"
+ *
+ * 注意:不再手动设置 Content-Type — http.js 看到 FormData 时会自动让 fetch
+ * 生成 multipart/form-data; boundary=xxx(手动覆盖会让后端 multipart 解析失败,
+ * 参见 2026-07-03 修复)。
  */
 export function uploadToolIcon(file) {
   const fd = new FormData()
   fd.append('file', file)
-  return http.post('/api/skillbox/tools/upload-icon', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  return http.post('/api/skillbox/tools/upload-icon', fd)
 }

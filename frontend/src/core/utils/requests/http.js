@@ -55,15 +55,54 @@ async function doRequest(method, path, bodyOrParams, options = {}) {
   const base = await resolveBaseURL()
   const url = `${base}${realPath}`
 
+  // body 序列化:
+  //   - string      → 原样(已序列化)
+  //   - FormData / Blob / URLSearchParams / ArrayBuffer / ReadableStream
+  //     → 原样透传(自带 multipart / 二进制 / form-urlencoded 边界,不要 JSON.stringify)
+  //   - 其它        → 默认 JSON.stringify
+  // Content-Type:
+  //   - body 是 FormData / Blob / URLSearchParams 时不要手动覆盖 Content-Type,
+  //     让浏览器 fetch 自动带上 boundary / charset;手动覆盖反而会让后端 multipart
+  //     解析失败(参见 2026-07-03 修复:ToolsView 上传自定义图标失败就是这个原因)
+  //   - 业务方如果传了 Content-Type(比如 application/json)就走业务方的,本兜底不冲突
+  const baseHeaders = {
+    'Content-Type': 'application/json',
+    ...(headers || {}),
+  }
+  let finalBody
+  if (body === undefined || body === null) {
+    finalBody = undefined
+  } else if (typeof body === 'string') {
+    finalBody = body
+  } else if (
+    typeof FormData !== 'undefined' && body instanceof FormData
+  ) {
+    finalBody = body
+    // FormData 自带 boundary,显式删 Content-Type 让 fetch 自己填 multipart/form-data; boundary=xxx
+    delete baseHeaders['Content-Type']
+    delete baseHeaders['content-type']
+  } else if (
+    typeof Blob !== 'undefined' && body instanceof Blob
+  ) {
+    finalBody = body
+  } else if (
+    typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams
+  ) {
+    finalBody = body
+  } else if (
+    typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer
+  ) {
+    finalBody = body
+  } else {
+    finalBody = JSON.stringify(body)
+  }
+
   // 初始 config
   let cfg = {
     url,
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers || {}),
-    },
-    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+    headers: baseHeaders,
+    body: finalBody,
     timeout,
     signal,
     raw: !!raw,
