@@ -7,7 +7,7 @@
  * - 暴露 header / body / footer 三个 slot
  */
 import { watch, onBeforeUnmount } from 'vue'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
               :aria-label="$t ? $t('common.close') : 'Close'"
               @click="close"
             >
-              <Icon icon="mdi:close" width="18" height="18" />
+              <IconPark icon="mdi:close" width="18" height="18" />
             </button>
           </header>
 

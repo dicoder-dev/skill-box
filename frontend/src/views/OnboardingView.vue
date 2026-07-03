@@ -9,7 +9,7 @@
 
 import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
 import { listSkills } from '@/api/skillbox/skills'
 import { platform } from '@/platform'
@@ -388,11 +388,11 @@ onMounted(async () => {
 <template>
   <div class="onb">
     <p v-if="error" class="message message-error">
-      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+      <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
       {{ error }}
     </p>
     <p v-if="success" class="message message-success">
-      <Icon icon="mdi:check-circle-outline" width="14" height="14" />
+      <IconPark icon="mdi:check-circle-outline" width="14" height="14" />
       {{ success }}
     </p>
 
@@ -400,7 +400,7 @@ onMounted(async () => {
     <section v-else-if="phase === 'scan'" class="card">
       <header class="card-header card-header-row">
         <h3>
-          <Icon icon="mdi:folder-search" width="16" height="16" />
+          <IconPark icon="mdi:folder-search" width="16" height="16" />
           {{ t('onboarding.phase2.title') }}
           <span class="card-sub">— {{ t('onboarding.phase2.foundSuffix', { n: scanReport?.found?.length || 0 }) }}</span>
         </h3>
@@ -412,7 +412,7 @@ onMounted(async () => {
             @click="doScan"
           >
             <span v-if="loading" class="spinner"></span>
-            <Icon v-else icon="mdi:refresh" width="14" height="14" />
+            <IconPark v-else icon="mdi:refresh" width="14" height="14" />
             {{ loading ? t('onboarding.btnRescanning') : t('onboarding.btnRescan') }}
           </button>
           <button
@@ -421,14 +421,14 @@ onMounted(async () => {
             @click="doImport"
           >
             <span v-if="loading" class="spinner"></span>
-            <Icon v-else icon="mdi:download" width="14" height="14" />
+            <IconPark v-else icon="mdi:download" width="14" height="14" />
             {{ loading ? t('onboarding.phase2.importing') : t('onboarding.phase2.btnImport', { n: selected.size }) }}
           </button>
         </div>
       </header>
 
       <div v-if="!scanReport?.found?.length" class="empty-state">
-        <Icon icon="mdi:magnify" width="48" height="48" />
+        <IconPark icon="mdi:magnify" width="48" height="48" />
         <p class="empty-title">{{ t('onboarding.phase2.empty') }}</p>
         <p class="empty-hint">{{ t('onboarding.phase2.emptyHint') }}</p>
       </div>
@@ -444,7 +444,7 @@ onMounted(async () => {
             :class="['tool-tab', { active: activeToolId === tab.toolId }]"
             @click="activeToolId = tab.toolId"
           >
-            <Icon :icon="tab.icon" width="16" height="16" class="tab-icon" />
+            <IconPark :icon="tab.icon" width="16" height="16" class="tab-icon" />
             <span class="tab-name">{{ tab.name }}</span>
             <span class="tab-count">
               {{ tab.count }}<span v-if="tab.totalCount > tab.count" class="tab-count-sys">+{{ tab.totalCount - tab.count }}</span>
@@ -474,7 +474,7 @@ onMounted(async () => {
             v-if="foundByTool[activeToolId].items.some((f) => f.category === 'user' || !f.category)"
             class="cat-label cat-user"
           >
-            <Icon icon="mdi:account-circle-outline" width="14" height="14" />
+            <IconPark icon="mdi:account-circle-outline" width="14" height="14" />
             {{ t('onboarding.phase2.catUser') }}
           </div>
           <ul v-if="foundByTool[activeToolId].items.some((f) => f.category !== 'system')" class="found-list">
@@ -501,11 +501,11 @@ onMounted(async () => {
                       class="f-disabled-reason"
                       :title="disabledReason(f)"
                     >
-                      <Icon icon="mdi:block-helper" width="11" height="11" />
+                      <IconPark icon="mdi:block-helper" width="11" height="11" />
                       {{ disabledReason(f) }}
                     </span>
                     <span v-if="existingNames.has(String(f.name).toLowerCase())" class="f-tag f-tag-exists">
-                      <Icon icon="mdi:package-variant" width="11" height="11" />
+                      <IconPark icon="mdi:package-variant" width="11" height="11" />
                       {{ t('onboarding.phase2.tagExists') }}
                     </span>
                   </div>
@@ -517,7 +517,7 @@ onMounted(async () => {
                       :title="f.source_path"
                       @click.stop="revealInFileManager(f.source_path)"
                     >
-                      <Icon icon="mdi:folder-outline" width="14" height="14" />
+                      <IconPark icon="mdi:folder-outline" width="14" height="14" />
                     </button>
                     <span class="f-path-text">{{ f.source_path }}</span>
                   </div>
@@ -536,7 +536,7 @@ onMounted(async () => {
             v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')"
             class="cat-label cat-system"
           >
-            <Icon icon="mdi:lock-outline" width="14" height="14" />
+            <IconPark icon="mdi:lock-outline" width="14" height="14" />
             {{ t('onboarding.phase2.catSystem') }}
             <span class="cat-hint">— {{ t('onboarding.phase2.catSystemHint') }}</span>
           </div>
@@ -556,7 +556,7 @@ onMounted(async () => {
                     <span class="f-name"><code>{{ f.name }}</code></span>
                     <span class="f-ver">v{{ f.version }}</span>
                     <span class="f-disabled-reason" :title="disabledReason(f)">
-                      <Icon icon="mdi:block-helper" width="11" height="11" />
+                      <IconPark icon="mdi:block-helper" width="11" height="11" />
                       {{ disabledReason(f) }}
                     </span>
                   </div>
@@ -568,12 +568,12 @@ onMounted(async () => {
                       :title="f.source_path"
                       @click.stop="revealInFileManager(f.source_path)"
                     >
-                      <Icon icon="mdi:folder-outline" width="14" height="14" />
+                      <IconPark icon="mdi:folder-outline" width="14" height="14" />
                     </button>
                     <span class="f-path-text">{{ f.source_path }}</span>
                   </div>
                 </div>
-                <Icon icon="mdi:lock-outline" width="12" height="12" class="lock-icon" />
+                <IconPark icon="mdi:lock-outline" width="12" height="12" class="lock-icon" />
               </span>
             </li>
           </ul>
@@ -585,7 +585,7 @@ onMounted(async () => {
     <section v-else-if="phase === 'import'" class="card">
       <header class="card-header">
         <h3>
-          <Icon icon="mdi:check-circle" width="16" height="16" />
+          <IconPark icon="mdi:check-circle" width="16" height="16" />
           {{ t('onboarding.phase3.title') }}
         </h3>
       </header>
@@ -615,11 +615,11 @@ onMounted(async () => {
 
       <div class="card-footer">
         <button class="ghost" @click="reset">
-          <Icon icon="mdi:refresh" width="14" height="14" />
+          <IconPark icon="mdi:refresh" width="14" height="14" />
           {{ t('onboarding.phase3.btnAgain') }}
         </button>
         <button class="primary" @click="goSkills">
-          <Icon icon="mdi:arrow-right" width="14" height="14" />
+          <IconPark icon="mdi:arrow-right" width="14" height="14" />
           {{ t('onboarding.phase3.btnGoSkills') }}
         </button>
       </div>

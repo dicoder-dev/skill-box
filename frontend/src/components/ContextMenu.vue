@@ -19,7 +19,7 @@
  *   />
  */
 import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 
 const props = defineProps({
   x: { type: Number, required: true },
@@ -136,7 +136,7 @@ nextTick(() => {
           @mouseenter="onMouseEnter(idx)"
           @mouseleave="hoverIndex = -1"
         >
-          <Icon v-if="it.icon" :icon="it.icon" width="14" height="14" class="ctx-item-icon" />
+          <IconPark v-if="it.icon" :icon="it.icon" width="14" height="14" class="ctx-item-icon" />
           <span class="ctx-item-label">{{ it.label }}</span>
           <span v-if="it.shortcut" class="ctx-item-shortcut">{{ it.shortcut }}</span>
         </button>

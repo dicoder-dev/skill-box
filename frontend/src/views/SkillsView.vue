@@ -13,7 +13,7 @@
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
@@ -1717,18 +1717,18 @@ onUnmounted(() => {
       <!-- 顶部操作栏 -->
       <div class="left-topbar">
         <button class="left-action" :title="t('skills.list.btnNewSkillTitle')" @click="startNew">
-          <Icon icon="mdi:plus" width="16" height="16" />
+          <IconPark icon="mdi:plus" width="16" height="16" />
           <span>{{ t('skills.list.btnNewSkill') }}</span>
         </button>
         <button class="left-action" :title="t('skills.list.btnImportSkillTitle')" @click="goOnboarding">
-          <Icon icon="mdi:tray-arrow-down" width="16" height="16" />
+          <IconPark icon="mdi:tray-arrow-down" width="16" height="16" />
           <span>{{ t('skills.list.btnImportSkill') }}</span>
         </button>
       </div>
 
       <!-- 搜索框 -->
       <div class="left-search">
-        <Icon icon="mdi:magnify" width="14" height="14" class="search-icon" />
+        <IconPark icon="mdi:magnify" width="14" height="14" class="search-icon" />
         <input
           v-model="keyword"
           :placeholder="t('skills.searchPlaceholder')"
@@ -1739,7 +1739,7 @@ onUnmounted(() => {
       </div>
 
       <p v-if="error" class="left-error">
-        <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+        <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
         {{ error }}
       </p>
 
@@ -1789,13 +1789,13 @@ onUnmounted(() => {
       <!-- 翻页(暂时禁用,树形不分页) -->
       <footer v-if="false" class="left-pager">
         <button :disabled="page <= 1" @click="gotoPage(page - 1)">
-          <Icon icon="mdi:chevron-left" width="12" height="12" />
+          <IconPark icon="mdi:chevron-left" width="12" height="12" />
           {{ t('common.prev') }}
         </button>
         <span>{{ page }} / {{ totalPages }}</span>
         <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">
           {{ t('common.next') }}
-          <Icon icon="mdi:chevron-right" width="12" height="12" />
+          <IconPark icon="mdi:chevron-right" width="12" height="12" />
         </button>
       </footer>
     </aside>
@@ -1804,7 +1804,7 @@ onUnmounted(() => {
     <section class="detail-pane">
       <!-- 空状态 -->
       <div v-if="!current" class="detail-empty">
-        <Icon icon="mdi:cursor-default-click-outline" width="40" height="40" />
+        <IconPark icon="mdi:cursor-default-click-outline" width="40" height="40" />
         <p class="empty-title">{{ t('skills.list.selectToView') }}</p>
       </div>
 
@@ -1832,7 +1832,7 @@ onUnmounted(() => {
                   :title="t('common.edit')"
                   @click="startInlineEdit"
                 >
-                  <Icon icon="mdi:pencil" width="12" height="12" />
+                  <IconPark icon="mdi:pencil" width="12" height="12" />
                   {{ t('common.edit') }}
                 </button>
                 <!-- 编辑态:同位置显示 取消 / 保存 实心按钮 -->
@@ -1842,7 +1842,7 @@ onUnmounted(() => {
                     :disabled="editSaving"
                     @click="cancelInlineEdit"
                   >
-                    <Icon icon="mdi:close" width="13" height="13" />
+                    <IconPark icon="mdi:close" width="13" height="13" />
                     {{ t('common.cancel') }}
                   </button>
                   <button
@@ -1851,7 +1851,7 @@ onUnmounted(() => {
                     @click="saveInlineEdit"
                   >
                     <span v-if="editSaving" class="spinner spinner-sm"></span>
-                    <Icon v-else icon="mdi:content-save" width="13" height="13" />
+                    <IconPark v-else icon="mdi:content-save" width="13" height="13" />
                     {{ editSaving ? t('common.processing') : t('common.save') }}
                   </button>
                 </template>
@@ -1883,7 +1883,7 @@ onUnmounted(() => {
               @click="triggerTest"
             >
               <span v-if="testing" class="spinner spinner-sm"></span>
-              <Icon v-else icon="mdi:test-tube" width="16" height="16" />
+              <IconPark v-else icon="mdi:test-tube" width="16" height="16" />
             </button>
             <button
               class="icon-btn"
@@ -1891,7 +1891,7 @@ onUnmounted(() => {
               :aria-label="t('skills.list.tooltipTag')"
               @click="openTagDialog"
             >
-              <Icon icon="mdi:tag-outline" width="16" height="16" />
+              <IconPark icon="mdi:tag-outline" width="16" height="16" />
             </button>
             <button
               class="icon-btn"
@@ -1899,7 +1899,7 @@ onUnmounted(() => {
               :aria-label="t('skills.list.tooltipOpenFolder')"
               @click="openInFolder"
             >
-              <Icon icon="mdi:folder-outline" width="16" height="16" />
+              <IconPark icon="mdi:folder-outline" width="16" height="16" />
             </button>
             <button
               class="icon-btn"
@@ -1907,7 +1907,7 @@ onUnmounted(() => {
               :aria-label="t('skills.list.copyPath')"
               @click="copySourcePath"
             >
-              <Icon icon="mdi:content-copy" width="16" height="16" />
+              <IconPark icon="mdi:content-copy" width="16" height="16" />
             </button>
             <button
               class="icon-btn"
@@ -1915,7 +1915,7 @@ onUnmounted(() => {
               :aria-label="t('skills.list.tooltipDelete')"
               @click="removeCurrent"
             >
-              <Icon icon="mdi:delete" width="16" height="16" />
+              <IconPark icon="mdi:delete" width="16" height="16" />
             </button>
             <button
               class="icon-btn ai-btn"
@@ -1923,7 +1923,7 @@ onUnmounted(() => {
               :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
               @click="toggleAI"
             >
-              <Icon :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="16" height="16" />
+              <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="16" height="16" />
             </button>
           </div>
         </header>
@@ -1955,13 +1955,13 @@ onUnmounted(() => {
             ></textarea>
           </div>
           <p v-if="editError" class="message message-error">
-            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
             {{ editError }}
           </p>
         </section>
 
         <p v-if="openError" class="message message-error">
-          <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
           {{ openError }}
         </p>
 
@@ -1970,7 +1970,7 @@ onUnmounted(() => {
         <section v-if="!editing" class="detail-section scope-card">
           <header class="section-header">
             <h3>
-              <Icon icon="mdi:earth" width="14" height="14" />
+              <IconPark icon="mdi:earth" width="14" height="14" />
               {{ t('skills.list.scopeLabel') }}
             </h3>
             <span v-if="!scopeLoading && scopeHits.length" class="muted small-hint">
@@ -1983,7 +1983,7 @@ onUnmounted(() => {
             <span class="muted">…</span>
           </p>
           <p v-else-if="scopeError" class="message message-error">
-            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
             {{ scopeError }}
           </p>
 
@@ -2016,7 +2016,7 @@ onUnmounted(() => {
                     v-if="syncingToolID === t.tool_id"
                     class="spinner spinner-sm chip-spinner"
                   ></span>
-                  <Icon v-else :icon="t.icon" width="12" height="12" />
+                  <IconPark v-else :icon="t.icon" width="12" height="12" />
                   <span>{{ toolShort(t.tool_id) }}</span>
                   <span v-if="t.hitCount > 0" class="chip-count">{{ t.hitCount }}</span>
                 </button>
@@ -2086,7 +2086,7 @@ onUnmounted(() => {
         <section class="detail-section detail-body">
           <header class="section-header">
             <h3>
-              <Icon :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
+              <IconPark :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
               {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
             </h3>
             <!-- 2026-06-26 改:"取消/保存"已搬到 detail-title-row 右侧(替换"编辑"按钮位置),
@@ -2094,7 +2094,7 @@ onUnmounted(() => {
           </header>
 
           <p v-if="editError" class="message message-error">
-            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
             {{ editError }}
           </p>
 
@@ -2116,7 +2116,7 @@ onUnmounted(() => {
               <span>{{ t('common.processing') }}</span>
             </div>
             <p v-else-if="currentError" class="message message-error">
-              <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+              <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
               {{ currentError }}
             </p>
             <div v-else-if="currentBody" class="md-body" v-html="renderedHtml"></div>
@@ -2136,15 +2136,15 @@ onUnmounted(() => {
       :title="current ? t('skills.tag.titlePrefix') + ' — ' + current.name + '@' + current.version : t('skills.tag.titlePrefix')"
     >
       <template #title-icon>
-        <Icon icon="mdi:tag-outline" width="18" height="18" />
+        <IconPark icon="mdi:tag-outline" width="18" height="18" />
       </template>
 
       <p v-if="tagMessage" class="message message-success">
-        <Icon icon="mdi:check-circle-outline" width="14" height="14" />
+        <IconPark icon="mdi:check-circle-outline" width="14" height="14" />
         {{ tagMessage }}
       </p>
       <p v-if="tagError" class="message message-error">
-        <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+        <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
         {{ tagError }}
       </p>
 
@@ -2164,7 +2164,7 @@ onUnmounted(() => {
             {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
           </option>
         </select>
-        <Icon icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
+        <IconPark icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
         <select v-model="diffRightTagID">
           <option :value="0">{{ t('skills.tag.current') }}</option>
           <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
@@ -2190,7 +2190,7 @@ onUnmounted(() => {
       </ul>
 
       <div v-else-if="!tagLoading" class="empty-state empty-state-sm">
-        <Icon icon="mdi:tag-off-outline" width="36" height="36" />
+        <IconPark icon="mdi:tag-off-outline" width="36" height="36" />
         <p class="empty-title">{{ t('common.dash') }}</p>
       </div>
 
@@ -2222,13 +2222,13 @@ onUnmounted(() => {
       :title="t('skills.test.title')"
     >
       <template #title-icon>
-        <Icon icon="mdi:test-tube" width="18" height="18" />
+        <IconPark icon="mdi:test-tube" width="18" height="18" />
       </template>
 
       <div :class="['test-status-row', `test-status-${lastTest?.run?.status || 'errored'}`]">
         <span v-if="lastTest?.run" class="test-status-badge">{{ lastTest.run.status }}</span>
         <p v-if="testError" class="message message-error" style="margin: 0">
-          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
           {{ t('skills.test.errPrefix') }} {{ testError }}
         </p>
         <p v-else-if="lastTest?.run?.summary" class="test-summary">{{ lastTest.run.summary }}</p>
@@ -2260,7 +2260,7 @@ onUnmounted(() => {
       :title="editingKey ? t('skills.editor.titleEdit') : t('skills.editor.titleNew')"
     >
       <template #title-icon>
-        <Icon :icon="editingKey ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
+        <IconPark :icon="editingKey ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
       </template>
       <form class="editor-form" @submit.prevent="submit">
         <div v-if="editingKey" class="editor-hint-bar">
@@ -2289,7 +2289,7 @@ onUnmounted(() => {
                 :disabled="!!editingKey"
                 @click="draft.scope = 'global'"
               >
-                <Icon icon="mdi:earth" width="13" height="13" />
+                <IconPark icon="mdi:earth" width="13" height="13" />
                 {{ t('skills.editor.scopeGlobal') }}
               </button>
               <button
@@ -2298,7 +2298,7 @@ onUnmounted(() => {
                 :disabled="!!editingKey"
                 @click="draft.scope = 'project'"
               >
-                <Icon icon="mdi:folder-outline" width="13" height="13" />
+                <IconPark icon="mdi:folder-outline" width="13" height="13" />
                 {{ t('skills.editor.scopeProject') }}
               </button>
             </div>
@@ -2329,7 +2329,7 @@ onUnmounted(() => {
               :title="tool.display"
               @click="toggleApplyTool(tool.tool_id)"
             >
-              <Icon :icon="toolIcon(tool.tool_id)" width="12" height="12" />
+              <IconPark :icon="toolIcon(tool.tool_id)" width="12" height="12" />
               <span>{{ tool.display }}</span>
             </button>
             <span v-if="!draft.applyTools.length" class="chip-empty muted">
@@ -2362,17 +2362,17 @@ onUnmounted(() => {
         </div>
 
         <p v-if="error" class="message message-error" style="margin: 0 0 12px">
-          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
           {{ error }}
         </p>
       </form>
       <template #footer>
         <button type="button" class="ghost" @click="editorOpen = false">
-          <Icon icon="mdi:close" width="14" height="14" />
+          <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
         <button type="button" class="primary" @click="submit">
-          <Icon :icon="editingKey ? 'mdi:content-save' : 'mdi:plus'" width="14" height="14" />
+          <IconPark :icon="editingKey ? 'mdi:content-save' : 'mdi:plus'" width="14" height="14" />
           {{ editingKey ? t('common.save') : t('common.create') }}
         </button>
       </template>
@@ -2415,7 +2415,7 @@ onUnmounted(() => {
     <!-- 2026-06-29 增:新建分组 弹窗 -->
     <Modal v-model="newGroupOpen" size="sm" :title="t('skills.list.ctxNewGroup')" :close-on-mask="false">
       <template #title-icon>
-        <Icon icon="mdi:folder-plus-outline" width="18" height="18" />
+        <IconPark icon="mdi:folder-plus-outline" width="18" height="18" />
       </template>
       <form class="new-group-form" @submit.prevent="submitNewGroup">
         <div class="editor-field-full">
@@ -2438,7 +2438,7 @@ onUnmounted(() => {
         </button>
         <button type="button" class="primary" :disabled="newGroupBusy || !newGroupInput.trim()" @click="submitNewGroup">
           <span v-if="newGroupBusy" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:check" width="14" height="14" />
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ t('common.create') }}
         </button>
       </template>
@@ -2448,7 +2448,7 @@ onUnmounted(() => {
     <Modal v-model="renameGroupOpen" size="sm" :close-on-mask="!renameGroupBusy">
       <template #header>
         <h3 class="modal-title">
-          <Icon icon="mdi:rename-outline" width="18" height="18" />
+          <IconPark icon="mdi:rename-outline" width="18" height="18" />
           {{ t('skills.list.groupRenamePrompt', { name: renameGroupOldName }) }}
         </h3>
       </template>
@@ -2469,7 +2469,7 @@ onUnmounted(() => {
             <code>{{ pathDirname(renameGroupOldPath) || '/' }}/<span style="color: var(--text)">{{ renameGroupInput || '...' }}</span></code>
           </p>
           <p v-if="renameGroupError" class="message message-error" style="margin: 8px 0 0">
-            <Icon icon="mdi:alert-circle-outline" width="12" height="12" />
+            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
             {{ renameGroupError }}
           </p>
         </div>
@@ -2485,7 +2485,7 @@ onUnmounted(() => {
           @click="submitRenameGroup"
         >
           <span v-if="renameGroupBusy" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:check" width="14" height="14" />
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ t('common.save') }}
         </button>
       </template>
@@ -2534,7 +2534,7 @@ onUnmounted(() => {
         </button>
         <button type="button" class="danger" :disabled="deleteBusy" @click="confirmDelete">
           <span v-if="deleteBusy" class="spinner spinner-sm"></span>
-          <Icon v-else icon="mdi:delete" width="14" height="14" />
+          <IconPark v-else icon="mdi:delete" width="14" height="14" />
           {{ t('common.delete') }}
         </button>
       </template>

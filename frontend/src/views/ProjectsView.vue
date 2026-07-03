@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { listProjects, createProject, updateProject, deleteProject, scanProject } from '@/api/skillbox/projects'
 import { platform } from '@/platform'
 import { formatRelative } from '@/core/utils/time.js'
@@ -273,7 +273,7 @@ onMounted(reload)
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-amber">
-          <Icon icon="mdi:folder-multiple-outline" width="24" height="24" />
+          <IconPark icon="mdi:folder-multiple-outline" width="24" height="24" />
         </div>
         <div>
           <h1>{{ t('projects.title') }}</h1>
@@ -285,7 +285,7 @@ onMounted(reload)
     <!-- 工具栏 -->
     <div class="toolbar">
       <div class="search-box">
-        <Icon icon="mdi:magnify" width="16" height="16" class="search-icon" />
+        <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
         <input
           v-model="filter.keyword"
           :placeholder="t('projects.searchPlaceholder')"
@@ -294,13 +294,13 @@ onMounted(reload)
         />
       </div>
       <button class="primary" :title="t('projects.btnImportTitle')" @click="startImport">
-        <Icon icon="mdi:folder-upload-outline" width="16" height="16" />
+        <IconPark icon="mdi:folder-upload-outline" width="16" height="16" />
         <span>{{ t('projects.btnImport') }}</span>
       </button>
     </div>
 
     <p v-if="error" class="error-message">
-      <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+      <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
       {{ error }}
     </p>
 
@@ -312,11 +312,11 @@ onMounted(reload)
       :close-on-mask="!importing"
     >
       <template #title-icon>
-        <Icon icon="mdi:folder-upload-outline" width="18" height="18" />
+        <IconPark icon="mdi:folder-upload-outline" width="18" height="18" />
       </template>
       <form class="form" @submit.prevent="submitImport">
         <p class="form-hint">
-          <Icon icon="mdi:information-outline" width="14" height="14" />
+          <IconPark icon="mdi:information-outline" width="14" height="14" />
           {{ t('projects.formHint') }}
         </p>
         <div class="form-grid">
@@ -340,7 +340,7 @@ onMounted(reload)
                   if (p) { form.root_path = p; await inspectFromPath(p) }
                 }"
               >
-                <Icon icon="mdi:folder-search-outline" width="14" height="14" />
+                <IconPark icon="mdi:folder-search-outline" width="14" height="14" />
               </button>
             </div>
           </div>
@@ -378,12 +378,12 @@ onMounted(reload)
       </form>
       <template #footer>
         <button type="button" class="ghost" :disabled="importing" @click="cancelImport">
-          <Icon icon="mdi:close" width="14" height="14" />
+          <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
         <button type="button" class="primary" :disabled="importing" @click="submitImport">
           <span v-if="importing" class="spinner spinner-sm btn-spinner"></span>
-          <Icon v-else icon="mdi:check" width="14" height="14" />
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ importing ? t('common.processing') : t('projects.btnImport') }}
         </button>
       </template>
@@ -397,7 +397,7 @@ onMounted(reload)
       :close-on-mask="!updating"
     >
       <template #title-icon>
-        <Icon icon="mdi:pencil-outline" width="18" height="18" />
+        <IconPark icon="mdi:pencil-outline" width="18" height="18" />
       </template>
       <form class="form" @submit.prevent="submitEdit">
         <div class="form-grid">
@@ -420,7 +420,7 @@ onMounted(reload)
                   if (p) editForm.root_path = p
                 }"
               >
-                <Icon icon="mdi:folder-search-outline" width="14" height="14" />
+                <IconPark icon="mdi:folder-search-outline" width="14" height="14" />
               </button>
             </div>
           </div>
@@ -452,12 +452,12 @@ onMounted(reload)
       </form>
       <template #footer>
         <button type="button" class="ghost" :disabled="updating" @click="cancelEdit">
-          <Icon icon="mdi:close" width="14" height="14" />
+          <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
         </button>
         <button type="button" class="primary" :disabled="updating" @click="submitEdit">
           <span v-if="updating" class="spinner spinner-sm btn-spinner"></span>
-          <Icon v-else icon="mdi:content-save" width="14" height="14" />
+          <IconPark v-else icon="mdi:content-save" width="14" height="14" />
           {{ updating ? t('common.processing') : t('projects.btnEdit') }}
         </button>
       </template>
@@ -467,7 +467,7 @@ onMounted(reload)
     <div class="card">
       <header class="card-header">
         <h3>
-          <Icon icon="mdi:format-list-bulleted" width="16" height="16" />
+          <IconPark icon="mdi:format-list-bulleted" width="16" height="16" />
           {{ t('projects.listTitle') }}
           <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
         </h3>
@@ -544,7 +544,7 @@ onMounted(reload)
               {{ t('projects.noTools') }}
             </span>
             <span v-if="scans[p.id]?.error" class="tools-error">
-              <Icon icon="mdi:alert-circle-outline" width="11" height="11" />
+              <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
               {{ t('projects.scanFailed') }}
             </span>
           </div>
@@ -557,20 +557,20 @@ onMounted(reload)
       </div>
 
       <div v-else-if="!loading" class="empty-state">
-        <Icon icon="mdi:folder-open-outline" width="48" height="48" />
+        <IconPark icon="mdi:folder-open-outline" width="48" height="48" />
         <p class="empty-title">{{ t('projects.empty') }}</p>
         <p class="empty-hint">{{ t('projects.emptyHint') }}</p>
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
         <button :disabled="filter.page <= 1" @click="gotoPage(filter.page - 1)">
-          <Icon icon="mdi:chevron-left" width="14" height="14" />
+          <IconPark icon="mdi:chevron-left" width="14" height="14" />
           {{ t('common.prev') }}
         </button>
         <span class="pager-info">{{ filter.page }} / {{ totalPages }} ({{ t('common.totalCount', { count: total }) }})</span>
         <button :disabled="filter.page >= totalPages" @click="gotoPage(filter.page + 1)">
           {{ t('common.next') }}
-          <Icon icon="mdi:chevron-right" width="14" height="14" />
+          <IconPark icon="mdi:chevron-right" width="14" height="14" />
         </button>
       </footer>
     </div>

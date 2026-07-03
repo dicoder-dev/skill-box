@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { useMarketStore } from '@/core/store/market'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
@@ -141,7 +141,7 @@ onMounted(async () => {
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-market">
-          <Icon icon="mdi:cart-outline" width="24" height="24" />
+          <IconPark icon="mdi:cart-outline" width="24" height="24" />
         </div>
         <div>
           <h1>{{ t('market.title') }}</h1>
@@ -157,13 +157,13 @@ onMounted(async () => {
            - 常驻重试按钮(loadSkills 重拉)
            放在工具栏上方,显眼但不高过主搜索条,避免打断搜索流程。 -->
       <div v-if="market.remoteUnavailable" class="market-remote-banner">
-        <Icon icon="mdi:cloud-off-outline" width="16" height="16" class="banner-icon" />
+        <IconPark icon="mdi:cloud-off-outline" width="16" height="16" class="banner-icon" />
         <div class="banner-text">
           <strong>{{ t('market.remoteUnavailable.title') }}</strong>
           <span>{{ t('market.remoteUnavailable.hint', { source: market.activeSource?.name || '' }) }}</span>
         </div>
         <button class="ghost banner-retry" :disabled="loading" @click="onRetryRemote">
-          <Icon icon="mdi:refresh" width="14" height="14" />
+          <IconPark icon="mdi:refresh" width="14" height="14" />
           {{ t('market.remoteUnavailable.retry') }}
         </button>
       </div>
@@ -172,7 +172,7 @@ onMounted(async () => {
       <div class="toolbar">
         <div class="toolbar-center">
           <div class="search-box">
-            <Icon icon="mdi:magnify" width="16" height="16" class="search-icon" />
+            <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
             <input
               v-model="keyword"
               type="text"
@@ -182,13 +182,13 @@ onMounted(async () => {
             />
           </div>
           <button class="ghost" @click="onSearch">
-            <Icon icon="mdi:magnify" width="14" height="14" />
+            <IconPark icon="mdi:magnify" width="14" height="14" />
             {{ t('common.search') }}
           </button>
         </div>
         <div class="toolbar-right">
           <button class="ghost" :disabled="!sources.length" @click="openSettings">
-            <Icon icon="mdi:cog-outline" width="14" height="14" />
+            <IconPark icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
           </button>
           <!-- 2026-07-01 改:全走 API 后,Enter 已经每次都打远端,搜索按钮被删除。
@@ -204,7 +204,7 @@ onMounted(async () => {
           :class="['source-tab', { active: s.id === activeSourceId }]"
           @click="onSelectSource(s.id)"
         >
-          <Icon icon="mdi:radio-tower" width="14" height="14" />
+          <IconPark icon="mdi:radio-tower" width="14" height="14" />
           {{ s.name }}
           <span class="source-type">{{ s.type }}</span>
         </button>
@@ -216,7 +216,7 @@ onMounted(async () => {
       <div class="market-body">
         <!-- 错误提示 -->
         <div v-if="error" class="message message-error">
-          <Icon icon="mdi:alert-circle-outline" width="14" height="14" />
+          <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
           {{ error }}
         </div>
 
@@ -230,29 +230,29 @@ onMounted(async () => {
           >
             <header class="market-card-top">
               <div class="market-card-icon">
-                <Icon icon="mdi:puzzle-outline" width="22" height="22" />
+                <IconPark icon="mdi:puzzle-outline" width="22" height="22" />
               </div>
               <div class="market-card-titles">
                 <h3 class="market-card-name" :title="it.name">{{ it.name }}</h3>
                 <code class="market-card-id">{{ it.remote_id }}</code>
               </div>
               <span v-if="installed[it.name]" class="badge badge-installed">
-                <Icon icon="mdi:check-circle" width="10" height="10" />
+                <IconPark icon="mdi:check-circle" width="10" height="10" />
                 {{ t('market.installedChip') }}
               </span>
               <span v-else class="badge badge-not-installed">
-                <Icon icon="mdi:circle-outline" width="10" height="10" />
+                <IconPark icon="mdi:circle-outline" width="10" height="10" />
                 {{ t('market.notInstalledChip') }}
               </span>
             </header>
 
             <div class="market-card-meta">
               <span class="meta-item">
-                <Icon icon="mdi:tag-outline" width="12" height="12" />
+                <IconPark icon="mdi:tag-outline" width="12" height="12" />
                 {{ it.version || t('common.dash') }}
               </span>
               <span class="meta-item">
-                <Icon icon="mdi:account-outline" width="12" height="12" />
+                <IconPark icon="mdi:account-outline" width="12" height="12" />
                 {{ it.author || t('common.dash') }}
               </span>
             </div>
@@ -283,7 +283,7 @@ onMounted(async () => {
                   @click="viewSkill(it.name)"
                 />
                 <button class="market-card-pull" :disabled="market.pulling" @click="openInstall(it)">
-                  <Icon icon="mdi:download" width="13" height="13" />
+                  <IconPark icon="mdi:download" width="13" height="13" />
                   {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
                 </button>
               </div>
@@ -295,7 +295,7 @@ onMounted(async () => {
           <!-- 2026-07-01 改:用 mdi:loading icon(36px)+ spin 动画,
                替代原来 12px 小 spinner,视觉更明显 + 用 source 名字给用户上下文。
                iconify 自带 icon 但不带动画,这里 CSS 加 spin。 -->
-          <Icon icon="mdi:loading" width="36" height="36" class="loading-icon" />
+          <IconPark icon="mdi:loading" width="36" height="36" class="loading-icon" />
           <p class="loading-text">{{ t('market.btnRemoteLoading') }}</p>
           <p v-if="market.activeSource" class="loading-hint">
             {{ t('market.loadingFromSource', { source: market.activeSource.name }) }}
@@ -303,7 +303,7 @@ onMounted(async () => {
         </div>
 
         <div v-else class="empty-state">
-          <Icon icon="mdi:radio-tower" width="48" height="48" />
+          <IconPark icon="mdi:radio-tower" width="48" height="48" />
           <p class="empty-title">{{ t('market.emptyAfter') }}</p>
           <p class="empty-hint">{{ t('market.emptyAfterHint') }}</p>
         </div>
@@ -312,13 +312,13 @@ onMounted(async () => {
       <!-- 分页 - 固定在卡片容器底部,不随内容滚动 -->
       <footer v-if="totalPages > 1" class="pager">
         <button :disabled="page <= 1" @click="market.page--; market.loadSkills()">
-          <Icon icon="mdi:chevron-left" width="14" height="14" />
+          <IconPark icon="mdi:chevron-left" width="14" height="14" />
           {{ t('common.prev') }}
         </button>
         <span class="pager-info">{{ t('common.pageOfNoCount', { page, total: totalPages }) }}</span>
         <button :disabled="page >= totalPages" @click="market.page++; market.loadSkills()">
           {{ t('common.next') }}
-          <Icon icon="mdi:chevron-right" width="14" height="14" />
+          <IconPark icon="mdi:chevron-right" width="14" height="14" />
         </button>
       </footer>
     </div>
@@ -330,7 +330,7 @@ onMounted(async () => {
       :title="detailItem?.name || ''"
     >
       <template #title-icon>
-        <Icon icon="mdi:information-outline" width="18" height="18" />
+        <IconPark icon="mdi:information-outline" width="18" height="18" />
       </template>
       <div v-if="detailItem" class="detail-grid">
         <div class="detail-row">
@@ -360,18 +360,18 @@ onMounted(async () => {
         <div class="detail-row detail-row-full">
           <span class="detail-label">{{ t('market.colStatus') }}</span>
           <span v-if="installed[detailItem.name]" class="installed-chip">
-            <Icon icon="mdi:check-circle" width="12" height="12" />
+            <IconPark icon="mdi:check-circle" width="12" height="12" />
             {{ t('market.installedChip') }}
           </span>
           <span v-else class="not-installed-chip">
-            <Icon icon="mdi:circle-outline" width="12" height="12" />
+            <IconPark icon="mdi:circle-outline" width="12" height="12" />
             {{ t('market.notInstalledChip') }}
           </span>
         </div>
       </div>
       <template #footer>
         <button type="button" class="ghost" @click="detailOpen = false">
-          <Icon icon="mdi:close" width="14" height="14" />
+          <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.close') }}
         </button>
         <button
@@ -380,7 +380,7 @@ onMounted(async () => {
           :disabled="market.pulling"
           @click="detailOpen = false; openInstall(detailItem)"
         >
-          <Icon icon="mdi:download" width="14" height="14" />
+          <IconPark icon="mdi:download" width="14" height="14" />
           {{ t('market.btnPull') }}
         </button>
       </template>

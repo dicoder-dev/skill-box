@@ -97,4 +97,15 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // iconpark 包 5300+ 图标全打包会撑大主 chunk ~2MB,拆到独立 vendor chunk 走浏览器缓存。
+    // 业务侧首屏不依赖图标(skeleton/text 先行),后置加载不阻塞首屏。
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-iconpark": ["@icon-park/vue-next"],
+        },
+      },
+    },
+  },
 });

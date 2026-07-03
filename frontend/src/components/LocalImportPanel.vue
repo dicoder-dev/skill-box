@@ -14,7 +14,7 @@
 
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { platform } from '@/platform'
 import { runOnboardingImportLocal, runOnboardingImportZipBytes } from '@/api/skillbox/onboarding'
 import { useToastStore } from '@/core/store/toast'
@@ -149,12 +149,12 @@ function finish() {
           :title="t('onboarding.local.btnPickFolderTitle')"
           @click="pickFolder"
         >
-          <Icon icon="mdi:folder-open-outline" width="28" height="28" />
+          <IconPark icon="mdi:folder-open-outline" width="28" height="28" />
           <span class="lip-action-name">{{ t('onboarding.local.btnPickFolder') }}</span>
         </button>
         <div v-else class="lip-disabled" :title="t('onboarding.local.webNoFolderTitle', { default: '' }) || t('onboarding.local.webNoFolder')">
           <button class="lip-action" disabled :title="t('onboarding.local.webNoFolder')">
-            <Icon icon="mdi:folder-open-outline" width="28" height="28" />
+            <IconPark icon="mdi:folder-open-outline" width="28" height="28" />
             <span class="lip-action-name">{{ t('onboarding.local.btnPickFolder') }}</span>
           </button>
           <p class="lip-hint">{{ t('onboarding.local.webNoFolderHint') }}</p>
@@ -165,7 +165,7 @@ function finish() {
           :title="t('onboarding.local.btnPickZipTitle')"
           @click="isWeb ? pickZipViaInput() : pickZipViaDialog()"
         >
-          <Icon icon="mdi:folder-zip-outline" width="28" height="28" />
+          <IconPark icon="mdi:folder-zip-outline" width="28" height="28" />
           <span class="lip-action-name">{{ t('onboarding.local.btnPickZip') }}</span>
         </button>
       </div>
@@ -190,7 +190,7 @@ function finish() {
     <!-- 阶段 3: 结果统计 -->
     <section v-else-if="phase === 'done' && result" class="lip-pane">
       <header class="lip-result-head">
-        <Icon icon="mdi:check-circle" width="18" height="18" />
+        <IconPark icon="mdi:check-circle" width="18" height="18" />
         <h3>{{ t('onboarding.local.resultTitle') }}</h3>
       </header>
 
@@ -229,11 +229,11 @@ function finish() {
 
       <div class="lip-footer">
         <button class="ghost" @click="reset">
-          <Icon icon="mdi:refresh" width="14" height="14" />
+          <IconPark icon="mdi:refresh" width="14" height="14" />
           {{ t('onboarding.local.btnAgain') }}
         </button>
         <button class="primary" @click="finish">
-          <Icon icon="mdi:check" width="14" height="14" />
+          <IconPark icon="mdi:check" width="14" height="14" />
           {{ t('onboarding.local.btnDone') }}
         </button>
       </div>

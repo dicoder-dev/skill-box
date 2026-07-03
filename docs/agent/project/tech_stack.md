@@ -21,6 +21,7 @@
 | Vite | 最新 | dev 默认 5173;`WAILS_VITE_PORT` 可覆盖 |
 | 平台能力 | `@/platform` 抽象 | Web / Desktop 双实现,**业务侧只 import 这一份** |
 | HTTP 层 | `@/core/utils/requests` | 自带拦截器栈 + 业务码剥离 |
+| 图标库 | `@icon-park/vue-next` (iconpark) | 统一图标库,走 `<IconPark />` 组件 + `MDI_TO_ICONPARK` 映射,见 [[fe-icon-library]] |
 
 ## 构建
 

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, provide, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
@@ -223,7 +223,7 @@ onUnmounted(() => {
       <!-- 品牌区域 - 留出 macOS 交通灯按钮的空间 -->
       <div class="sidebar-brand">
         <div class="brand-icon">
-          <Icon icon="mdi:package-variant-closed" width="24" height="24" />
+          <IconPark icon="mdi:package-variant-closed" width="24" height="24" />
         </div>
         <div class="brand-text">
           <span class="brand-name">{{ t('app.brand') }}</span>
@@ -234,7 +234,7 @@ onUnmounted(() => {
           @click="sidebarOpen = false"
           :aria-label="t('app.closeSidebar')"
         >
-          <Icon icon="mdi:close" width="18" height="18" />
+          <IconPark icon="mdi:close" width="18" height="18" />
         </button>
       </div>
 
@@ -250,7 +250,7 @@ onUnmounted(() => {
           @click="switchTab(n.key)"
         >
           <span class="nav-icon">
-            <Icon :icon="n.icon" width="20" height="20" />
+            <IconPark :icon="n.icon" width="20" height="20" />
           </span>
           <span class="nav-content">
             <span class="nav-label">{{ n.label }}</span>
@@ -271,12 +271,12 @@ onUnmounted(() => {
 
         <!-- 主题切换 -->
         <button class="theme-toggle" @click="toggleTheme" :title="isDark ? '切换到亮色模式' : '切换到暗黑模式'">
-          <Icon :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="18" height="18" />
+          <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="18" height="18" />
         </button>
 
         <!-- 刷新按钮 -->
         <button class="refresh-btn" @click="refreshStats" :title="t('app.refreshStats')">
-          <Icon icon="mdi:refresh" width="16" height="16" />
+          <IconPark icon="mdi:refresh" width="16" height="16" />
         </button>
       </div>
 
@@ -306,28 +306,28 @@ onUnmounted(() => {
             @click="sidebarOpen = true"
             :aria-label="t('app.openSidebar')"
           >
-            <Icon icon="mdi:menu" width="22" height="22" />
+            <IconPark icon="mdi:menu" width="22" height="22" />
           </button>
           <div class="breadcrumb">
             <span class="breadcrumb-brand">{{ t('app.brand') }}</span>
-            <Icon icon="mdi:chevron-right" width="14" height="14" class="breadcrumb-sep" />
+            <IconPark icon="mdi:chevron-right" width="14" height="14" class="breadcrumb-sep" />
             <span class="breadcrumb-current">{{ navItems.find((x) => x.key === tab)?.label }}</span>
           </div>
         </div>
 
         <div class="topbar-right">
           <div class="stat-badge stat-badge-blue">
-            <Icon icon="mdi:book-open-variant" width="12" height="12" />
+            <IconPark icon="mdi:book-open-variant" width="12" height="12" />
             <span>{{ t('app.nav.skills.label') }}</span>
             <strong>{{ stats.skills }}</strong>
           </div>
           <div class="stat-badge stat-badge-violet">
-            <Icon icon="mdi:folder-multiple-outline" width="12" height="12" />
+            <IconPark icon="mdi:folder-multiple-outline" width="12" height="12" />
             <span>{{ t('app.nav.projects.label') }}</span>
             <strong>{{ stats.projects }}</strong>
           </div>
           <div class="stat-badge stat-badge-emerald">
-            <Icon icon="mdi:tools" width="12" height="12" />
+            <IconPark icon="mdi:tools" width="12" height="12" />
             <span>{{ t('app.toolsLabel') }}</span>
             <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
           </div>

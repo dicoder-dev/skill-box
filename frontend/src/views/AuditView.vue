@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { listAuditLogs, getAuditStats } from '@/api/skillbox/audit'
 
 const { t } = useI18n()
@@ -87,7 +87,7 @@ onMounted(async () => {
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-amber">
-          <Icon icon="mdi:script-text-outline" width="24" height="24" />
+          <IconPark icon="mdi:script-text-outline" width="24" height="24" />
         </div>
         <div>
           <h1>{{ t('audit.title') }}</h1>
@@ -125,7 +125,7 @@ onMounted(async () => {
     <!-- 后端未就绪占位 -->
     <div v-if="!backendReady" class="card placeholder">
       <div class="empty-state">
-        <Icon icon="mdi:construction" width="48" height="48" />
+        <IconPark icon="mdi:construction" width="48" height="48" />
         <h3 class="empty-title">{{ t('audit.placeholderTitle') }}</h3>
         <p class="empty-desc">{{ t('audit.placeholderHint1') }}</p>
         <p class="empty-desc">{{ t('audit.placeholderHint2') }}</p>
@@ -136,7 +136,7 @@ onMounted(async () => {
     <div v-else class="card">
       <header class="card-header">
         <h3>
-          <Icon icon="mdi:format-list-bulleted" width="16" height="16" />
+          <IconPark icon="mdi:format-list-bulleted" width="16" height="16" />
           {{ t('audit.listTitle') }}
           <span class="card-sub">— {{ t('common.totalCount', { count: total }) }}</span>
         </h3>
@@ -159,7 +159,7 @@ onMounted(async () => {
           <input v-model="filterTargetType" :placeholder="t('audit.targetTypePlaceholder')" @keyup.enter="reload" />
         </div>
         <button class="primary filter-btn" @click="reload">
-          <Icon icon="mdi:magnify" width="14" height="14" />
+          <IconPark icon="mdi:magnify" width="14" height="14" />
           {{ t('common.applyFilter') }}
         </button>
       </div>
@@ -200,20 +200,20 @@ onMounted(async () => {
         </table>
 
         <div v-else-if="!loading" class="empty-state">
-          <Icon icon="mdi:inbox-outline" width="48" height="48" />
+          <IconPark icon="mdi:inbox-outline" width="48" height="48" />
           <p class="empty-title">{{ t('audit.empty') }}</p>
         </div>
       </div>
 
       <footer v-if="totalPages > 1" class="pager">
         <button :disabled="page <= 1" @click="gotoPage(page - 1)">
-          <Icon icon="mdi:chevron-left" width="14" height="14" />
+          <IconPark icon="mdi:chevron-left" width="14" height="14" />
           {{ t('common.prev') }}
         </button>
         <span class="pager-info">{{ t('common.pageOf', { page, total: totalPages, count: total }) }}</span>
         <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">
           {{ t('common.next') }}
-          <Icon icon="mdi:chevron-right" width="14" height="14" />
+          <IconPark icon="mdi:chevron-right" width="14" height="14" />
         </button>
       </footer>
     </div>

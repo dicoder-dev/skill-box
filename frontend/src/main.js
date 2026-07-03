@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import './style.css'
+// iconpark 全局样式(必加,否则 svg 不受 .i-icon 样式影响)
+import '@icon-park/vue-next/styles/index.css'
 import { resolveBaseURL } from './api/http.js'
 import { http } from './core/utils/requests'
 import { getRuntime } from './core/utils/runtime.js'

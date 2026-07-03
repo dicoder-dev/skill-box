@@ -25,7 +25,7 @@
 
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import { useSkillTreeStore } from '@/core/store/skill-tree'
 import { createGroup as apiCreateGroup } from '@/api/skillbox/skills'
@@ -201,13 +201,13 @@ onMounted(() => {
     @update:model-value="(v) => emit('update:modelValue', v)"
   >
     <template #title-icon>
-      <Icon icon="mdi:download-outline" width="18" height="18" />
+      <IconPark icon="mdi:download-outline" width="18" height="18" />
     </template>
 
     <div v-if="item" class="pull-form">
       <!-- 描述卡 -->
       <p v-if="item.description" class="pull-desc">
-        <Icon icon="mdi:text-box-outline" width="14" height="14" class="pull-desc-icon" />
+        <IconPark icon="mdi:text-box-outline" width="14" height="14" class="pull-desc-icon" />
         <span>{{ item.description }}</span>
       </p>
 
@@ -215,7 +215,7 @@ onMounted(() => {
       <div v-if="isDuplicate" class="dup-card">
         <div class="dup-head">
           <div class="dup-icon">
-            <Icon icon="mdi:alert-octagon-outline" width="16" height="16" />
+            <IconPark icon="mdi:alert-octagon-outline" width="16" height="16" />
           </div>
           <div class="dup-text">
             <div class="dup-title">
@@ -230,7 +230,7 @@ onMounted(() => {
             :class="['seg-btn', { active: strategy === 'overwrite' }]"
             @click="strategy = 'overwrite'"
           >
-            <Icon icon="mdi:content-save-outline" width="14" height="14" />
+            <IconPark icon="mdi:content-save-outline" width="14" height="14" />
             {{ t('market.pullDialog.btnOverwrite') }}
           </button>
           <button
@@ -238,7 +238,7 @@ onMounted(() => {
             :class="['seg-btn', { active: strategy === 'saveAs' }]"
             @click="strategy = 'saveAs'"
           >
-            <Icon icon="mdi:content-copy" width="14" height="14" />
+            <IconPark icon="mdi:content-copy" width="14" height="14" />
             {{ t('market.pullDialog.btnSaveAs') }}
           </button>
         </div>
@@ -263,7 +263,7 @@ onMounted(() => {
             :class="['seg-btn flex', { active: scope === 'global' }]"
             @click="setScope('global')"
           >
-            <Icon icon="mdi:earth" width="14" height="14" />
+            <IconPark icon="mdi:earth" width="14" height="14" />
             {{ t('market.scopeGlobal') }}
           </button>
           <button
@@ -271,7 +271,7 @@ onMounted(() => {
             :class="['seg-btn flex', { active: scope === 'project' }]"
             @click="setScope('project')"
           >
-            <Icon icon="mdi:folder-account-outline" width="14" height="14" />
+            <IconPark icon="mdi:folder-account-outline" width="14" height="14" />
             {{ t('market.scopeProject') }}
           </button>
         </div>
@@ -305,7 +305,7 @@ onMounted(() => {
             :title="t('market.pullDialog.btnNewGroup')"
             @click="newGroupOpen = !newGroupOpen"
           >
-            <Icon icon="mdi:folder-plus-outline" width="12" height="12" />
+            <IconPark icon="mdi:folder-plus-outline" width="12" height="12" />
             {{ t('market.pullDialog.btnNewGroup') }}
           </button>
         </div>
@@ -323,14 +323,14 @@ onMounted(() => {
             :disabled="!newGroupInput.trim()"
             @click="createNewGroup"
           >
-            <Icon icon="mdi:check" width="12" height="12" />
+            <IconPark icon="mdi:check" width="12" height="12" />
           </button>
           <button
             type="button"
             class="ghost sm inline-flex"
             @click="newGroupOpen = false; newGroupInput = ''"
           >
-            <Icon icon="mdi:close" width="12" height="12" />
+            <IconPark icon="mdi:close" width="12" height="12" />
           </button>
         </div>
         <p v-if="newGroupErr" class="form-hint form-hint-error">{{ newGroupErr }}</p>
@@ -340,7 +340,7 @@ onMounted(() => {
       <!-- 「将自动启用到」信息条(2026-07-01 重构:替代原多选) -->
       <div class="apply-info">
         <div class="apply-info-icon">
-          <Icon icon="mdi:rocket-launch-outline" width="14" height="14" />
+          <IconPark icon="mdi:rocket-launch-outline" width="14" height="14" />
         </div>
         <div class="apply-info-text">
           <div class="apply-info-title">{{ t('market.pullDialog.applyToTitle') }}</div>
@@ -356,7 +356,7 @@ onMounted(() => {
 
     <template #footer>
       <button type="button" class="ghost inline-flex" :disabled="submitting" @click="close">
-        <Icon icon="mdi:close" width="14" height="14" />
+        <IconPark icon="mdi:close" width="14" height="14" />
         {{ t('market.pullDialog.btnCancel') }}
       </button>
       <button
@@ -366,7 +366,7 @@ onMounted(() => {
         @click="onConfirm"
       >
         <span v-if="submitting" class="spinner"></span>
-        <Icon v-else icon="mdi:download" width="14" height="14" />
+        <IconPark v-else icon="mdi:download" width="14" height="14" />
         {{ submitting ? t('market.pullDialog.pulling') : t('market.pullDialog.confirm') }}
       </button>
     </template>

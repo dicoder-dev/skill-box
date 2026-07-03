@@ -11,7 +11,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { htmlToMarkdown } from '@/core/utils/html_to_markdown.js'
 
@@ -166,16 +166,16 @@ function isBtn(name, attrs = undefined) {
 
       <div class="rte-group">
         <button type="button" :class="isBtn('bold')" data-tip="加粗" @click="editor.chain().focus().toggleBold().run()">
-          <Icon icon="mdi:format-bold" width="14" height="14" />
+          <IconPark icon="mdi:format-bold" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('italic')" data-tip="斜体" @click="editor.chain().focus().toggleItalic().run()">
-          <Icon icon="mdi:format-italic" width="14" height="14" />
+          <IconPark icon="mdi:format-italic" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('strike')" data-tip="删除线" @click="editor.chain().focus().toggleStrike().run()">
-          <Icon icon="mdi:format-strikethrough" width="14" height="14" />
+          <IconPark icon="mdi:format-strikethrough" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('code')" data-tip="行内代码" @click="editor.chain().focus().toggleCode().run()">
-          <Icon icon="mdi:code-tags" width="14" height="14" />
+          <IconPark icon="mdi:code-tags" width="14" height="14" />
         </button>
       </div>
 
@@ -183,16 +183,16 @@ function isBtn(name, attrs = undefined) {
 
       <div class="rte-group">
         <button type="button" :class="isBtn('bulletList')" data-tip="无序列表" @click="editor.chain().focus().toggleBulletList().run()">
-          <Icon icon="mdi:format-list-bulleted" width="14" height="14" />
+          <IconPark icon="mdi:format-list-bulleted" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('orderedList')" data-tip="有序列表" @click="editor.chain().focus().toggleOrderedList().run()">
-          <Icon icon="mdi:format-list-numbered" width="14" height="14" />
+          <IconPark icon="mdi:format-list-numbered" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('blockquote')" data-tip="引用" @click="editor.chain().focus().toggleBlockquote().run()">
-          <Icon icon="mdi:format-quote-close" width="14" height="14" />
+          <IconPark icon="mdi:format-quote-close" width="14" height="14" />
         </button>
         <button type="button" :class="isBtn('codeBlock')" data-tip="代码块" @click="editor.chain().focus().toggleCodeBlock().run()">
-          <Icon icon="mdi:code-braces" width="14" height="14" />
+          <IconPark icon="mdi:code-braces" width="14" height="14" />
         </button>
       </div>
 
@@ -206,7 +206,7 @@ function isBtn(name, attrs = undefined) {
             data-tip="链接"
             @click="openLinkInput"
           >
-            <Icon icon="mdi:link-variant" width="14" height="14" />
+            <IconPark icon="mdi:link-variant" width="14" height="14" />
           </button>
           <button
             v-if="editor.isActive('link')"
@@ -215,7 +215,7 @@ function isBtn(name, attrs = undefined) {
             data-tip="取消链接"
             @click="unsetLink"
           >
-            <Icon icon="mdi:link-variant-off" width="14" height="14" />
+            <IconPark icon="mdi:link-variant-off" width="14" height="14" />
           </button>
           <div v-if="showLinkInput" class="rte-popover">
             <input
@@ -241,7 +241,7 @@ function isBtn(name, attrs = undefined) {
             data-tip="插入图片(填 URL)"
             @click="openImageInput"
           >
-            <Icon icon="mdi:image-outline" width="14" height="14" />
+            <IconPark icon="mdi:image-outline" width="14" height="14" />
           </button>
           <div v-if="showImageInput" class="rte-popover">
             <input
@@ -279,7 +279,7 @@ function isBtn(name, attrs = undefined) {
           :disabled="!editor.can().undo()"
           @click="editor.chain().focus().undo().run()"
         >
-          <Icon icon="mdi:undo" width="14" height="14" />
+          <IconPark icon="mdi:undo" width="14" height="14" />
         </button>
         <button
           type="button"
@@ -288,7 +288,7 @@ function isBtn(name, attrs = undefined) {
           :disabled="!editor.can().redo()"
           @click="editor.chain().focus().redo().run()"
         >
-          <Icon icon="mdi:redo" width="14" height="14" />
+          <IconPark icon="mdi:redo" width="14" height="14" />
         </button>
       </div>
     </div>

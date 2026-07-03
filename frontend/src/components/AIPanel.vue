@@ -3,6 +3,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listPresets, chatStream } from '@/api/skillbox/ai.js'
+import IconPark from '@/components/IconPark.vue'
 
 const { t } = useI18n()
 
@@ -140,7 +141,7 @@ function copy(text) {
   <aside class="ai-panel">
     <header class="ai-header">
       <strong>
-        <Icon icon="mdi:robot" width="14" height="14" class="ai-icon" />
+        <IconPark icon="mdi:robot" width="14" height="14" class="ai-icon" />
         {{ t('skills.ai.header') }}
       </strong>
       <button class="link" @click="clear" :title="t('skills.ai.clear')">{{ t('skills.ai.clear') }}</button>
@@ -162,7 +163,7 @@ function copy(text) {
 
     <div class="history" ref="historyEl">
       <p v-if="!messages.length" class="empty">
-        <Icon icon="mdi:chat-outline" width="24" height="24" />
+        <IconPark icon="mdi:chat-outline" width="24" height="24" />
         <span>{{ t('skills.ai.empty') }}</span>
       </p>
       <article
@@ -188,11 +189,11 @@ function copy(text) {
       />
       <div class="actions">
         <button v-if="busy" class="danger" @click="stop">
-          <Icon icon="mdi:stop" width="12" height="12" />
+          <IconPark icon="mdi:stop" width="12" height="12" />
           {{ t('skills.ai.stop') }}
         </button>
         <button v-else class="primary" :disabled="!activePreset" @click="send">
-          <Icon icon="mdi:send" width="12" height="12" />
+          <IconPark icon="mdi:send" width="12" height="12" />
           {{ t('skills.ai.send') }}
         </button>
       </div>

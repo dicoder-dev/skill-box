@@ -12,7 +12,7 @@
 // 不引入第三方 ui 库,沿用项目 --success / --danger / --accent-blue 变量。
 
 import { useToastStore } from '@/core/store/toast'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 
 const toast = useToastStore()
 
@@ -32,10 +32,10 @@ const ICON_MAP = {
         :class="['toast-item', `toast-${item.type}`]"
         role="status"
       >
-        <Icon :icon="ICON_MAP[item.type] || ICON_MAP.info" width="16" height="16" class="toast-icon" />
+        <IconPark :icon="ICON_MAP[item.type] || ICON_MAP.info" width="16" height="16" class="toast-icon" />
         <span class="toast-message">{{ item.message }}</span>
         <button class="toast-close" :aria-label="'close'" @click="toast.dismiss(item.id)">
-          <Icon icon="mdi:close" width="12" height="12" />
+          <IconPark icon="mdi:close" width="12" height="12" />
         </button>
       </div>
     </transition-group>

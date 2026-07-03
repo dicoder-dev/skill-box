@@ -4,7 +4,7 @@
 // 优先级:
 //   1) icon_file 非空 → 用 <img src="/api/files/tool-icons/<name>" alt />
 //      (前端 vite dev 时直接给绝对 URL,后端 /api/files/tool-icons/ 提供二进制)
-//   2) icon_file 为空 → 用 <Icon icon="mdi:..." /> (Iconify 离线优先)
+//   2) icon_file 为空 → 用 <IconPark icon="mdi:..." /> (Iconify 离线优先)
 //
 // 设计原因:
 //   - 用户上传的图标存盘于 ~/.skill-box/tool-icons/<name>,通过后端静态路由拉;
@@ -15,13 +15,13 @@
 // Props:
 //   - tool: ToolView(view 字段集)
 //     必须字段:{mdi_icon, icon_file}
-//   - size:  渲染尺寸(像素),默认 22 与原 <Icon :icon=:width="22"/> 一致
+//   - size:  渲染尺寸(像素),默认 22 与原 <IconPark :icon=:width="22"/> 一致
 //
 // 注意:本组件只渲染图标本身,不负责"主图标右侧 + 文字"那种卡片头部布局 —
 // 那些留在 call site 用 flex / grid 自己拼。
 
 import { computed } from 'vue'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 
 const props = defineProps({
   tool: { type: Object, required: true },

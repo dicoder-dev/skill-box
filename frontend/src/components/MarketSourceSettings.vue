@@ -10,7 +10,7 @@
 
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { useMarketStore } from '@/core/store/market'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
@@ -100,14 +100,14 @@ function close() {
     @update:model-value="(v) => emit('update:modelValue', v)"
   >
     <template #title-icon>
-      <Icon icon="mdi:cog-outline" width="18" height="18" />
+      <IconPark icon="mdi:cog-outline" width="18" height="18" />
     </template>
 
     <div class="source-settings">
       <div v-for="s in market.sources" :key="s.id" class="source-card">
         <div class="source-head">
           <div class="source-info">
-            <Icon icon="mdi:radio-tower" width="14" height="14" class="source-icon" />
+            <IconPark icon="mdi:radio-tower" width="14" height="14" class="source-icon" />
             <span class="source-name">{{ s.name }}</span>
             <span class="source-type-badge">{{ s.type }}</span>
           </div>
@@ -140,7 +140,7 @@ function close() {
             @click="saveOne(s.id)"
           >
             <span v-if="saving[s.id]" class="spinner"></span>
-            <Icon v-else icon="mdi:content-save-outline" width="12" height="12" />
+            <IconPark v-else icon="mdi:content-save-outline" width="12" height="12" />
             {{ t('market.sourcesSettings.btnSave') }}
           </button>
         </div>
@@ -156,7 +156,7 @@ function close() {
         {{ t('common.close') }}
       </button>
       <button type="button" class="primary" @click="saveAll">
-        <Icon icon="mdi:content-save-all-outline" width="14" height="14" />
+        <IconPark icon="mdi:content-save-all-outline" width="14" height="14" />
         {{ t('market.sourcesSettings.btnSave') }}
       </button>
     </template>

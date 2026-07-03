@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, watch, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
 import { setLocale, getLocale } from '@/core/i18n'
@@ -235,7 +235,7 @@ onMounted(loadPrefs)
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-gray">
-          <Icon icon="mdi:cog-outline" width="24" height="24" />
+          <IconPark icon="mdi:cog-outline" width="24" height="24" />
         </div>
         <div>
           <h1>{{ t('settings.title') }}</h1>
@@ -248,7 +248,7 @@ onMounted(loadPrefs)
     <section class="card">
       <header class="card-header">
         <h3>
-          <Icon icon="mdi:tune-variant" width="18" height="18" />
+          <IconPark icon="mdi:tune-variant" width="18" height="18" />
           {{ t('settings.general.title') }}
           <span class="card-sub">— {{ t('settings.general.subtitle') }}</span>
         </h3>
@@ -267,7 +267,7 @@ onMounted(loadPrefs)
               :class="['lang-btn', currentLang === 'zh-CN' ? 'lang-active' : '']"
               @click="onLangChange('zh-CN')"
             >
-              <Icon icon="mdi:check" width="14" height="14" v-if="currentLang === 'zh-CN'" />
+              <IconPark icon="mdi:check" width="14" height="14" v-if="currentLang === 'zh-CN'" />
               {{ t('settings.general.langZhCN') }}
             </button>
             <button
@@ -275,7 +275,7 @@ onMounted(loadPrefs)
               :class="['lang-btn', currentLang === 'en-US' ? 'lang-active' : '']"
               @click="onLangChange('en-US')"
             >
-              <Icon icon="mdi:check" width="14" height="14" v-if="currentLang === 'en-US'" />
+              <IconPark icon="mdi:check" width="14" height="14" v-if="currentLang === 'en-US'" />
               {{ t('settings.general.langEnUS') }}
             </button>
           </div>
@@ -298,8 +298,8 @@ onMounted(loadPrefs)
               :disabled="applyModeBusy"
               @click="onApplyModeChange('copy')"
             >
-              <Icon icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'copy'" />
-              <Icon icon="mdi:content-copy-outline" width="16" height="16" class="mode-btn-icon" v-else />
+              <IconPark icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'copy'" />
+              <IconPark icon="mdi:content-copy-outline" width="16" height="16" class="mode-btn-icon" v-else />
               <span class="mode-btn-label">{{ t('settings.applyMode.copy') }}</span>
             </button>
             <button
@@ -308,8 +308,8 @@ onMounted(loadPrefs)
               :disabled="applyModeBusy"
               @click="onApplyModeChange('symlink')"
             >
-              <Icon icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'symlink'" />
-              <Icon icon="mdi:link-variant" width="16" height="16" class="mode-btn-icon" v-else />
+              <IconPark icon="mdi:check-circle" width="16" height="16" class="mode-btn-icon" v-if="applyMode === 'symlink'" />
+              <IconPark icon="mdi:link-variant" width="16" height="16" class="mode-btn-icon" v-else />
               <span class="mode-btn-label">{{ t('settings.applyMode.symlink') }}</span>
             </button>
           </div>
@@ -318,11 +318,11 @@ onMounted(loadPrefs)
 
       <!-- 切换提示 -->
       <div v-if="langHint" class="hint-box lang-hint">
-        <Icon icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
+        <IconPark icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
         <span>{{ langHint }}</span>
       </div>
       <div v-if="applyModeHint" class="hint-box lang-hint apply-mode-hint">
-        <Icon icon="mdi:information" width="14" height="14" class="hint-icon" />
+        <IconPark icon="mdi:information" width="14" height="14" class="hint-icon" />
         <span style="white-space: pre-line">{{ applyModeHint }}</span>
       </div>
     </section>
@@ -331,14 +331,14 @@ onMounted(loadPrefs)
     <section v-if="isDesktop" class="card">
       <header class="card-header">
         <h3>
-          <Icon icon="mdi:desktop-classic" width="18" height="18" />
+          <IconPark icon="mdi:desktop-classic" width="18" height="18" />
           {{ t('settings.desktop.title') }}
           <span class="card-sub">— {{ t('settings.desktop.subtitle') }}</span>
         </h3>
       </header>
 
       <div v-if="!prefsSupported" class="error-box">
-        <Icon icon="mdi:alert-circle-outline" width="16" height="16" />
+        <IconPark icon="mdi:alert-circle-outline" width="16" height="16" />
         {{ t('settings.prefsUnavailable') }}
       </div>
 
@@ -413,15 +413,15 @@ onMounted(loadPrefs)
             <div class="pref-hint">{{ t('settings.testNotifyHint') }}</div>
           </div>
           <button class="primary" @click="testNotify">
-            <Icon icon="mdi:bell-ring-outline" width="14" height="14" />
+            <IconPark icon="mdi:bell-ring-outline" width="14" height="14" />
             {{ t('settings.btnTestNotify') }}
           </button>
         </div>
 
         <!-- 保存提示 -->
         <div v-if="saveHint || notifyTest" class="hint-box">
-          <Icon v-if="saveHint" icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
-          <Icon v-if="notifyTest" icon="mdi:information" width="14" height="14" class="hint-icon" />
+          <IconPark v-if="saveHint" icon="mdi:check-circle" width="14" height="14" class="hint-icon hint-success" />
+          <IconPark v-if="notifyTest" icon="mdi:information" width="14" height="14" class="hint-icon" />
           <span>{{ saveHint || notifyTest }}</span>
         </div>
       </div>
@@ -430,7 +430,7 @@ onMounted(loadPrefs)
     <!-- Web 端提示 -->
     <section v-else class="card">
       <div class="empty-state">
-        <Icon icon="mdi:monitor-dashboard" width="48" height="48" />
+        <IconPark icon="mdi:monitor-dashboard" width="48" height="48" />
         <p class="empty-title">{{ t('settings.webOnlyHint') }}</p>
       </div>
     </section>

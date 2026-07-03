@@ -12,7 +12,7 @@
 
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import OnboardingView from '@/views/OnboardingView.vue'
 import LocalImportPanel from '@/components/LocalImportPanel.vue'
@@ -47,7 +47,7 @@ function onDone(result) {
     @update:model-value="(v) => emit('update:modelValue', v)"
   >
     <template #title-icon>
-      <Icon icon="mdi:tray-arrow-down" width="18" height="18" />
+      <IconPark icon="mdi:tray-arrow-down" width="18" height="18" />
     </template>
 
     <!-- 顶部 tab 切换 -->
@@ -59,7 +59,7 @@ function onDone(result) {
         :class="['oid-tab', { active: tab === 'scan' }]"
         @click="tab = 'scan'"
       >
-        <Icon icon="mdi:magnify-scan" width="14" height="14" />
+        <IconPark icon="mdi:magnify-scan" width="14" height="14" />
         {{ t('onboarding.tabs.scan') }}
       </button>
       <button
@@ -69,7 +69,7 @@ function onDone(result) {
         :class="['oid-tab', { active: tab === 'local' }]"
         @click="tab = 'local'"
       >
-        <Icon icon="mdi:folder-download-outline" width="14" height="14" />
+        <IconPark icon="mdi:folder-download-outline" width="14" height="14" />
         {{ t('onboarding.tabs.local') }}
       </button>
     </div>

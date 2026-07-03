@@ -29,7 +29,7 @@
  *   折叠时缩进(分组)不影响 skill 卡片视觉。
  */
 import { computed } from 'vue'
-import { Icon } from '@iconify/vue'
+import { Icon } from '@/components/IconPark.vue'
 
 const props = defineProps({
   // 当前节点的 children 列表(从树根传入)
@@ -270,7 +270,7 @@ function isDropTarget(node) {
                 height="10"
                 class="tree-tool-chip-img"
               />
-              <Icon v-else :icon="toolIcon(tid)" width="10" height="10" />
+              <IconPark v-else :icon="toolIcon(tid)" width="10" height="10" />
               <span>{{ toolShort(tid) }}</span>
             </span>
           </div>
