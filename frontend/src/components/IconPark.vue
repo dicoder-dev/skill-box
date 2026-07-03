@@ -34,7 +34,7 @@ const props = defineProps({
   height:      { type: [Number, String], default: null },
   theme:       { type: String, default: 'outline' },
   fill:        { type: [String, Array], default: () => ['currentColor'] },
-  strokeWidth: { type: Number, default: 4 },
+  strokeWidth: { type: Number, default: 2 },
   spin:        { type: Boolean, default: false },
 })
 

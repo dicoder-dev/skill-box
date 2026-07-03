@@ -215,7 +215,7 @@ function finish() {
           :key="i"
           :class="r.ok ? 'lip-row-ok' : 'lip-row-err'"
         >
-          <Icon
+          <IconPark
             :icon="r.ok ? 'mdi:check' : 'mdi:close-circle-outline'"
             width="14"
             height="14"

@@ -216,13 +216,13 @@ function isDropTarget(node) {
         @contextmenu="onContextMenu(node, $event)"
         @dragstart="onDragStart(node, $event)"
       >
-        <Icon
+        <IconPark
           :icon="isCollapsed(node) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
           width="16"
           height="16"
           class="tree-caret"
         />
-        <Icon
+        <IconPark
           :icon="isCollapsed(node) ? 'mdi:folder-outline' : 'mdi:folder-open-outline'"
           width="18"
           height="18"

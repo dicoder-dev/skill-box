@@ -489,7 +489,7 @@ onMounted(reload)
             </div>
             <div class="project-card-actions">
               <!-- 直接用 Icon 标签,@click 绑逻辑,不用 button 包裹 -->
-              <Icon
+              <IconPark
                 icon="mdi:folder-outline"
                 class="action-icon action-icon-finder"
                 :title="t('projects.openInFinder')"
@@ -497,7 +497,7 @@ onMounted(reload)
                 height="14"
                 @click.stop="openInFinder(p)"
               />
-              <Icon
+              <IconPark
                 icon="mdi:pencil-outline"
                 class="action-icon action-icon-edit"
                 :title="t('projects.btnEdit')"
@@ -505,7 +505,7 @@ onMounted(reload)
                 height="14"
                 @click.stop="startEdit(p)"
               />
-              <Icon
+              <IconPark
                 icon="mdi:delete-outline"
                 class="action-icon action-icon-danger"
                 :title="t('common.delete')"

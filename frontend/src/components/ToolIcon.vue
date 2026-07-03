@@ -62,7 +62,7 @@ const mdiIcon = computed(() => {
     :alt="tool?.display_name || tool?.tool_id || 'tool icon'"
     class="tool-icon-img"
   />
-  <Icon
+  <IconPark
     v-else
     :icon="mdiIcon"
     :width="size"

@@ -328,7 +328,7 @@ onMounted(async () => {
             {{ formatRelative(t_item.updated_at) }}
           </span>
           <div class="tool-card-actions" @click.stop>
-            <Icon
+            <IconPark
               icon="mdi:square-edit-outline"
               class="action-icon action-icon-edit"
               :title="t('tools.btnEdit')"
@@ -336,7 +336,7 @@ onMounted(async () => {
               height="14"
               @click="tools.openEdit(t_item)"
             />
-            <Icon
+            <IconPark
               v-if="!t_item.is_system"
               icon="mdi:trash-can"
               class="action-icon action-icon-danger"
@@ -345,7 +345,7 @@ onMounted(async () => {
               height="14"
               @click="tools.askDelete(t_item)"
             />
-            <Icon
+            <IconPark
               v-else
               icon="mdi:lock-outline"
               class="action-icon action-icon-locked"
@@ -374,7 +374,7 @@ onMounted(async () => {
       :close-on-mask="!tools.saving"
     >
       <template #title-icon>
-        <Icon
+        <IconPark
           :icon="tools.formMode === 'create' ? 'mdi:plus-box' : 'mdi:square-edit-outline'"
           width="18"
           height="18"
@@ -439,7 +439,7 @@ onMounted(async () => {
                   alt="icon"
                   class="icon-preview-img"
                 />
-                <Icon
+                <IconPark
                   v-else
                   icon="mdi:image-off-outline"
                   width="22"
@@ -596,7 +596,7 @@ onMounted(async () => {
                   />
                 </td>
                 <td class="paths-action-cell">
-                  <Icon
+                  <IconPark
                     icon="mdi:trash-can"
                     class="action-icon action-icon-danger"
                     :title="t('common.delete')"

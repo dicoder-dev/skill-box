@@ -2064,7 +2064,7 @@ onUnmounted(() => {
                     v-if="selectedToolBusy(tg)"
                     class="spinner spinner-sm chip-spinner"
                   ></span>
-                  <Icon
+                  <IconPark
                     v-else
                     :icon="tg.scope === 'global' ? 'mdi:earth' : 'mdi:folder-outline'"
                     width="12"
@@ -2072,7 +2072,7 @@ onUnmounted(() => {
                   />
                   <span>{{ tg.project_label }}</span>
                   <span v-if="selectedToolHitExists(tg)" class="chip-mini-list">
-                    <Icon
+                    <IconPark
                       :icon="toolIcon(selectedToolID)"
                       width="10"
                       height="10"
@@ -2512,7 +2512,7 @@ onUnmounted(() => {
       :close-on-mask="!deleteBusy"
     >
       <template #title-icon>
-        <Icon
+        <IconPark
           :icon="deleteTarget?.kind === 'group' ? 'mdi:folder-remove-outline' : 'mdi:delete'"
           width="18"
           height="18"
