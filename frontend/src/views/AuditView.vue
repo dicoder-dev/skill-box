@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { listAuditLogs, getAuditStats } from '@/api/skillbox/audit'
 
 const { t } = useI18n()

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, provide, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'

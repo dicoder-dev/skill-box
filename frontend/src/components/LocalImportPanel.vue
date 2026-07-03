@@ -14,7 +14,7 @@
 
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
 import { runOnboardingImportLocal, runOnboardingImportZipBytes } from '@/api/skillbox/onboarding'
 import { useToastStore } from '@/core/store/toast'

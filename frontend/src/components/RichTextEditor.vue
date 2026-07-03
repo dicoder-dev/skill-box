@@ -11,7 +11,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { htmlToMarkdown } from '@/core/utils/html_to_markdown.js'
 

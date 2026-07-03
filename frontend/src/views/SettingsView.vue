@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, watch, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
 import { setLocale, getLocale } from '@/core/i18n'

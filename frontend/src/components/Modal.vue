@@ -7,7 +7,7 @@
  * - 暴露 header / body / footer 三个 slot
  */
 import { watch, onBeforeUnmount } from 'vue'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

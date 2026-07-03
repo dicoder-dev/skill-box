@@ -9,7 +9,7 @@
 
 import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
 import { listSkills } from '@/api/skillbox/skills'
 import { platform } from '@/platform'

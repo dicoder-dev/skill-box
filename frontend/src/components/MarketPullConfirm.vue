@@ -25,7 +25,7 @@
 
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import { useSkillTreeStore } from '@/core/store/skill-tree'
 import { createGroup as apiCreateGroup } from '@/api/skillbox/skills'

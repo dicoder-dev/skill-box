@@ -12,7 +12,7 @@
 
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import OnboardingView from '@/views/OnboardingView.vue'
 import LocalImportPanel from '@/components/LocalImportPanel.vue'

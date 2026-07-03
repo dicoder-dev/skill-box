@@ -19,7 +19,7 @@
  *   />
  */
 import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 
 const props = defineProps({
   x: { type: Number, required: true },

@@ -12,7 +12,7 @@
 // 不引入第三方 ui 库,沿用项目 --success / --danger / --accent-blue 变量。
 
 import { useToastStore } from '@/core/store/toast'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 
 const toast = useToastStore()
 

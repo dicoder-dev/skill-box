@@ -13,7 +13,7 @@
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
@@ -1479,8 +1479,16 @@ async function openSkillInFolder(node) {
     sp = current.value._full?.canonical?.source_path || current.value._full?.source_path || ''
   }
   if (!sp) {
-    // 没选中(或选了别的)— 走 store root + path 兜底(可能不准确,但能给个大概位置)
-    sp = `${skillTree.tree?.length ? '' : ''}${node.path}`
+    // 2026-07-03 改:用 storeRoot + node.path(相对路径)拼绝对路径。
+    // 旧版 ${skillTree.tree?.length ? '' : ''}${node.path} 三元两段都是空串,
+    // 实际只传了相对路径,后端 fsutil.Reveal 收到非绝对路径 → os.Stat 失败 500。
+    const root = skillTree.storeRoot || ''
+    if (root && node.path) {
+      sp = `${root}/${node.path}`
+    } else {
+      // storeRoot 未拉取(罕见)— 走旧逻辑兜底,至少不丢调用
+      sp = node.path || ''
+    }
   }
   if (!sp) {
     toast.error(t('skills.list.skillOpenFolderFailed', { msg: 'no source path' }))
@@ -1498,12 +1506,17 @@ async function openSkillInFolder(node) {
 }
 
 async function openGroupInFolder(groupPath) {
-  // 拼 store root + groupPath — 详情区的 current._full 不知道分组;走 store root + path
-  // 但 store 不知道 root。简化:仅在桌面端通过 platform.fs.reveal 尝试,失败给 toast。
-  // P2:暴露 store root 给前端。这里给个友好兜底。
-  const path = groupPath || ''
+  // 2026-07-03 改:用 storeRoot + groupPath 拼绝对路径。groupPath 为空时
+  // 直接 reveal storeRoot(根区域)。storeRoot 未拉取时走旧逻辑兜底。
+  const root = skillTree.storeRoot || ''
+  let abs
+  if (root) {
+    abs = groupPath ? `${root}/${groupPath}` : root
+  } else {
+    abs = groupPath || '.'
+  }
   try {
-    const r = await platform.fs.reveal(path || '.')
+    const r = await platform.fs.reveal(abs)
     if (r && r.ok === false && r.fallbackUrl) {
       platform.platform.openExternal(r.fallbackUrl)
     }

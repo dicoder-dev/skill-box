@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { listProjects, createProject, updateProject, deleteProject, scanProject } from '@/api/skillbox/projects'
 import { platform } from '@/platform'
 import { formatRelative } from '@/core/utils/time.js'

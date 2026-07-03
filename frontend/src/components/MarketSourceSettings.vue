@@ -10,7 +10,7 @@
 
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 import { useMarketStore } from '@/core/store/market'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'

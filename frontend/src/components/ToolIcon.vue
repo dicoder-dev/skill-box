@@ -21,7 +21,7 @@
 // 那些留在 call site 用 flex / grid 自己拼。
 
 import { computed } from 'vue'
-import { Icon } from '@/components/IconPark.vue'
+import IconPark from '@/components/IconPark.vue'
 
 const props = defineProps({
   tool: { type: Object, required: true },
