@@ -148,7 +148,18 @@ async function onIconFileChosen(e) {
 
 function pickIconFile() {
   // 通过 ref 直接拿 input,绕开 label-for + Teleport 的不确定性
-  if (iconFileInputRef.value) iconFileInputRef.value.click()
+  // 2026-07-03 调试:加日志确认 click 是否真的进了这个函数 + ref 是否拿到了 input
+  // eslint-disable-next-line no-console
+  console.log('[tools] pickIconFile called', {
+    hasRef: !!iconFileInputRef.value,
+    disabledBtn: tools.saving || uploadingToolFlag,
+    formOpen: tools.formOpen,
+  })
+  if (iconFileInputRef.value) {
+    iconFileInputRef.value.click()
+    // eslint-disable-next-line no-console
+    console.log('[tools] input.click() invoked')
+  }
 }
 
 function clearIconFile() {
