@@ -126,6 +126,20 @@ func (a *Adapter) SourceID() string    { return skillmarket.SourceSkillsSH }
 func (a *Adapter) DisplayName() string { return "skills.sh" }
 func (a *Adapter) BaseURL() string     { return defaultBaseURL }
 
+// KnownFallbackIDs 2026-07-03 增:返回 knownCatalogFallback 列表的 RemoteID 集合。
+//
+// 注意:knownCatalogFallback 是文本,这里解析时复用 parseCatalog 走"remote_id | author | description"
+// 拆分,只取第一段 remote_id。
+func (a *Adapter) KnownFallbackIDs() []string {
+	// 不依赖 baseURL(只取 slug,无需 detail_url),用占位避免空指针。
+	items := parseCatalog(knownCatalogFallback, defaultBaseURL)
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.RemoteID)
+	}
+	return out
+}
+
 // Discover 解析 catalog 页,提取 (owner/repo, skill) 列表。
 //
 // 2026-07-01 改:三段式 —

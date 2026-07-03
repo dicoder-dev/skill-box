@@ -50,6 +50,10 @@ func (s *stubAdapter) Download(ctx context.Context, baseURL, remoteID string) (*
 	}, nil
 }
 
+// KnownFallbackIDs 2026-07-03 增:测试 stub 不内置兜底,返 nil 让 orchestrator
+// 永远判定 source="remote"。
+func (s *stubAdapter) KnownFallbackIDs() []string { return nil }
+
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	r := &skillmarket.Registry{}
 	a := &stubAdapter{id: "stub", display: "Stub"}

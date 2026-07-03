@@ -44,6 +44,16 @@ function onSearch() {
   market.loadSkills()
 }
 
+// 2026-07-03 增:常驻重试按钮回调,触发 loadSkills 再次拉取。
+// 保留 try/catch:失败时 store 已设 remoteUnavailable,UI 自动回到 banner 状态。
+async function onRetryRemote() {
+  try {
+    await market.loadSkills()
+  } catch (_e) {
+    // 错误已在 store 里设好,banner 继续显示
+  }
+}
+
 async function onSelectSource(id) {
   // 2026-07-01 改:全走 API 后每次切源都重新打远端(纯 API,无缓存判断)。
   market.setSourceActive(id)
@@ -141,6 +151,23 @@ onMounted(async () => {
     </header>
 
     <div class="card">
+      <!-- 2026-07-03 增:三方源不可达 banner。
+           只在 store.remoteUnavailable=true 时显示。包含:
+           - 提示信息(说明当前展示的就是推荐/兜底列表)
+           - 常驻重试按钮(loadSkills 重拉)
+           放在工具栏上方,显眼但不高过主搜索条,避免打断搜索流程。 -->
+      <div v-if="market.remoteUnavailable" class="market-remote-banner">
+        <Icon icon="mdi:cloud-off-outline" width="16" height="16" class="banner-icon" />
+        <div class="banner-text">
+          <strong>{{ t('market.remoteUnavailable.title') }}</strong>
+          <span>{{ t('market.remoteUnavailable.hint', { source: market.activeSource?.name || '' }) }}</span>
+        </div>
+        <button class="ghost banner-retry" :disabled="loading" @click="onRetryRemote">
+          <Icon icon="mdi:refresh" width="14" height="14" />
+          {{ t('market.remoteUnavailable.retry') }}
+        </button>
+      </div>
+
       <!-- 工具栏 -->
       <div class="toolbar">
         <div class="toolbar-center">
@@ -468,6 +495,60 @@ onMounted(async () => {
   box-shadow: var(--shadow-card);
   padding: 20px;
   transition: all 0.3s ease;
+}
+
+/* 2026-07-03 增:三方源不可达 banner。
+   主题色沿用市场海蓝,但降低饱和度 + 浅底 + 警示色 icon,
+   不抢主搜索区焦点。 */
+.market-remote-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--mkt-bg);
+  border: 1px solid var(--mkt-border);
+  border-left: 3px solid var(--mkt-primary);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.market-remote-banner .banner-icon {
+  color: var(--mkt-primary);
+  flex-shrink: 0;
+}
+.market-remote-banner .banner-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.market-remote-banner .banner-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mkt-text);
+}
+.market-remote-banner .banner-text span {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.market-remote-banner .banner-retry {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-card);
+  border-color: var(--mkt-border);
+  color: var(--mkt-text);
+}
+.market-remote-banner .banner-retry:hover:not(:disabled) {
+  background: var(--mkt-bg-strong);
+  border-color: var(--mkt-primary);
+  color: var(--mkt-text);
 }
 
 /* 工具栏 */

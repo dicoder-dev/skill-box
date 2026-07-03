@@ -79,13 +79,19 @@ type Adapter struct {
 	httpClient *http.Client
 	// 2026-07-01 增:区分"拉 Location"和"拉 body"的 client(默认不 follow redirect)
 	noRedirectClient *http.Client
+	// 2026-07-03 增:全量目录 Discover 用的硬截止时间。
+	// skillhub 国内服务器不稳定,4 worker 并发翻页经常单页 5–30s 才回;
+	// 用 8s 兜底后,UI 8s 内必然拿到 fallback,不再卡到 ctx=90s。
+	discoverHardDeadline time.Duration
 }
 
 // New 构造 Adapter(用 httpx 长生命周期客户端, 跨多次翻页复用 TLS 连接)。
 func New() *Adapter {
 	return &Adapter{
-		httpClient:       httpx.NewClient(30 * time.Second),
-		noRedirectClient: httpx.NewNoRedirectClient(30 * time.Second),
+		httpClient:       httpx.NewClient(8 * time.Second),
+		noRedirectClient: httpx.NewNoRedirectClient(8 * time.Second),
+		// 2026-07-03 增:全量目录 Discover 8s 硬截止;与单页超时独立。
+		discoverHardDeadline: 8 * time.Second,
 	}
 }
 
@@ -102,8 +108,9 @@ func NewWithClient(c *http.Client) *Adapter {
 	noRedirect := *c
 	noRedirect.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	return &Adapter{
-		httpClient:       c,
-		noRedirectClient: &noRedirect,
+		httpClient:           c,
+		noRedirectClient:     &noRedirect,
+		discoverHardDeadline: 8 * time.Second,
 	}
 }
 
@@ -111,20 +118,31 @@ func NewWithClient(c *http.Client) *Adapter {
 // 用于 zip flow 测试:noRedirect 走 fakeRT,httpClient 走真实 httptest.NewServer 拉 zip)。
 func NewWithClients(noRedirect, normal *http.Client) *Adapter {
 	if noRedirect == nil {
-		noRedirect = httpx.NewNoRedirectClient(30 * time.Second)
+		noRedirect = httpx.NewNoRedirectClient(8 * time.Second)
 	}
 	if normal == nil {
-		normal = httpx.NewClient(30 * time.Second)
+		normal = httpx.NewClient(8 * time.Second)
 	}
 	return &Adapter{
-		httpClient:       normal,
-		noRedirectClient: noRedirect,
+		httpClient:           normal,
+		noRedirectClient:     noRedirect,
+		discoverHardDeadline: 8 * time.Second,
 	}
 }
 
 func (a *Adapter) SourceID() string    { return skillmarket.SourceSkillhub }
 func (a *Adapter) DisplayName() string { return "SkillHub" }
 func (a *Adapter) BaseURL() string     { return defaultBaseURL }
+
+// KnownFallbackIDs 2026-07-03 增:返回 knownFallback 列表的 RemoteID 集合,
+// 让 orchestrator 能识别"当前返回的就是兜底"。
+func (a *Adapter) KnownFallbackIDs() []string {
+	out := make([]string, 0, len(knownFallback))
+	for _, it := range knownFallback {
+		out = append(out, it.RemoteID)
+	}
+	return out
+}
 
 // apiListResp /api/skills 列表响应。
 // 2026-07-01 增:对接真实 API 响应结构。
@@ -200,17 +218,29 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 	// 2026-07-02 改:worker pool 并发=4,串行翻页在 40000 条场景慢到 30s+;
 	// 并发后单页 ~200ms × ceil(N/4) ≈ 几秒。
 	//
+	// 2026-07-03 增:8s hard deadline 子 ctx。
+	// skillhub 国内服务器常单页 5–30s 才回;之前的 90s ctx 让 UI 长时间假死。
+	// 8s 内拿多少算多少 + 累计 0 条就走 knownFallback,UI 永远不空。
+	//
 	// 实现要点:
 	//   - pageCh / resultCh 都缓冲 = maxConcurrency,避免 worker 写 resultCh 阻塞
 	//   - producer 派发:被 stop / ctx 取消 / 派完触发时退出 → close(pageCh) → worker 自动退出
 	//   - 收集器读完 resultCh → 等 producer 退出 → 返回
-	//   - 退出条件:①单页 err ②totalHint 收齐 ③本页<pageSize ④added==0
+	//   - 退出条件:①单页 err ②totalHint 收齐 ③本页<pageSize ④added==0 ⑤子 ctx 到期
 	seen := make(map[string]struct{}, defaultPageSize*4)
 	var seenMu sync.Mutex
 	out := make([]skillmarket.MarketItem, 0, defaultPageSize*4)
 	var outMu sync.Mutex
 	totalHint := -1 // 0 = API 没回 total 字段;>0 = 上限
 	var totalMu sync.Mutex
+
+	// 2026-07-03 增:派生 8s hard deadline 子 ctx,覆盖在外部 ctx 之上。
+	deadline := a.discoverHardDeadline
+	if deadline <= 0 {
+		deadline = 8 * time.Second
+	}
+	hardCtx, hardCancel := context.WithTimeout(ctx, deadline)
+	defer hardCancel()
 
 	// stop 标志 + stopCh(select 用,设上后立即让 producer 退出)
 	var stopFlag bool
@@ -246,7 +276,7 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 			u = fmt.Sprintf("%s/api/skills?page=%d&pageSize=%d",
 				trimBase, page, defaultPageSize)
 		}
-		body, err := a.fetchBody(ctx, u)
+		body, err := a.fetchBody(hardCtx, u)
 		if err != nil {
 			return pageResult{page: page, err: err}
 		}
@@ -282,7 +312,9 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 		close(resultCh)
 	}()
 
-	// producer: 派发 page, 直到 stop / ctx 取消
+	// producer: 派发 page, 直到 stop / 硬截止 ctx 取消
+	// 2026-07-03 改:ctx 改成 hardCtx — 8s 硬截止到点后自动触发退出,
+	// 不再等外部 ctx(可能 90s)取消。
 	producerDone := make(chan struct{})
 	go func() {
 		defer close(pageCh)
@@ -291,15 +323,15 @@ func (a *Adapter) Discover(ctx context.Context, baseURL, keyword string) ([]skil
 			if isStop() {
 				return
 			}
-			if cerr := ctx.Err(); cerr != nil {
+			if cerr := hardCtx.Err(); cerr != nil {
 				return
 			}
-			// select 三选一:成功 send / stopCh 关闭 / ctx 取消
+			// select 四选一:成功 send / stopCh 关闭 / 硬截止 ctx 取消
 			select {
 			case pageCh <- page:
 			case <-stopCh:
 				return
-			case <-ctx.Done():
+			case <-hardCtx.Done():
 				return
 			}
 		}

@@ -395,6 +395,14 @@ const messages = {
     emptyAfter: '没找到匹配的 skill',
     emptyAfterHint: '换个关键词,或切到其他源试试',
     loading: '加载中…',
+    // 2026-07-03 增:三方源不可达 banner 文案。
+    // 触发条件:后端 controller 检测 ctx 超时 / 网络层错误,返 502 + market_remote_unreachable 前缀;
+    // 前端 fetch 直接 Failed to fetch 时也归到这一类。展示成"不可达"而非"超时",让用户理解是远端问题。
+    remoteUnavailable: {
+      title: '三方源暂时不可达',
+      hint: '显示来自 {source} 的推荐条目,稍后自动恢复或点重试再拉真实数据。',
+      retry: '重试',
+    },
     // 2026-06-30 增
     allSources: '全部源',
     filterAll: '全部',

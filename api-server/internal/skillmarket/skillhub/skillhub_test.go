@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeRT 自定义 http.RoundTripper,不监听端口(沙盒限制)。
@@ -596,10 +597,19 @@ func TestNewWithClient_NilFallsBack(t *testing.T) {
 	}
 }
 
-func TestNew_Default30s(t *testing.T) {
+// TestNew_DefaultTimeout 2026-07-03 改:httpx 默认 client 单次超时从 30s → 8s,
+// 因为 skillhub 国内服务器常 5–30s 才回单页,8s hard deadline 下,
+//
+// 单页超时也必须短,否则 ctx 取消但 client 还在等单页响应,实际不会 8s 返回。
+//
+// (旧名字 TestNew_Default30s 也更新语义。)
+func TestNew_DefaultTimeout(t *testing.T) {
 	a := New()
-	if a.httpClient.Timeout != 30*1e9 {
-		t.Errorf("timeout should be 30s, got %v", a.httpClient.Timeout)
+	if a.httpClient.Timeout != 8*time.Second {
+		t.Errorf("timeout should be 8s, got %v", a.httpClient.Timeout)
+	}
+	if a.discoverHardDeadline != 8*time.Second {
+		t.Errorf("discover hard deadline should be 8s, got %v", a.discoverHardDeadline)
 	}
 }
 

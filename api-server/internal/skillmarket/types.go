@@ -82,6 +82,12 @@ type MarketAdapter interface {
 	// Download 拉到本地:返回 canonical,以及(可选)写好的本地目录。
 	// 实现侧负责把 source-specific 格式(单个 SKILL.md / tarball / 目录树)转成 canonical。
 	Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error)
+
+	// KnownFallbackIDs 2026-07-03 增:返回 adapter 内置兜底列表的 RemoteID 集合。
+	// orchestrator 用此判断 Discover 返回的 items 是否完全等于兜底列表,
+	// 从而告诉上层"这是 fallback,不是真实数据"。
+	// 返回 nil/空表示该 adapter 无兜底概念(理论上不会有,留接口兼容)。
+	KnownFallbackIDs() []string
 }
 
 // SanitizeSourceName 把 source.name 规范成 ^[a-z][a-z0-9_-]{1,63}$。

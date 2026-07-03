@@ -511,6 +511,11 @@ type ListSkillsWithInstalledResult struct {
 	Page      int                   `json:"page"`
 	Size      int                   `json:"size"`
 	Installed map[string]bool       `json:"installed"` // name -> exists
+	// 2026-07-03 增:数据来源标记。
+	//   - "remote":真实打三方源成功
+	//   - "fallback":打三方源失败,返回的是 adapter 内置兜底列表
+	// 前端按此显示"远端不可达 banner"或隐藏,让用户知道当前列表是推荐而非真实数据。
+	Source string `json:"source"`
 }
 
 // ListSkillsWithInstalled 列出市场 skill + 标注本地是否已安装。
@@ -544,6 +549,7 @@ func (s *Service) ListSkillsWithInstalled(q ListSkillsQuery) (*ListSkillsWithIns
 		Page:      base.Page,
 		Size:      base.Size,
 		Installed: installed,
+		Source:    "remote",
 	}, nil
 }
 
@@ -560,12 +566,16 @@ func (s *Service) ListSkillsWithInstalled(q ListSkillsQuery) (*ListSkillsWithIns
 // skillhub 走 /api/skills?keyword= 直接拿搜索结果。
 //
 // 超时:60s(继承 controller 的 ctx timeout)。
+//
+// 2026-07-03 增:返回 source 标记 ("remote" / "fallback"),让前端按此显示 banner;
+// fallback 触发条件 — adapter 内部 err 后返回 knownFallback(0 条真实 + 兜底条目),
+// 此时 ctx 提前结束但 controller 仍返 200 + items,前端必须能区分"真实数据"和"兜底"。
 func (s *Service) ListSkillsRemote(ctx context.Context, q ListSkillsQuery) (*ListSkillsWithInstalledResult, error) {
 	src, err := s.sourceModel().FindOneById(q.SourceID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %d", ErrSourceNotFound, q.SourceID)
 	}
-	items, derr := s.orchestrator().DiscoverFromSource(ctx, q.SourceID, q.Keyword)
+	items, source, derr := s.orchestrator().DiscoverFromSourceWithMeta(ctx, q.SourceID, q.Keyword)
 	if derr != nil {
 		return nil, derr
 	}
@@ -608,6 +618,7 @@ func (s *Service) ListSkillsRemote(ctx context.Context, q ListSkillsQuery) (*Lis
 		Page:      page,
 		Size:      size,
 		Installed: installed,
+		Source:    source,
 	}, nil
 }
 

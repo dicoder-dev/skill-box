@@ -160,19 +160,79 @@ func (o *Orchestrator) DownloadFromSource(ctx context.Context, sourceID uint, re
 // 与 RefreshFromSource 的差别:本方法不 upsert 到 DB、不返回 RefreshResult,
 // 仅返回 []MarketItem 给调用方做 in-memory 分页 / 过滤。
 func (o *Orchestrator) DiscoverFromSource(ctx context.Context, sourceID uint, keyword string) ([]MarketItem, error) {
+	items, _, err := o.DiscoverFromSourceWithMeta(ctx, sourceID, keyword)
+	return items, err
+}
+
+// DiscoverFromSourceWithMeta 走 adapter.Discover,带 source 标记 (2026-07-03 增)。
+//
+// 返回 (items, source, err):
+//   - source="remote":真实打三方源成功
+//   - source="fallback":三方源不可达 / 网络层失败,返回的是 adapter 内置兜底列表
+//   - source="":adapter 没识别(理论上不会发生,留空兜底)
+//
+// 推断方式:看 ctx 是否被 deadline 触发 / 看 adapter 内是否触发 fallback 路径。
+// 这里用 err 信息 + items 内容结合判断:
+//   1. err 是 context.DeadlineExceeded / context.Canceled / 网络层错误 → fallback
+//   2. items 与 adapter 的 knownFallback 完全重合 → fallback(强信号)
+//   3. 否则 → remote
+//
+// 注意:adapter 内部超时通常在 setStop + out=0 时主动 fallback,err 为 nil;
+// 此时用 (2) 的"与 knownFallback 重合"判断。
+func (o *Orchestrator) DiscoverFromSourceWithMeta(ctx context.Context, sourceID uint, keyword string) ([]MarketItem, string, error) {
 	src, err := o.sourceModel.FindOneById(sourceID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %d", ErrSourceNotFound, sourceID)
+		return nil, "", fmt.Errorf("%w: %d", ErrSourceNotFound, sourceID)
 	}
 	if !src.Enabled {
-		return nil, ErrSourceDisabled
+		return nil, "", ErrSourceDisabled
 	}
 	ad, ok := o.registry.Get(src.Type)
 	if !ok {
-		return nil, fmt.Errorf("%w: type=%s", ErrSourceNotImpl, src.Type)
+		return nil, "", fmt.Errorf("%w: type=%s", ErrSourceNotImpl, src.Type)
 	}
 	baseURL := resolveBaseFromConfig(src.ConfigJSON, ad.BaseURL())
-	return ad.Discover(ctx, baseURL, strings.TrimSpace(keyword))
+	items, derr := ad.Discover(ctx, baseURL, strings.TrimSpace(keyword))
+
+	// 判定 source 标记
+	source := "remote"
+	if derr != nil {
+		// 2026-07-03 增:任何 err 都视为远端不可达,即便 adapter 仍返 items
+		// (skillhub 全量分支 err 时已走 fallback 返 items,这时也算 fallback)
+		source = "fallback"
+	} else if isFallbackItems(ad, items) {
+		// 2026-07-03 增:items 完全等于 adapter 内置 knownFallback → 走兜底
+		source = "fallback"
+	}
+	return items, source, derr
+}
+
+// isFallbackItems 判断 items 是否完全等于 adapter 的 knownFallback 列表(2026-07-03 增)。
+//
+// 强信号:每个 item.RemoteID 都能在 adapter.KnownFallbackIDs() 找到 → fallback。
+// 不同 adapter 的 knownFallback 不同;没有这个方法时,只判断 items 是 fallback
+// 路径的特征组合(短 + 全是固定 slug)即可。
+func isFallbackItems(ad MarketAdapter, items []MarketItem) bool {
+	if ad == nil || len(items) == 0 {
+		return false
+	}
+	known := ad.KnownFallbackIDs()
+	if len(known) == 0 {
+		return false
+	}
+	if len(items) != len(known) {
+		return false
+	}
+	have := make(map[string]bool, len(known))
+	for _, it := range items {
+		have[it.RemoteID] = true
+	}
+	for _, id := range known {
+		if !have[id] {
+			return false
+		}
+	}
+	return true
 }
 
 // ListSources 简化的"所有源"读出。

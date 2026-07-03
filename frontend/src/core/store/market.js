@@ -23,7 +23,7 @@ import {
   updateMarketSource,
 } from '@/api/skillbox/market'
 import { listProjects } from '@/api/skillbox/projects'
-import { TimeoutError } from '@/core/utils/requests/errors'
+import { HttpError, TimeoutError } from '@/core/utils/requests/errors'
 
 export const useMarketStore = defineStore('market', {
   state: () => ({
@@ -51,6 +51,20 @@ export const useMarketStore = defineStore('market', {
     // 状态
     // 2026-07-01 简化:每次都打远端,只剩 loading 单 flag(取代旧 refreshing)。
     loading: false,
+
+    // 2026-07-03 增:三方源不可达状态。
+    // 后端 controller 检测到 ctx 超时 / 网络层错误时返 502 + "market_remote_unreachable" 前缀,
+    // 这里识别后:
+    //   - remoteUnavailable=true → MarketView 顶部展示 banner + 常驻重试按钮
+    //   - lastError 留空(banner 代替 lastError)
+    //   - skills 可以保留上一次成功的数据(避免空白闪烁),也可保持当前
+    remoteUnavailable: false,
+    // 2026-07-03 增:当前响应数据来源标记。
+    //   - 'remote' :真实打三方源成功(默认)
+    //   - 'fallback':三方源不可达,后端返的是 adapter 内置兜底列表
+    // 触发 banner 显示的另一个条件 — 即便响应 200 + items,如果 source==='fallback',
+    // 也视为不可达,UI 给 banner + 重试。
+    dataSource: 'remote',
   }),
   getters: {
     activeSource(state) {
@@ -104,6 +118,7 @@ export const useMarketStore = defineStore('market', {
     async loadSkills() {
       this.loading = true
       this.lastError = ''
+      this.remoteUnavailable = false
       try {
         // listMarketSkillsRemote:走 adapter.Discover,完全不读本地缓存,
         // 响应永远是三方源最新数据;keyword 透传到三方源(skillhub 走真实搜索语义,
@@ -127,11 +142,29 @@ export const useMarketStore = defineStore('market', {
           this.skills = this.skills.filter((s) => !s.installed)
           this.total = this.skills.length
         }
+        // 2026-07-03 增:识别响应 data_source,fallback 走 banner 路径
+        // (200 + items + source=fallback → 远端不可达,UI 提示用户)
+        this.dataSource = res.source || 'remote'
+        if (this.dataSource === 'fallback') {
+          this.remoteUnavailable = true
+        }
       } catch (e) {
-        // 2026-07-01 改:远端每次都打三方,超时(90s 仍不够)是常态,翻译成中文。
-        if (e instanceof TimeoutError) {
-          this.lastError = '远端市场请求超时(90s),请稍后重试或切换源试试'
+        // 2026-07-03 改:区分"三方源不可达(502)" / "前端层超时(TimeoutError)" / "其它业务错"。
+        //
+        // 三方源不可达 → 设 remoteUnavailable,UI 显示 banner + 重试按钮(永远不空)
+        // 前端层超时  → 同样归到 remoteUnavailable(浏览器 fetch "Failed to fetch" 也是这类)
+        // 其它错误     → lastError 兜底,UI 显示普通错误提示
+        const isRemoteUnreachable =
+          (e instanceof HttpError && e.status === 502 &&
+            (e.message || '').startsWith('market_remote_unreachable')) ||
+          e instanceof TimeoutError
+        if (isRemoteUnreachable) {
+          this.remoteUnavailable = true
+          this.dataSource = 'fallback'
+          this.lastError = ''
         } else {
+          this.remoteUnavailable = false
+          this.dataSource = 'remote'
           this.lastError = e?.message || String(e)
         }
         throw e

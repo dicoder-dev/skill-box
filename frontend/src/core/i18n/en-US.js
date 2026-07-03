@@ -239,9 +239,8 @@ const messages = {
       ctxTag: 'Add tag',
       ctxDelete: 'Delete',
       ctxMoveTo: 'Move to…',
-      // 2026-07-03: home groups are single-level only.
-      groupNamePrompt: 'Enter group name (single level only, no / allowed)',
-      groupNamePromptSub: 'Enter group name (single level only, no / allowed)',
+      groupNamePrompt: 'Enter group name (use / for nested, e.g. frontend/react)',
+      groupNamePromptSub: 'Enter sub-group name',
       groupInvalid: 'Invalid group name (no .., no leading/trailing /)',
       groupCreateFailed: 'Create group failed: {msg}',
       groupDeleteConfirm: 'Delete group "{name}"?',
@@ -393,6 +392,15 @@ const messages = {
     emptyAfter: 'No matching skills found',
     emptyAfterHint: 'Try a different keyword, or switch to another source',
     loading: 'Loading…',
+    // 2026-07-03 added: remote unreachable banner copy.
+    // Triggered when backend returns 502 + "market_remote_unreachable" prefix
+    // (ctx timeout / network errors) or browser fetch fails with "Failed to fetch".
+    // Surfaced as "unreachable" rather than "timeout" so users understand it's the remote's fault.
+    remoteUnavailable: {
+      title: 'Remote source unreachable',
+      hint: 'Showing recommended items from {source}. It will recover automatically, or tap Retry to pull live data.',
+      retry: 'Retry',
+    },
     // 2026-06-30 added
     allSources: 'All sources',
     filterAll: 'All',
