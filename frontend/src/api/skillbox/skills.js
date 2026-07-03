@@ -142,3 +142,15 @@ export function moveGroup(payload) {
 export function renameGroup(payload) {
   return http.post('/api/skillbox/skills/group/rename', payload)
 }
+
+/**
+ * 拉取 skillstore 物理根目录的绝对路径。
+ * 2026-07-03 增:供首页右键"在文件夹中打开"拼绝对路径用 — 之前右键
+ * 分组 / 未选中 skill 时,前端拿不到 store root,只能把相对路径
+ * 直接传给 fsutil.Reveal,后端 os.Stat 失败 500。
+ * 响应: { store_root: "/Users/.../.skill-box/skills" }
+ * 来源: api-server/internal/gapi/controller/skillbox/cskill/get_store_info.a.go
+ */
+export function getStoreInfo() {
+  return http.get('/api/skillbox/skills/store-info')
+}

@@ -26,6 +26,7 @@ import {
   moveSkill as apiMoveSkill,
   moveGroup as apiMoveGroup,
   renameGroup as apiRenameGroup,
+  getStoreInfo as apiGetStoreInfo,
 } from '@/api/skillbox/skills'
 
 // 一个 TreeNode 的最小形态(对应后端 skillstore.TreeNode)
@@ -47,6 +48,11 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   const dropTargetPath = ref('')
   // 选中 skill 的 path(供详情区联动)
   const selectedPath = ref('')
+  // 2026-07-03 增:store 物理根目录绝对路径,首次 load 时拉一次。
+  // 用途:把 tree 节点里的相对 path(如 "frontend/code-review")还原成
+  // 绝对路径,供"在文件夹中打开"用。
+  const storeRoot = ref('')
+  const storeRootLoaded = ref(false)
 
   // 派生:扁平化(只取 skill 叶子),按 group_path 排序后,按 name 排序
   const flatItems = computed(() => {
@@ -138,6 +144,18 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     error.value = ''
     try {
       if (typeof kw === 'string') keyword.value = kw
+      // 2026-07-03 增:首次 load 时预热 storeRoot(后续 reload 不再重拉,
+      // 避免每个关键字切换都多发一次请求)。失败时打 console.warn,不影响 tree 加载。
+      if (!storeRootLoaded.value) {
+        try {
+          const info = await apiGetStoreInfo()
+          storeRoot.value = info?.store_root || ''
+        } catch (e) {
+          console.warn('[skill-tree] getStoreInfo failed:', e?.message || e)
+        } finally {
+          storeRootLoaded.value = true
+        }
+      }
       const resp = await apiListSkills({ keyword: keyword.value || undefined, page: 1, size: 1000 })
       tree.value = resp?.tree || []
       // 搜索时:自动展开匹配路径(让结果可见)
@@ -384,6 +402,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   return {
     // state
     tree, loading, error, keyword, collapsedPaths, dropTargetPath, selectedPath,
+    storeRoot, storeRootLoaded,
     // getters
     flatItems, totalSkills,
     // actions
