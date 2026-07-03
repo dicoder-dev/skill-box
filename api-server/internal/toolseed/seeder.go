@@ -32,6 +32,13 @@ func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
 	}
 	if count > 0 {
 		log.Printf("toolseed: skip (e_tool already has %d rows)", count)
+		// 即使跳过 seed,也要同步内置图标到磁盘 + 刷新系统工具的 icon_file 字段
+		// (2026-07-03 加:之前占位图标名如 cursor.png 已被替换成 cursor.ico,
+		// 老 DB 里 icon_file 字段还指向不存在的旧名,前端会拿到 404)
+		writeBuiltinIcons()
+		if err := refreshSystemIconFiles(dbWrite); err != nil {
+			log.Printf("toolseed: refreshSystemIconFiles: %v", err)
+		}
 		return nil
 	}
 	log.Printf("toolseed: seeding %d default tools", len(builtins))
@@ -40,6 +47,34 @@ func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
 	}
 	writeBuiltinIcons() // best-effort,失败也只是图标回退 mdi
 	log.Printf("toolseed: seeded %d default tools", len(builtins))
+	return nil
+}
+
+// refreshSystemIconFiles 把系统工具的 icon_file 字段刷成 builtins 里最新的值。
+// 只在 "已初始化但内置图标文件名变了" 时生效;老字段值跟新字段值一样时不做无谓 update。
+// 系统工具 is_system=true 不让走 stool.Update(防止误改),所以这里直接走 model 层写 DB。
+func refreshSystemIconFiles(db *gorm.DB) error {
+	toolM := mtool.NewModel(db, db)
+	updated := 0
+	for _, bt := range builtins {
+		cur, err := toolM.FindByToolID(bt.ToolID)
+		if err != nil {
+			// 系统工具应该都在(已经过 EnsureSeeded),找不到就跳过
+			continue
+		}
+		if cur.IconFile == bt.IconFile {
+			continue
+		}
+		if tx := db.Model(cur).Update(mtool.FieldIconFile, bt.IconFile); tx.Error != nil {
+			log.Printf("toolseed: refresh %s icon_file: %v", bt.ToolID, tx.Error)
+			continue
+		}
+		updated++
+		log.Printf("toolseed: refresh %s icon_file: %q → %q", bt.ToolID, cur.IconFile, bt.IconFile)
+	}
+	if updated > 0 {
+		log.Printf("toolseed: refreshed %d system tool icon_file fields", updated)
+	}
 	return nil
 }
 

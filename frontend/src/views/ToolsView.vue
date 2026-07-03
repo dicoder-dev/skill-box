@@ -111,17 +111,14 @@ function maturityIcon(m) {
   return 'mdi:help-circle-outline'
 }
 
-// 选择图标文件按钮(隐藏 <input>,点"上传自定义"按钮触发);
-// uploadingToolFlag 防重复点击。
-const iconFileInput = ref(null)
+// 选择图标文件:用 <label for="tool-icon-input"> 触发隐藏的 file input,
+// 这样不需要在 JS 里 .click(),由浏览器原生 label-input 关联触发,不受 display 样式影响。
+// onIconFileChosen 还在;uploadingToolFlag 防重复提交。
 const uploadingToolFlag = ref(false)
 
-function pickIconFile() {
-  if (iconFileInput.value) iconFileInput.value.click()
-}
-
 async function onIconFileChosen(e) {
-  const file = e.target.files && e.target.files[0]
+  const input = e.target
+  const file = input.files && input.files[0]
   // 允许清空(重新选) — 只看是否拿到 file
   if (file) {
     uploadingToolFlag.value = true
@@ -135,11 +132,11 @@ async function onIconFileChosen(e) {
       toast.error(t('tools.uploadIconFailed', { msg: err?.message || err }))
     } finally {
       uploadingToolFlag.value = false
-      // 重置 input,允许选同一文件
-      if (iconFileInput.value) iconFileInput.value.value = ''
+      // 重置 input,允许选同一文件(浏览器同一 file 不会触发 change 事件)
+      input.value = ''
     }
   } else {
-    if (iconFileInput.value) iconFileInput.value.value = ''
+    input.value = ''
   }
 }
 
@@ -440,16 +437,30 @@ onMounted(async () => {
                 />
               </div>
               <div class="icon-upload-controls">
-                <button
-                  type="button"
-                  class="ghost with-icon"
-                  :disabled="tools.saving || uploadingToolFlag"
-                  @click="pickIconFile"
+                <!--
+                  2026-07-03 修复:用 <label for="iconFileInput"> 包裹 input 而不是 button+click() hack。
+                  原因:display:none 的 input 在 button.click() 触发时不弹文件选择框
+                  (浏览器把不在渲染树里的元素当不可交互);
+                  <label for> 触发 input 浏览器原生处理,不受 hidden 样式影响。
+                  同时去掉 iconFileInput ref + pickIconFile(),减少 Vue ref 跨 Teleport 的不确定性。
+                -->
+                <label
+                  for="tool-icon-input"
+                  class="ghost with-icon upload-label"
+                  :class="{ disabled: tools.saving || uploadingToolFlag }"
                 >
                   <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
                   <Icon v-else icon="mdi:upload" width="14" height="14" />
                   {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
-                </button>
+                  <input
+                    id="tool-icon-input"
+                    type="file"
+                    accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
+                    class="hidden-input"
+                    :disabled="tools.saving || uploadingToolFlag"
+                    @change="onIconFileChosen"
+                  />
+                </label>
                 <button
                   v-if="tools.form.icon_file"
                   type="button"
@@ -463,13 +474,6 @@ onMounted(async () => {
                 <code v-if="tools.form.icon_file" class="icon-file-name">
                   {{ tools.form.icon_file }}
                 </code>
-                <input
-                  ref="iconFileInput"
-                  type="file"
-                  accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
-                  class="hidden-input"
-                  @change="onIconFileChosen"
-                />
               </div>
             </div>
             <p class="field-hint">{{ t('tools.hint.customIcon') }}</p>
@@ -1493,6 +1497,32 @@ button.add-path-btn:hover:not(:disabled) {
 }
 
 .hidden-input {
-  display: none;
+  /*
+   * 2026-07-03 修复:用 <label for> 触发 input 后,input 仍需保持 "在 DOM 里但视觉不可见"。
+   * 但因为现在是 label 触发(不是 button.click()),即使 display:none 也能弹文件框。
+   * 仍保留安全写法:position: absolute + 0×0 + opacity:0,这样 input 即使被程序 click() 也兼容。
+   */
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  left: -9999px;
+  top: -9999px;
+}
+
+/*
+ * 2026-07-03:把"上传自定义图标"按钮从 <button> 改成 <label for> 触发隐藏的 input。
+ * label 默认 inline,这里复用 button.with-icon 的视觉 + 加 cursor:pointer。
+ * 不要再 click() input,label 原生触发更可靠(不受 hidden 样式影响)。
+ */
+.upload-label {
+  cursor: pointer;
+  user-select: none;
+}
+.upload-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 </style>
