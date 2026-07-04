@@ -29,6 +29,8 @@ import TreeNode from '@/components/TreeNode.vue'
 // 2026-07-04 增:首页技能文件浏览器(抽屉)。Commit 1 只做"目录树 + 纯文本预览",
 // 后续 commit 加 Monaco / 编辑 / 保存。
 import SkillFileDrawer from '@/components/skill/SkillFileDrawer.vue'
+// 2026-07-04 改:抽屉改内联面板,直接放在正文右侧。
+import SkillFileInlinePanel from '@/components/skill/SkillFileInlinePanel.vue'
 // 2026-06-27 改:详情预览区改用 markdown-it + highlight.js 渲染(支持 GFM / 代码高亮)。
 // 编辑态给 Tiptap 喂 HTML 那条路仍用自研 renderMarkdown,在 RichTextEditor 内部独立 import。
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
@@ -587,9 +589,8 @@ async function doUnapplyOne(h) {
 const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
 
-// 2026-07-04 增:首页技能文件浏览器抽屉的开合 + 当前文件列表(派生自 current._full.canonical.files)。
-// drawer 内的选中态 / dirty 由 SkillFileDrawer 内部管理,这里只控制 v-model。
-const fileDrawerOpen = ref(false)
+// 2026-07-04 改:文件浏览器从抽屉改成内联面板,直接放正文右侧,不再需要 fileDrawerOpen。
+// currentFiles 仍保留(供 SkillFileInlinePanel 用)。
 const currentFiles = ref([])
 watch(
   () => current.value?._full?.canonical?.files,
@@ -2018,17 +2019,8 @@ onUnmounted(() => {
             >
               <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="16" height="16" />
             </button>
-            <!-- 2026-07-04 增:打开技能文件浏览器(抽屉,展示全文件树 + Monaco 预览)。
-                 放在 detail-actions 末尾,跟其他只读操作图标同一组,统一靠 data-tip 提示。 -->
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.fileBrowser.open')"
-              :aria-label="t('skills.fileBrowser.open')"
-              :disabled="!current"
-              @click="fileDrawerOpen = true"
-            >
-              <IconPark icon="mdi:folder-multiple-outline" width="16" height="16" />
-            </button>
+            <!-- 2026-07-04 改:抽屉改内联面板,移除 [📁] 按钮(改用右侧固定面板浏览) -->
+            <!-- (旧) <button class="icon-btn" ... @click="fileDrawerOpen = true"> ... </button> -->
           </div>
         </header>
 
@@ -2186,46 +2178,62 @@ onUnmounted(() => {
         <!-- 2026-06-25 改:触发词已搬到 description 下方行内展示,触发词 + 更新时间 独立 section 删除。
              更新时间挪到 detail-toolbar 标题行右侧,作为次要信息展示。 -->
 
-        <!-- 正文 -->
-        <section class="detail-section detail-body">
-          <header class="section-header">
-            <h3>
-              <IconPark :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
-              {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
-            </h3>
-            <!-- 2026-06-26 改:"取消/保存"已搬到 detail-title-row 右侧(替换"编辑"按钮位置),
-                 这里不再放操作按钮,保持 section-header 干净 -->
-          </header>
+        <!-- 正文 + 文件浏览器 左右两栏(2026-07-04 改:不再走抽屉,直接放正文右侧) -->
+        <section class="detail-section detail-body detail-body-split">
+          <!-- 左:SKILL.md 渲染 -->
+          <div class="detail-body-md">
+            <header class="section-header">
+              <h3>
+                <IconPark :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
+                {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
+              </h3>
+            </header>
 
-          <p v-if="editError" class="message message-error">
-            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-            {{ editError }}
-          </p>
-
-          <!-- 2026-06-27 改:内联编辑态从 textarea 升级为 Tiptap 所见即所得编辑器
-               (RichTextEditor 输入输出都是 markdown 字符串,与 editBody 类型保持一致) -->
-          <RichTextEditor
-            v-if="editing"
-            v-model="editBody"
-            class="md-editor"
-            :placeholder="t('skills.list.bodyEmpty')"
-            :disabled="editSaving"
-            min-height="320px"
-          />
-
-          <!-- 查看态:渲染 -->
-          <template v-else>
-            <div v-if="currentLoading" class="detail-loading">
-              <span class="spinner"></span>
-              <span>{{ t('common.processing') }}</span>
-            </div>
-            <p v-else-if="currentError" class="message message-error">
+            <p v-if="editError" class="message message-error">
               <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-              {{ currentError }}
+              {{ editError }}
             </p>
-            <div v-else-if="currentBody" class="md-body" v-html="renderedHtml" @click="onMdClick"></div>
-            <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
-          </template>
+
+            <RichTextEditor
+              v-if="editing"
+              v-model="editBody"
+              class="md-editor"
+              :placeholder="t('skills.list.bodyEmpty')"
+              :disabled="editSaving"
+              min-height="320px"
+            />
+
+            <template v-else>
+              <div v-if="currentLoading" class="detail-loading">
+                <span class="spinner"></span>
+                <span>{{ t('common.processing') }}</span>
+              </div>
+              <p v-else-if="currentError" class="message message-error">
+                <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+                {{ currentError }}
+              </p>
+              <div v-else-if="currentBody" class="md-body" v-html="renderedHtml" @click="onMdClick"></div>
+              <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
+            </template>
+          </div>
+
+          <!-- 右:文件浏览器内联(不弹抽屉) -->
+          <aside class="detail-body-file">
+            <SkillFileInlinePanel
+              v-if="currentFiles.length"
+              :files="currentFiles"
+              :skill="{
+                name: current.name,
+                version: current.version,
+                scope: current.scope,
+                project_id: current.project_id,
+                source: current.source,
+                group_path: current.group_path,
+                canonical: current._full?.canonical,
+              }"
+              @saved="onDrawerSaved"
+            />
+          </aside>
         </section>
       </template>
     </section>
@@ -2233,22 +2241,8 @@ onUnmounted(() => {
     <!-- AI 侧栏 -->
     <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
 
-    <!-- 2026-07-04 增:技能文件浏览器(右侧抽屉) -->
-    <SkillFileDrawer
-      v-if="current && currentFiles.length"
-      v-model="fileDrawerOpen"
-      :skill="{
-        name: current.name,
-        version: current.version,
-        scope: current.scope,
-        project_id: current.project_id,
-        source: current.source,
-        group_path: current.group_path,
-        canonical: current._full?.canonical,
-      }"
-      :files="currentFiles"
-      @saved="onDrawerSaved"
-    />
+    <!-- 2026-07-04 改:文件浏览器改成正文右侧内联面板(不再用抽屉),挂载点已合并到 detail-body-split 里。 -->
+    <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->
 
     <!-- Tag 弹窗 -->
     <Modal
@@ -3705,6 +3699,37 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 2026-07-04 改:detail-body-split 走左右两栏 — 左 SKILL.md,右 SkillFileInlinePanel。
+   小屏 (<900px) 自动收为单列(文件面板藏到下方)。 */
+.detail-body-split {
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+}
+.detail-body-md {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 20px 24px;
+  overflow: auto;
+}
+.detail-body-file {
+  width: 420px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 1100px) {
+  .detail-body-file { width: 340px; }
+}
+@media (max-width: 900px) {
+  .detail-body-split { flex-direction: column; }
+  .detail-body-file { width: 100%; max-height: 360px; border-top: 1px solid var(--border); border-left: none; }
 }
 
 .md-body {
