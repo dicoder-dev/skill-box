@@ -2178,62 +2178,25 @@ onUnmounted(() => {
         <!-- 2026-06-25 改:触发词已搬到 description 下方行内展示,触发词 + 更新时间 独立 section 删除。
              更新时间挪到 detail-toolbar 标题行右侧,作为次要信息展示。 -->
 
-        <!-- 正文 + 文件浏览器 左右两栏(2026-07-04 改:不再走抽屉,直接放正文右侧) -->
-        <section class="detail-section detail-body detail-body-split">
-          <!-- 左:SKILL.md 渲染 -->
-          <div class="detail-body-md">
-            <header class="section-header">
-              <h3>
-                <IconPark :icon="editing ? 'mdi:pencil-box-outline' : 'mdi:text-box-outline'" width="14" height="14" />
-                {{ editing ? t('skills.list.bodyEditing') : t('skills.list.bodyTitle') }}
-              </h3>
-            </header>
-
-            <p v-if="editError" class="message message-error">
-              <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-              {{ editError }}
-            </p>
-
-            <RichTextEditor
-              v-if="editing"
-              v-model="editBody"
-              class="md-editor"
-              :placeholder="t('skills.list.bodyEmpty')"
-              :disabled="editSaving"
-              min-height="320px"
-            />
-
-            <template v-else>
-              <div v-if="currentLoading" class="detail-loading">
-                <span class="spinner"></span>
-                <span>{{ t('common.processing') }}</span>
-              </div>
-              <p v-else-if="currentError" class="message message-error">
-                <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-                {{ currentError }}
-              </p>
-              <div v-else-if="currentBody" class="md-body" v-html="renderedHtml" @click="onMdClick"></div>
-              <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
-            </template>
-          </div>
-
-          <!-- 右:文件浏览器内联(不弹抽屉) -->
-          <aside class="detail-body-file">
-            <SkillFileInlinePanel
-              v-if="currentFiles.length"
-              :files="currentFiles"
-              :skill="{
-                name: current.name,
-                version: current.version,
-                scope: current.scope,
-                project_id: current.project_id,
-                source: current.source,
-                group_path: current.group_path,
-                canonical: current._full?.canonical,
-              }"
-              @saved="onDrawerSaved"
-            />
-          </aside>
+        <!-- 2026-07-04 改 v2:正文区直接换成 SkillFileInlinePanel(目录树 + 预览/编辑),
+             不再单独渲染 SKILL.md。SKILL.md 现在是文件树里的一个文件,
+             点开就在右侧预览/编辑。 -->
+        <section class="detail-section detail-body">
+          <SkillFileInlinePanel
+            v-if="current && currentFiles.length"
+            :files="currentFiles"
+            :skill="{
+              name: current.name,
+              version: current.version,
+              scope: current.scope,
+              project_id: current.project_id,
+              source: current.source,
+              group_path: current.group_path,
+              canonical: current._full?.canonical,
+            }"
+            @saved="onDrawerSaved"
+          />
+          <p v-else-if="!currentFiles.length && !currentLoading" class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
         </section>
       </template>
     </section>
@@ -3688,48 +3651,15 @@ onUnmounted(() => {
 }
 .triggers-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* 2026-06-27 改:detail-body 顶部加 border-top,
-   与上方 scope-card 之间形成"▢ 卡片 → 12px → ━ 分隔线 → 正文"的两段层次,
-   避免 scope-card 看起来底部边框"消失" */
+/* 2026-07-04 改 v2:detail-body 直接被 SkillFileInlinePanel 占满,
+   不再是两栏(SKILL.md 单独 + 文件浏览器内联),目录树已经在 InlinePanel 里。 */
 .detail-body {
-  padding: 20px 20px 24px;
-  border-top: 1px solid var(--border);
-  /* 占满 .detail-pane 剩余高度,让 .md-editor 能 flex:1 自适应填满 */
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 2026-07-04 改:detail-body-split 走左右两栏 — 左 SKILL.md,右 SkillFileInlinePanel。
-   小屏 (<900px) 自动收为单列(文件面板藏到下方)。 */
-.detail-body-split {
-  flex-direction: row;
-  gap: 0;
   padding: 0;
-}
-.detail-body-md {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 20px 24px;
-  overflow: auto;
-}
-.detail-body-file {
-  width: 420px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
   border-top: 1px solid var(--border);
-}
-@media (max-width: 1100px) {
-  .detail-body-file { width: 340px; }
-}
-@media (max-width: 900px) {
-  .detail-body-split { flex-direction: column; }
-  .detail-body-file { width: 100%; max-height: 360px; border-top: 1px solid var(--border); border-left: none; }
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .md-body {
