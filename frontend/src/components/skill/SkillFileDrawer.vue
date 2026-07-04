@@ -16,6 +16,9 @@
 import { computed, ref, watch } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import FileTreeView from './FileTreeView.vue'
+// 2026-07-04 增:CodeViewer 提供 markdown / 纯文本 / 二进制兜底三分支渲染(Commit 2),
+// 后续 commit 接 Monaco / 编辑。
+import CodeViewer from './CodeViewer.vue'
 
 const props = defineProps({
   // v-model 控制开合
@@ -120,7 +123,12 @@ const fileSize = computed(() => (previewContent.value || '').length)
                   <span class="file-drawer-viewer-path">{{ previewPath || '未选中文件' }}</span>
                   <span v-if="previewPath" class="file-drawer-viewer-size">{{ fileSize }} B</span>
                 </header>
-                <pre v-if="previewPath" class="file-drawer-preview"><code>{{ previewContent }}</code></pre>
+                <!-- 2026-07-04 改:用 CodeViewer 替换裸 <pre>,Commit 2 加 markdown 渲染 + 二进制兜底 -->
+                <CodeViewer
+                  v-if="previewPath"
+                  :path="previewPath"
+                  :content="previewContent"
+                />
                 <div v-else class="file-drawer-empty">
                   <IconPark icon="mdi:file-outline" width="48" height="48" />
                   <p>从左侧选择一个文件查看</p>

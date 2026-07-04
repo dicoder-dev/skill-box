@@ -32,6 +32,8 @@ import SkillFileDrawer from '@/components/skill/SkillFileDrawer.vue'
 // 2026-06-27 改:详情预览区改用 markdown-it + highlight.js 渲染(支持 GFM / 代码高亮)。
 // 编辑态给 Tiptap 喂 HTML 那条路仍用自研 renderMarkdown,在 RichTextEditor 内部独立 import。
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
+// 2026-07-04 增:md-body 内 .md-external-link 点击统一走 platform.openExternal(Commit 2)。
+import { handleExternalClick } from '@/core/utils/external_link.js'
 import 'highlight.js/styles/github.css'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
@@ -772,6 +774,12 @@ const filteredItems = computed(() => {
 
 // ====== 渲染后的 markdown HTML ======
 const renderedHtml = computed(() => renderMarkdownView(currentBody.value))
+
+// 2026-07-04 增:md-body 内 .md-external-link 链接统一走 platform.openExternal,
+// 桌面端 webview 不会在内部打开,Web 端走 window.open(Commit 2)。
+function onMdClick(e) {
+  handleExternalClick(e)
+}
 
 // ====== Tag 弹窗 ======
 const tagOpen = ref(false)
@@ -2158,7 +2166,7 @@ onUnmounted(() => {
               <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
               {{ currentError }}
             </p>
-            <div v-else-if="currentBody" class="md-body" v-html="renderedHtml"></div>
+            <div v-else-if="currentBody" class="md-body" v-html="renderedHtml" @click="onMdClick"></div>
             <p v-else class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
           </template>
         </section>

@@ -42,6 +42,26 @@ const md = new MarkdownIt({
 // GFM 任务列表:把 "- [x] xxx" 转成 <input type="checkbox" checked>
 .use(taskLists, { enabled: true, label: true })
 
+// 2026-07-04 改:外链统一走 platform.openExternal,不走 webview 自带 target=_blank。
+// 重写 link_open rule,把链接改写成 class="md-external-link" data-url="<href>"(不带 target),
+// 由容器上的 @click="handleExternalClick" 拦截,统一调 openExternal。
+// 这样桌面端 webview 不会在内部打开外链,Web 端 / 桌面端行为一致。
+const _defaultLinkOpen = md.renderer.rules.link_open
+  || function (tokens, idx, options, env, self) { return self.renderToken(tokens, idx, options) }
+md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+  const token = tokens[idx]
+  const hrefIdx = token.attrIndex('href')
+  const href = hrefIdx >= 0 ? token.attrs[hrefIdx][1] : ''
+  // 锚点(以 # 开头)保留默认行为,不强制外链
+  if (href && !href.startsWith('#')) {
+    token.attrSet('class', 'md-external-link')
+    token.attrSet('data-url', href)
+    // 显式把 target="_blank" 去掉
+    token.attrSet('target', '_self')
+  }
+  return _defaultLinkOpen(tokens, idx, options, env, self)
+}
+
 /**
  * 把 markdown 字符串渲染成 HTML,用于详情预览区。
  * @param {string} src markdown 源码
