@@ -234,6 +234,28 @@ const messages = {
       openFailed: 'Open failed: {msg}',
       goOnboarding: 'Go import',
 
+      // 2026-07-04 增:Skill file browser (Commit 5)
+      fileBrowser: {
+        open: 'Browse files',
+        files: '{n} files',
+        readOnly: 'Read only',
+        readOnlyHint: 'SKILL.md is read-only here, edit in the main area',
+        unsaved: 'You have unsaved changes. Close anyway?',
+        unsavedShort: 'Unsaved',
+        noFile: 'No file selected',
+        pickOne: 'Pick a file from the left to preview',
+        saved: 'Saved {path}',
+        saveFailed: 'Save failed: {msg}',
+        discard: 'Discard',
+        save: 'Save',
+        saving: 'Saving',
+        binaryTitle: 'No online preview',
+        binaryHint: 'Binary file (.{ext}) can be viewed in the folder',
+        largeTitle: 'File too large for online preview',
+        largeHint: 'File size {kb} KB, view it in the folder',
+        openInFolder: 'Open in folder',
+      },
+
       // 2026-06-29: tree UI + context menu + drag
       treeEmpty: 'No skills yet. Click "New" to start.',
       treeRootHint: 'Right-click to create a group, or drag a skill here',

@@ -236,6 +236,28 @@ const messages = {
       openFailed: '打开失败: {msg}',
       goOnboarding: '去导入',
 
+      // 2026-07-04 增:首页技能文件浏览器(Commit 5)
+      fileBrowser: {
+        open: '浏览文件',
+        files: '{n} 个文件',
+        readOnly: '只读',
+        readOnlyHint: 'SKILL.md 在抽屉中只读,请在主区编辑',
+        unsaved: '有未保存的修改,确定关闭吗?',
+        unsavedShort: '未保存',
+        noFile: '未选中文件',
+        pickOne: '从左侧选择一个文件查看',
+        saved: '已保存 {path}',
+        saveFailed: '保存失败: {msg}',
+        discard: '放弃',
+        save: '保存',
+        saving: '保存中',
+        binaryTitle: '不支持在线预览',
+        binaryHint: '二进制文件(.{ext})可在文件夹中查看',
+        largeTitle: '文件过大,不支持在线预览',
+        largeHint: '文件大小 {kb} KB,可在文件夹中查看',
+        openInFolder: '在文件夹打开',
+      },
+
       // 2026-06-29 增:分组树形 UI + 右键菜单 + 拖拽
       treeEmpty: '还没有技能,点上方"新建"开始',
       treeRootHint: '右键空白处新建分组,或拖拽 skill 到此处',

@@ -11,12 +11,16 @@
 //   - SKILL.md 在抽屉里默认选中,只读(避免与主页 Tiptap 编辑态冲突)
 //   - 编辑保存复用后端 updateSkill(同 saveInlineEdit 路径)
 
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
-import { updateSkill } from '@/api/skillbox/skills'
+import { updateSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { useToastStore } from '@/core/store/toast'
+
+const { t } = useI18n()
+const toast = useToastStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -27,8 +31,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'closed', 'saved'])
-
-const toast = useToastStore()
 
 // 编辑态独立副本(覆盖原 files 内容,保存时构造完整 files 数组提交)
 const localFiles = reactive(new Map())
@@ -171,7 +173,7 @@ function resetCurrent() {
 // 关闭抽屉
 async function close() {
   if (dirtyPaths.value.size > 0) {
-    const ok = window.confirm('有未保存的修改,确定关闭吗?')
+    const ok = window.confirm(t('skills.fileBrowser.unsaved'))
     if (!ok) return
   }
   emit('update:modelValue', false)
@@ -188,6 +190,26 @@ function onKeydown(e) {
     close()
   }
 }
+
+// 2026-07-04 增(Commit 5):拉 store_root + 拼 skill 相对路径,用于"在文件夹打开"按钮
+const storeRoot = ref('')
+async function fetchStoreRoot() {
+  if (storeRoot.value) return
+  try {
+    const info = await getStoreInfo()
+    storeRoot.value = info?.store_root || ''
+  } catch (_) {
+    storeRoot.value = ''
+  }
+}
+onMounted(fetchStoreRoot)
+watch(() => props.modelValue, (open) => { if (open) fetchStoreRoot() })
+
+// skill 相对路径(在 store_root 下的相对路径)
+const skillRelPath = computed(() => {
+  const gp = props.skill.group_path || ''
+  return gp ? `${gp}/${props.skill.name || ''}` : (props.skill.name || '')
+})
 </script>
 
 <template>
@@ -214,9 +236,9 @@ function onKeydown(e) {
               <div class="file-drawer-title">
                 <IconPark icon="mdi:folder-multiple-outline" width="18" height="18" />
                 <span class="file-drawer-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="file-drawer-version">@{{ skill.version }}</span></span>
-                <span class="file-drawer-count">{{ (files || []).length }} files</span>
+                <span class="file-drawer-count">{{ t('skills.fileBrowser.files', { n: (files || []).length }) }}</span>
               </div>
-              <button class="file-drawer-close" :aria-label="'关闭'" @click="close">
+              <button class="file-drawer-close" :aria-label="t('common.close')" @click="close">
                 <IconPark icon="mdi:close" width="18" height="18" />
               </button>
             </header>
@@ -234,16 +256,16 @@ function onKeydown(e) {
               <main class="file-drawer-viewer">
                 <header class="file-drawer-viewer-header">
                   <IconPark :icon="selectedFile?.path ? 'mdi:file-document-outline' : 'mdi:file-outline'" width="14" height="14" />
-                  <span class="file-drawer-viewer-path">{{ selectedFile?.path || '未选中文件' }}</span>
+                  <span class="file-drawer-viewer-path">{{ selectedFile?.path || t('skills.fileBrowser.noFile') }}</span>
                   <span v-if="selectedFile?.path" class="file-drawer-viewer-size">{{ fileSize }} B</span>
-                  <span v-if="isReadOnly && selectedFile?.path" class="file-drawer-viewer-readonly" title="SKILL.md 在抽屉中只读,请在主区编辑">只读</span>
-                  <span v-if="isDirty" class="file-drawer-viewer-dirty">● 未保存</span>
+                  <span v-if="isReadOnly && selectedFile?.path" class="file-drawer-viewer-readonly" :title="t('skills.fileBrowser.readOnlyHint')">{{ t('skills.fileBrowser.readOnly') }}</span>
+                  <span v-if="isDirty" class="file-drawer-viewer-dirty">● {{ t('skills.fileBrowser.unsavedShort', '未保存') }}</span>
                   <button
                     v-if="isDirty && !isReadOnly"
                     class="file-drawer-viewer-btn"
                     :disabled="saving"
                     @click="resetCurrent"
-                  >放弃</button>
+                  >{{ t('skills.fileBrowser.discard') }}</button>
                   <button
                     v-if="isDirty && !isReadOnly"
                     class="file-drawer-viewer-btn file-drawer-viewer-btn-primary"
@@ -252,7 +274,7 @@ function onKeydown(e) {
                   >
                     <span v-if="saving" class="spinner spinner-sm"></span>
                     <IconPark v-else icon="mdi:content-save" width="13" height="13" />
-                    {{ saving ? '保存中' : '保存' }}
+                    {{ saving ? t('skills.fileBrowser.saving') : t('skills.fileBrowser.save') }}
                   </button>
                 </header>
                 <CodeViewer
@@ -261,12 +283,14 @@ function onKeydown(e) {
                   :path="selectedFile.path"
                   :content="currentContent"
                   :editable="!isReadOnly"
+                  :store-root="storeRoot"
+                  :skill-rel-path="skillRelPath"
                   @update:content="onContentChange"
                   @dirty-change="onDirtyChange"
                 />
                 <div v-else class="file-drawer-empty">
                   <IconPark icon="mdi:file-outline" width="48" height="48" />
-                  <p>从左侧选择一个文件查看</p>
+                  <p>{{ t('skills.fileBrowser.pickOne', '从左侧选择一个文件查看') }}</p>
                 </div>
               </main>
             </div>

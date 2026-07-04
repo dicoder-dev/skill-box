@@ -2022,8 +2022,8 @@ onUnmounted(() => {
                  放在 detail-actions 末尾,跟其他只读操作图标同一组,统一靠 data-tip 提示。 -->
             <button
               class="icon-btn"
-              :data-tip="'浏览文件'"
-              :aria-label="'浏览文件'"
+              :data-tip="t('skills.fileBrowser.open')"
+              :aria-label="t('skills.fileBrowser.open')"
               :disabled="!current"
               @click="fileDrawerOpen = true"
             >

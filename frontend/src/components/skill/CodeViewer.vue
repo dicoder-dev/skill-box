@@ -3,27 +3,35 @@
 //
 // 三种渲染分支:
 //   1. Markdown(.md / .markdown)→ renderMarkdownView 渲染(只读预览)
-//   2. 纯文本 / 代码(.py / .js / .json / ...)→ Monaco 只读(Commit 3) / 可编辑(Commit 4)
-//   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览"
+//   2. 纯文本 / 代码(.py / .js / .json / ...)→ Monaco 只读 / 可编辑
+//   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
 //
-// Commit 3 实现:Monaco 只读预览(所有文本文件走 Monaco,theme 跟随站点)。
-// 不实现编辑(Commit 4)、"在文件夹打开"按钮(Commit 5)。
-//
-// 2026-07-04 增:首页技能文件浏览器(Commit 3)。
+// 2026-07-04 增:首页技能文件浏览器。
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { loadMonaco } from '@/core/composables/useMonaco.js'
+import { platform } from '@/platform'
+import { useToastStore } from '@/core/store/toast'
+
+const { t } = useI18n()
+const toast = useToastStore()
 
 const props = defineProps({
   // 文件相对路径
   path: { type: String, default: '' },
   // 文件内容
   content: { type: String, default: '' },
-  // 2026-07-04 增(Commit 4):是否可编辑;SKILL.md 在抽屉里强制只读,避免与主页 Tiptap 编辑态冲突
+  // SKILL.md 在抽屉里强制只读(避免与主页 Tiptap 编辑态冲突)
   editable: { type: Boolean, default: true },
+  // 技能在 store_root 下的相对路径(用于拼绝对路径,显示"在文件夹打开")
+  // 格式: <group_path>/<name>(group_path 可能为空)
+  skillRelPath: { type: String, default: '' },
+  // store_root 绝对路径(后端 /api/skillbox/skills/store-info 拿到)
+  storeRoot: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:content', 'dirty-change'])
@@ -93,6 +101,26 @@ const EXT_TO_LANG = {
 }
 
 const language = computed(() => EXT_TO_LANG[ext.value] || 'plaintext')
+
+// 2026-07-04 增(Commit 5):"在文件夹打开"按钮
+// 拼绝对路径: storeRoot + skillRelPath + / + path
+// storeRoot / skillRelPath 由父级 SkillFileDrawer 注入(后端 /api/skillbox/skills/store-info)
+async function openInFolder() {
+  if (!props.storeRoot || !props.skillRelPath) {
+    toast.error(t('common.openFailed', { msg: 'storeRoot 未知' }))
+    return
+  }
+  const relPath = `${props.skillRelPath}/${props.path}`.replace(/^\/+/, '')
+  const abs = `${props.storeRoot.replace(/\/+$/, '')}/${relPath}`
+  try {
+    const r = await platform.fs.reveal(abs)
+    if (r && r.ok === false && r.fallbackUrl) {
+      await platform.platform.openExternal(r.fallbackUrl)
+    }
+  } catch (e) {
+    toast.error(t('common.openFailed', { msg: e?.message || e }))
+  }
+}
 
 // 是否应使用 Monaco(非 markdown / 非二进制 / 非过大)
 const useMonaco = computed(() => !isMarkdown.value && !isBinary.value && !isLarge.value)
@@ -179,10 +207,14 @@ onBeforeUnmount(() => {
   <div class="code-viewer">
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
-      <IconPark icon="mdi:file-document-outline" width="56" height="56" />
+      <IconPark icon="mdi:file-image-outline" width="56" height="56" />
       <p class="cv-binary-title">{{ fileName }}</p>
-      <p class="cv-binary-hint">二进制文件(.{{ ext }})不支持在线预览</p>
-      <p class="cv-binary-hint">Commit 5 将支持"在文件夹打开"</p>
+      <p class="cv-binary-hint">{{ t('skills.fileBrowser.binaryTitle') }}</p>
+      <p class="cv-binary-hint">{{ t('skills.fileBrowser.binaryHint', { ext }) }}</p>
+      <button class="cv-open-folder-btn" @click="openInFolder">
+        <IconPark icon="mdi:folder-open-outline" width="14" height="14" />
+        {{ t('skills.fileBrowser.openInFolder') }}
+      </button>
     </div>
 
     <!-- Markdown 渲染 -->
@@ -197,8 +229,12 @@ onBeforeUnmount(() => {
     <div v-else-if="isLarge" class="cv-large">
       <IconPark icon="mdi:file-alert-outline" width="56" height="56" />
       <p class="cv-large-title">{{ fileName }}</p>
-      <p class="cv-large-hint">文件过大({{ Math.round((content || '').length / 1024) }} KB),不支持在线预览</p>
-      <p class="cv-large-hint">Commit 5 将支持"在文件夹打开"</p>
+      <p class="cv-large-hint">{{ t('skills.fileBrowser.largeTitle') }}</p>
+      <p class="cv-large-hint">{{ t('skills.fileBrowser.largeHint', { kb: Math.round((content || '').length / 1024) }) }}</p>
+      <button class="cv-open-folder-btn" @click="openInFolder">
+        <IconPark icon="mdi:folder-open-outline" width="14" height="14" />
+        {{ t('skills.fileBrowser.openInFolder') }}
+      </button>
     </div>
 
     <!-- Monaco(代码 / 纯文本) -->
@@ -274,6 +310,25 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: var(--text-faint);
   margin: 0;
+}
+.cv-open-folder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.cv-open-folder-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
 }
 .spinner {
   display: inline-block;
