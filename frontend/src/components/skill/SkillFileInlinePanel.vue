@@ -88,8 +88,13 @@ watch(
   () => [props.files],
   () => {
     localFiles.clear()
+    // 2026-07-04 改:localFiles 存"Monaco 看到的内容"——
+    // SKILL.md 存 body(剥 frontmatter),其它文件存原文。
+    // 与 displayContent / isDirty 的语义保持一致,避免永远 dirty。
     for (const f of props.files || []) {
-      localFiles.set(f.path, f.content || '')
+      const c = f.content || ''
+      const stored = f.path === 'SKILL.md' ? splitSkillMd(c).body : c
+      localFiles.set(f.path, stored)
     }
     dirtyPaths.value = new Set()
   },
