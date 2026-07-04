@@ -476,17 +476,20 @@ func TestDetail_NotFound_FallbackHit(t *testing.T) {
 	}
 }
 
-// 2026-07-04 增:detail_url 必须走站点 host(skillhub.cn)而不是 API host(api.skillhub.cn)。
+// 2026-07-04 增:detail_url 必须无条件走站点 host(skillhub.cn)。
 //
-// 历史 bug:用 baseURL 拼成 https://api.skillhub.cn/skills/{slug},真实详情页
-// 在 https://skillhub.cn/skills/{slug}。前端「前往技能详情」按钮会跳到 API host
-// 直接 404。用户反馈的实景:slug=guosen-stock-market/self-improving-agent 等
-// 大量 skill 的 apiSkill.homepage 字段都为空,fallback 走 baseURL 拼接后全错。
+// 历史两轮 bug 都跟上游 apiSkill.Homepage 字段不可信有关:
+//   1) homepage 为空时,fallback 误用 baseURL(API host api.skillhub.cn)
+//      拼成 https://api.skillhub.cn/skills/{slug} → 404。
+//   2) homepage 非空但内容脏(典型如
+//      https://api.skillhub.cn/pskoett/self-improving-agent 或
+//      https://skillhub.cn/pskoett/<slug> 带命名空间前缀),仍会跳错。
 //
-// 三个 case:
-//   - 列表 fallback(HTTP 返回 skill 但 homepage 字段为空 → 应拼 siteDetailURL)
-//   - 列表 显式 homepage(优先用上游给的,不再覆盖)
-//   - 详情 fallback(Detail 接口返回但 homepage 字段为空)
+// 因此不论上游 Homepage 字段是什么,统一覆盖为站点详情页。
+// 覆盖三个 case:
+//   - 列表 fallback(homepage 为空 → 拼 siteDetailURL)
+//   - 列表 脏 homepage(URL 含 /pskoett/ 命名空间或 api. 子域 → 一律覆盖)
+//   - 详情 脏 homepage(同列表)
 func TestDiscover_DetailURL_SiteHostFallback(t *testing.T) {
 	rt := newFakeClient(map[string]fakeResp{
 		"/api/skills?keyword=guosen&pageSize=100": {
@@ -524,37 +527,54 @@ func TestDiscover_DetailURL_SiteHostFallback(t *testing.T) {
 	}
 }
 
-func TestDiscover_DetailURL_ExplicitHomepageWins(t *testing.T) {
-	// 显式 homepage 字段(上游填好的)优先,不强制改写。
-	rt := newFakeClient(map[string]fakeResp{
-		"/api/skills?page=1&pageSize=100&sortBy=downloads&order=desc": {
-			status: 200,
-			body: `{
-				"code": 0,
-				"data": {
-					"skills": [
-						{
-							"slug": "code-review",
-							"name": "Code Review",
-							"description": "review",
-							"version": "1.0.0",
-							"ownerName": "alice",
-							"homepage": "https://custom.example.dev/skills/code-review",
-							"updated_at": 1782878868630
-						}
-					],
-					"total": 1
-				}
-			}`,
-		},
-	})
-	a := NewWithClient(rt)
-	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "")
-	if err != nil {
-		t.Fatal(err)
+func TestDiscover_DetailURL_DirtyUpstreamHomepage_Overridden(t *testing.T) {
+	// 2026-07-04 增:上游 homepage 字段非空但内容脏(如带 api. 子域或
+	// /pskoett/<slug> 命名空间前缀)时,必须无条件覆盖为站点详情页。
+	// 用户反馈的实景:slug=self-improving-agent 上游给的就是
+	// https://api.skillhub.cn/pskoett/self-improving-agent,跳过去 404。
+	cases := []struct {
+		name     string
+		homepage string
+	}{
+		{"api_subdomain", "https://api.skillhub.cn/pskoett/self-improving-agent"},
+		{"site_with_namespace", "https://skillhub.cn/pskoett/self-improving-agent"},
+		{"custom_domain", "https://custom.example.dev/skills/code-review"},
 	}
-	if items[0].DetailURL != "https://custom.example.dev/skills/code-review" {
-		t.Errorf("explicit homepage 应优先,got: %s", items[0].DetailURL)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := newFakeClient(map[string]fakeResp{
+				"/api/skills?keyword=guosen&pageSize=100": {
+					status: 200,
+					body: `{
+						"code": 0,
+						"data": {
+							"skills": [
+								{
+									"slug": "self-improving-agent",
+									"name": "Self Improving Agent",
+									"description": "x",
+									"version": "1.0.0",
+									"ownerName": "pskoett",
+									"homepage": "` + tc.homepage + `",
+									"updated_at": 1782878868630
+								}
+							],
+							"total": 1
+						}
+					}`,
+				},
+			})
+			a := NewWithClient(rt)
+			items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "guosen")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "https://skillhub.cn/skills/self-improving-agent"
+			if items[0].DetailURL != want {
+				t.Errorf("脏 homepage 必须被覆盖为站点详情页:\n  got:  %s\n  want: %s",
+					items[0].DetailURL, want)
+			}
+		})
 	}
 }
 
@@ -587,6 +607,39 @@ func TestDetail_DetailURL_SiteHostFallback(t *testing.T) {
 	want := "https://skillhub.cn/skills/guosen-stock-market"
 	if d.DetailURL != want {
 		t.Errorf("detail fallback 也走错 host:\n  got:  %s\n  want: %s", d.DetailURL, want)
+	}
+}
+
+func TestDetail_DetailURL_DirtyUpstreamHomepage_Overridden(t *testing.T) {
+	// 2026-07-04 增:Detail 接口返回的 skill 带脏 homepage 时,也要被覆盖。
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/v1/skills/self-improving-agent": {
+			status: 200,
+			body: `{
+				"code": 0,
+				"data": {
+					"skill": {
+						"slug": "self-improving-agent",
+						"name": "Self Improving Agent",
+						"description": "x",
+						"version": "1.0.0",
+						"ownerName": "pskoett",
+						"homepage": "https://api.skillhub.cn/pskoett/self-improving-agent",
+						"updated_at": 1782878868630
+					},
+					"latestVersion": {"version": "1.0.0", "changelog": "", "createdAt": 0}
+				}
+			}`,
+		},
+	})
+	a := NewWithClient(rt)
+	d, err := a.Detail(context.Background(), "https://api.skillhub.cn", "self-improving-agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://skillhub.cn/skills/self-improving-agent"
+	if d.DetailURL != want {
+		t.Errorf("detail 接口脏 homepage 也必须被覆盖:\n  got:  %s\n  want: %s", d.DetailURL, want)
 	}
 }
 

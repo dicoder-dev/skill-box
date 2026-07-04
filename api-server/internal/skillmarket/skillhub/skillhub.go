@@ -453,15 +453,18 @@ func mapSkillList(skills []apiSkill, baseURL string) []skillmarket.MarketItem {
 		if s.Slug == "" {
 			continue
 		}
-		// 2026-07-04 改:detail_url fallback 不再用 baseURL(API host),
-		// baseURL 实际是 https://api.skillhub.cn,真实站点是
-		// https://skillhub.cn,跳到 api.skillhub.cn/skills/{slug} 是 404。
-		// 强制走 defaultSourceHomepage(站点 host),跟已知正确的 knownFallback / Download
-		// 单文件路径行为对齐 — 那里都走站点 host。
-		detail := s.Homepage
-		if detail == "" {
-			detail = siteDetailURL(s.Slug)
-		}
+		// 2026-07-04 改:detail_url 必须无条件走站点 host(skillhub.cn)。
+		//
+		// 历史两轮 bug 都跟上游 apiSkill.Homepage 字段不可信有关:
+		//   1) homepage 为空时,fallback 误用 baseURL(API host api.skillhub.cn)
+		//      拼成 https://api.skillhub.cn/skills/{slug} → 404。
+		//   2) homepage 非空但内容脏(典型如
+		//      https://api.skillhub.cn/pskoett/self-improving-agent 或
+		//      https://skillhub.cn/pskoett/<slug> 带命名空间前缀),仍会跳错。
+		//
+		// 不论上游给什么值,都强制重写为站点详情页,与 Download 单文件路径
+		// 行为对齐。
+		detail := siteDetailURL(s.Slug)
 		install := detail
 		if s.UpstreamURL != nil && *s.UpstreamURL != "" {
 			install = *s.UpstreamURL
@@ -571,12 +574,10 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 	if s.Slug == "" {
 		return nil, fmt.Errorf("%w: empty slug in detail response", skillmarket.ErrRemoteNotFound)
 	}
-	// 2026-07-04 改:detail_url fallback 不再用 baseURL(API host),
-	// 2026-07-04 同 bug 修复 — 强制走 defaultSourceHomepage 站点 host。
-	detail := s.Homepage
-	if detail == "" {
-		detail = siteDetailURL(s.Slug)
-	}
+	// 2026-07-04 改:同上,无条件走 defaultSourceHomepage 站点 host,
+	// 即便上游 apiSkill.Homepage 是脏值(如带 /pskoett/<slug> 命名空间)
+	// 也要被覆盖。真实详情页始终在 https://skillhub.cn/skills/<slug>。
+	detail := siteDetailURL(s.Slug)
 	install := detail
 	if s.UpstreamURL != nil && *s.UpstreamURL != "" {
 		install = *s.UpstreamURL
