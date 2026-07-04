@@ -27,6 +27,10 @@ const emit = defineEmits(['select-file'])
 // 数据结构:
 //   root.dirs: [{ name, path, dirs: [...], files: [{name, path, size}] }]
 //   root.files: [{ name, path, size }]
+//
+// 2026-07-04 增(Commit 7+):过滤掉 macOS 系统元数据文件(.DS_Store / ._*),
+// 这些是 Finder 留下的,跟 skill 内容无关,展示出来干扰用户。
+// 走"以 . 开头"为统一规则,顺手过滤 .git / .vscode 等其它隐藏文件。
 function buildTree(files) {
   const root = { dirs: [], files: [] }
   // 用 path 前缀找 / 建中间目录
@@ -36,6 +40,8 @@ function buildTree(files) {
     if (dirIndex.has(fullPath)) return dirIndex.get(fullPath)
     const parentPath = fullPath.includes('/') ? fullPath.slice(0, fullPath.lastIndexOf('/')) : ''
     const name = fullPath.slice(fullPath.lastIndexOf('/') + 1)
+    // 中间目录名也走隐藏文件过滤(.git / .vscode 等空目录)
+    if (name.startsWith('.')) return root
     const parent = ensureDir(parentPath)
     const dirNode = { name, path: fullPath, dirs: [], files: [] }
     parent.dirs.push(dirNode)
@@ -44,6 +50,8 @@ function buildTree(files) {
   }
   for (const f of files || []) {
     if (!f || !f.path) continue
+    // 过滤以 . 开头的隐藏文件(.DS_Store / ._* / .git 等)
+    if (f.path.startsWith('.') || f.path.split('/').some((seg) => seg.startsWith('.'))) continue
     const parts = f.path.split('/')
     const fileName = parts[parts.length - 1]
     const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
