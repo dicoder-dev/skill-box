@@ -39,19 +39,38 @@ const emit = defineEmits(['saved'])
 const selectedFile = ref(null)
 const selectedKey = ref('')  // 用于 FileTreeView 的 selectedPath
 
+// 监听 props.files 变化,更新 selectedFile
+// 2026-07-04 修(Commit 8+):保存代码文件后,父组件 onDrawerSaved 会 reload 整个 skill,
+// props.files 重新赋值,这个 watch 会触发。旧版总是 fallback 到 SKILL.md,
+// 导致用户编辑了 examples/foo.py 点保存 → 跳回 SKILL.md,体验很糟。
+// 修复:files 变化时优先保留 selectedKey(用户正在编辑的文件),找不到再 fallback SKILL.md。
 watch(
   () => props.files,
   (files) => {
-    if (files && files.length) {
-      // 默认选 SKILL.md(主入口)
-      const sk = files.find((f) => f.path === 'SKILL.md')
-      const target = sk || files[0]
-      selectedFile.value = target
-      selectedKey.value = target?.path || ''
-    } else {
+    if (!files || !files.length) {
       selectedFile.value = null
       selectedKey.value = ''
+      return
     }
+    // 优先用用户当前选中的 path 在新 files 里找
+    const prev = selectedKey.value
+    if (prev) {
+      const found = files.find((f) => f.path === prev)
+      if (found) {
+        // 保留 selectedKey,只更新 selectedFile 的 content(防 stale)
+        // 但 selectedFile 不能直接用 found 替换,因为 selectedFile 是 ref,会触发 watch
+        // 用 nextTick 等一帧再设(实际上 selectedFile 在外面已经被 saveCurrent 同步过)
+        if (!selectedFile.value || selectedFile.value.path !== prev) {
+          selectedFile.value = found
+        }
+        return
+      }
+    }
+    // 首次打开/没选中:默认选 SKILL.md
+    const sk = files.find((f) => f.path === 'SKILL.md')
+    const target = sk || files[0]
+    selectedFile.value = target
+    selectedKey.value = target?.path || ''
   },
   { immediate: true, deep: true },
 )
