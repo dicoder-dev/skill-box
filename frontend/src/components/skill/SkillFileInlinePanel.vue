@@ -225,6 +225,9 @@ async function saveCurrent() {
     const s = new Set(dirtyPaths.value)
     s.delete(path)
     dirtyPaths.value = s
+    // 2026-07-04 改:保存成功后自动切回渲染模式(用户编辑目的已达到,
+    // 切回 view 让他们确认结果,也避免一直占着 Monaco 实例)
+    editMode.value = 'view'
     emit('saved', { path, content: newContent })
     toast.success(t('skills.fileBrowser.saved', { path }))
   } catch (e) {
