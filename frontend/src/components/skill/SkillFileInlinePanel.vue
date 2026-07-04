@@ -103,11 +103,41 @@ const currentContent = computed(() => {
   return localFiles.has(path) ? localFiles.get(path) : (selectedFile.value?.content || '')
 })
 
+// 2026-07-04 增:SKILL.md 在 Monaco 里**不显示 frontmatter 区域**(用户反馈太干扰)。
+// 策略:
+//   - Monaco 看到的内容 = body(去掉开头 --- 块)
+//   - localFiles / selectedFile.content 始终存完整 SKILL.md 原文
+//   - 保存时用 rebuildSkillMd 把 frontmatter + 编辑后 body 重新拼回
+//   - 顶部加 [i] frontmatter 弹窗,告诉用户这些元数据存在但不在编辑器里
+function splitSkillMd(text) {
+  if (!text) return { frontmatter: '', body: '' }
+  // 匹配开头 --- 到下一个 --- 的 frontmatter 块(允许末尾有空行)
+  const m = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/)
+  if (!m) return { frontmatter: '', body: text }
+  return {
+    frontmatter: m[0],         // 含 --- 包裹的完整块
+    body: text.slice(m[0].length),  // frontmatter 之后的内容
+  }
+}
+
+// 给 Monaco 显示用的内容(SKILL.md 去掉 frontmatter,其它文件原样)
+const displayContent = computed(() => {
+  if (!selectedFile.value) return ''
+  if (selectedFile.value.path === 'SKILL.md') {
+    return splitSkillMd(currentContent.value).body
+  }
+  return currentContent.value
+})
+
 const isDirty = computed(() => {
   const path = selectedFile.value?.path
   if (!path) return false
   if (!localFiles.has(path)) return false
-  return localFiles.get(path) !== (selectedFile.value?.content || '')
+  // 2026-07-04 改:SKILL.md 时比较 body(同 displayContent 的逻辑)
+  const current = localFiles.get(path) || ''
+  const origFull = selectedFile.value?.content || ''
+  const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
+  return current !== orig
 })
 
 const fileSize = computed(() => (currentContent.value || '').length)
@@ -115,8 +145,13 @@ const fileSize = computed(() => (currentContent.value || '').length)
 function onContentChange(v) {
   const path = selectedFile.value?.path
   if (!path) return
+  // 2026-07-04 改:SKILL.md 时,Monaco 拿到的是 body,原文件含 frontmatter,
+  // 不能直接比 localFiles 跟 selectedFile.content(永远不等 → 永远 dirty)。
+  // 统一存 localFiles = "Monaco 看到的内容"(SKILL.md 是 body,其它文件是原文)。
+  // orig(用于 dirty 判定)同步剥 frontmatter。
   localFiles.set(path, v || '')
-  const orig = selectedFile.value?.content || ''
+  const origFull = selectedFile.value?.content || ''
+  const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
   const s = new Set(dirtyPaths.value)
   if ((v || '') !== orig) s.add(path)
   else s.delete(path)
@@ -139,7 +174,19 @@ async function saveCurrent() {
   saving.value = true
   try {
     const path = selectedFile.value.path
-    const newContent = localFiles.get(path) || ''
+    let newContent = localFiles.get(path) || ''
+
+    // 2026-07-04 改:SKILL.md 保存时,把 Monaco 编辑的 body + 原 frontmatter 拼回。
+    // 否则保存的就是"剥离 frontmatter 的 body",磁盘文件就丢了元数据。
+    if (path === 'SKILL.md') {
+      const orig = selectedFile.value?.content || ''
+      const { frontmatter } = splitSkillMd(orig)
+      // 如果原文件有 frontmatter,拼回去;如果用户把 frontmatter 全删了,新文件也不加(尊重用户)
+      if (frontmatter) {
+        newContent = frontmatter + (newContent.startsWith('\n') ? '' : '\n') + newContent
+      }
+    }
+
     const updatedFiles = (props.files || []).map((f) =>
       f.path === path ? { ...f, content: newContent } : f,
     )
@@ -171,7 +218,10 @@ async function saveCurrent() {
 function resetCurrent() {
   if (!selectedFile.value) return
   const path = selectedFile.value.path
-  const orig = selectedFile.value.content || ''
+  const origFull = selectedFile.value.content || ''
+  // 2026-07-04 改:SKILL.md 时 Monaco 看到的是 body,reset 也要把 body 写回 localFiles
+  // 否则 onContentChange 比对会判 dirty(完整 vs body 永远不等)
+  const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
   localFiles.set(path, orig)
   onContentChange(orig)
   const s = new Set(dirtyPaths.value)
@@ -326,7 +376,7 @@ function closeFrontmatter() { fmOpen.value = false }
           v-if="selectedFile?.path"
           :key="selectedFile.path"
           :path="selectedFile.path"
-          :content="currentContent"
+          :content="displayContent"
           :editable="!isReadOnly"
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
