@@ -8,7 +8,7 @@
 //
 // 2026-07-04 增:首页技能文件浏览器。
 
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
@@ -167,13 +167,22 @@ function disposeEditor() {
 }
 
 // 监听 path / content 变化,更新 Monaco 内容
+// 2026-07-04 修(Commit 6 - 修复空白 bug):
+//   - 旧版 useMonaco 直接作为数组元素传,Vue 把 ref 当成 reactive 跟踪的源,可能不会立即触发
+//   - 旧版 immediate: false → 首次挂载不调 ensureMonaco,容器空
+//   - 修复:统一用 getter 形式,immediate: true + nextTick 等容器就绪
 watch(
-  [() => props.path, () => props.content, useMonaco],
+  [() => props.path, () => props.content, () => useMonaco.value],
   async () => {
     if (!useMonaco.value) {
       disposeEditor()
       return
     }
+    // 等容器 ref 挂到 DOM 上
+    if (!monacoContainer.value) {
+      await nextTick()
+    }
+    if (!monacoContainer.value) return
     if (!editor) {
       await ensureMonaco()
     }
@@ -188,15 +197,13 @@ watch(
     // 切文件后清除 dirty 状态
     emit('dirty-change', false)
   },
-  { immediate: false },
+  { immediate: true },
 )
 
 // 监听 editable 变化(Monaco 实例化后切换)
 watch(() => props.editable, (v) => {
   if (editor) editor.updateOptions({ readOnly: !v })
 })
-
-import { nextTick } from 'vue'
 
 onBeforeUnmount(() => {
   disposeEditor()
