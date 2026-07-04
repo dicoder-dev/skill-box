@@ -22,9 +22,11 @@ const props = defineProps({
   path: { type: String, default: '' },
   // 文件内容
   content: { type: String, default: '' },
+  // 2026-07-04 增(Commit 4):是否可编辑;SKILL.md 在抽屉里强制只读,避免与主页 Tiptap 编辑态冲突
+  editable: { type: Boolean, default: true },
 })
 
-const emit = defineEmits([])
+const emit = defineEmits(['update:content', 'dirty-change'])
 
 // 文件后缀
 const ext = computed(() => {
@@ -103,7 +105,7 @@ async function ensureMonaco() {
     editor = monaco.editor.create(monacoContainer.value, {
       value: props.content || '',
       language: language.value,
-      readOnly: true, // Commit 3 只读,Commit 4 加编辑
+      readOnly: !props.editable, // 2026-07-04 改(Commit 4):由 editable prop 控制
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize: 13,
@@ -114,9 +116,18 @@ async function ensureMonaco() {
       folding: true,
       renderWhitespace: 'selection',
       smoothScrolling: true,
-      contextmenu: false, // 桌面端 webview 右键菜单体验差,禁用
+      contextmenu: false,
     })
     model = editor.getModel()
+    // 2026-07-04 增(Commit 4):内容变化 → emit update:content + dirty-change
+    if (props.editable) {
+      model.onDidChangeContent(() => {
+        if (suppressEmit) return
+        const v = model.getValue()
+        emit('update:content', v)
+        emit('dirty-change', v !== (props.content || ''))
+      })
+    }
   } finally {
     monacoLoading.value = false
   }
@@ -146,16 +157,15 @@ watch(
     suppressEmit = true
     editor.setModel(model)
     suppressEmit = false
+    // 切文件后清除 dirty 状态
+    emit('dirty-change', false)
   },
   { immediate: false },
 )
 
-// 当 useMonaco 由 false 变 true 时(切到代码文件),初始化
-watch(useMonaco, async (v) => {
-  if (v && !editor) {
-    await nextTick()
-    await ensureMonaco()
-  }
+// 监听 editable 变化(Monaco 实例化后切换)
+watch(() => props.editable, (v) => {
+  if (editor) editor.updateOptions({ readOnly: !v })
 })
 
 import { nextTick } from 'vue'

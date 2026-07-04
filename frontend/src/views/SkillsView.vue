@@ -599,6 +599,63 @@ watch(
   { immediate: true },
 )
 
+// 2026-07-04 增(Commit 4):抽屉内文件保存后,主区同步。
+//   - 如果改的是 SKILL.md,同步刷新 currentMd / currentBody,主区预览实时更新
+//   - 重新拉一次 detail(确保 files 与磁盘一致)
+//   - 走与 saveInlineEdit 相同的"已 enabled scope 重放 apply"流程(共用逻辑)
+async function onDrawerSaved({ path, content }) {
+  if (path === 'SKILL.md') {
+    currentMd.value = content
+    currentBody.value = extractBody(content)
+  }
+  // 重新拉一次详情(让 currentFiles 与磁盘同步)
+  const row = items.value.find((x) => skillKey(x) === selectedKey.value)
+  if (row) {
+    try {
+      await loadCurrent(row)
+    } catch (_) { /* 忽略,主区渲染靠 currentMd/currentBody 即可 */ }
+  }
+  // 同步到已 enabled 的工具 / 项目(skill 全文被 updateSkill 重写后,磁盘副本要回放)
+  // 复用 saveInlineEdit 的 existingApplies / failItems 逻辑,这里抽不出太细的函数,
+  // 复制一份(避免内联编辑那条路被这个改动影响)
+  try {
+    const existingApplies = scopeHits.value
+      .filter((h) => h.exists)
+      .map((h) => ({ tool_id: h.tool_id, scope: h.scope, project_id: h.project_id || 0 }))
+    if (existingApplies.length) {
+      const failItems = []
+      for (const a of existingApplies) {
+        try {
+          const res = await applySkill({
+            name: current.value.name,
+            scope: a.scope,
+            project_id: a.project_id,
+            tools: [a.tool_id],
+          })
+          const ins = inspectApplyResult(res)
+          if (!ins.allOk) {
+            failItems.push(...ins.failedItems.map((f) => ({
+              tool: f.tool || a.tool_id,
+              scope: a.scope,
+              msg: f.error,
+            })))
+          }
+        } catch (e) {
+          failItems.push({ tool: a.tool_id, scope: a.scope, msg: e?.message || String(e) })
+        }
+      }
+      if (failItems.length) {
+        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
+        toast.error(t('skills.apply.partialFailed', {
+          ok: existingApplies.length - failItems.length,
+          total: existingApplies.length,
+          detail,
+        }), 6000)
+      }
+    }
+  } catch (_) { /* scope 重放失败不影响主保存成功 */ }
+}
+
 // 2026-06-25 二改:skillKey 改为只取 name(后端 listSkills 不返回 scope/project_id,
 // 之前用 scope|project_id|name|version 会因为 scope/project_id 都是 undefined,
 // 所有 item 的 key 都一样,导致 findIndex 总是命中 idx=0,splice 时把第一行
@@ -2176,7 +2233,7 @@ onUnmounted(() => {
     <!-- AI 侧栏 -->
     <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
 
-    <!-- 2026-07-04 增:技能文件浏览器(右侧抽屉,Commit 1 只展示目录树 + 纯文本预览) -->
+    <!-- 2026-07-04 增:技能文件浏览器(右侧抽屉) -->
     <SkillFileDrawer
       v-if="current && currentFiles.length"
       v-model="fileDrawerOpen"
@@ -2187,8 +2244,10 @@ onUnmounted(() => {
         project_id: current.project_id,
         source: current.source,
         group_path: current.group_path,
+        canonical: current._full?.canonical,
       }"
       :files="currentFiles"
+      @saved="onDrawerSaved"
     />
 
     <!-- Tag 弹窗 -->
