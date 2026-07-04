@@ -8,12 +8,13 @@ import "ginp-api/internal/gapi/entity"
 //
 // Skill Box 表(见 docs/project/需求规划.md 第 6 节):
 // project / skill_file / skill_tag / skill_file_snapshot /
-// skill_apply / audit_log / ai_provider / market_source / market_skill /
-// onboarding_state / setting
+// skill_apply / ai_provider / market_source / market_skill /
+// onboarding_state / setting / tool / tool_path
 //
 // 2026-06-24 改造:skill 表(对应 entity.Skill)弃用,源数据走 ~/.skill-box/skills/<name>/SKILL.md;
 // 下游表(skill_file / skill_apply / skill_tag / skill_file_snapshot / skill_test_*)
 // 保留,关联键从 skill_id(uint)改为 (scope, project_id, name) 复合键。
+// 2026-07-04 改造:audit_log 表下线,业务事件改写到 ~/.skill-box/logs/<YYYY-MM>/INFO.csv。
 var EntityAutoMigrateList = []any{
 	new(entity.User),
 
@@ -24,7 +25,6 @@ var EntityAutoMigrateList = []any{
 	new(entity.SkillApply),
 	new(entity.SkillTestRun),
 	new(entity.SkillTestResult),
-	new(entity.AuditLog),
 	new(entity.AIProvider),
 	new(entity.MarketSource),
 	new(entity.MarketSkill),

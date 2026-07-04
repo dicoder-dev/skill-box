@@ -3,7 +3,6 @@ package router
 //显式导入：来确保它的 init 函数被调用
 import (
 	_ "ginp-api/internal/gapi/controller/skillbox/caiprovider"
-	_ "ginp-api/internal/gapi/controller/skillbox/caudit"
 	_ "ginp-api/internal/gapi/controller/skillbox/cdesktop"
 	_ "ginp-api/internal/gapi/controller/skillbox/cmarket"
 	_ "ginp-api/internal/gapi/controller/skillbox/conboarding"

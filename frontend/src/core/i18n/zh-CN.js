@@ -7,7 +7,6 @@
 //   - projects.* ProjectsView
 //   - market.*  MarketView
 //   - onboarding.* OnboardingView
-//   - audit.*   AuditView
 
 const messages = {
   app: {
@@ -21,7 +20,6 @@ const messages = {
       tools: { label: '工具' },
       market: { label: '市场' },
       onboarding: { label: '导入技能' },
-      audit: { label: '审计' },
       settings: { label: '设置' },
     },
     backendOk: '后端已连接',
@@ -573,31 +571,6 @@ const messages = {
     errScan: '扫描失败: {msg}',
     errImport: '导入失败: {msg}',
     okImport: '导入完成: {ok} 成功 / {failed} 失败',
-  },
-
-  audit: {
-    title: '审计日志',
-    subtitle: '记录所有关键操作的操作者 / 动作 / 目标 / 载荷。第 10 步后端就绪后,这里会自动出现真实数据。',
-    statTotal: '总记录数',
-    statByAction: '按动作分类',
-    statByActor: '按操作者分类',
-    placeholderTitle: '第 10 步后端尚未就绪',
-    placeholderHint1: '该页面会在 internal/skillpkg/ 导出导入包 + caudit 审计日志控制器完成后自动启用。',
-    placeholderHint2: '预计接口:GET /api/skillbox/audit/logs · GET /api/skillbox/audit/stats',
-    listTitle: '日志列表',
-    filterAction: '动作',
-    filterActor: '操作者',
-    actorPlaceholder: '用户名',
-    filterTargetType: '目标类型',
-    targetTypePlaceholder: '技能 / 项目 / ...',
-    colId: 'ID',
-    colTime: '时间',
-    colActor: '操作者',
-    colAction: '动作',
-    colTarget: '目标',
-    colPayload: '载荷',
-    seeMore: '查看',
-    empty: '没有匹配的日志记录',
   },
 
   settings: {

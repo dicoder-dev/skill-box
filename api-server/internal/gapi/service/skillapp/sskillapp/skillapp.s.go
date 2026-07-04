@@ -10,7 +10,6 @@ package sskillapp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -19,7 +18,6 @@ import (
 
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/controller/skillbox/cskill"
-	"ginp-api/internal/gapi/service/audit/saudit"
 	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/settings"
@@ -29,6 +27,7 @@ import (
 	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
 	mskillapply "ginp-api/internal/gapi/model/skillbox/mskillapply"
 
+	"ginp-api/pkg/logger"
 	"ginp-api/pkg/where"
 	"gorm.io/gorm"
 )
@@ -111,32 +110,13 @@ func (s *Service) applier() *skillapp.Applier {
 	return a
 }
 
-// audit 内部 helper:把关键事件落 audit_log。actor 暂用 "system"。
-// targetID 弃用(2026-06-24):改用 name 字符串作为标识;为保持 saudit.WriteInput 兼容,
-// 这里把 name 做 hash 成 uint 简化处理(实际查询时按 action + payload 过滤)。
-func (s *Service) audit(targetID uint, name string, payload any) {
-	if s.dbWrite == nil {
-		return
-	}
-	payloadStr := ""
-	if payload != nil {
-		if b, err := json.Marshal(payload); err == nil {
-			payloadStr = string(b)
-		}
-	}
-	action := "skill_apply"
-	if mp, ok := payload.(map[string]any); ok {
-		if a, ok2 := mp["action"].(string); ok2 {
-			action = a
-		}
-	}
-	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
-		Actor:      "system",
-		Action:     action,
-		TargetType: "skill",
-		TargetID:   targetID,
-		Payload:    payloadStr + "|name=" + name,
-	})
+// Event 把"业务审计事件"写到 INFO.csv。
+// name=技能名,fields=其它自定义键值(序列化后落到"日志内容"列的 JSON 中)。
+//
+// 2026-07-04 改造:原 s.audit 写 audit_log 表;现在改走 logger.Event,与
+// ~/.skill-box/logs/<YYYY-MM>/INFO.csv 同通道,前端不展示。
+func (s *Service) Event(action, name string, fields map[string]any) {
+	logger.Event(action, "skill", name, fields)
 }
 
 // ApplyInput 单 skill apply 入参(2026-06-24:用 scope+name 定位)。
@@ -250,8 +230,7 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 		})
 		if err != nil {
 			out.AllOK = false
-			s.audit(0, full.Manifest.Name, map[string]any{
-				"action": "apply_failed",
+			s.Event("apply_failed", full.Manifest.Name, map[string]any{
 				"tool":   tool,
 				"scope":  scope,
 				"error":  err.Error(),
@@ -260,12 +239,11 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 		if res != nil {
 			s.recordApply(scope, in.ProjectID, full.Manifest.Name, tool, res)
 			if res.ApplyID > 0 && res.Status == skillapp.StatusApplied {
-				s.audit(0, full.Manifest.Name, map[string]any{
-					"action":     "apply",
-					"tool":       tool,
-					"scope":      scope,
+				s.Event("apply", full.Manifest.Name, map[string]any{
+					"tool":        tool,
+					"scope":       scope,
 					"target_path": res.TargetPath,
-					"apply_id":   res.ApplyID,
+					"apply_id":    res.ApplyID,
 				})
 			}
 			res.PreSnapshot = nil
@@ -328,8 +306,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		s.recordApply(bir.Scope, bir.ProjectID, bir.SkillName, bir.Tool, bir.Result)
 		if bir.Result.ApplyID > 0 {
 			if bir.Result.Status == skillapp.StatusApplied {
-				s.audit(0, bir.SkillName, map[string]any{
-					"action":      "apply",
+				s.Event("apply", bir.SkillName, map[string]any{
 					"tool":        bir.Tool,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
@@ -337,8 +314,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 					"batch":       true,
 				})
 			} else if bir.Result.Status == skillapp.StatusFailed {
-				s.audit(0, bir.SkillName, map[string]any{
-					"action":      "apply_failed",
+				s.Event("apply_failed", bir.SkillName, map[string]any{
 					"tool":        bir.Tool,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
@@ -374,12 +350,11 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 		return nil, fmt.Errorf("skillapp: cannot undo a failed apply (id=%d)", applyID)
 	}
 	if err := skillapp.UndoWithSnapshot(row.TargetPath, row.PreSnapshot); err != nil {
-		s.audit(0, row.Name, map[string]any{
-			"action":     "undo_failed",
-			"apply_id":   applyID,
-			"tool":       row.Tool,
+		s.Event("undo_failed", row.Name, map[string]any{
+			"apply_id":    applyID,
+			"tool":        row.Tool,
 			"target_path": row.TargetPath,
-			"error":      err.Error(),
+			"error":       err.Error(),
 		})
 		return nil, fmt.Errorf("skillapp: undo file: %w", err)
 	}
@@ -389,10 +364,9 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	if err := s.applyModel().Update(where.New(mskillapply.FieldID, "=", row.ID).Conditions(), row); err != nil {
 		return nil, fmt.Errorf("skillapp: update apply row: %w", err)
 	}
-	s.audit(0, row.Name, map[string]any{
-		"action":     "undo",
-		"apply_id":   applyID,
-		"tool":       row.Tool,
+	s.Event("undo", row.Name, map[string]any{
+		"apply_id":    applyID,
+		"tool":        row.Tool,
 		"target_path": row.TargetPath,
 	})
 	return &UndoResult{ApplyID: applyID, NewStatus: row.Status, RolledBackAt: now}, nil
@@ -471,19 +445,17 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	}
 	created, _ := s.applyModel().Create(placeholder)
 	if created != nil {
-		s.audit(0, in.Name, map[string]any{
-			"action":     "force_undo",
-			"tool":       in.Tool,
-			"scope":      scope,
+		s.Event("force_undo", in.Name, map[string]any{
+			"tool":        in.Tool,
+			"scope":       scope,
 			"target_path": resolved,
-			"apply_id":   created.ID,
+			"apply_id":    created.ID,
 		})
 		return &UndoResult{ApplyID: created.ID, NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
 	}
-	s.audit(0, in.Name, map[string]any{
-		"action":     "force_undo",
-		"tool":       in.Tool,
-		"scope":      scope,
+	s.Event("force_undo", in.Name, map[string]any{
+		"tool":        in.Tool,
+		"scope":       scope,
 		"target_path": resolved,
 	})
 	return &UndoResult{NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
@@ -772,8 +744,7 @@ func (s *Service) MigrateMode(targetMode string) (*MigrateModeResult, error) {
 		}
 		res.Entries = append(res.Entries, entry)
 	}
-	s.audit(0, "batch_migrate_mode", map[string]any{
-		"action":  "migrate_mode",
+	s.Event("migrate_mode", "batch_migrate_mode", map[string]any{
 		"from":    fromMode,
 		"to":      targetMode,
 		"total":   res.Total,

@@ -5,7 +5,6 @@ import IconPark from '@/components/IconPark.vue'
 import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
-import AuditView from './views/AuditView.vue'
 import SettingsView from './views/SettingsView.vue'
 // 2026-07-01 增:工具元数据管理视图
 import ToolsView from './views/ToolsView.vue'
@@ -171,13 +170,12 @@ const navItems = computed(() => [
   // 2026-07-01 增:工具元数据管理(放在 projects 之后,影响 projects 扫描的依赖项)
   { key: 'tools',      label: t('app.nav.tools.label'),       icon: 'mdi:tools' },
   { key: 'market',     label: t('app.nav.market.label'),      icon: 'mdi:cart-outline' },
-  { key: 'audit',      label: t('app.nav.audit.label'),       icon: 'mdi:script-text-outline' },
   { key: 'settings',    label: t('app.nav.settings.label'),   icon: 'mdi:cog-outline' },
 ])
 
 function switchTab(k) {
   tab.value = k
-  if (k === 'audit' || k === 'skills') refreshStats()
+  if (k === 'skills') refreshStats()
   if (isMobile.value) sidebarOpen.value = false
 }
 
@@ -340,7 +338,6 @@ onUnmounted(() => {
         <ToolsView v-else-if="tab === 'tools'" />
         <SkillsView v-else-if="tab === 'skills'" />
         <MarketView v-else-if="tab === 'market'" />
-        <AuditView v-else-if="tab === 'audit'" />
         <SettingsView v-else-if="tab === 'settings'" />
       </div>
     </main>

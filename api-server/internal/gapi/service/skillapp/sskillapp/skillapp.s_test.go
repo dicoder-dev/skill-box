@@ -61,7 +61,6 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 		&entity.SkillFile{},
 		&entity.SkillApply{},
 		&entity.MarketSkill{},
-		&entity.AuditLog{},
 		&entity.Setting{},
 	); err != nil {
 		t.Fatal(err)

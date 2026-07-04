@@ -4,14 +4,12 @@
 package sskillaudit
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/gapi/service/audit/saudit"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	mskillfile "ginp-api/internal/gapi/model/skillbox/mskillfile"
 	mskillfilesnapshot "ginp-api/internal/gapi/model/skillbox/mskillfilesnapshot"
@@ -19,6 +17,7 @@ import (
 	"ginp-api/internal/skillaudit"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillstore"
+	"ginp-api/pkg/logger"
 	"ginp-api/pkg/where"
 
 	"gorm.io/gorm"
@@ -53,24 +52,13 @@ func (s *Service) snapModel() *mskillfilesnapshot.Model {
 	return mskillfilesnapshot.NewModel(s.dbWrite, s.dbRead)
 }
 
-// audit 内部 helper。
-func (s *Service) audit(action string, targetID uint, payload any) {
-	if s.dbWrite == nil {
-		return
-	}
-	payloadStr := ""
-	if payload != nil {
-		if b, err := json.Marshal(payload); err == nil {
-			payloadStr = string(b)
-		}
-	}
-	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
-		Actor:      "system",
-		Action:     action,
-		TargetType: "tag",
-		TargetID:   targetID,
-		Payload:    payloadStr,
-	})
+// Event 把"业务审计事件"写到 INFO.csv。
+// name=技能名,fields=其它自定义键值(序列化后落到"日志内容"列的 JSON 中)。
+//
+// 2026-07-04 改造:原 audit 写 audit_log 表;现在改走 logger.Event,与
+// ~/.skill-box/logs/<YYYY-MM>/INFO.csv 同通道,前端不展示。
+func (s *Service) Event(action, name string, fields map[string]any) {
+	logger.Event(action, "tag", name, fields)
 }
 
 // CreateTagInput 打 tag 入参(2026-06-24:用 scope+name 定位)。
@@ -130,8 +118,7 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 		IsImplicit: false,
 	}
 	if _, err := s.tagModel().Create(tagRow); err != nil {
-		s.audit("tag_create_failed", 0, map[string]any{
-			"name":    in.Name,
+		s.Event("tag_create_failed", in.Name, map[string]any{
 			"tag":     in.Tag,
 			"message": in.Message,
 			"error":   err.Error(),
@@ -149,8 +136,7 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 			Content:      f.Content,
 			ContentHash:  f.ContentHash,
 		}); err != nil {
-			s.audit("tag_create_failed", 0, map[string]any{
-				"name":    in.Name,
+			s.Event("tag_create_failed", in.Name, map[string]any{
 				"tag":     in.Tag,
 				"message": in.Message,
 				"error":   err.Error(),
@@ -158,8 +144,7 @@ func (s *Service) CreateTag(in *CreateTagInput) (*CreateTagOutput, error) {
 			return nil, fmt.Errorf("skillaudit: create file snapshot: %w", err)
 		}
 	}
-	s.audit("tag_create", 0, map[string]any{
-		"name":    in.Name,
+	s.Event("tag_create", in.Name, map[string]any{
 		"tag_id":  tagRow.ID,
 		"tag":     in.Tag,
 		"message": in.Message,
@@ -211,10 +196,9 @@ func (s *Service) DeleteTag(tagID uint) error {
 	if err := s.tagModel().DeleteById(tagID); err != nil {
 		return fmt.Errorf("skillaudit: delete tag: %w", err)
 	}
-	s.audit("tag_delete", 0, map[string]any{
-		"name":       tagRow.Name,
-		"tag_id":     tagID,
-		"tag":        tagRow.Tag,
+	s.Event("tag_delete", tagRow.Name, map[string]any{
+		"tag_id":      tagID,
+		"tag":         tagRow.Tag,
 		"is_implicit": tagRow.IsImplicit,
 	})
 	return nil
@@ -332,8 +316,7 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		Message:   fmt.Sprintf("auto pre-rollback to tag %s", tag.Tag),
 	})
 	if err != nil {
-		s.audit("rollback_failed", 0, map[string]any{
-			"name":   tag.Name,
+		s.Event("rollback_failed", tag.Name, map[string]any{
 			"tag_id": in.TagID,
 			"tag":    tag.Tag,
 			"stage":  "pre_tag",
@@ -347,8 +330,7 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		&entity.SkillTag{IsImplicit: true, Message: fmt.Sprintf("auto pre-rollback to tag %s", tag.Tag)},
 		mskilltag.FieldIsImplicit, mskilltag.FieldMessage,
 	); err != nil {
-		s.audit("rollback_failed", 0, map[string]any{
-			"name":   tag.Name,
+		s.Event("rollback_failed", tag.Name, map[string]any{
 			"tag_id": in.TagID,
 			"tag":    tag.Tag,
 			"stage":  "mark_implicit",
@@ -365,8 +347,7 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 	// 2026-07-03 改:Load → LoadByName,支持多级分组。
 	cur, err := s.store.LoadByName(tag.Name)
 	if err != nil {
-		s.audit("rollback_failed", 0, map[string]any{
-			"name":   tag.Name,
+		s.Event("rollback_failed", tag.Name, map[string]any{
 			"tag_id": in.TagID,
 			"tag":    tag.Tag,
 			"stage":  "load_current",
@@ -383,8 +364,7 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		Manifest: mfst,
 		Files:    files,
 	}); err != nil {
-		s.audit("rollback_failed", 0, map[string]any{
-			"name":   tag.Name,
+		s.Event("rollback_failed", tag.Name, map[string]any{
 			"tag_id": in.TagID,
 			"tag":    tag.Tag,
 			"stage":  "replace_files",
@@ -392,13 +372,12 @@ func (s *Service) Rollback(in *RollbackInput) (*RollbackOutput, error) {
 		})
 		return nil, fmt.Errorf("skillaudit: replace files: %w", err)
 	}
-	s.audit("rollback", 0, map[string]any{
-		"name":              tag.Name,
-		"tag_id":            in.TagID,
-		"tag":               tag.Tag,
-		"pre_rollback_tag":  preName,
+	s.Event("rollback", tag.Name, map[string]any{
+		"tag_id":              in.TagID,
+		"tag":                 tag.Tag,
+		"pre_rollback_tag":    preName,
 		"pre_rollback_tag_id": preOut.TagID,
-		"files_restored":    len(target),
+		"files_restored":      len(target),
 	})
 	return &RollbackOutput{
 		PreRollbackTagID: preOut.TagID,

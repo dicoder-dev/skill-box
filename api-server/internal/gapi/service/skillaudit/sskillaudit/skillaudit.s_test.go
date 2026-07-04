@@ -33,7 +33,6 @@ func newTestSvc(t *testing.T) (*sskillaudit.Service, *sskill.Service) {
 		&entity.SkillFile{},
 		&entity.SkillTag{},
 		&entity.SkillFileSnapshot{},
-		&entity.AuditLog{},
 	); err != nil {
 		t.Fatal(err)
 	}

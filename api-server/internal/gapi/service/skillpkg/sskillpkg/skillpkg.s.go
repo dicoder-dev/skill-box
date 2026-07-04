@@ -10,14 +10,13 @@
 package sskillpkg
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
-	"ginp-api/internal/gapi/service/audit/saudit"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillpkg"
+	"ginp-api/pkg/logger"
 
 	"gorm.io/gorm"
 )
@@ -36,26 +35,6 @@ type Service struct {
 
 func New(dbWrite, dbRead *gorm.DB, skillSvcFactory func() (*sskill.Service, error)) *Service {
 	return &Service{dbWrite: dbWrite, dbRead: dbRead, skillSvcFactory: skillSvcFactory}
-}
-
-// audit 内部 helper:把 import / export 关键事件落 audit_log。actor 暂用 "system"。
-func (s *Service) audit(action string, targetID uint, payload any) {
-	if s.dbWrite == nil {
-		return
-	}
-	payloadStr := ""
-	if payload != nil {
-		if b, err := json.Marshal(payload); err == nil {
-			payloadStr = string(b)
-		}
-	}
-	_, _ = saudit.New(s.dbWrite, s.dbRead).Write(saudit.WriteInput{
-		Actor:      "system",
-		Action:     action,
-		TargetType: "package",
-		TargetID:   targetID,
-		Payload:    payloadStr,
-	})
 }
 
 // sskillAdapter 把 sskill.Service 适配成 skillpkg.CanonicalProvider / SkillInstaller。
@@ -119,14 +98,14 @@ func (s *Service) BuildExport(req skillpkg.ExportRequest) ([]byte, []string, err
 	provider := &sskillAdapter{svc: svc}
 	bytes, failures, err := skillpkg.BuildBytes(req, provider)
 	if err != nil {
-		s.audit("export_failed", 0, map[string]any{
+		logger.Event("export_failed", "package", "", map[string]any{
 			"skills":     req.Skills,
 			"source_app": req.SourceApp,
 			"error":      err.Error(),
 		})
 		return bytes, failures, err
 	}
-	s.audit("export", 0, map[string]any{
+	logger.Event("export", "package", "", map[string]any{
 		"skills":        req.Skills,
 		"source_app":    req.SourceApp,
 		"source_desc":   req.SourceDesc,
@@ -156,7 +135,7 @@ func (s *Service) Import(zipBytes []byte, req skillpkg.ImportRequest) (*skillpkg
 	inst := skillpkg.NewImporter(&sskillAdapter{svc: svc})
 	out, err := inst.Install(zipBytes, req)
 	if err != nil {
-		s.audit("import_failed", 0, map[string]any{
+		logger.Event("import_failed", "package", "", map[string]any{
 			"target_scope": req.TargetScope,
 			"project_id":   req.ProjectID,
 			"skills":       req.Skills,
@@ -164,7 +143,7 @@ func (s *Service) Import(zipBytes []byte, req skillpkg.ImportRequest) (*skillpkg
 		})
 		return out, err
 	}
-	s.audit("import", 0, map[string]any{
+	logger.Event("import", "package", "", map[string]any{
 		"target_scope":  req.TargetScope,
 		"project_id":    req.ProjectID,
 		"skills":        req.Skills,
