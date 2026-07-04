@@ -13,6 +13,7 @@
 package cdesktop
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -138,6 +139,41 @@ func PostFsInspectProject(c *ginp.ContextPlus, req *RequestFsInspectProject) {
 	c.JSON(200, RespondFsInspectProject{Name: hint.Name, Alias: hint.Alias})
 }
 
+// RequestFsRemovePath { path } 删除给定磁盘路径(文件或目录树)。
+//
+// 2026-07-04 增:供 ProjectsView 工具 skill 弹窗的"删除 skill"按钮使用,
+// 物理删 source_path 对应的目录。不写 DB,不联动其它状态(纯本地文件操作)。
+//
+// 注意:这是**破坏性**操作,前端必须二次确认;后端不做语义层校验,
+// 仅 fsutil.RemovePath 兜底防 root / 防空。
+type RequestFsRemovePath struct {
+	Path string `json:"path"`
+}
+
+// RespondFsRemovePath { ok, removed: bool }
+// removed=false 表示路径本来就不存在(幂等成功),用于前端打 log 不报错。
+type RespondFsRemovePath struct {
+	OK      bool `json:"ok"`
+	Removed bool `json:"removed"`
+}
+
+// PostFsRemovePath POST /api/desktop/fs/remove-path
+func PostFsRemovePath(c *ginp.ContextPlus, req *RequestFsRemovePath) {
+	if strings.TrimSpace(req.Path) == "" {
+		c.JSON(400, gin.H{"error": "missing path"})
+		return
+	}
+	// 删之前再 stat 一次,记录 removed=true/false(幂等场景返 false)
+	_, statErr := os.Stat(req.Path)
+	existed := statErr == nil
+
+	if err := fsutil.RemovePath(req.Path); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, RespondFsRemovePath{OK: true, Removed: existed})
+}
+
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/fs/read-text", HttpType: ginp.HttpPost,
@@ -174,6 +210,15 @@ func init() {
 			Title:         "desktop.fs.inspectProject",
 			Description:   "从目录路径推断项目 name / alias(name 取 basename,alias 走 slugify)",
 			RequestParams: RequestFsInspectProject{},
+		},
+	})
+	ginp.RouterAppend(ginp.RouterItem{
+		Path: "/api/desktop/fs/remove-path", HttpType: ginp.HttpPost,
+		Handler: ginp.BindParamsHandler(PostFsRemovePath, &RequestFsRemovePath{}),
+		Swagger: &ginp.SwaggerInfo{
+			Title:         "desktop.fs.removePath",
+			Description:   "删除给定磁盘路径(文件或目录树),幂等(不存在不报错)。前端必须二次确认。",
+			RequestParams: RequestFsRemovePath{},
 		},
 	})
 }

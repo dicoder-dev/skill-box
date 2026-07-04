@@ -56,6 +56,7 @@ const messages = {
     totalCount: '{count} total',
     noData: 'No skills in this scope yet',
     noDataHint: 'Click "+ New" to start, or import from installed tools via Onboarding',
+    deleted: 'Deleted {name}',
   },
 
   skills: {
@@ -340,6 +341,12 @@ const messages = {
     scanFailed: 'Scan failed',
     toolSkillsTitle: '{project} · {tool} skills ({count})',
     skillPath: 'Path',
+    // Actions on each skill row inside the tool-skills modal
+    skillActionReveal: 'Reveal this skill folder in file manager',
+    skillActionDelete: 'Delete this skill folder (irreversible)',
+    skillDeleteConfirm: 'Delete skill "{name}"? This will permanently remove the folder:\n{path}',
+    skillDeleteFailed: 'Delete failed: {msg}',
+    skillRevealFailed: 'Reveal failed: {msg}',
   },
 
   market: {

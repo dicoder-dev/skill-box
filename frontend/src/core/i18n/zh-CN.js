@@ -56,6 +56,7 @@ const messages = {
     totalCount: '共 {count} 条',
     noData: '该作用域下还没有技能',
     noDataHint: '点右上角"新建"开始,或去首次配置从已装工具导入',
+    deleted: '已删除 {name}',
   },
 
   skills: {
@@ -345,6 +346,12 @@ const messages = {
     scanFailed: '扫描失败',
     toolSkillsTitle: '{project} · {tool} 的 skills ({count})',
     skillPath: '路径',
+    // 工具 skill 弹窗里的"跳转"和"删除"两个操作图标
+    skillActionReveal: '在文件管理器中打开该 skill 目录',
+    skillActionDelete: '删除该 skill 目录(物理删除)',
+    skillDeleteConfirm: '确定删除 skill "{name}"?此操作会永久删除磁盘目录:\n{path}',
+    skillDeleteFailed: '删除失败:{msg}',
+    skillRevealFailed: '跳转失败:{msg}',
   },
 
   market: {

@@ -115,6 +115,40 @@ function openToolSkills(p, tool) {
   skillsModal.skills = tool.skills || []
 }
 
+// revealSkill 在系统文件管理器中打开该 skill 的物理目录。
+// 复用 platform.fs.reveal(Web 端有 501 → fallback_url 的兜底逻辑),
+// source_path 已是 EvalSymlinks 后的真实路径,直接喂给后端即可。
+async function revealSkill(s) {
+  if (!s?.source_path) return
+  try {
+    await platform.fs.reveal(s.source_path)
+  } catch (e) {
+    toast.error(t('projects.skillRevealFailed', { msg: e?.message || String(e) }))
+  }
+}
+
+// 删除单条 skill 的目标目录(物理删除,不可逆)。二次确认弹窗走 openConfirm。
+// 删除成功 → 从 skillsModal.skills 列表里就地移除,并通知调用方 reload 扫描结果
+// (scans[projectId] 缓存会被外层 useEffect / 交互触发刷新;这里只改 modal 视图)。
+async function deleteSkill(s) {
+  if (!s?.source_path) return
+  const ok = await openConfirm({
+    title: t('common.delete'),
+    message: t('projects.skillDeleteConfirm', { name: s.name, path: s.source_path }),
+    variant: 'danger',
+    confirmText: t('common.delete'),
+  })
+  if (!ok) return
+  try {
+    await platform.fs.removePath(s.source_path)
+    // 从当前 modal 的 skill 列表里移除;chips 计数由父级 ensureScanned 在下次扫描时刷新
+    skillsModal.skills = skillsModal.skills.filter((x) => x.source_path !== s.source_path)
+    toast.success(t('common.deleted', { name: s.name }))
+  } catch (e) {
+    toast.error(t('projects.skillDeleteFailed', { msg: e?.message || String(e) }))
+  }
+}
+
 // 点击"导入项目"按钮:先让用户选目录,再弹"导入"弹窗预填
 async function startImport() {
   error.value = ''
@@ -579,8 +613,30 @@ onMounted(reload)
     <Modal v-model="skillsModal.open" :title="skillsModal.title" size="md">
       <ul v-if="skillsModal.skills.length" class="skill-list">
         <li v-for="s in skillsModal.skills" :key="s.source_path || s.name" class="skill-list-item">
-          <code class="skill-list-name">{{ s.name }}</code>
-          <span class="skill-list-path" :title="s.source_path">{{ s.source_path }}</span>
+          <div class="skill-list-row">
+            <div class="skill-list-info">
+              <code class="skill-list-name">{{ s.name }}</code>
+              <span class="skill-list-path" :title="s.source_path">{{ s.source_path }}</span>
+            </div>
+            <div class="skill-list-actions">
+              <IconPark
+                icon="mdi:folder-outline"
+                class="action-icon action-icon-finder"
+                :title="t('projects.skillActionReveal')"
+                width="14"
+                height="14"
+                @click.stop="revealSkill(s)"
+              />
+              <IconPark
+                icon="mdi:delete-outline"
+                class="action-icon action-icon-danger"
+                :title="t('projects.skillActionDelete')"
+                width="14"
+                height="14"
+                @click.stop="deleteSkill(s)"
+              />
+            </div>
+          </div>
         </li>
       </ul>
       <p v-else class="empty-title">{{ t('common.dash') }}</p>
@@ -1115,12 +1171,48 @@ onMounted(reload)
 
 .skill-list-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
   padding: 8px 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* 2026-07-04 增:hover 时淡出主题边,让右侧操作图标更醒目 */
+.skill-list-item:hover {
+  border-color: color-mix(in srgb, var(--prj-primary) 35%, var(--border));
+  background: var(--bg-card);
+}
+
+.skill-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.skill-list-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  /* 默认浅色透明,hover 整行时才显出来,降低视觉噪音 */
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.skill-list-item:hover .skill-list-actions {
+  opacity: 1;
 }
 
 .skill-list-name {

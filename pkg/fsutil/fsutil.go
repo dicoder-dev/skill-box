@@ -127,6 +127,51 @@ func InspectProject(path string) (*ProjectHint, error) {
 	}, nil
 }
 
+// RemovePath 删除给定路径(文件或目录,带目录树)。
+//
+// 安全策略:
+//   - 拒绝删除根目录 "/" / "." / ""(避免误删整盘)
+//   - path 必须是绝对路径(前端传来的 source_path 已是 EvalSymlinks 后的真实绝对路径,
+//     但 fsutil 仍然走 filepath.Abs 双保险,确保后续 filepath.Rel(parent) 比较有意义)
+//   - 调用方必须自己确认"该路径确实要删"(二次确认、scope 校验等),fsutil
+//     不做语义层校验,只做物理层防护(防 root / 防空)
+//   - 失败语义:不存在 → 不报错(幂等,跟 Reveal 一致);权限不足/路径不可达 → 报错
+func RemovePath(path string) error {
+	cleaned := strings.TrimSpace(path)
+	if cleaned == "" {
+		return fmt.Errorf("path is empty")
+	}
+	if cleaned == "/" || cleaned == "." || cleaned == ".." {
+		return fmt.Errorf("refusing to delete root-like path: %q", cleaned)
+	}
+	abs, err := filepath.Abs(cleaned)
+	if err != nil {
+		return fmt.Errorf("abs: %w", err)
+	}
+	// 双保险:绝对路径化后再次判定,防 cleaned="/./" 这类绕过
+	if abs == "/" || abs == "." {
+		return fmt.Errorf("refusing to delete root-like path: %q", abs)
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 幂等:已经不存在就当成功,不报 404(前端调完再 reload 不会因为 race 翻车)
+			return nil
+		}
+		return fmt.Errorf("stat: %w", err)
+	}
+	if fi.IsDir() {
+		if err := os.RemoveAll(abs); err != nil {
+			return fmt.Errorf("remove dir: %w", err)
+		}
+		return nil
+	}
+	if err := os.Remove(abs); err != nil {
+		return fmt.Errorf("remove file: %w", err)
+	}
+	return nil
+}
+
 // slugify 把任意字符串规整成"小写 + 字母数字保留,其它替成 '-',折叠重复 '-' 并 trim"。
 //
 // 例:

@@ -139,6 +139,16 @@ function createWebPlatform() {
           throw new Error(`inspectProject(${path}) failed: ${e?.message || e}`)
         }
       },
+      // 2026-07-04 增:删除磁盘路径(文件或目录树),幂等(不存在返 ok=true)。
+      // 供 ProjectsView 工具 skill 弹窗的"删除 skill"使用,前端必须二次确认。
+      async removePath(path) {
+        try {
+          const r = await http.post('/api/desktop/fs/remove-path', { path })
+          return { ok: !!r?.ok, removed: !!r?.removed }
+        } catch (e) {
+          throw new Error(`removePath(${path}) failed: ${e?.message || e}`)
+        }
+      },
     },
     notify: {
       async hasPermission() { return false },
@@ -231,6 +241,10 @@ function createDesktopPlatform() {
       async inspectProject(path) {
         const r = await http.post('/api/desktop/fs/inspect-project', { path })
         return { name: r?.name || '', alias: r?.alias || '' }
+      },
+      async removePath(path) {
+        const r = await http.post('/api/desktop/fs/remove-path', { path })
+        return { ok: !!r?.ok, removed: !!r?.removed }
       },
     },
     notify: {
