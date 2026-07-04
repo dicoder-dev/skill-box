@@ -993,11 +993,21 @@ async function openInFolder() {
 }
 
 // ====== 复制路径 ======
-async function copySourcePath() {
-  if (!current.value) return
-  const sp = current.value._full?.canonical?.source_path
-    || current.value._full?.source_path
-    || ''
+// 2026-07-04 改:从工具栏图标按钮搬到右键菜单(node 参数版),
+// 兼容 toolbar(current 走 _full)和右键(node)两条调用链。
+// 路径优先用 current._full.canonical.source_path(详情区后端给的真实物理路径),
+// 否则 storeRoot + node.path 拼出绝对路径,跟 openSkillInFolder 逻辑保持一致。
+async function copySourcePath(node) {
+  let sp = ''
+  if (current.value && (!node || current.value.name === (node.skill_meta?.name || node.name))) {
+    sp = current.value._full?.canonical?.source_path
+      || current.value._full?.source_path
+      || ''
+  }
+  if (!sp && node) {
+    const root = skillTree.storeRoot || ''
+    sp = root && node.path ? `${root}/${node.path}` : (node.path || '')
+  }
   if (!sp) return
   try {
     await platform.platform.setClipboardText(sp)
@@ -1373,6 +1383,12 @@ function onSkillContextMenu({ node, event }) {
       label: t('skills.list.ctxOpenFolder'),
       icon: 'mdi:folder-outline',
       onClick: () => openSkillInFolder(node),
+    },
+    {
+      key: 'copy-path',
+      label: t('skills.list.ctxCopyPath'),
+      icon: 'mdi:content-copy',
+      onClick: () => copySourcePath(node),
     },
     {
       key: 'tag',
@@ -1995,14 +2011,7 @@ onUnmounted(() => {
             >
               <IconPark icon="mdi:folder-outline" width="16" height="16" />
             </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.copyPath')"
-              :aria-label="t('skills.list.copyPath')"
-              @click="copySourcePath"
-            >
-              <IconPark icon="mdi:content-copy" width="16" height="16" />
-            </button>
+            <!-- 2026-07-04 改:复制路径从工具栏移到右键菜单,详见 onSkillContextMenu ctxCopyPath 项 -->
             <button
               class="icon-btn"
               :data-tip="t('skills.list.tooltipDelete')"
