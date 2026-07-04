@@ -113,6 +113,7 @@ export default defineConfig({
   optimizeDeps: {
     // 2026-07-04 增:monaco 在 dev 模式下需要单独优化,避免 Vite esbuild 把 worker
     // 链路打崩(在 wails3 dev + macOS webview 环境下表现尤其明显)。
-    include: ["monaco-editor/esm/vs/editor/editor.api.js"],
+    // 用 editor.main.js(完整入口,含 theme / language 注册),不能用 editor.api.js(只有 API stub)。
+    include: ["monaco-editor/esm/vs/editor/editor.main.js"],
   },
 });

@@ -190,19 +190,22 @@ function watchTheme(monaco) {
 }
 
 // 加载 monaco + 注册 worker
+//
+// 2026-07-04 改:import 路径从 'editor.api.js' 换成 'editor.main.js'。
+// 旧版只 import API stub,monaco.editor.defineTheme / setTheme / 实际主题实现
+// 都在 'standalone/browser/standaloneEditor.js' 里(不在 editor.api.js),
+// 结果 setTheme 静默失败,tokenColors 全部不生效。
+// 'editor.main.js' 通过 basic-languages + language/* 自动引入 standalone 主题注册。
 export async function loadMonaco() {
   if (monacoRef) return monacoRef
   if (loadingPromise) return loadingPromise
   loadingPromise = (async () => {
-    // 动态 import,首次加载会下载 ~700KB gzip(按需加载)
-    const monaco = await import('monaco-editor/esm/vs/editor/editor.api.js')
+    // 动态 import 完整入口(包含所有 language + theme 注册)
+    const monaco = await import('monaco-editor/esm/vs/editor/editor.main.js')
     // 设置 worker(Vite 单独 chunk)
     if (typeof self !== 'undefined') {
       self.MonacoEnvironment = {
         getWorkerUrl(_moduleId, _label) {
-          // 走 Vite ?worker,直接用 editor.worker
-          // 语言相关 worker(typescript / json / css / html)也走同一个 editor.worker
-          // (简化处理,功能上仍可语法高亮 + 折叠,只是无高级补全)
           return new URL('monaco-editor/esm/vs/editor/editor.worker?worker', import.meta.url).toString()
         },
       }
