@@ -349,4 +349,31 @@ onBeforeUnmount(() => {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* 2026-07-04 改:细化预览区滚动条(默认 14px 太粗太黑,改 6px 细款 + 浅灰)。
+   范围:.code-viewer 内一切可滚动节点(包含 Monaco 内部 .monaco-scrollable-element)。
+   桌面端 webview 走 webkit 内核,Web 端 Chrome/Safari 走 webkit,
+   Firefox 走 scrollbar-width 兜底。 */
+.code-viewer * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.code-viewer ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.code-viewer ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-viewer ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 160ms ease;
+}
+.code-viewer ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+.code-viewer ::-webkit-scrollbar-corner {
+  background: transparent;
+}
 </style>
