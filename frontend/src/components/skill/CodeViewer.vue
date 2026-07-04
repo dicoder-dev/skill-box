@@ -13,7 +13,7 @@ import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
-import { loadMonaco } from '@/core/composables/useMonaco.js'
+import { loadMonaco, isDark as monacoIsDark } from '@/core/composables/useMonaco.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
 
@@ -133,7 +133,10 @@ async function ensureMonaco() {
     editor = monaco.editor.create(monacoContainer.value, {
       value: props.content || '',
       language: language.value,
-      readOnly: !props.editable, // 2026-07-04 改(Commit 4):由 editable prop 控制
+      // 2026-07-04 改:显式传 theme 字段,否则 Monaco 用默认 'vs',
+      // useMonaco 里 setTheme 设的全局主题不会自动应用到这个 editor 实例。
+      theme: monacoIsDark() ? 'skillbox-dark' : 'skillbox-light',
+      readOnly: !props.editable,
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize: 13,

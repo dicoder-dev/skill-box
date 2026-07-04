@@ -219,3 +219,8 @@ export async function loadMonaco() {
 export function isMonacoLoaded() {
   return !!monacoRef
 }
+
+// 导出 isDark 供外部使用(CodeViewer 创建 editor 时需要判断 theme)
+// 2026-07-04 改:之前 CodeViewer 没传 theme,Monaco 用默认 'vs',
+// useMonaco 里 setTheme 的全局主题不会自动应用。
+export { isDark }
