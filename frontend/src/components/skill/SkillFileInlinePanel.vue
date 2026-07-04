@@ -39,6 +39,14 @@ const emit = defineEmits(['saved'])
 const selectedFile = ref(null)
 const selectedKey = ref('')  // 用于 FileTreeView 的 selectedPath
 
+// 2026-07-04 增:编辑器模式
+//   'view' - 默认只读渲染(markdown v-html / Monaco readOnly)
+//   'edit' - 可编辑(markdown Tiptap / Monaco 可写)
+// 切文件时重置为 'view'(每个文件独立 view/edit 状态,避免混淆)。
+const editMode = ref('view')
+function setEditMode(m) { editMode.value = m }
+function toggleEdit() { editMode.value = editMode.value === 'edit' ? 'view' : 'edit' }
+
 // 监听 props.files 变化,更新 selectedFile
 // 2026-07-04 修(Commit 8+):保存代码文件后,父组件 onDrawerSaved 会 reload 整个 skill,
 // props.files 重新赋值,这个 watch 会触发。旧版总是 fallback 到 SKILL.md,
@@ -66,16 +74,22 @@ watch(
         return
       }
     }
-    // 首次打开/没选中:默认选 SKILL.md
+    // 首次打开/没选中:默认选 SKILL.md,并把 mode 重置为 'view'
     const sk = files.find((f) => f.path === 'SKILL.md')
     const target = sk || files[0]
     selectedFile.value = target
     selectedKey.value = target?.path || ''
+    editMode.value = 'view'  // 2026-07-04 增:首次打开默认渲染模式
   },
   { immediate: true, deep: true },
 )
 
 function onSelectFile(file) {
+  // 2026-07-04 改:切文件时重置为渲染模式(每个文件独立 mode,避免上个文件的
+  // 编辑态带到新文件)
+  if (selectedKey.value !== file.path) {
+    editMode.value = 'view'
+  }
   selectedFile.value = file
   selectedKey.value = file.path
 }
@@ -359,6 +373,26 @@ function closeFrontmatter() { fmOpen.value = false }
         <header class="sfip-viewer-header">
           <span class="sfip-viewer-path">{{ selectedFile?.path || t('skills.fileBrowser.noFile') }}</span>
           <span v-if="selectedFile?.path" class="sfip-viewer-size">{{ fileSize }} B</span>
+          <!-- 2026-07-04 增:编辑模式切换按钮(默认 view,点击进 edit,再点回 view)
+               放在文件大小右侧,与 dirty 提示和保存按钮同一行 -->
+          <button
+            v-if="selectedFile?.path && editMode === 'view'"
+            class="sfip-mode-btn"
+            :title="'编辑'"
+            :aria-label="'编辑'"
+            @click="setEditMode('edit')"
+          >
+            <IconPark icon="mdi:pencil-outline" width="14" height="14" />
+          </button>
+          <button
+            v-else-if="selectedFile?.path && editMode === 'edit'"
+            class="sfip-mode-btn sfip-mode-btn-active"
+            :title="'返回预览'"
+            :aria-label="'返回预览'"
+            @click="setEditMode('view')"
+          >
+            <IconPark icon="mdi:eye-outline" width="14" height="14" />
+          </button>
           <span v-if="isDirty" class="sfip-viewer-dirty">● {{ t('skills.fileBrowser.unsavedShort') }}</span>
           <button
             v-if="isDirty"
@@ -382,7 +416,7 @@ function closeFrontmatter() { fmOpen.value = false }
           :key="selectedFile.path"
           :path="selectedFile.path"
           :content="displayContent"
-          :editable="!isReadOnly"
+          :mode="editMode"
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
           @update:content="onContentChange"
@@ -530,6 +564,35 @@ function closeFrontmatter() { fmOpen.value = false }
 .sfip-viewer-dirty {
   color: var(--accent-amber, #d97706);
   font-weight: 500;
+}
+/* 2026-07-04 增:view/edit 模式切换按钮 */
+.sfip-mode-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.sfip-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+.sfip-mode-btn-active {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+.sfip-mode-btn-active:hover {
+  background: var(--accent-blue);
+  color: white;
+  filter: brightness(1.1);
 }
 .sfip-btn {
   display: inline-flex;

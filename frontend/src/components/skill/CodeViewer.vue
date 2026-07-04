@@ -28,8 +28,11 @@ const props = defineProps({
   path: { type: String, default: '' },
   // 文件内容
   content: { type: String, default: '' },
-  // SKILL.md 在抽屉里强制只读(避免与主页 Tiptap 编辑态冲突)
-  editable: { type: Boolean, default: true },
+  // 2026-07-04 改:editable boolean 改成 mode 二态,语义更清晰
+  //   'view'  - 只读渲染(markdown v-html / Monaco readOnly)
+  //   'edit'  - 可编辑(markdown Tiptap / Monaco readOnly=false)
+  // 默认 'view'(用户点编辑按钮后才进 'edit')
+  mode: { type: String, default: 'view' },
   // 技能在 store_root 下的相对路径(用于拼绝对路径,显示"在文件夹打开")
   // 格式: <group_path>/<name>(group_path 可能为空)
   skillRelPath: { type: String, default: '' },
@@ -37,7 +40,10 @@ const props = defineProps({
   storeRoot: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update:content', 'dirty-change'])
+const emit = defineEmits(['update:content', 'dirty-change', 'update:mode'])
+
+// editable = mode === 'edit'(后续内部用这个,不改字段名影响太多)
+const editable = computed(() => props.mode === 'edit')
 
 // 文件后缀
 const ext = computed(() => {
@@ -139,7 +145,7 @@ async function ensureMonaco() {
       // 2026-07-04 改:显式传 theme 字段,否则 Monaco 用默认 'vs',
       // useMonaco 里 setTheme 设的全局主题不会自动应用到这个 editor 实例。
       theme: monacoIsDark() ? 'skillbox-dark' : 'skillbox-light',
-      readOnly: !props.editable,
+      readOnly: !editable.value,
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize: 13,
@@ -206,9 +212,9 @@ watch(
   { immediate: true },
 )
 
-// 监听 editable 变化(Monaco 实例化后切换)
-watch(() => props.editable, (v) => {
-  if (editor) editor.updateOptions({ readOnly: !v })
+// 监听 mode 变化(Monaco 实例化后切换 readOnly)
+watch(() => props.mode, (m) => {
+  if (editor) editor.updateOptions({ readOnly: m !== 'edit' })
 })
 
 onBeforeUnmount(() => {
