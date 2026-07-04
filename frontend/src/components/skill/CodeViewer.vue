@@ -11,6 +11,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
+// 2026-07-04 增:SKILL.md 等 .md 文件在可编辑时用 Tiptap 所见即所得,
+// 与 SkillsView 旧版"正文编辑"体验一致(粗体/斜体/标题/列表/链接工具栏)。
+import RichTextEditor from '@/components/RichTextEditor.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { loadMonaco, isDark as monacoIsDark } from '@/core/composables/useMonaco.js'
@@ -227,13 +230,24 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- Markdown 渲染 -->
-    <div
-      v-else-if="isMarkdown"
-      class="cv-md md-body"
-      v-html="renderedMd"
-      @click="onMdClick"
-    />
+    <!-- Markdown 渲染:可编辑时用 Tiptap 所见即所得,只读时用 v-html -->
+    <div v-else-if="isMarkdown" class="cv-md-wrap">
+      <RichTextEditor
+        v-if="editable"
+        :model-value="content || ''"
+        :placeholder="t('skills.list.bodyEmpty', '开始输入正文…')"
+        :disabled="false"
+        min-height="100%"
+        class="cv-md-rte"
+        @update:model-value="(v) => $emit('update:content', v)"
+      />
+      <div
+        v-else
+        class="cv-md md-body"
+        v-html="renderedMd"
+        @click="onMdClick"
+      />
+    </div>
 
     <!-- 大文件提示 -->
     <div v-else-if="isLarge" class="cv-large">
@@ -270,9 +284,23 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 20px 28px;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 12.5px;
+  line-height: 1.65;
   color: var(--text);
+}
+/* 2026-07-04 增:markdown 编辑态容器,让 RichTextEditor 自适应填满 */
+.cv-md-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cv-md-rte {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .cv-monaco-wrap {
   flex: 1;
