@@ -26,6 +26,9 @@ import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import TreeNode from '@/components/TreeNode.vue'
+// 2026-07-04 增:首页技能文件浏览器(抽屉)。Commit 1 只做"目录树 + 纯文本预览",
+// 后续 commit 加 Monaco / 编辑 / 保存。
+import SkillFileDrawer from '@/components/skill/SkillFileDrawer.vue'
 // 2026-06-27 改:详情预览区改用 markdown-it + highlight.js 渲染(支持 GFM / 代码高亮)。
 // 编辑态给 Tiptap 喂 HTML 那条路仍用自研 renderMarkdown,在 RichTextEditor 内部独立 import。
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
@@ -581,6 +584,18 @@ async function doUnapplyOne(h) {
 // AI 侧栏
 const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
+
+// 2026-07-04 增:首页技能文件浏览器抽屉的开合 + 当前文件列表(派生自 current._full.canonical.files)。
+// drawer 内的选中态 / dirty 由 SkillFileDrawer 内部管理,这里只控制 v-model。
+const fileDrawerOpen = ref(false)
+const currentFiles = ref([])
+watch(
+  () => current.value?._full?.canonical?.files,
+  (files) => {
+    currentFiles.value = (files || []).map((f) => ({ ...f }))
+  },
+  { immediate: true },
+)
 
 // 2026-06-25 二改:skillKey 改为只取 name(后端 listSkills 不返回 scope/project_id,
 // 之前用 scope|project_id|name|version 会因为 scope/project_id 都是 undefined,
@@ -1938,6 +1953,17 @@ onUnmounted(() => {
             >
               <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="16" height="16" />
             </button>
+            <!-- 2026-07-04 增:打开技能文件浏览器(抽屉,展示全文件树 + Monaco 预览)。
+                 放在 detail-actions 末尾,跟其他只读操作图标同一组,统一靠 data-tip 提示。 -->
+            <button
+              class="icon-btn"
+              :data-tip="'浏览文件'"
+              :aria-label="'浏览文件'"
+              :disabled="!current"
+              @click="fileDrawerOpen = true"
+            >
+              <IconPark icon="mdi:folder-multiple-outline" width="16" height="16" />
+            </button>
           </div>
         </header>
 
@@ -2141,6 +2167,21 @@ onUnmounted(() => {
 
     <!-- AI 侧栏 -->
     <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
+
+    <!-- 2026-07-04 增:技能文件浏览器(右侧抽屉,Commit 1 只展示目录树 + 纯文本预览) -->
+    <SkillFileDrawer
+      v-if="current && currentFiles.length"
+      v-model="fileDrawerOpen"
+      :skill="{
+        name: current.name,
+        version: current.version,
+        scope: current.scope,
+        project_id: current.project_id,
+        source: current.source,
+        group_path: current.group_path,
+      }"
+      :files="currentFiles"
+    />
 
     <!-- Tag 弹窗 -->
     <Modal
