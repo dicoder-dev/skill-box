@@ -713,15 +713,17 @@ const messages = {
     // paths sub-table
     paths: {
       title: 'Skill Paths',
-      add: 'Add path',
       scope: 'Scope',
       category: 'Category',
       path: 'Path',
-      order: 'Order',
       pathHint: 'absolute path, ~/ supported',
       pickFolder: 'Pick a folder',
-      empty: 'No paths yet. Click "Add path" above to start',
-      hint: 'scope: global|project; category: user|system. (scope, category, path) is unique.',
+      scopeGlobal: 'Global',
+      scopeProject: 'Project',
+      categoryUser: 'User',
+      categorySystem: 'System',
+      // 2026-07-04 改:4 fixed slots, hint explains "empty = skip"
+      hint: 'Each (scope × category) slot allows at most 1 path; leave empty to skip that slot.',
     },
 
     // feedback

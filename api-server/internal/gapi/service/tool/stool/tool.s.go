@@ -41,6 +41,9 @@ var (
 	ErrBadCategory      = errors.New("tool: category must be user|system")
 	ErrBadScope         = errors.New("tool: scope must be global|project")
 	ErrEmptyPath        = errors.New("tool: path is empty")
+	// ErrPathExisted 同一 (tool, scope, category) 已存在一条 path。
+	// 2026-07-04 改:单 path 模型下,(scope, category) 只能对应 1 条 path。
+	ErrPathExisted = errors.New("tool: a path already exists for (scope, category)")
 )
 
 // Service 工具管理服务。
@@ -80,6 +83,9 @@ type PathInput struct {
 // Create 新建一个用户工具(is_system 强制 false)。
 func (s *Service) Create(in *CreateInput) (*entity.Tool, error) {
 	if err := validateBase(in.ToolID, in.DisplayName, in.MdiIcon, in.IconFile, in.Maturity); err != nil {
+		return nil, err
+	}
+	if err := validatePathUniqueness(in.Paths); err != nil {
 		return nil, err
 	}
 	for i, p := range in.Paths {
@@ -187,6 +193,9 @@ func (s *Service) Update(in *UpdateInput) (*entity.Tool, error) {
 		return nil, fmt.Errorf("tool: update: %w", err)
 	}
 	if in.Paths != nil {
+		if err := validatePathUniqueness(*in.Paths); err != nil {
+			return nil, err
+		}
 		for i, p := range *in.Paths {
 			if err := validatePath(p); err != nil {
 				return nil, fmt.Errorf("paths[%d]: %w", i, err)
@@ -335,6 +344,84 @@ func validatePath(p PathInput) error {
 		return fmt.Errorf("%w: %q", ErrBadCategory, p.Category)
 	}
 	return nil
+}
+
+// validatePathUniqueness 校验输入的 paths 列表中,同一 (scope, category)
+// 不重复(单 path 模型下)。
+//
+// 2026-07-04 改:之前允许同 (scope, category) 多 path(靠 path_order 排序),
+// 现在收口为 0~1 条,Service 层先报错返回 ErrPathExisted,避免依赖
+// DB uniqueIndex 的错误信息(更稳定)。
+func validatePathUniqueness(paths []PathInput) error {
+	seen := make(map[string]struct{}, len(paths))
+	for _, p := range paths {
+		key := p.Scope + "|" + p.Category
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("%w: (%s, %s)", ErrPathExisted, p.Scope, p.Category)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// AddOnePath 给已存在工具追加一条 path,严格校验 (scope, category) 唯一。
+//
+// 2026-07-04 改:原 controller 直接调 model.Create,依赖 DB uniqueIndex 报错,
+// 现在 Service 层先查一次避免空跑事务,DB uniqueIndex 作为最终兜底。
+//
+// 入参 toolID 是工具的 tool_id(非 DB 主键);失败时返回 ErrNotFound /
+// ErrPathExisted / 其它基础校验错。
+func (s *Service) AddOnePath(toolID string, in PathInput) (*entity.ToolPath, error) {
+	if err := validatePath(in); err != nil {
+		return nil, err
+	}
+	tool, err := s.toolM().FindByToolID(toolID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	// 先查 (tool_id, scope, category) 是否已有,命中就返 ErrPathExisted
+	existing, lerr := s.pathM().FindOne(where.New(mtool.FieldPathToolID, "=", tool.ID).
+		And(mtool.FieldPathScope, "=", in.Scope).
+		And(mtool.FieldPathCategory, "=", in.Category).Conditions())
+	if lerr == nil && existing != nil {
+		return nil, fmt.Errorf("%w: (%s, %s)", ErrPathExisted, in.Scope, in.Category)
+	}
+	// gorm.ErrRecordNotFound 不算冲突,继续 Create。
+	out, err := s.pathM().Create(&entity.ToolPath{
+		ToolID:    tool.ID,
+		Scope:     in.Scope,
+		Category:  in.Category,
+		Path:      strings.TrimSpace(in.Path),
+		PathOrder: in.PathOrder,
+	})
+	if err != nil {
+		// DB 兜底:uniqueIndex 也会触发,统一映射为 ErrPathExisted
+		if isUniqueConflict(err) {
+			return nil, fmt.Errorf("%w: (%s, %s)", ErrPathExisted, in.Scope, in.Category)
+		}
+		return nil, fmt.Errorf("tool: add path: %w", err)
+	}
+	return out, nil
+}
+
+// isUniqueConflict 简单判断 GORM 报的 duplicate key 错误(跨 DB 兼容)。
+func isUniqueConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return containsAny(msg, []string{"UNIQUE constraint failed", "Duplicate entry", "duplicate key", "unique constraint"})
+}
+
+func containsAny(s string, subs []string) bool {
+	for _, sub := range subs {
+		for i := 0; i+len(sub) <= len(s); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validMaturity(s string) bool {

@@ -14,6 +14,10 @@
 //   - is_system=false:全部可改 + 可删
 //   - paths 非 null = 整组覆盖(update 语义)
 //
+// 2026-07-04 改:paths 从"任意数组"改成"4 个固定 (scope, category) 格子",
+// 每个格子最多 1 条 path。getPath(scope, category) 拿该格的输入对象;
+// 提交时由 buildPayload 把 4 格拍平为 paths 数组,空 path 自动剔除。
+//
 // 用法:
 //   import { useToolsStore } from '@/core/store/tools'
 //   const tools = useToolsStore()
@@ -35,6 +39,25 @@ const ALLOWED_MATURITY = ['stable', 'experimental', 'deprecated']
 const ALLOWED_SCOPE = ['global', 'project']
 const ALLOWED_CATEGORY = ['user', 'system']
 
+// 2026-07-04 改:固定 4 个 (scope, category) 格子,顺序与 UI 行顺序一致。
+// 每个工具的每个格子 0 或 1 条 path(单 path 模型)。
+export const PATH_SLOTS = [
+  { scope: 'global', category: 'user', label: 'tools.paths.slotGlobalUser' },
+  { scope: 'global', category: 'system', label: 'tools.paths.slotGlobalSystem' },
+  { scope: 'project', category: 'user', label: 'tools.paths.slotProjectUser' },
+  { scope: 'project', category: 'system', label: 'tools.paths.slotProjectSystem' },
+]
+
+// 单格 path 模板(空字符串 = 这一格未配置)
+function emptySlot(scope, category) {
+  return { scope, category, path: '', path_order: 0 }
+}
+
+// 4 格模板(顺序与 PATH_SLOTS 一致)
+function emptySlots() {
+  return PATH_SLOTS.map((s) => emptySlot(s.scope, s.category))
+}
+
 // 空表单模板(避免多处重复 + 保证 reset 时字段不会跨弹窗泄漏)
 function emptyForm() {
   return {
@@ -46,13 +69,22 @@ function emptyForm() {
     note: '',
     enabled: true,
     sort_order: 0,
-    paths: [], // [{ scope: 'global'|'project', category: 'user'|'system', path: string, path_order: number }]
+    // 2026-07-04 改:4 格单 path 模型 — slots[i] = { scope, category, path, path_order }
+    slots: emptySlots(),
   }
 }
 
-// 单条 path 行模板(行内 "添加路径" 用)
-function emptyPathRow(order = 0) {
-  return { scope: 'global', category: 'user', path: '', path_order: order }
+// 把后端的 paths 数组塞进 4 格(顺序无关,只填对应 (scope, category) 那格)。
+function pathsToSlots(paths) {
+  const slots = emptySlots()
+  for (const p of paths || []) {
+    const slot = slots.find((s) => s.scope === p.scope && s.category === p.category)
+    if (slot) {
+      slot.path = p.path || ''
+      slot.path_order = typeof p.path_order === 'number' ? p.path_order : 0
+    }
+  }
+  return slots
 }
 
 export const useToolsStore = defineStore('tools', {
@@ -191,12 +223,8 @@ export const useToolsStore = defineStore('tools', {
         note: t.note || '',
         enabled: !!t.enabled,
         sort_order: typeof t.sort_order === 'number' ? t.sort_order : 0,
-        paths: (t.paths || []).map((p) => ({
-          scope: p.scope,
-          category: p.category,
-          path: p.path,
-          path_order: typeof p.path_order === 'number' ? p.path_order : 0,
-        })),
+        // 2026-07-04 改:4 格单 path 模型,从 t.paths 拍平到 slots
+        slots: pathsToSlots(t.paths),
       }
       this.editingToolId = t.tool_id
       this.editingIsSystem = !!t.is_system
@@ -208,20 +236,26 @@ export const useToolsStore = defineStore('tools', {
       this.formOpen = false
     },
 
-    /** form.paths 追加一行(取当前 length 作为默认 path_order)。 */
+    /**
+     * 2026-07-04 改:paths 编辑从"任意行"改成 4 固定格,不再有 add/remove 操作。
+     * 保留这两个空方法是为了兼容旧 view 调用,不报错。
+     */
     addPathRow() {
-      this.form.paths.push(emptyPathRow(this.form.paths.length))
+      // no-op:单 path 模型下不需要追加行
+    },
+
+    removePathRow(_i) {
+      // no-op:单 path 模型下不能删整行,用户应清空该格的 path
     },
 
     /**
-     * 删一行 path,顺手重排 path_order 让列表保持 0..N-1 连续。
-     * @param {number} i 行下标
+     * 2026-07-04 改:清空指定 (scope, category) 格的 path。
+     * 单 path 模型下,删"行"语义改为"清空该格的 path 字符串"。
+     * @param {number} slotIndex PATH_SLOTS 索引
      */
-    removePathRow(i) {
-      this.form.paths.splice(i, 1)
-      this.form.paths.forEach((p, idx) => {
-        p.path_order = idx
-      })
+    clearSlotPath(slotIndex) {
+      const slot = this.form.slots?.[slotIndex]
+      if (slot) slot.path = ''
     },
 
     /**
@@ -352,16 +386,14 @@ export const useToolsStore = defineStore('tools', {
       if (f.maturity && !ALLOWED_MATURITY.includes(f.maturity)) {
         return `maturity 必须是 ${ALLOWED_MATURITY.join('/')}`
       }
-      for (let i = 0; i < f.paths.length; i++) {
-        const p = f.paths[i]
-        if (!String(p.path || '').trim()) {
-          return `paths[${i}].path 不能为空`
-        }
+      // 2026-07-04 改:校验 4 格的 path(单 path 模型,空字符串 = 该格未配置,合法)
+      for (let i = 0; i < (f.slots || []).length; i++) {
+        const p = f.slots[i]
         if (!ALLOWED_SCOPE.includes(p.scope)) {
-          return `paths[${i}].scope 必须是 global/project`
+          return `slots[${i}].scope 必须是 global/project`
         }
         if (!ALLOWED_CATEGORY.includes(p.category)) {
-          return `paths[${i}].category 必须是 user/system`
+          return `slots[${i}].category 必须是 user/system`
         }
       }
       return null
@@ -371,9 +403,20 @@ export const useToolsStore = defineStore('tools', {
      * 把当前表单打包成 update / create 用的 payload。
      * update 语义:paths 字段总是带上(非 null = 整组覆盖,后端会清空再写);
      * mdi_icon 和 icon_file 也总是带上,后端会对比处理(都是空就报错)。
+     *
+     * 2026-07-04 改:从 4 格 slots 拍平为 paths 数组,空字符串 path 自动剔除
+     * (避免给后端发空 path 行)。
      */
     buildPayload() {
       const f = this.form
+      const paths = (f.slots || [])
+        .map((p, idx) => ({
+          scope: p.scope,
+          category: p.category,
+          path: String(p.path || '').trim(),
+          path_order: typeof p.path_order === 'number' ? p.path_order : idx,
+        }))
+        .filter((p) => p.path !== '')
       return {
         display_name: f.display_name.trim(),
         mdi_icon: f.mdi_icon.trim(),
@@ -382,12 +425,7 @@ export const useToolsStore = defineStore('tools', {
         note: f.note || '',
         enabled: !!f.enabled,
         sort_order: Number(f.sort_order) || 0,
-        paths: f.paths.map((p, idx) => ({
-          scope: p.scope,
-          category: p.category,
-          path: String(p.path || '').trim(),
-          path_order: typeof p.path_order === 'number' ? p.path_order : idx,
-        })),
+        paths,
         // create 模式才带 tool_id(edit 模式从 editingToolId 取)
         ...(this.formMode === 'create' ? { tool_id: f.tool_id.trim() } : {}),
       }

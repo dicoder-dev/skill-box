@@ -26,7 +26,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-import { useToolsStore } from '@/core/store/tools'
+import { useToolsStore, PATH_SLOTS } from '@/core/store/tools'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
@@ -94,10 +94,11 @@ async function onToggleEnabled(t_item) {
 }
 
 // pickFolder 辅助函数:用户取消时静默(返空串不报错)
-async function pickPath(p) {
+// 2026-07-04 改:4 格单 path 模型,接收 slot 对象而不是 path 数组行。
+async function pickPath(slot) {
   try {
     const v = await platform.fs.pickFolder()
-    if (v) p.path = v
+    if (v) slot.path = v
   } catch (e) {
     toast.error(t('tools.pickFolderFailed', { msg: e?.message || e }))
   }
@@ -590,49 +591,42 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- paths 子表 -->
+        <!-- paths 子表 — 2026-07-04 改:4 个 (scope, category) 固定格子,
+         每个格子 0 或 1 条 path。删了"添加路径"按钮 + 删除行图标。 -->
         <div class="paths-section">
           <div class="paths-section-header">
             <h4>{{ t('tools.paths.title') }}</h4>
-            <button
-              type="button"
-              class="add-path-btn with-icon"
-              :disabled="tools.saving"
-              @click="tools.addPathRow()"
-            >
-              <IconPark icon="mdi:plus" width="13" height="13" />
-              {{ t('tools.paths.add') }}
-            </button>
           </div>
 
-          <table v-if="tools.form.paths.length" class="paths-table">
+          <table class="paths-table">
             <thead>
               <tr>
-                <th style="width: 110px">{{ t('tools.paths.scope') }}</th>
-                <th style="width: 110px">{{ t('tools.paths.category') }}</th>
+                <th style="width: 90px">{{ t('tools.paths.scope') }}</th>
+                <th style="width: 90px">{{ t('tools.paths.category') }}</th>
                 <th>{{ t('tools.paths.path') }}</th>
-                <th style="width: 80px">{{ t('tools.paths.order') }}</th>
                 <th style="width: 40px"></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(p, i) in tools.form.paths" :key="i">
+              <tr
+                v-for="(slot, idx) in PATH_SLOTS"
+                :key="`${slot.scope}-${slot.category}`"
+                :class="{ 'paths-slot-empty': !slot.path }"
+              >
                 <td>
-                  <select v-model="p.scope" :disabled="tools.saving">
-                    <option value="global">global</option>
-                    <option value="project">project</option>
-                  </select>
+                  <span class="paths-slot-readonly">
+                    {{ slot.scope === 'global' ? t('tools.paths.scopeGlobal') : t('tools.paths.scopeProject') }}
+                  </span>
                 </td>
                 <td>
-                  <select v-model="p.category" :disabled="tools.saving">
-                    <option value="user">user</option>
-                    <option value="system">system</option>
-                  </select>
+                  <span class="paths-slot-readonly">
+                    {{ slot.category === 'user' ? t('tools.paths.categoryUser') : t('tools.paths.categorySystem') }}
+                  </span>
                 </td>
                 <td>
                   <div class="input-with-action">
                     <input
-                      v-model="p.path"
+                      v-model="tools.form.slots[idx].path"
                       :placeholder="t('tools.paths.pathHint')"
                       :disabled="tools.saving"
                     />
@@ -641,33 +635,26 @@ onMounted(async () => {
                       class="ghost icon-btn"
                       :disabled="tools.saving"
                       :title="t('tools.paths.pickFolder')"
-                      @click="pickPath(p)"
+                      @click="pickPath(tools.form.slots[idx])"
                     >
                       <IconPark icon="mdi:folder-open" width="14" height="14" />
                     </button>
                   </div>
                 </td>
-                <td>
-                  <input
-                    v-model.number="p.path_order"
-                    type="number"
-                    :disabled="tools.saving"
-                  />
-                </td>
                 <td class="paths-action-cell">
                   <IconPark
-                    icon="mdi:trash-can"
+                    v-if="tools.form.slots[idx].path"
+                    icon="mdi:close-circle-outline"
                     class="action-icon action-icon-danger"
                     :title="t('common.delete')"
                     width="14"
                     height="14"
-                    @click="tools.removePathRow(i)"
+                    @click="tools.clearSlotPath(idx)"
                   />
                 </td>
               </tr>
             </tbody>
           </table>
-          <p v-else class="paths-empty">{{ t('tools.paths.empty') }}</p>
 
           <p class="field-hint">{{ t('tools.paths.hint') }}</p>
         </div>
@@ -1443,6 +1430,26 @@ button.add-path-btn:hover:not(:disabled) {
 
 .paths-action-cell {
   text-align: center;
+}
+
+/* 2026-07-04 改:4 格固定布局下,scope/category 列用 readonly 文字展示
+   (不用 select),保持视觉简洁 */
+.paths-slot-readonly {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted, var(--text-faint));
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 50px;
+  text-align: center;
+}
+
+/* 空格子整行淡灰,提示用户这一格没配 */
+.paths-slot-empty {
+  opacity: 0.6;
 }
 
 .paths-empty {

@@ -6,6 +6,7 @@ import (
 
 	"ginp-api/internal/skilladapter"
 	"ginp-api/pkg/ginp"
+	"ginp-api/pkg/logger"
 )
 
 // onboardingCache 用于把"上次 scan 的 Report"在包内共享,避免 import 时再跑一次 scan。
@@ -70,6 +71,11 @@ func GetOnboardingStatus(c *ginp.ContextPlus, _ *RequestOnboardingStatus) {
 			Icon:        a.Icon(),
 		}
 		if len(paths) > 0 {
+			if len(paths) > 1 {
+				// 单 path 模型下不应出现;只展示 paths[0] 并 warn,onboarding 是
+				// 只读展示接口,不能把整个列表搞崩。
+				logger.Warn("onboarding: tool %s has %d global paths (max 1), showing paths[0]", a.ToolID(), len(paths))
+			}
 			s.GlobalPath = paths[0]
 			s.GlobalOK = pathExists(paths[0])
 		}

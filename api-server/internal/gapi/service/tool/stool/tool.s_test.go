@@ -1,6 +1,7 @@
 package stool_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,5 +187,90 @@ func TestDelete_Cascade(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("expected 0 paths after cascade delete, got %d", n)
+	}
+}
+
+// TestCreate_DuplicateScopeCategoryPaths 2026-07-04 改:单 path 模型下,Create
+// 入参中两条同 (scope, category) 的 path 必须被 Service 层拦截返 ErrPathExisted,
+// 不依赖 DB uniqueIndex 兜底。
+func TestCreate_DuplicateScopeCategoryPaths(t *testing.T) {
+	db := setupTestDB(t)
+	svc := stool.New(db, db)
+	_, err := svc.Create(&stool.CreateInput{
+		ToolID:      "dup",
+		DisplayName: "Dup",
+		MdiIcon:     "mdi:robot-outline",
+		Maturity:    "stable",
+		Paths: []stool.PathInput{
+			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
+			{Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 1},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected ErrPathExisted, got nil")
+	}
+	if !errors.Is(err, stool.ErrPathExisted) {
+		t.Errorf("expected ErrPathExisted, got %v", err)
+	}
+}
+
+// TestUpdate_DuplicateScopeCategoryPaths Update 路径同样要拦截同 (scope, category)
+// 重复的入参。
+func TestUpdate_DuplicateScopeCategoryPaths(t *testing.T) {
+	db := setupTestDB(t)
+	svc := stool.New(db, db)
+	if _, err := svc.Create(&stool.CreateInput{
+		ToolID:      "updup",
+		DisplayName: "UpDup",
+		MdiIcon:     "mdi:robot-outline",
+		Maturity:    "stable",
+		Paths: []stool.PathInput{
+			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
+		},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	paths := []stool.PathInput{
+		{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
+		{Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 1},
+	}
+	_, err := svc.Update(&stool.UpdateInput{ToolID: "updup", Paths: &paths})
+	if err == nil {
+		t.Fatal("expected ErrPathExisted on update, got nil")
+	}
+	if !errors.Is(err, stool.ErrPathExisted) {
+		t.Errorf("expected ErrPathExisted, got %v", err)
+	}
+}
+
+// TestAddOnePath_Conflict AddOnePath 第二次同 (scope, category) 必须返 ErrPathExisted。
+func TestAddOnePath_Conflict(t *testing.T) {
+	db := setupTestDB(t)
+	svc := stool.New(db, db)
+	if _, err := svc.Create(&stool.CreateInput{
+		ToolID:      "addp",
+		DisplayName: "AddP",
+		MdiIcon:     "mdi:robot-outline",
+		Maturity:    "stable",
+		Paths: []stool.PathInput{
+			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
+		},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, err := svc.AddOnePath("addp", stool.PathInput{
+		Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 0,
+	})
+	if err == nil {
+		t.Fatal("expected ErrPathExisted on AddOnePath, got nil")
+	}
+	if !errors.Is(err, stool.ErrPathExisted) {
+		t.Errorf("expected ErrPathExisted, got %v", err)
+	}
+	// 不同 (scope, category) 应该 OK
+	if _, err := svc.AddOnePath("addp", stool.PathInput{
+		Scope: "global", Category: "system", Path: "~/.cline/system", PathOrder: 0,
+	}); err != nil {
+		t.Errorf("expected ok on different (scope, category), got %v", err)
 	}
 }

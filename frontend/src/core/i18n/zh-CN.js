@@ -720,15 +720,17 @@ const messages = {
     // paths 子表
     paths: {
       title: '技能路径',
-      add: '添加路径',
       scope: '作用域',
       category: '类别',
       path: '路径',
-      order: '顺序',
       pathHint: '绝对路径,支持 ~/',
       pickFolder: '选择本地目录',
-      empty: '还没有路径,点上方「添加路径」开始',
-      hint: 'scope: global|project;category: user|system。同一 (scope, category, path) 唯一。',
+      scopeGlobal: '全局',
+      scopeProject: '项目',
+      categoryUser: '用户',
+      categorySystem: '系统',
+      // 2026-07-04 改:4 格固定布局,提示文案改成"清空即不生效"
+      hint: '每个 (scope × category) 格子最多配置 1 条 path;留空 = 该档位不写入。',
     },
 
     // 反馈
