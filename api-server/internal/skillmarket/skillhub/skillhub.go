@@ -34,6 +34,10 @@ import (
 const (
 	// 2026-07-01 改:对接 API host(原 https://skillhub.cn 是站点,无 API)
 	defaultBaseURL = "https://api.skillhub.cn"
+	// 2026-07-04 增:源官方站点首页(用户视角的「官网」)。
+	// skillhub API 在 https://api.skillhub.cn,真实站点 https://skillhub.cn,
+	// 「前往官网」跳这里用户能浏览 skill 列表。
+	defaultSourceHomepage = "https://skillhub.cn"
 	// 默认 list 页大小(文档说最大 100)
 	defaultPageSize = 100
 	// 2026-07-01 改:去掉 maxDiscoverItems=1000 上限(2026-07-01 第一版改造时设的),
@@ -133,6 +137,20 @@ func NewWithClients(noRedirect, normal *http.Client) *Adapter {
 func (a *Adapter) SourceID() string    { return skillmarket.SourceSkillhub }
 func (a *Adapter) DisplayName() string { return "SkillHub" }
 func (a *Adapter) BaseURL() string     { return defaultBaseURL }
+
+// HomepageURL 2026-07-04 增:返回源官方站点首页(非 API host)。
+//
+// skillhub 真实站点是 https://skillhub.cn,API host 是 https://api.skillhub.cn;
+// 「前往官网」按钮要让用户跳到能浏览 skill 的真实站点,所以从 baseURL 派生会跑偏。
+// 当 config_json.base_url 为空 / 解析失败时,fallback 默认站点首页。
+func (a *Adapter) HomepageURL(sourceConfigJSON string) string {
+	// 2026-07-04 改:允许用户把 config_json.base_url 填成自定义站点(私有部署等);
+	// 用 url.Parse 提取 origin,失败则 fallback 默认站点。
+	if u := extractOrigin(sourceConfigJSON); u != "" {
+		return u
+	}
+	return defaultSourceHomepage
+}
 
 // KnownFallbackIDs 2026-07-03 增:返回 knownFallback 列表的 RemoteID 集合,
 // 让 orchestrator 能识别"当前返回的就是兜底"。
@@ -838,6 +856,21 @@ func containsString(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// extractOrigin 2026-07-04 增:从 source.ConfigJSON 里抽出 base_url 的 origin(协议 + host)。
+// 私有部署场景:用户填内网站点 URL,「前往官网」跳这里。
+// 失败返回空串,adapter 自行 fallback 到默认主页。
+func extractOrigin(configJSON string) string {
+	cfg := skillmarket.ParseSourceConfig(configJSON)
+	if cfg == nil || strings.TrimSpace(cfg.BaseURL) == "" {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimSpace(cfg.BaseURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // 注册到默认 registry。

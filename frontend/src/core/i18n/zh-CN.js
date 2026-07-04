@@ -427,6 +427,12 @@ const messages = {
     // 兼容 alias
     btnReinstall: '再拉取一次',
     btnSourceSettings: '源设置',
+    // 2026-07-04 增:工具栏「前往官网」按钮文案,跳转源官方站点首页(非 API host)。
+    btnGoSourceWebsite: '前往官网',
+    // 2026-07-04 增:卡片底部「前往技能详情」按钮文案,用 item.detail_url 打开三方原始详情页。
+    btnGoDetail: '前往技能详情',
+    // 2026-07-04 增:platform.openExternal 失败时统一 toast 文案。Web 端 / 桌面端共用。
+    errOpenExternal: '打开外链失败: {msg}',
     // 拉取弹窗(2026-07-01 改:installDialog → pullDialog)
     pullDialog: {
       title: '拉取「{name}」到 skill-box',

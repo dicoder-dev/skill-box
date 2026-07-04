@@ -88,17 +88,74 @@ func (s *Service) orchestrator() *skillmarket.Orchestrator {
 }
 
 // ListSources 列出所有源(不做 enabled 过滤,前端按需展示)。
+//
+// 2026-07-04 改:Items 类型从 []*entity.MarketSource 改成 []*SourceWithHomepage,
+// 序列化时把 entity 字段打平 + 追加 homepage 派生字段(由 adapter.HomepageURL 计算)。
+// 老字段(id/name/type/config_json/enabled)JSON 形状不变,只多出一个 homepage 键;
+// 旧客户端忽略新字段即可,完全向后兼容。
 type ListSourcesResult struct {
-	Items []*entity.MarketSource `json:"items"`
-	Total int64                  `json:"total"`
+	Items []*SourceWithHomepage `json:"items"`
+	Total int64                 `json:"total"`
+}
+
+// SourceWithHomepage 2026-07-04 增:source 的派生视图。
+//
+// 嵌套 entity.MarketSource,只多一个 homepage 字段(由 adapter.HomepageURL 派生)。
+// 不在 entity 上加持久化字段,因为 homepage 是 UI 派生属性(可能随 adapter 升级而变化),
+// 不该写盘。
+type SourceWithHomepage struct {
+	*entity.MarketSource
+	// 2026-07-04 增:源官方主页 URL,前端工具栏「前往官网」按钮点击后跳转此 URL。
+	// 空字符串表示该源没有官方主页(按钮降级隐藏)。
+	Homepage string `json:"homepage"`
+}
+
+// MarshalJSON 自定义序列化:把 Homepage 嵌到顶层,不输出 MarketSource 嵌套形式。
+//
+// go 默认会序列化内嵌指针为 {"MarketSource": {...}, "homepage": "..."} 嵌套 JSON,
+// 不符合前端期望(前端用 flat shape: { id, name, type, homepage, ... })。
+func (s *SourceWithHomepage) MarshalJSON() ([]byte, error) {
+	if s == nil || s.MarketSource == nil {
+		return []byte("null"), nil
+	}
+	type alias struct {
+		*entity.MarketSource
+		Homepage string `json:"homepage"`
+	}
+	return json.Marshal(&alias{s.MarketSource, s.Homepage})
+}
+
+// ListSourcesWithHomepageResult 2026-07-04 增:带 homepage 字段的源列表响应。
+// 保留独立类型便于 ListSources 内部使用,ListSourcesResult 已统一指向 SourceWithHomepage。
+type ListSourcesWithHomepageResult = ListSourcesResult
+
+// ListSourcesWithHomepage 2026-07-04 增:列源并注入 homepage 派生字段,轻 alias。
+func (s *Service) ListSourcesWithHomepage() (*ListSourcesWithHomepageResult, error) {
+	return s.ListSources()
 }
 
 func (s *Service) ListSources() (*ListSourcesResult, error) {
-	items, total, err := s.sourceModel().FindList(nil, &where.Extra{
+	srcs, total, err := s.sourceModel().FindList(nil, &where.Extra{
 		PageNum: 1, PageSize: 100, OrderByColumn: mmarketsource.FieldID, OrderByDesc: false,
 	})
 	if err != nil {
 		return nil, err
+	}
+	// 2026-07-04 增:把 entity.MarketSource 包成 SourceWithHomepage,注入 homepage 派生字段。
+	// adapter 未注册的 type 让 Homepage = ""(前端按钮降级隐藏)。
+	items := make([]*SourceWithHomepage, 0, len(srcs))
+	for _, it := range srcs {
+		if it == nil {
+			continue
+		}
+		var homepage string
+		if ad, ok := skillmarket.Get(it.Type); ok {
+			homepage = ad.HomepageURL(it.ConfigJSON)
+		}
+		items = append(items, &SourceWithHomepage{
+			MarketSource: it,
+			Homepage:     homepage,
+		})
 	}
 	return &ListSourcesResult{Items: items, Total: int64(total)}, nil
 }

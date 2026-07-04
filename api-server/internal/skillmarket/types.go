@@ -9,8 +9,10 @@ package skillmarket
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"ginp-api/internal/skilladapter"
@@ -22,6 +24,12 @@ const (
 	SourceSkillsSH = "skillssh" // skills.sh
 	SourceCustom   = "custom"   // 用户自定义 HTTP+JSON(预留)
 )
+
+// SourceConfigJSON 2026-07-04 移到此:允许 source config_json 携带的私有字段。
+// 当前只支持 base_url;后续如加新字段,保持向后兼容(JSON unmarshal 忽略未知字段)。
+type SourceConfigJSON struct {
+	BaseURL string `json:"base_url,omitempty"`
+}
 
 // 业务错误。
 var (
@@ -88,6 +96,15 @@ type MarketAdapter interface {
 	// 从而告诉上层"这是 fallback,不是真实数据"。
 	// 返回 nil/空表示该 adapter 无兜底概念(理论上不会有,留接口兼容)。
 	KnownFallbackIDs() []string
+
+	// HomepageURL 2026-07-04 增:源官方主页(站点首页,非 API host)。
+	// 前端工具栏「前往官网」按钮点击后跳转此 URL。
+	// 实现约定:
+	//   - skillhub:返回 https://skillhub.cn(站点首页,不是 api.skillhub.cn)
+	//   - skillssh:返回 https://skills.sh
+	//   - custom:从 source config_json.base_url 派生 origin,允许内网私有部署指向自家门户
+	// 返回空字符串表示该源没有官方主页(降级隐藏按钮)。
+	HomepageURL(sourceConfigJSON string) string
 }
 
 // SanitizeSourceName 把 source.name 规范成 ^[a-z][a-z0-9_-]{1,63}$。
@@ -119,4 +136,18 @@ func WrapErr(verb string, err error) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %s: %v", ErrRemoteFetchFail, verb, err)
+}
+
+// ParseSourceConfig 2026-07-04 增:解析 source.ConfigJSON,失败返 nil。
+// 多个 adapter 复用此函数解析 base_url;失败时由调用方 fallback 到 adapter 自己的默认值。
+func ParseSourceConfig(configJSON string) *SourceConfigJSON {
+	cfg := strings.TrimSpace(configJSON)
+	if cfg == "" {
+		return nil
+	}
+	var out SourceConfigJSON
+	if err := json.Unmarshal([]byte(cfg), &out); err != nil {
+		return nil
+	}
+	return &out
 }

@@ -7,6 +7,7 @@ import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
 import MarketPullConfirm from '@/components/MarketPullConfirm.vue'
 import MarketSourceSettings from '@/components/MarketSourceSettings.vue'
+import { platform } from '@/platform'
 
 const { t } = useI18n()
 const market = useMarketStore()
@@ -68,10 +69,49 @@ function openDetail(item) {
   detailOpen.value = true
 }
 
+// 2026-07-04 增:卡片底部「前往技能详情」回调,打开 item.detail_url(已由 adapter 映射好)。
+//
+// detail_url 来源:
+//   - skillhub:apiSkill.Homepage 或拼接 {baseURL}/skills/{slug}
+//   - skills.sh:{baseURL}/{source}/{skillId}
+// 两条路径都已包含原始详情页,直接外跳。空 detail_url 表示该条 item 缺少详情链接,
+// 卡片底部按钮在模板层用 v-if 隐藏。
+async function goDetail(item) {
+  const u = item?.detail_url
+  if (!u) return
+  try {
+    await platform.platform.openExternal(u)
+  } catch (e) {
+    toast.push({
+      type: 'error',
+      message: t('market.errOpenExternal', { msg: e?.message || String(e) }),
+    })
+  }
+}
+
 // 源设置弹窗
 const settingsOpen = ref(false)
 function openSettings() {
   settingsOpen.value = true
+}
+
+// 2026-07-04 增:工具栏「前往官网」回调。
+// 调 platform.platform.openExternal(unified) 跨平台打开外部 URL:
+//   - Web 端:window.open
+//   - Desktop 端:wails BrowserOpenURL(桌面 OS 走系统默认浏览器)
+// activeSource.homepage 由后端 smarket 注入(skillhub→skillhub.cn、skillssh→skills.sh
+// 等),activeSourceId===0 聚合态下没具体源,按钮已禁用,所以这里 homeUrl 必非空。
+async function goSourceWebsite() {
+  const home = market.activeSource?.homepage
+  if (!home) return
+  try {
+    await platform.platform.openExternal(home)
+  } catch (e) {
+    toast.push({
+      type: 'error',
+      message: t('market.errOpenExternal', { msg: e?.message || String(e) }),
+    })
+  }
 }
 
 // 安装弹窗
@@ -187,6 +227,19 @@ onMounted(async () => {
           </button>
         </div>
         <div class="toolbar-right">
+          <!-- 2026-07-04 增:「前往官网」按钮,在源设置左侧。
+               activeSourceId===0(聚合态) 或 activeSource.homepage 为空 时禁用/隐藏。
+               跳转走 platform.platform.openExternal 跨平台打开(桌面 → 系统默认浏览器;
+               Web → window.open),与现有 SkillsView 跨页外链行为一致。 -->
+          <button
+            v-if="market.activeSource?.homepage"
+            class="ghost"
+            :title="market.activeSource.homepage"
+            @click="goSourceWebsite"
+          >
+            <IconPark icon="mdi:open-in-new" width="14" height="14" />
+            {{ t('market.btnGoSourceWebsite') }}
+          </button>
           <button class="ghost" :disabled="!sources.length" @click="openSettings">
             <IconPark icon="mdi:cog-outline" width="14" height="14" />
             {{ t('market.btnSourceSettings') }}
@@ -265,12 +318,24 @@ onMounted(async () => {
 
             <footer class="market-card-bottom">
               <!-- 眼睛按钮:靠左,独立子项配合 space-between -->
-              <IconPark
-                icon="mdi:eye-outline"
-                :title="t('market.btnViewSkill')"
-                class="action-icon action-icon-view"
-                @click="openDetail(it)"
-              />
+              <div class="market-card-detail-icons">
+                <IconPark
+                  icon="mdi:eye-outline"
+                  :title="t('market.btnViewSkill')"
+                  class="action-icon action-icon-view"
+                  @click="openDetail(it)"
+                />
+                <!-- 2026-07-04 增:「前往技能详情」打开 item.detail_url(三方原始详情页)。
+                     detail_url 由 adapter 映射填充(skillhub/skillssh 都有),空时隐藏按钮降级
+                     而非禁用,避免无意义 disabled 占位。 -->
+                <IconPark
+                  v-if="it.detail_url"
+                  icon="mdi:open-in-new"
+                  :title="t('market.btnGoDetail')"
+                  class="action-icon action-icon-go-detail"
+                  @click="goDetail(it)"
+                />
+              </div>
               <!-- spacer:占满中间,把右侧推到底 -->
               <span class="market-card-bottom-spacer"></span>
               <!-- 右侧 actions:跳转(可选)+ 拉取按钮 -->
@@ -908,6 +973,22 @@ onMounted(async () => {
 .action-icon-view:hover {
   background: var(--mkt-bg);
   color: var(--mkt-primary);
+}
+
+/* 2026-07-04 增:卡片底部「前往技能详情」悬浮色,走 mkt 主题蓝,与其它 action
+   视觉区分但不抢拉取按钮的渐变主色。 */
+.action-icon-go-detail:hover {
+  background: var(--mkt-bg);
+  color: var(--mkt-primary);
+}
+
+/* 2026-07-04 增:卡片底部 detail icons 容器,把眼睛 + 前往详情两颗 icon 并排。
+   gap 让两颗 icon 之间留 4px,避免视觉粘连。 */
+.market-card-detail-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .action-icon-jump:hover {

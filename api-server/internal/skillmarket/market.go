@@ -16,11 +16,6 @@ import (
 	"ginp-api/pkg/where"
 )
 
-// SourceConfigJSON 允许 source config_json 携带的私有字段(当前只支持 base_url)。
-type SourceConfigJSON struct {
-	BaseURL string `json:"base_url,omitempty"`
-}
-
 // Orchestrator 把 DB(model) + adapter 编排起来:刷新 / 下载。
 type Orchestrator struct {
 	mu          sync.Mutex
@@ -311,11 +306,8 @@ func itemToRow(src *entity.MarketSource, ad MarketAdapter, baseURL string, it Ma
 
 // resolveBaseFromConfig 解析 source.ConfigJSON 里的 base_url;失败 fallback。
 func resolveBaseFromConfig(configJSON, def string) string {
-	if strings.TrimSpace(configJSON) == "" {
-		return def
-	}
-	var cfg SourceConfigJSON
-	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+	cfg := ParseSourceConfig(configJSON)
+	if cfg == nil {
 		return def
 	}
 	if strings.TrimSpace(cfg.BaseURL) == "" {

@@ -197,7 +197,7 @@ func TestPull_GlobalOk_UsingFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -241,7 +241,7 @@ func TestPullV2_GlobalOk_UsingFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -296,7 +296,7 @@ func TestPullV2_FinalName_Rename(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -336,7 +336,7 @@ func TestPullV2_EmptyTools_OnlyWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -381,7 +381,7 @@ func TestPullV2_GroupPath_WritesToSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -434,7 +434,7 @@ func TestPullV2_BadGroupPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -551,7 +551,7 @@ func TestListSkillsRemote_HappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -595,7 +595,7 @@ func TestListSkillsRemote_KeywordPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -630,7 +630,7 @@ func TestListSkillsRemote_InMemoryPaging(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s
@@ -695,7 +695,7 @@ func TestListSkillsRemote_InstalledMapping(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, _ := env.svc.ListSources()
-	var src *entity.MarketSource
+	var src *smarket.SourceWithHomepage
 	for _, s := range res.Items {
 		if s.Type == skillmarket.SourceSkillhub {
 			src = s

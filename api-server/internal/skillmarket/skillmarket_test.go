@@ -54,6 +54,9 @@ func (s *stubAdapter) Download(ctx context.Context, baseURL, remoteID string) (*
 // 永远判定 source="remote"。
 func (s *stubAdapter) KnownFallbackIDs() []string { return nil }
 
+// HomepageURL 2026-07-04 增:测试 stub 返回默认 https://stub。
+func (s *stubAdapter) HomepageURL(sourceConfigJSON string) string { return "https://stub" }
+
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	r := &skillmarket.Registry{}
 	a := &stubAdapter{id: "stub", display: "Stub"}

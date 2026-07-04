@@ -33,6 +33,7 @@ import (
 
 const (
 	defaultBaseURL    = "https://skills.sh"
+	defaultSourceHomepage = "https://skills.sh" // 2026-07-04 增:站点首页(skills.sh 本身就是浏览页,API 也在这个 host)
 	defaultGHRawBase  = "https://raw.githubusercontent.com"
 	defaultGHBlobBase = "https://github.com"
 	// 2026-07-01 改:用 /api/audits/{page} 公开 JSON API(无需鉴权)做主数据源。
@@ -125,6 +126,29 @@ func (a *Adapter) rawBase() string {
 func (a *Adapter) SourceID() string    { return skillmarket.SourceSkillsSH }
 func (a *Adapter) DisplayName() string { return "skills.sh" }
 func (a *Adapter) BaseURL() string     { return defaultBaseURL }
+
+// HomepageURL 2026-07-04 增:skills.sh 本身就是浏览页首页 + API host 同一站;
+// 私有部署场景下用户可能在 config_json.base_url 填内网 skills.sh 镜像,这里
+// 派生出 origin 让用户跳到自己的镜像。
+func (a *Adapter) HomepageURL(sourceConfigJSON string) string {
+	if u := extractSkillsSHOrigin(sourceConfigJSON); u != "" {
+		return u
+	}
+	return defaultSourceHomepage
+}
+
+// extractSkillsSHOrigin 2026-07-04 增:解析 config_json.base_url 的 origin。
+func extractSkillsSHOrigin(configJSON string) string {
+	cfg := skillmarket.ParseSourceConfig(configJSON)
+	if cfg == nil || strings.TrimSpace(cfg.BaseURL) == "" {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimSpace(cfg.BaseURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
 
 // KnownFallbackIDs 2026-07-03 增:返回 knownCatalogFallback 列表的 RemoteID 集合。
 //
