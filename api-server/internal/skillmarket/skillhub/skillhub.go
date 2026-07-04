@@ -453,9 +453,14 @@ func mapSkillList(skills []apiSkill, baseURL string) []skillmarket.MarketItem {
 		if s.Slug == "" {
 			continue
 		}
+		// 2026-07-04 改:detail_url fallback 不再用 baseURL(API host),
+		// baseURL 实际是 https://api.skillhub.cn,真实站点是
+		// https://skillhub.cn,跳到 api.skillhub.cn/skills/{slug} 是 404。
+		// 强制走 defaultSourceHomepage(站点 host),跟已知正确的 knownFallback / Download
+		// 单文件路径行为对齐 — 那里都走站点 host。
 		detail := s.Homepage
 		if detail == "" {
-			detail = fmt.Sprintf("%s/skills/%s", strings.TrimRight(baseURL, "/"), s.Slug)
+			detail = siteDetailURL(s.Slug)
 		}
 		install := detail
 		if s.UpstreamURL != nil && *s.UpstreamURL != "" {
@@ -485,6 +490,17 @@ func mapSkillList(skills []apiSkill, baseURL string) []skillmarket.MarketItem {
 		})
 	}
 	return out
+}
+
+// siteDetailURL 2026-07-04 增:用站点 host(skillhub.cn)拼详情 URL。
+//
+// 历史上"详情 URL"误用 baseURL(API host api.skillhub.cn),导致前端
+// 「前往技能详情」按钮跳到 https://api.skillhub.cn/skills/{slug} 404;
+// 现在强制用 defaultSourceHomepage(站点 host)避免后续回归。
+//
+// 入参 slug 由 adapter 校验为非空,这里不再防御。
+func siteDetailURL(slug string) string {
+	return defaultSourceHomepage + "/skills/" + slug
 }
 
 // apiDetailResp /api/v1/skills/{slug} 详情响应。
@@ -555,9 +571,11 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 	if s.Slug == "" {
 		return nil, fmt.Errorf("%w: empty slug in detail response", skillmarket.ErrRemoteNotFound)
 	}
+	// 2026-07-04 改:detail_url fallback 不再用 baseURL(API host),
+	// 2026-07-04 同 bug 修复 — 强制走 defaultSourceHomepage 站点 host。
 	detail := s.Homepage
 	if detail == "" {
-		detail = fmt.Sprintf("%s/skills/%s", strings.TrimRight(baseURL, "/"), s.Slug)
+		detail = siteDetailURL(s.Slug)
 	}
 	install := detail
 	if s.UpstreamURL != nil && *s.UpstreamURL != "" {
@@ -810,7 +828,7 @@ func buildFallbackCanonical(it skillmarket.MarketItem) *skilladapter.Canonical {
 	}
 }
 
-// cloneFallback 给 fallback item 补上 baseURL 拼出来的 detail_url。
+// cloneFallback 给 fallback item 补全 detail_url(2026-07-04 改:不再用 baseURL,直接走 siteDetailURL)。
 func cloneFallback(baseURL string) []skillmarket.MarketItem {
 	out := make([]skillmarket.MarketItem, len(knownFallback))
 	for i, it := range knownFallback {
@@ -819,9 +837,15 @@ func cloneFallback(baseURL string) []skillmarket.MarketItem {
 	return out
 }
 
+// withDetailBase 2026-07-04 改:把 fallback item 补上 detail_url,
+// 强制走站点 host(skillhub.cn),不再用 baseURL(API host)。
+//
+// 历史 bug:用 baseURL 拼成 https://api.skillhub.cn/skills/{slug},真实
+// 详情页在 https://skillhub.cn/skills/{slug},导致前端「前往技能详情」404。
+// 站点 host 写死在 defaultSourceHomepage,与 HomepageURL 的派生口径对齐。
 func withDetailBase(it skillmarket.MarketItem, baseURL string) skillmarket.MarketItem {
 	if it.DetailURL == "" {
-		it.DetailURL = fmt.Sprintf("%s/skills/%s", strings.TrimRight(baseURL, "/"), it.RemoteID)
+		it.DetailURL = siteDetailURL(it.RemoteID)
 	}
 	return it
 }

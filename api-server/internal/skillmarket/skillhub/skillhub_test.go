@@ -476,6 +476,120 @@ func TestDetail_NotFound_FallbackHit(t *testing.T) {
 	}
 }
 
+// 2026-07-04 增:detail_url 必须走站点 host(skillhub.cn)而不是 API host(api.skillhub.cn)。
+//
+// 历史 bug:用 baseURL 拼成 https://api.skillhub.cn/skills/{slug},真实详情页
+// 在 https://skillhub.cn/skills/{slug}。前端「前往技能详情」按钮会跳到 API host
+// 直接 404。用户反馈的实景:slug=guosen-stock-market/self-improving-agent 等
+// 大量 skill 的 apiSkill.homepage 字段都为空,fallback 走 baseURL 拼接后全错。
+//
+// 三个 case:
+//   - 列表 fallback(HTTP 返回 skill 但 homepage 字段为空 → 应拼 siteDetailURL)
+//   - 列表 显式 homepage(优先用上游给的,不再覆盖)
+//   - 详情 fallback(Detail 接口返回但 homepage 字段为空)
+func TestDiscover_DetailURL_SiteHostFallback(t *testing.T) {
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/skills?keyword=guosen&pageSize=100": {
+			status: 200,
+			body: `{
+				"code": 0,
+				"data": {
+					"skills": [
+						{
+							"slug": "guosen-stock-market",
+							"name": "Guosen Stock Market",
+							"description": "stock helper",
+							"version": "1.2.0",
+							"ownerName": "guosen",
+							"updated_at": 1782878868630
+						}
+					],
+					"total": 1
+				}
+			}`,
+		},
+	})
+	a := NewWithClient(rt)
+	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "guosen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	want := "https://skillhub.cn/skills/guosen-stock-market"
+	if items[0].DetailURL != want {
+		t.Errorf("detail_url fallback 走错 host:\n  got:  %s\n  want: %s",
+			items[0].DetailURL, want)
+	}
+}
+
+func TestDiscover_DetailURL_ExplicitHomepageWins(t *testing.T) {
+	// 显式 homepage 字段(上游填好的)优先,不强制改写。
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/skills?page=1&pageSize=100&sortBy=downloads&order=desc": {
+			status: 200,
+			body: `{
+				"code": 0,
+				"data": {
+					"skills": [
+						{
+							"slug": "code-review",
+							"name": "Code Review",
+							"description": "review",
+							"version": "1.0.0",
+							"ownerName": "alice",
+							"homepage": "https://custom.example.dev/skills/code-review",
+							"updated_at": 1782878868630
+						}
+					],
+					"total": 1
+				}
+			}`,
+		},
+	})
+	a := NewWithClient(rt)
+	items, err := a.Discover(context.Background(), "https://api.skillhub.cn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].DetailURL != "https://custom.example.dev/skills/code-review" {
+		t.Errorf("explicit homepage 应优先,got: %s", items[0].DetailURL)
+	}
+}
+
+func TestDetail_DetailURL_SiteHostFallback(t *testing.T) {
+	// detail 接口响应里 homepage 字段为空时,fallback 也必须走 skillhub.cn(站点 host)。
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/v1/skills/guosen-stock-market": {
+			status: 200,
+			body: `{
+				"code": 0,
+				"data": {
+					"skill": {
+						"slug": "guosen-stock-market",
+						"name": "Guosen Stock Market",
+						"description": "stock helper",
+						"version": "1.2.0",
+						"ownerName": "guosen",
+						"updated_at": 1782878868630
+					},
+					"latestVersion": {"version": "1.2.0", "changelog": "", "createdAt": 0}
+				}
+			}`,
+		},
+	})
+	a := NewWithClient(rt)
+	d, err := a.Detail(context.Background(), "https://api.skillhub.cn", "guosen-stock-market")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://skillhub.cn/skills/guosen-stock-market"
+	if d.DetailURL != want {
+		t.Errorf("detail fallback 也走错 host:\n  got:  %s\n  want: %s", d.DetailURL, want)
+	}
+}
+
 // --- Download ---
 
 func TestDownload_ZipFlow_302ToCOS(t *testing.T) {
