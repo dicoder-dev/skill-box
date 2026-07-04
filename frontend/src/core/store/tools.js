@@ -41,10 +41,13 @@ const ALLOWED_CATEGORY = ['user', 'system']
 
 // 2026-07-04 改:固定 4 个 (scope, category) 格子,顺序与 UI 行顺序一致。
 // 每个工具的每个格子 0 或 1 条 path(单 path 模型)。
+//
+// 排序约定:user 在前、system 在后(用户实际写盘的目录更常用,优先展示);
+// 同 category 内 global → project(全局优先,因为日常使用的入口)。
 export const PATH_SLOTS = [
   { scope: 'global', category: 'user', label: 'tools.paths.slotGlobalUser' },
-  { scope: 'global', category: 'system', label: 'tools.paths.slotGlobalSystem' },
   { scope: 'project', category: 'user', label: 'tools.paths.slotProjectUser' },
+  { scope: 'global', category: 'system', label: 'tools.paths.slotGlobalSystem' },
   { scope: 'project', category: 'system', label: 'tools.paths.slotProjectSystem' },
 ]
 
