@@ -100,6 +100,8 @@ export default defineConfig({
   build: {
     // iconpark 包 5300+ 图标全打包会撑大主 chunk ~2MB,拆到独立 vendor chunk 走浏览器缓存。
     // 业务侧首屏不依赖图标(skeleton/text 先行),后置加载不阻塞首屏。
+    // 2026-07-04 增:monaco-editor ~700KB gzip 单独拆 chunk,首屏不依赖,
+    // 打开技能文件浏览器时才按需加载(走 import('monaco-editor/...'))。
     rollupOptions: {
       output: {
         manualChunks: {
@@ -107,5 +109,10 @@ export default defineConfig({
         },
       },
     },
+  },
+  optimizeDeps: {
+    // 2026-07-04 增:monaco 在 dev 模式下需要单独优化,避免 Vite esbuild 把 worker
+    // 链路打崩(在 wails3 dev + macOS webview 环境下表现尤其明显)。
+    include: ["monaco-editor/esm/vs/editor/editor.api.js"],
   },
 });
