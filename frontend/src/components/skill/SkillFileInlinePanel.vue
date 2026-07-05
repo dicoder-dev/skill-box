@@ -42,18 +42,24 @@ const selectedKey = ref('')  // 用于 FileTreeView 的 selectedPath
 // 2026-07-05 改:编辑模式从组件级 ref 改为按 path 索引的 map。
 // 旧实现切文件就 reset view,导致用户编辑 A.md → 切到 B.md → 切回 A.md,
 // A.md 又进入 view,跟"每个文件独立记忆"的直觉不一致。
-// 新实现:每个 path 独立记 editMode,localFiles 也已按 path 隔离,
-// 所以切走再回来时编辑器内容 + 编辑模式都还在。
-// 注:切到"整个 skill"维度变化时,本组件通过 v-if 卸载重建,map 也随之清空,
-// 不会跨 skill 串扰。
+// 2026-07-06 改:key 不能只用 path,跨 skill 切换时多个 skill 都有 SKILL.md,
+// path 相同但语义不同 → 会串。改成 "<skillName>/<path>" 做 key。
+// skillName 为空时(初始未加载),只用 path 也行,因为那时只可能有一个文件。
 const editModeMap = reactive({})
-function getMode(path) {
-  if (!path) return 'view'
-  return editModeMap[path] || 'view'
+function modeKey(skillName, path) {
+  if (!path) return ''
+  // skillName 可能为空:首屏 / 未加载完成时只用 path 也安全(只有一个 skill)
+  return skillName ? `${skillName}/${path}` : path
 }
-function setMode(path, m) {
-  if (!path) return
-  editModeMap[path] = m
+function getMode(skillName, path) {
+  const k = modeKey(skillName, path)
+  if (!k) return 'view'
+  return editModeMap[k] || 'view'
+}
+function setMode(skillName, path, m) {
+  const k = modeKey(skillName, path)
+  if (!k) return
+  editModeMap[k] = m
 }
 
 // 监听 props.files 变化,更新 selectedFile
@@ -61,37 +67,34 @@ function setMode(path, m) {
 // props.files 重新赋值,这个 watch 会触发。旧版总是 fallback 到 SKILL.md,
 // 导致用户编辑了 examples/foo.py 点保存 → 跳回 SKILL.md,体验很糟。
 // 修复:files 变化时优先保留 selectedKey(用户正在编辑的文件),找不到再 fallback SKILL.md。
+//
+// 2026-07-06 修:跨 skill 切换时,两个 skill 都可能有 SKILL.md,path 相同;
+// 旧代码 "selectedFile.path === prev 时不替换" 导致保留旧 selectedFile 引用,
+// selectedFile.content 仍是上一个 skill 的内容 → isDirty 用旧 orig 比新 current
+// → 误判为 dirty。
+// 新策略:files 引用变了 / 当前 skill.name 变了 → 强制用新 files 里的 found 对象
+// 替换 selectedFile(即便 path 相同,也是不同 skill 的同名文件,内容不一样)。
 watch(
-  () => props.files,
-  (files) => {
+  () => [props.files, props.skill?.name],
+  () => {
+    const files = props.files
     if (!files || !files.length) {
       selectedFile.value = null
       selectedKey.value = ''
+      localFiles.clear()
+      dirtyPaths.value = new Set()
       return
     }
-    // 优先用用户当前选中的 path 在新 files 里找
+    // 优先用 selectedKey 在新 files 里找;找到就用 found 替换 selectedFile
+    // (不再做 "path 相等就保留旧 selectedFile" 的优化,跨 skill 切换必须替换)
     const prev = selectedKey.value
-    if (prev) {
-      const found = files.find((f) => f.path === prev)
-      if (found) {
-        // 保留 selectedKey,只更新 selectedFile 的 content(防 stale)
-        // 但 selectedFile 不能直接用 found 替换,因为 selectedFile 是 ref,会触发 watch
-        // 用 nextTick 等一帧再设(实际上 selectedFile 在外面已经被 saveCurrent 同步过)
-        if (!selectedFile.value || selectedFile.value.path !== prev) {
-          selectedFile.value = found
-        }
-        return
-      }
-    }
-    // 首次打开/没选中:默认选 SKILL.md。
-    // editMode 不用重置:每个文件按 path 独立记忆,首次打开是 view,
-    // 用户点过编辑按钮的会保留 edit。
-    const sk = files.find((f) => f.path === 'SKILL.md')
-    const target = sk || files[0]
+    const target = (prev && files.find((f) => f.path === prev))
+      || files.find((f) => f.path === 'SKILL.md')
+      || files[0]
     selectedFile.value = target
     selectedKey.value = target?.path || ''
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 
 function onSelectFile(file) {
@@ -158,7 +161,7 @@ const displayContent = computed(() => {
 
 // 2026-07-05 增:当前选中文件的 mode,模板里用,内部切换也用。
 // 等价于 editModeMap[selectedFile.path],但包成 computed 触发响应式更新。
-const currentMode = computed(() => getMode(selectedFile.value?.path || ''))
+const currentMode = computed(() => getMode(props.skill?.name, selectedFile.value?.path || ''))
 
 const isDirty = computed(() => {
   const path = selectedFile.value?.path
@@ -240,7 +243,7 @@ async function saveCurrent() {
     // 2026-07-04 改:保存成功后自动切回渲染模式(用户编辑目的已达到,
     // 切回 view 让他们确认结果,也避免一直占着 Monaco 实例)
     // 2026-07-05 改:按 path 独立记忆,所以只重置当前文件的 mode
-    setMode(path, 'view')
+    setMode(props.skill?.name, path, 'view')
     emit('saved', { path, content: newContent })
     toast.success(t('skills.fileBrowser.saved', { path }))
   } catch (e) {
@@ -398,7 +401,7 @@ function closeFrontmatter() { fmOpen.value = false }
             class="sfip-mode-btn"
             :title="'编辑'"
             :aria-label="'编辑'"
-            @click="setMode(selectedFile.path, 'edit')"
+            @click="setMode(props.skill?.name, selectedFile.path, 'edit')"
           >
             <IconPark icon="mdi:pencil-outline" width="14" height="14" />
           </button>
@@ -407,7 +410,7 @@ function closeFrontmatter() { fmOpen.value = false }
             class="sfip-mode-btn sfip-mode-btn-active"
             :title="'返回预览'"
             :aria-label="'返回预览'"
-            @click="setMode(selectedFile.path, 'view')"
+            @click="setMode(props.skill?.name, selectedFile.path, 'view')"
           >
             <IconPark icon="mdi:eye-outline" width="14" height="14" />
           </button>
