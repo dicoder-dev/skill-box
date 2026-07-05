@@ -39,13 +39,22 @@ const emit = defineEmits(['saved'])
 const selectedFile = ref(null)
 const selectedKey = ref('')  // 用于 FileTreeView 的 selectedPath
 
-// 2026-07-04 增:编辑器模式
-//   'view' - 默认只读渲染(markdown v-html / Monaco readOnly)
-//   'edit' - 可编辑(markdown Tiptap / Monaco 可写)
-// 切文件时重置为 'view'(每个文件独立 view/edit 状态,避免混淆)。
-const editMode = ref('view')
-function setEditMode(m) { editMode.value = m }
-function toggleEdit() { editMode.value = editMode.value === 'edit' ? 'view' : 'edit' }
+// 2026-07-05 改:编辑模式从组件级 ref 改为按 path 索引的 map。
+// 旧实现切文件就 reset view,导致用户编辑 A.md → 切到 B.md → 切回 A.md,
+// A.md 又进入 view,跟"每个文件独立记忆"的直觉不一致。
+// 新实现:每个 path 独立记 editMode,localFiles 也已按 path 隔离,
+// 所以切走再回来时编辑器内容 + 编辑模式都还在。
+// 注:切到"整个 skill"维度变化时,本组件通过 v-if 卸载重建,map 也随之清空,
+// 不会跨 skill 串扰。
+const editModeMap = reactive({})
+function getMode(path) {
+  if (!path) return 'view'
+  return editModeMap[path] || 'view'
+}
+function setMode(path, m) {
+  if (!path) return
+  editModeMap[path] = m
+}
 
 // 监听 props.files 变化,更新 selectedFile
 // 2026-07-04 修(Commit 8+):保存代码文件后,父组件 onDrawerSaved 会 reload 整个 skill,
@@ -74,22 +83,21 @@ watch(
         return
       }
     }
-    // 首次打开/没选中:默认选 SKILL.md,并把 mode 重置为 'view'
+    // 首次打开/没选中:默认选 SKILL.md。
+    // editMode 不用重置:每个文件按 path 独立记忆,首次打开是 view,
+    // 用户点过编辑按钮的会保留 edit。
     const sk = files.find((f) => f.path === 'SKILL.md')
     const target = sk || files[0]
     selectedFile.value = target
     selectedKey.value = target?.path || ''
-    editMode.value = 'view'  // 2026-07-04 增:首次打开默认渲染模式
   },
   { immediate: true, deep: true },
 )
 
 function onSelectFile(file) {
-  // 2026-07-04 改:切文件时重置为渲染模式(每个文件独立 mode,避免上个文件的
-  // 编辑态带到新文件)
-  if (selectedKey.value !== file.path) {
-    editMode.value = 'view'
-  }
+  // 2026-07-05 改:不再强制 reset editMode,改用 editModeMap 按 path 独立记忆。
+  // 用户在 A.md 点编辑 → 切到 B.md(B 默认 view) → 切回 A.md(仍 edit),
+  // localFiles 也是按 path 隔离,Monaco/Tiptap 内容都还在。
   selectedFile.value = file
   selectedKey.value = file.path
 }
@@ -147,6 +155,10 @@ const displayContent = computed(() => {
   }
   return currentContent.value
 })
+
+// 2026-07-05 增:当前选中文件的 mode,模板里用,内部切换也用。
+// 等价于 editModeMap[selectedFile.path],但包成 computed 触发响应式更新。
+const currentMode = computed(() => getMode(selectedFile.value?.path || ''))
 
 const isDirty = computed(() => {
   const path = selectedFile.value?.path
@@ -227,7 +239,8 @@ async function saveCurrent() {
     dirtyPaths.value = s
     // 2026-07-04 改:保存成功后自动切回渲染模式(用户编辑目的已达到,
     // 切回 view 让他们确认结果,也避免一直占着 Monaco 实例)
-    editMode.value = 'view'
+    // 2026-07-05 改:按 path 独立记忆,所以只重置当前文件的 mode
+    setMode(path, 'view')
     emit('saved', { path, content: newContent })
     toast.success(t('skills.fileBrowser.saved', { path }))
   } catch (e) {
@@ -377,22 +390,24 @@ function closeFrontmatter() { fmOpen.value = false }
           <span class="sfip-viewer-path">{{ selectedFile?.path || t('skills.fileBrowser.noFile') }}</span>
           <span v-if="selectedFile?.path" class="sfip-viewer-size">{{ fileSize }} B</span>
           <!-- 2026-07-04 增:编辑模式切换按钮(默认 view,点击进 edit,再点回 view)
-               放在文件大小右侧,与 dirty 提示和保存按钮同一行 -->
+               放在文件大小右侧,与 dirty 提示和保存按钮同一行
+               2026-07-05 改:按当前文件的 mode 显示,模式存到 editModeMap[path]
+               实现每个文件独立记忆 -->
           <button
-            v-if="selectedFile?.path && editMode === 'view'"
+            v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
             :title="'编辑'"
             :aria-label="'编辑'"
-            @click="setEditMode('edit')"
+            @click="setMode(selectedFile.path, 'edit')"
           >
             <IconPark icon="mdi:pencil-outline" width="14" height="14" />
           </button>
           <button
-            v-else-if="selectedFile?.path && editMode === 'edit'"
+            v-else-if="selectedFile?.path && currentMode === 'edit'"
             class="sfip-mode-btn sfip-mode-btn-active"
             :title="'返回预览'"
             :aria-label="'返回预览'"
-            @click="setEditMode('view')"
+            @click="setMode(selectedFile.path, 'view')"
           >
             <IconPark icon="mdi:eye-outline" width="14" height="14" />
           </button>
@@ -419,7 +434,7 @@ function closeFrontmatter() { fmOpen.value = false }
           :key="selectedFile.path"
           :path="selectedFile.path"
           :content="displayContent"
-          :mode="editMode"
+          :mode="currentMode"
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
           @update:content="onContentChange"
