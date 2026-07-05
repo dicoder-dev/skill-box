@@ -24,11 +24,14 @@ import (
 
 // 业务错误(sentinel),controller 可用 errors.Is 判断。
 var (
-	ErrEmptyName    = errors.New("skill: name is empty")
-	ErrEmptyScope   = errors.New("skill: scope is empty")
-	ErrInvalidScope = errors.New("skill: scope must be 'global' or 'project'")
-	ErrNotFound     = errors.New("skill: not found")
-	ErrStoreSave    = errors.New("skill: store save failed")
+	ErrEmptyName     = errors.New("skill: name is empty")
+	ErrEmptyScope    = errors.New("skill: scope is empty")
+	ErrInvalidScope  = errors.New("skill: scope must be 'global' or 'project'")
+	ErrNotFound      = errors.New("skill: not found")
+	ErrStoreSave     = errors.New("skill: store save failed")
+	// 2026-07-05 增:磁盘文件被破坏(含非 UTF-8 字节)时返回该 sentinel。
+	// controller 识别后返 422 + code=corrupted_file,前端弹"需手动修复"提示。
+	ErrCorruptedFile = errors.New("skill: file contains non-UTF-8 bytes")
 )
 
 // Service 业务服务,只持有 store;DB 已经不参与。
@@ -127,6 +130,10 @@ func (s *Service) Get(name string) (*skilladapter.Canonical, error) {
 	if err != nil {
 		if errors.Is(err, skillstore.ErrNotFound) {
 			return nil, ErrNotFound
+		}
+		// 2026-07-05 增:store 层的 skillstore.ErrCorruptedFile 翻译成服务层 sentinel
+		if errors.Is(err, skillstore.ErrCorruptedFile) {
+			return nil, fmt.Errorf("%w: %v", ErrCorruptedFile, err)
 		}
 		return nil, err
 	}
@@ -381,7 +388,16 @@ func (s *Service) GetByPath(groupPath string, name string) (*skilladapter.Canoni
 	if err != nil {
 		return nil, err
 	}
-	return s.store.LoadByPath(gp, name)
+	canon, err := s.store.LoadByPath(gp, name)
+	if err != nil {
+		// 2026-07-05 增:store 层的 skillstore.ErrCorruptedFile 翻译成本服务的
+		// sentinel ErrCorruptedFile,controller 用 errors.Is 跨包识别。
+		if errors.Is(err, skillstore.ErrCorruptedFile) {
+			return nil, fmt.Errorf("%w: %v", ErrCorruptedFile, err)
+		}
+		return nil, err
+	}
+	return canon, nil
 }
 
 // DeleteByPath 按分组路径删 skill(供 cskill.delete_skill 用)。

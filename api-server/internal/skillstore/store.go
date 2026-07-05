@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ginp-api/configs"
 	"ginp-api/internal/skilladapter"
@@ -33,6 +34,10 @@ import (
 
 // ErrNotFound skill 不存在。
 var ErrNotFound = errors.New("skillstore: not found")
+
+// 2026-07-05 增:ErrCorruptedFile 表示磁盘文件被破坏(含非 UTF-8 字节)。
+// 前端可以字符串匹配 "non-UTF-8" / "已损坏" 来弹清晰提示(比通用 500 更友好)。
+var ErrCorruptedFile = errors.New("skillstore: file contains non-UTF-8 bytes")
 
 // Store canonical skill 物理存储。
 type Store struct {
@@ -181,6 +186,13 @@ func (s *Store) loadFromDir(dir string) (*skilladapter.Canonical, error) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("skillstore: read SKILL.md: %w", err)
+	}
+	// 2026-07-05 改:校验 SKILL.md 是不是合法 UTF-8。磁盘文件被破坏
+	// (如 Finder 拖拽 / iCloud sync 把 plist 二进制混进文本)时,直接 string(content)
+	// 会把非法字节静默替换成 U+FFFD,前端渲染出豆腐块。这里检测到非 UTF-8
+	// 时返回 sentinel ErrCorruptedFile,前端能用 errors.Is 识别并弹清晰提示。
+	if !utf8.Valid(content) {
+		return nil, fmt.Errorf("%w: %s", ErrCorruptedFile, skillMD)
 	}
 	c, err := skilladapter.ParseSkillMD(string(content))
 	if err != nil {
@@ -743,6 +755,9 @@ func (s *Store) collectSkillsRecursive(absDir, groupPath string, kw string, dept
 	if _, err := os.Stat(filepath.Join(absDir, "SKILL.md")); err == nil {
 		c, err := s.loadFromDir(absDir)
 		if err != nil {
+			// 2026-07-05 改:损坏的 skill 跳过时 log 一条 warn,
+			// 用户可以在 ~/.skill-box/logs 里看到具体哪个目录的 SKILL.md 坏了。
+			fmt.Fprintf(os.Stderr, "[skillstore] skip corrupted skill %s: %v\n", absDir, err)
 			return // 损坏的 skill 跳过
 		}
 		if kw != "" && !strings.Contains(strings.ToLower(c.Manifest.Name), kw) {

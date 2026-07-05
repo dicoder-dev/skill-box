@@ -47,6 +47,17 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 			c.JSON(400, gin.H{"error": gerr.Error()})
 			return
 		}
+		// 2026-07-05 增:磁盘文件被破坏(含非 UTF-8 字节)时返 422 + code,
+		// 前端识别 code=corrupted_file 后弹"文件已损坏,需手动修复"提示。
+		if errors.Is(gerr, sskill.ErrCorruptedFile) {
+			logger.Error("skill get: corrupted file: %v", gerr)
+			c.JSON(422, gin.H{
+				"error":      gerr.Error(),
+				"code":       "corrupted_file",
+				"hint":       "磁盘上的 SKILL.md 包含非 UTF-8 字节,可能已损坏。请检查源文件内容,或从备份恢复。",
+			})
+			return
+		}
 		logger.Error("skill get: %v", gerr)
 		c.JSON(500, gin.H{"error": gerr.Error()})
 		return

@@ -781,7 +781,18 @@ async function loadCurrent(row) {
     // 拉 scope 实时状态(工具/作用域两级展示)
     await loadScopeStatus()
   } catch (e) {
-    currentError.value = e?.message || String(e)
+    // 2026-07-05 增:识别后端 corrupted_file 错误(磁盘 SKILL.md 损坏),
+    // 给用户弹清晰的"需手动修复"提示,而不是单纯的"网络/服务错误"。
+    // 后端 controller 在 cskill.get_skill 返 422 + {code: 'corrupted_file', hint}
+    // HttpError 实例带 data 字段,所以可以这样识别。
+    const isCorrupted = e?.status === 422 && e?.data?.code === 'corrupted_file'
+    if (isCorrupted) {
+      const hint = e.data?.hint || '磁盘上的 SKILL.md 包含非 UTF-8 字节,可能已损坏。'
+      currentError.value = hint
+      toast.error(t('skills.fileBrowser.corruptedHint', { name: row.name, hint }), 8000)
+    } else {
+      currentError.value = e?.message || String(e)
+    }
     current.value = { ...row }
     currentMd.value = ''
     currentBody.value = ''

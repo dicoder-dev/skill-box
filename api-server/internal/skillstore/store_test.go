@@ -1,6 +1,8 @@
 package skillstore
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -269,6 +271,65 @@ func TestLoadByName_NotFound(t *testing.T) {
 	_, err := s.LoadByName("nope")
 	if err != ErrNotFound {
 		t.Errorf("err = %v want ErrNotFound", err)
+	}
+}
+
+// 2026-07-05 增:磁盘 SKILL.md 被破坏(含非 UTF-8 字节,如 Finder .DS_Store /
+// iCloud sync plist 数据被误写入文本文件)时,LoadByName / LoadByPath 都应该
+// 返回 ErrCorruptedFile sentinel,而非把损坏内容按 UTF-8 解码后静默吞成
+// U+FFFD(豆腐块)。前端能 errors.Is 识别该 sentinel,弹"文件损坏"提示。
+func TestLoadByName_CorruptedSKILL(t *testing.T) {
+	s := newTestStore(t)
+	dir := filepath.Join(s.root, "broken-skill")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// 头部是合法 frontmatter,后续跟着非 UTF-8 字节(plist 二进制片段的 byte 序列)
+	bogus := append([]byte("---\nname: broken\nversion: 0.1.0\n---\n"),
+		0x00, 0x01, 0xef, 0xbf, 0xbd, 0xff, 0xfe, 0xfd, 0x00, 0x00)
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), bogus, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := s.LoadByName("broken-skill")
+	if !errors.Is(err, ErrCorruptedFile) {
+		t.Errorf("err = %v, want ErrCorruptedFile", err)
+	}
+}
+
+func TestLoadByPath_CorruptedSKILL(t *testing.T) {
+	s := newTestStore(t)
+	dir := filepath.Join(s.root, "broken-skill")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	bogus := append([]byte("---\nname: broken\nversion: 0.1.0\n---\n"), 0xff, 0xfe)
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), bogus, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := s.LoadByPath("", "broken-skill")
+	if !errors.Is(err, ErrCorruptedFile) {
+		t.Errorf("err = %v, want ErrCorruptedFile", err)
+	}
+}
+
+// List 时遇到损坏的 SKILL.md 应该跳过(不打乱整个 list),只在 stderr log。
+// 之前是直接 return 不打 log,用户看不到任何反馈。
+func TestList_SkipsCorruptedAndLogs(t *testing.T) {
+	s := newTestStore(t)
+	dir := filepath.Join(s.root, "broken-skill")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	bogus := append([]byte("---\nname: broken\n---\n"), 0xff)
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), bogus, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	out, err := s.List("")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("List returned %d items, want 0 (corrupted skill should be skipped)", len(out))
 	}
 }
 

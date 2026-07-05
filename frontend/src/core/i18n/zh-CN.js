@@ -304,6 +304,8 @@ const messages = {
       largeTitle: '文件过大,不支持在线预览',
       largeHint: '文件大小 {kb} KB,可在文件夹中查看',
       openInFolder: '在文件夹打开',
+      // 2026-07-05 增:磁盘文件损坏提示(后端 corrupted_file 错误时弹)
+      corruptedHint: '技能「{name}」的 SKILL.md 文件已损坏({hint})。请检查磁盘文件内容,或从备份恢复。',
     },
 
     ai: {

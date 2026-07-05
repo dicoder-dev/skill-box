@@ -300,6 +300,8 @@ const messages = {
       largeTitle: 'File too large for online preview',
       largeHint: 'File size {kb} KB, view it in the folder',
       openInFolder: 'Open in folder',
+      // 2026-07-05 增:磁盘文件损坏提示(后端 corrupted_file 错误时弹)
+      corruptedHint: 'Skill "{name}" has a corrupted SKILL.md file ({hint}). Please inspect the disk file or restore from backup.',
     },
 
     ai: {
