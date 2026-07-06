@@ -93,6 +93,32 @@ async function onToggleEnabled(t_item) {
   }
 }
 
+// 2026-07-06 增:打开工具对应的 skills 目录按钮。
+// 工具的 paths 是数组 [{scope, category, path, path_order}]。展示态下找
+// 第一个 path 非空的项,桌面端走 platform.fs.reveal 在文件管理器中打开,
+// Web 端 platform.fs.reveal 内部兜底到 file:// 父目录。无任何可用 path 时
+// 按钮置灰禁用。
+function firstSkillsPath(t_item) {
+  const list = t_item?.paths || []
+  for (const p of list) {
+    if (p && typeof p.path === 'string' && p.path.trim()) return p.path.trim()
+  }
+  return ''
+}
+
+async function openSkillsDir(t_item) {
+  const p = firstSkillsPath(t_item)
+  if (!p) {
+    toast.info(t('tools.openNoPath'))
+    return
+  }
+  try {
+    await platform.fs.reveal(p)
+  } catch (e) {
+    toast.error(t('tools.openFailed', { msg: e?.message || e }))
+  }
+}
+
 // pickFolder 辅助函数:用户取消时静默(返空串不报错)
 // 2026-07-04 改:4 格单 path 模型,接收 slot 对象而不是 path 数组行。
 async function pickPath(slot) {
@@ -376,6 +402,18 @@ onMounted(async () => {
             {{ formatRelative(t_item.updated_at) }}
           </span>
           <div class="tool-card-actions" @click.stop>
+            <!-- 2026-07-06 增:打开工具对应的 skills 目录(无任何 path 时置灰) -->
+            <IconPark
+              icon="mdi:folder-open-outline"
+              class="action-icon action-icon-folder"
+              :class="{ 'action-icon-disabled': !firstSkillsPath(t_item) }"
+              :title="firstSkillsPath(t_item)
+                ? t('tools.btnOpenSkillsDir')
+                : t('tools.openNoPath')"
+              width="14"
+              height="14"
+              @click="openSkillsDir(t_item)"
+            />
             <IconPark
               icon="mdi:square-edit-outline"
               class="action-icon action-icon-edit"
@@ -1119,10 +1157,12 @@ onMounted(async () => {
 .tool-card-actions {
   display: flex;
   gap: 2px;
-  opacity: 0;
+  /* 2026-07-06 改:编辑 / 锁定 图标常显,不再依赖 hover */
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
+/* hover 不再控制 actions 显隐(常显后保留 hover 过渡,避免视觉突变) */
 .tool-card:hover .tool-card-actions {
   opacity: 1;
 }
@@ -1148,6 +1188,23 @@ onMounted(async () => {
   /* 编辑:hover 时用主题色(区别于危险) */
   background: var(--tool-bg);
   color: var(--tool-primary);
+}
+
+/* 2026-07-06 增:打开 skills 目录按钮:hover 走主题色,和编辑按钮一致 */
+.action-icon-folder:hover {
+  background: var(--tool-bg);
+  color: var(--tool-primary);
+}
+
+/* 无任何 path 时禁用文件夹按钮 */
+.action-icon-disabled {
+  cursor: not-allowed;
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+.action-icon-disabled:hover {
+  background: transparent;
+  color: var(--text-faint);
 }
 
 .action-icon-danger:hover {
@@ -1506,10 +1563,6 @@ button.add-path-btn:hover:not(:disabled) {
 @media (max-width: 768px) {
   .tools-grid {
     grid-template-columns: 1fr;
-  }
-
-  .tool-card-actions {
-    opacity: 1;
   }
 
   .toolbar-right {

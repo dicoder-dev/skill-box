@@ -670,6 +670,10 @@ const messages = {
     systemBadge: 'System',
     systemLocked: 'System tools cannot be deleted',
     pathCount: '{n} paths',
+    // 2026-07-06: open the tool's skills directory in the system file manager
+    btnOpenSkillsDir: 'Open skills directory',
+    openNoPath: 'No skills directory configured for this tool',
+    openFailed: 'Failed to open directory: {msg}',
     empty: 'No tools in the current scope',
     emptyHint: 'Click "+ New" at the top right to start; the 9 system tools are auto-seeded',
     loading: 'Loading…',

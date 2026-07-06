@@ -164,11 +164,12 @@ async function refreshStats() {
 onMounted(refreshStats)
 
 // 侧栏配置
+// 顺序:技能 / 工具 / 项目 / 市场 / 设置 — 把"工具"提前到"项目"之前。
 const navItems = computed(() => [
   { key: 'skills',      label: t('app.nav.skills.label'),      icon: 'mdi:book-open-variant' },
-  { key: 'projects',   label: t('app.nav.projects.label'),    icon: 'mdi:folder-multiple-outline' },
-  // 2026-07-01 增:工具元数据管理(放在 projects 之后,影响 projects 扫描的依赖项)
+  // 2026-07-06 调:工具提到 projects 之前(原来是 projects → tools)
   { key: 'tools',      label: t('app.nav.tools.label'),       icon: 'mdi:tools' },
+  { key: 'projects',   label: t('app.nav.projects.label'),    icon: 'mdi:folder-multiple-outline' },
   { key: 'market',     label: t('app.nav.market.label'),      icon: 'mdi:cart-outline' },
   { key: 'settings',    label: t('app.nav.settings.label'),   icon: 'mdi:cog-outline' },
 ])
