@@ -149,6 +149,17 @@ function createWebPlatform() {
           throw new Error(`removePath(${path}) failed: ${e?.message || e}`)
         }
       },
+      // 2026-07-07 增:创建目录(含中间目录),幂等。
+      // 供"打开 skills 目录"按钮在 reveal 失败时让用户选择"是否创建并打开"。
+      // 后端走 fsutil.MkdirAll,仅允许在 $HOME 之下创建(防越界)。
+      async mkdir(path) {
+        try {
+          const r = await http.post('/api/desktop/fs/mkdir', { path })
+          return { ok: !!r?.ok, created: !!r?.created }
+        } catch (e) {
+          throw new Error(`mkdir(${path}) failed: ${e?.message || e}`)
+        }
+      },
     },
     notify: {
       async hasPermission() { return false },
@@ -245,6 +256,11 @@ function createDesktopPlatform() {
       async removePath(path) {
         const r = await http.post('/api/desktop/fs/remove-path', { path })
         return { ok: !!r?.ok, removed: !!r?.removed }
+      },
+      // 2026-07-07 增:mkdir 桌面端实现,跟 web 版同语义
+      async mkdir(path) {
+        const r = await http.post('/api/desktop/fs/mkdir', { path })
+        return { ok: !!r?.ok, created: !!r?.created }
       },
     },
     notify: {

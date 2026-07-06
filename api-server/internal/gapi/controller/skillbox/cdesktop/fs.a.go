@@ -183,6 +183,41 @@ func PostFsRemovePath(c *ginp.ContextPlus, req *RequestFsRemovePath) {
 	c.JSON(200, RespondFsRemovePath{OK: true, Removed: existed})
 }
 
+// RequestFsMkdir { path }
+//
+// 2026-07-07 增:供"打开 skills 目录"按钮在 reveal 失败时让用户选择"是否
+// 创建并打开"。底层走 fsutil.MkdirAll(含 ~ 展开 + $HOME 边界校验,
+// 已存在返幂等成功)。
+type RequestFsMkdir struct {
+	Path string `json:"path"`
+}
+
+// RespondFsMkdir { ok, created: bool }
+// created=true 表示本次调用真的创建了新目录;created=false 表示目录已存在
+// (幂等成功)。前端用 created 区分 toast 文案("已创建并打开" vs "目录已存在,正在打开")。
+type RespondFsMkdir struct {
+	OK      bool `json:"ok"`
+	Created bool `json:"created"`
+}
+
+// PostFsMkdir POST /api/desktop/fs/mkdir
+func PostFsMkdir(c *ginp.ContextPlus, req *RequestFsMkdir) {
+	if strings.TrimSpace(req.Path) == "" {
+		c.JSON(400, gin.H{"error": "missing path"})
+		return
+	}
+	// 调用前先 stat 记录 created 标记(幂等场景返 false)
+	_, statErr := os.Stat(req.Path)
+	existed := statErr == nil
+
+	if err := fsutil.MkdirAll(req.Path); err != nil {
+		log.Printf("cdesktop.fs.mkdir: err: %v", err)
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, RespondFsMkdir{OK: true, Created: !existed})
+}
+
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
 		Path: "/api/desktop/fs/read-text", HttpType: ginp.HttpPost,
@@ -228,6 +263,15 @@ func init() {
 			Title:         "desktop.fs.removePath",
 			Description:   "删除给定磁盘路径(文件或目录树),幂等(不存在不报错)。前端必须二次确认。",
 			RequestParams: RequestFsRemovePath{},
+		},
+	})
+	ginp.RouterAppend(ginp.RouterItem{
+		Path: "/api/desktop/fs/mkdir", HttpType: ginp.HttpPost,
+		Handler: ginp.BindParamsHandler(PostFsMkdir, &RequestFsMkdir{}),
+		Swagger: &ginp.SwaggerInfo{
+			Title:         "desktop.fs.mkdir",
+			Description:   "在指定路径创建目录(含中间目录),幂等(已存在返 ok=true,created=false)。仅允许在 $HOME 之下创建。",
+			RequestParams: RequestFsMkdir{},
 		},
 	})
 }

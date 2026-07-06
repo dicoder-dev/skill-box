@@ -674,6 +674,11 @@ const messages = {
     btnOpenSkillsDir: 'Open skills directory',
     openNoPath: 'No skills directory configured for this tool',
     openFailed: 'Failed to open directory: {msg}',
+    // 2026-07-07: confirm-create-and-open when reveal fails (directory missing)
+    openCreateConfirm: 'Directory does not exist. Create it and open?\n{path}',
+    openCreateOk: 'Created and opened',
+    openExistedOpen: 'Directory already exists, opening',
+    openCreateFailed: 'Failed to create: {msg}',
     empty: 'No tools in the current scope',
     emptyHint: 'Click "+ New" at the top right to start; the 9 system tools are auto-seeded',
     loading: 'Loading…',

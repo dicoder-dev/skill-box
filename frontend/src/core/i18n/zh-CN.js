@@ -680,6 +680,11 @@ const messages = {
     btnOpenSkillsDir: '打开技能目录',
     openNoPath: '该工具尚未配置 skills 目录',
     openFailed: '打开目录失败:{msg}',
+    // 2026-07-07 增:reveal 失败时弹确认,允许用户自动创建并打开
+    openCreateConfirm: '目录不存在,是否创建并打开?\n{path}',
+    openCreateOk: '已创建并打开',
+    openExistedOpen: '目录已存在,正在打开',
+    openCreateFailed: '创建失败:{msg}',
     empty: '当前作用域下还没有工具',
     emptyHint: '点右上角「新建」开始;系统工具(9 个)由 seed 自动注入',
     loading: '加载中…',

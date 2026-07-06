@@ -93,17 +93,19 @@ async function onToggleEnabled(t_item) {
   }
 }
 
-// 2026-07-06 增:打开工具对应的 skills 目录按钮。
-// 工具的 paths 是数组 [{scope, category, path, path_order}]。展示态下找
-// 第一个 path 非空的项,桌面端走 platform.fs.reveal 在文件管理器中打开,
-// Web 端 platform.fs.reveal 内部兜底到 file:// 父目录。无任何可用 path 时
-// 按钮置灰禁用。
+// 2026-07-06/07 改:打开工具对应的 skills 目录按钮。
+//
+// 2026-07-07 修语义:之前"取第一个非空 path",实际上拿到的是 global|system
+// (即 ~/.claude/plugins/marketplaces/claude-plugins-official 之类工具
+// 自带的目录),用户期望打开的是"用户配置的全局 skills 目录",即
+// (scope=global, category=user) 那条。所以这里**只取 global|user**。
+// 2026-07-07 行为:目录不存在时按钮仍可用(走 mkdir 兜底流程),只有当该
+// tool 完全没有 (global,user) 这条 path 时才置灰。
 function firstSkillsPath(t_item) {
   const list = t_item?.paths || []
-  for (const p of list) {
-    if (p && typeof p.path === 'string' && p.path.trim()) return p.path.trim()
-  }
-  return ''
+  const slot = list.find((p) => p && p.scope === 'global' && p.category === 'user')
+  if (!slot) return ''
+  return (slot.path || '').trim()
 }
 
 async function openSkillsDir(t_item) {
@@ -115,7 +117,25 @@ async function openSkillsDir(t_item) {
   try {
     await platform.fs.reveal(p)
   } catch (e) {
-    toast.error(t('tools.openFailed', { msg: e?.message || e }))
+    // 2026-07-07 改:reveal 失败时(通常是目录不存在)弹确认,用户同意就
+    // mkdir -p 后再 reveal。失败信息可能含 "(resolved from " 这类我们
+    // 自己加的提示,判断时忽略它,只看是否指向"不存在"。
+    const msg = String(e?.message || e)
+    const notExist = /does not exist|ENOENT|no such file/i.test(msg)
+    if (!notExist) {
+      toast.error(t('tools.openFailed', { msg }))
+      return
+    }
+    const ok = window.confirm(t('tools.openCreateConfirm', { path: p }))
+    if (!ok) return
+    try {
+      const r = await platform.fs.mkdir(p)
+      toast.success(r.created ? t('tools.openCreateOk') : t('tools.openExistedOpen'))
+      // 创建后再 reveal 一次
+      await platform.fs.reveal(p)
+    } catch (mkErr) {
+      toast.error(t('tools.openCreateFailed', { msg: mkErr?.message || mkErr }))
+    }
   }
 }
 

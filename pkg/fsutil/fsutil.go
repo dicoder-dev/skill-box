@@ -154,6 +154,46 @@ func expandHome(path string) string {
 	return path
 }
 
+// MkdirAll 在指定路径创建目录(含中间目录)。幂等:目录已存在返 nil。
+//
+// 2026-07-07 增:供"打开 skills 目录"按钮在 reveal 失败时让用户选择"是否
+// 创建并打开"。安全校验:目标必须落在 $HOME 之下,防止恶意前端传入
+// /etc 或 /var 之类路径。$HOME 来自 os.UserHomeDir,获取失败时拒绝调用。
+//
+// 失败语义:
+//   - $HOME 获取失败 / 路径不在 $HOME 下 → 返 ErrOutsideHome(给前端映射成
+//     "不允许在用户目录之外创建")
+//   - 父目录不可写 / 权限不足 → 透传 os.MkdirAll 错误
+func MkdirAll(path string) error {
+	expanded := expandHome(path)
+	cleaned := filepath.Clean(expanded)
+	abs, err := filepath.Abs(cleaned)
+	if err != nil {
+		return fmt.Errorf("abs: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return fmt.Errorf("cannot resolve $HOME: %w", err)
+	}
+	// 必须落在 $HOME 之下(用 filepath.Rel 判包含关系,避免 "/home/user2" 误判通过 "/home/user")
+	rel, err := filepath.Rel(home, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("refusing to mkdir outside $HOME: %s (home=%s)", abs, home)
+	}
+	// 已存在且是目录 → 幂等成功
+	if fi, statErr := os.Stat(abs); statErr == nil {
+		if fi.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("path exists but is not a directory: %s", abs)
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", abs, err)
+	}
+	log.Printf("fsutil.MkdirAll ok: %s", abs)
+	return nil
+}
+
 // ProjectHint 是从目录路径推断出来的"项目元信息",供前端"导入项目"流程预填表单。
 //
 //   - Name:取目录的 basename,如 /Users/x/repo/foo → "foo"
