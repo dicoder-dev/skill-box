@@ -18,6 +18,7 @@ package fsutil
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,29 +59,54 @@ func ReadText(path string) (string, error) {
 }
 
 // Reveal 在系统文件管理器中显示给定路径。
+//
+// 2026-07-06 修复:之前用 .Start() 不 Wait + 不接 stderr,出错时 GIN 只打到
+// 500 状态码,完全看不到原因(Mac 上 user 点 reveal 按钮返 500,但日志没
+// 任何线索)。改成同步 Run + 捕获 stderr,失败时把 exit code / stderr
+// 一起带上,前端能看到具体问题。
 func Reveal(path string) error {
 	cleaned := filepath.Clean(path)
 	abs, err := filepath.Abs(cleaned)
 	if err != nil {
 		return fmt.Errorf("abs: %w", err)
 	}
-	if _, err := os.Stat(abs); err != nil {
-		return fmt.Errorf("stat: %w", err)
+	fi, statErr := os.Stat(abs)
+	if statErr != nil {
+		return fmt.Errorf("stat: %w", statErr)
 	}
+
+	// 按平台选命令 + 参数
+	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		if fi, err := os.Stat(abs); err == nil && fi.IsDir() {
-			return exec.Command("open", abs).Start()
+		if fi.IsDir() {
+			cmd = exec.Command("open", abs)
+		} else {
+			cmd = exec.Command("open", "-R", abs)
 		}
-		return exec.Command("open", "-R", abs).Start()
 	case "windows":
-		if fi, err := os.Stat(abs); err == nil && fi.IsDir() {
-			return exec.Command("explorer", abs).Start()
+		if fi.IsDir() {
+			cmd = exec.Command("explorer", abs)
+		} else {
+			cmd = exec.Command("explorer", "/select,", abs)
 		}
-		return exec.Command("explorer", "/select,", abs).Start()
 	default:
-		return exec.Command("xdg-open", "file://"+filepath.Dir(abs)).Start()
+		cmd = exec.Command("xdg-open", "file://"+filepath.Dir(abs))
 	}
+
+	// 同步执行:捕获 stderr + exit code。空 stderr 不打印,避免噪音。
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		s := strings.TrimSpace(stderr.String())
+		log.Printf("fsutil.Reveal failed: os=%s path=%q err=%v stderr=%q", runtime.GOOS, abs, runErr, s)
+		if s != "" {
+			return fmt.Errorf("reveal failed: %v (stderr: %s)", runErr, s)
+		}
+		return fmt.Errorf("reveal failed: %w", runErr)
+	}
+	log.Printf("fsutil.Reveal ok: os=%s path=%q", runtime.GOOS, abs)
+	return nil
 }
 
 // ProjectHint 是从目录路径推断出来的"项目元信息",供前端"导入项目"流程预填表单。
