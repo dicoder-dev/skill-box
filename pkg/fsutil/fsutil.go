@@ -64,15 +64,31 @@ func ReadText(path string) (string, error) {
 // 500 状态码,完全看不到原因(Mac 上 user 点 reveal 按钮返 500,但日志没
 // 任何线索)。改成同步 Run + 捕获 stderr,失败时把 exit code / stderr
 // 一起带上,前端能看到具体问题。
+//
+// 2026-07-06 增:path 入参支持 shell 风格的 `~` 展开(只作用于 Reveal,
+// 不影响 ReadText)。展开规则:
+//   - `~`            → $HOME
+//   - `~/foo`        → $HOME/foo
+//   - `~user/foo`    → 原样保留(user 形式不展开,Go 标准库没有 usermod lookup)
+//   - 其他           → 原样
+//
+// 触发背景:DB 里存的 tool.paths 是 `~/.agents/skills`、`~/.cursor/skills`
+// 这种占位符(由 toolseed 写入,代表"工具的默认 skills 目录"),不是真实
+// 可访问路径。`filepath.Abs` 不会展开 `~`,会拼成 `/Users/x/~/...` 然后
+// ENOENT。这里在 Reveal 入口做 ~ 展开,ENOENT 时错误信息也更明确。
 func Reveal(path string) error {
-	cleaned := filepath.Clean(path)
+	expanded := expandHome(path)
+	cleaned := filepath.Clean(expanded)
 	abs, err := filepath.Abs(cleaned)
 	if err != nil {
 		return fmt.Errorf("abs: %w", err)
 	}
 	fi, statErr := os.Stat(abs)
 	if statErr != nil {
-		return fmt.Errorf("stat: %w", statErr)
+		if os.IsNotExist(statErr) {
+			return fmt.Errorf("path does not exist: %s (resolved from %q)", abs, path)
+		}
+		return fmt.Errorf("stat %s: %w", abs, statErr)
 	}
 
 	// 按平台选命令 + 参数
@@ -107,6 +123,35 @@ func Reveal(path string) error {
 	}
 	log.Printf("fsutil.Reveal ok: os=%s path=%q", runtime.GOOS, abs)
 	return nil
+}
+
+// expandHome 把 shell 风格的 `~` 展开为 $HOME。仅作用于 Reveal 调用链。
+//
+// 规则:
+//   - "~"             → $HOME
+//   - "~/foo"         → $HOME/foo
+//   - "~user/foo"     → 原样保留(Go 标准库没有 usermod lookup,此处不展开)
+//   - "/abs/path"     → 原样
+//   - "rel/path"      → 原样
+//   - ""              → 原样
+//
+// $HOME 来自 os.UserHomeDir(优先 HOME 环境变量,回退 /etc/passwd)。
+func expandHome(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path // 拿不到 HOME 就原样返回,让后续 stat 报 ENOENT 给出线索
+	}
+	if path == "~" {
+		return home
+	}
+	if len(path) > 1 && (path[1] == '/' || path[1] == filepath.Separator) {
+		return filepath.Join(home, path[2:])
+	}
+	// "~user/..." 这种形态不展开,留给后续 ENOENT + 友好错误提示
+	return path
 }
 
 // ProjectHint 是从目录路径推断出来的"项目元信息",供前端"导入项目"流程预填表单。

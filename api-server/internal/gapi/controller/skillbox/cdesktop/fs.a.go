@@ -13,6 +13,7 @@
 package cdesktop
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,8 +65,13 @@ type RequestFsReveal struct {
 }
 
 // PostFsReveal POST /api/desktop/fs/reveal
+//
+// 2026-07-06 增诊断日志:之前 reveal 返 500 但日志只有状态码,看不出是 hook
+// 没注入、fsutil 报错、还是路径有问题。现在把每个失败分支都打 log,下次
+// 用户点 reveal 失败,日志里能直接 grep 到原因。
 func PostFsReveal(c *ginp.ContextPlus, req *RequestFsReveal) {
 	if strings.TrimSpace(req.Path) == "" {
+		log.Printf("cdesktop.fs.reveal: missing path")
 		c.JSON(400, gin.H{"error": "missing path"})
 		return
 	}
@@ -74,13 +80,16 @@ func PostFsReveal(c *ginp.ContextPlus, req *RequestFsReveal) {
 		// 兜底:返回 file:// 父目录 URL,前端可以走 openExternal
 		parent := filepath.Dir(req.Path)
 		if abs, err := filepath.Abs(parent); err == nil {
+			log.Printf("cdesktop.fs.reveal: hook nil, fallback to file://%s", abs)
 			c.JSON(501, gin.H{"error": "fs.reveal not available", "fallback_url": "file://" + abs})
 			return
 		}
+		log.Printf("cdesktop.fs.reveal: hook nil and cannot resolve fallback")
 		c.JSON(501, gin.H{"error": "fs.reveal not available"})
 		return
 	}
 	if err := h.FsReveal(req.Path); err != nil {
+		log.Printf("cdesktop.fs.reveal: hook returned err: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
