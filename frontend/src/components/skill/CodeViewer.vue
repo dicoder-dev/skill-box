@@ -185,6 +185,10 @@ function onTextareaKeydown(e) {
 
 <template>
   <div class="code-viewer">
+    <!-- 临时调试:看 hljs 输出 -->
+    <div style="padding: 4px 8px; background: #dbeafe; color: #1e40af; font-size: 11px; font-family: monospace;">
+      HLJS: lang={{ language }}, hasLang={{ !!language && !!hljs.getLanguage(language) }}, preview={{ (highlightedHtml || '').slice(0, 80) }}
+    </div>
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />
@@ -427,6 +431,40 @@ function onTextareaKeydown(e) {
   white-space: pre;
   overflow: visible;
 }
+
+/* 2026-07-07 增:highlight.js token class 配色。
+   hljs.highlight() 返回的 HTML 里有 <span class="hljs-keyword"> 等,
+   这些 class 默认在 github.css(已在 SkillsView 顶部 import)里定义颜色。
+   但 CodeViewer 的 .cv-text-pre { color: var(--text) } + scoped CSS 顺序
+   可能导致 hljs token 颜色被覆盖。这里在 scoped 内重新定义 token 配色,
+   优先级 100% 高于 hljs 全局 CSS,确保颜色生效。
+   配色对齐项目 UI 调色板(主色禁用紫,token 紫仅用于变量,跟 monaco 主题一致)。 */
+.cv-text-pre :deep(.hljs-keyword),
+.cv-text-pre :deep(.hljs-selector-tag),
+.cv-text-pre :deep(.hljs-built_in),
+.cv-text-pre :deep(.hljs-name) { color: #2563eb; font-weight: 600; }
+.cv-text-pre :deep(.hljs-string),
+.cv-text-pre :deep(.hljs-attr),
+.cv-text-pre :deep(.hljs-symbol),
+.cv-text-pre :deep(.hljs-bullet),
+.cv-text-pre :deep(.hljs-link) { color: #16a34a; }
+.cv-text-pre :deep(.hljs-number),
+.cv-text-pre :deep(.hljs-literal),
+.cv-text-pre :deep(.hljs-meta-number) { color: #ea580c; }
+.cv-text-pre :deep(.hljs-comment),
+.cv-text-pre :deep(.hljs-quote) { color: #94a3b8; font-style: italic; }
+.cv-text-pre :deep(.hljs-function),
+.cv-text-pre :deep(.hljs-title),
+.cv-text-pre :deep(.hljs-attribute),
+.cv-text-pre :deep(.hljs-class),
+.cv-text-pre :deep(.hljs-type) { color: #0891b2; }
+.cv-text-pre :deep(.hljs-tag),
+.cv-text-pre :deep(.hljs-meta) { color: #dc2626; }
+.cv-text-pre :deep(.hljs-variable),
+.cv-text-pre :deep(.hljs-template-variable),
+.cv-text-pre :deep(.hljs-params) { color: #7c3aed; }
+.cv-text-pre :deep(.hljs-deletion) { color: #dc2626; background: #fee2e2; }
+.cv-text-pre :deep(.hljs-addition) { color: #16a34a; background: #dcfce7; }
 
 .spinner {
   display: inline-block;
