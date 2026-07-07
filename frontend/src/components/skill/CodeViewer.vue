@@ -23,7 +23,11 @@ import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
 // highlight.js 用于代码高亮(只读视图),跟 markdown_view.js 共享 CSS。
-import hljs from 'highlight.js/lib/common'
+// 2026-07-07 改:从 'highlight.js/lib/common'(35 种语言 subset)换成全量
+// 'highlight.js'(384 种语言自带 register)。common 模式下 py / js / ts / json
+// / sh / toml / 等都不可用,hljs.getLanguage() 返 null → highlightedHtml 走
+// escapeHtml 分支 → 没有 span → 看不到高亮。多 50KB,稳定。
+import hljs from 'highlight.js'
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -437,9 +441,11 @@ function onTextareaKeydown(e) {
 /* 2026-07-07 修:github.css(全局)在 .hljs / pre / code 上加了 background:#f0f0f0,
    跟 .cv-text-pre { background:#0a0a0a } 同优先级,但 github.css 是后加载的 → 赢,
    结果每一行代码都出现白底(其实是 pre 的 box-decoration-break: slice + 每行视觉块)。
-   显式 :deep() 覆盖,清掉所有 hljs 默认背景,保留 token 颜色。 */
+   显式 :deep() 覆盖,清掉所有 hljs 默认背景,保留 token 颜色。
+   同时 github.css 给 code 加 color:#24292e 深色,黑底上看不清,
+   这里 :deep(code) 显式设 color:#e2e8f0 浅灰。 */
 .cv-text-pre :deep(.hljs) { background: transparent; }
-.cv-text-pre :deep(code) { background: transparent; display: block; }
+.cv-text-pre :deep(code) { background: transparent; color: #e2e8f0; display: block; }
 .cv-text-pre :deep(.hljs-subst),
 .cv-text-pre :deep(.hljs-section),
 .cv-text-pre :deep(.hljs-emphasis) { color: inherit; background: transparent; }
