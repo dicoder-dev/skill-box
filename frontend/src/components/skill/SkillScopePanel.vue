@@ -466,10 +466,17 @@ onErrorCaptured((err) => {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
+  /* 2026-07-07 改 v6:作用域标题色跟 sfip-tree-header 完全一致 var(--text-dim),
+     图标 svg 强制 currentColor 继承,避免 IconPark svg 默认 fill 跟文字对比过大
+     看上去像"白色"。 */
   color: var(--text-dim);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.ssp-scope-header :deep(svg) { color: inherit; fill: currentColor; }
+/* 2026-07-07 改 v6:标题内 IconPark svg 显式 currentColor,跟文字色统一 */
+.ssp-scope-header > :deep(svg),
+.ssp-scope-header svg { color: inherit; fill: currentColor; }
 /* 2026-07-07 改:作用域标题栏变成可点击 button 后的样式 reset。
    跟 .sfip-tree-header 同款风格(uppercase + sticky + bg-subtle + border-bottom)。
    收起态(sectionCollapsed=true)下整块只占标题一行,不再 max-height:45%,自然收缩。 */

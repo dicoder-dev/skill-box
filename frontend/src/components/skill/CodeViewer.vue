@@ -434,6 +434,16 @@ function onTextareaKeydown(e) {
   overflow: visible;
 }
 
+/* 2026-07-07 修:github.css(全局)在 .hljs / pre / code 上加了 background:#f0f0f0,
+   跟 .cv-text-pre { background:#0a0a0a } 同优先级,但 github.css 是后加载的 → 赢,
+   结果每一行代码都出现白底(其实是 pre 的 box-decoration-break: slice + 每行视觉块)。
+   显式 :deep() 覆盖,清掉所有 hljs 默认背景,保留 token 颜色。 */
+.cv-text-pre :deep(.hljs) { background: transparent; }
+.cv-text-pre :deep(code) { background: transparent; display: block; }
+.cv-text-pre :deep(.hljs-subst),
+.cv-text-pre :deep(.hljs-section),
+.cv-text-pre :deep(.hljs-emphasis) { color: inherit; background: transparent; }
+
 /* 2026-07-07 改 v2:代码区黑底,hljs token 配色用浅色高对比版(浅色 token 在黑底上看不清)。
    .cv-text-pre :deep() scoped 优先级 > 全局 hljs github.css。
    颜色对应项目 UI 调色板:蓝/绿/橙/青/红;紫仅用于变量。 */
