@@ -443,7 +443,9 @@ onErrorCaptured((err) => {
 <style scoped>
 .ssp-scope {
   border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
+  /* 2026-07-07 改 v5:作用域区不再用 bg-subtle 灰色面板,改成 transparent,
+     跟文件树视觉一致。bg-subtle 在浅色主题下是浅灰,信息密度没意义还显脏。 */
+  background: transparent;
   /* 2026-07-07 改 v4:作用域区移到文件树底部,不要再 max-height:50%(占满左栏下半),
      让它作为底部一块自然收缩,文件树占主空间。 */
   max-height: 45%;
@@ -473,7 +475,8 @@ onErrorCaptured((err) => {
    收起态(sectionCollapsed=true)下整块只占标题一行,不再 max-height:45%,自然收缩。 */
 .ssp-scope-header-toggle {
   width: 100%;
-  background: var(--bg-subtle);
+  /* 2026-07-07 改 v5:作用域标题栏不再 bg-subtle 灰底,transparent 跟整块一致 */
+  background: transparent;
   border: none;
   border-bottom: 1px solid var(--border);
   border-top: 1px solid var(--border);

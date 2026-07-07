@@ -185,10 +185,6 @@ function onTextareaKeydown(e) {
 
 <template>
   <div class="code-viewer">
-    <!-- 临时调试:看 hljs 输出 -->
-    <div style="padding: 4px 8px; background: #dbeafe; color: #1e40af; font-size: 11px; font-family: monospace;">
-      HLJS: lang={{ language }}, hasLang={{ !!language && !!hljs.getLanguage(language) }}, preview={{ (highlightedHtml || '').slice(0, 80) }}
-    </div>
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />
@@ -341,16 +337,19 @@ function onTextareaKeydown(e) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg);
+  /* 2026-07-07 改 v2:代码区背景改纯黑,跟 IDE 一致;之前的 var(--bg) 跟外面卡片同色,
+     没有"代码区"的视觉区隔。黑色背景上 token 配色对比度更高。 */
+  background: #0a0a0a;
 }
 .cv-text-toolbar {
   display: flex;
   align-items: center;
   padding: 4px 12px;
   font-size: 11px;
-  color: var(--text-faint);
-  background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border);
+  /* 2026-07-07 改 v2:工具栏背景深灰,跟代码区黑底过渡自然 */
+  background: #171717;
+  color: #94a3b8;
+  border-bottom: 1px solid #262626;
   flex-shrink: 0;
   text-transform: lowercase;
   letter-spacing: 0.04em;
@@ -371,12 +370,13 @@ function onTextareaKeydown(e) {
   flex-shrink: 0;
   width: 48px;
   padding: 12px 8px;
-  background: var(--bg-subtle);
-  border-right: 1px solid var(--border);
+  /* 2026-07-07 改 v2:行号列背景深灰,跟代码黑底形成层级 */
+  background: #171717;
+  border-right: 1px solid #262626;
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text-faint);
+  color: #64748b;
   text-align: right;
   user-select: none;
   overflow: hidden;
@@ -400,8 +400,9 @@ function onTextareaKeydown(e) {
   border: none;
   outline: none;
   resize: none;
-  background: var(--bg-card);
-  color: var(--text);
+  /* 2026-07-07 改 v2:编辑态背景纯黑 + 文字浅灰,跟只读视图同款风格 */
+  background: #0a0a0a;
+  color: #e2e8f0;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
@@ -409,7 +410,7 @@ function onTextareaKeydown(e) {
   tab-size: 2;
 }
 .cv-text-input:focus {
-  background: var(--bg-card);
+  background: #0a0a0a;
 }
 
 /* 只读模式:<pre> + highlight.js */
@@ -423,8 +424,9 @@ function onTextareaKeydown(e) {
   flex: 1;
   margin: 0;
   padding: 12px 16px;
-  background: var(--bg-card);
-  color: var(--text);
+  /* 2026-07-07 改 v2:纯黑背景 + 浅灰底色 */
+  background: #0a0a0a;
+  color: #e2e8f0;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
@@ -432,39 +434,35 @@ function onTextareaKeydown(e) {
   overflow: visible;
 }
 
-/* 2026-07-07 增:highlight.js token class 配色。
-   hljs.highlight() 返回的 HTML 里有 <span class="hljs-keyword"> 等,
-   这些 class 默认在 github.css(已在 SkillsView 顶部 import)里定义颜色。
-   但 CodeViewer 的 .cv-text-pre { color: var(--text) } + scoped CSS 顺序
-   可能导致 hljs token 颜色被覆盖。这里在 scoped 内重新定义 token 配色,
-   优先级 100% 高于 hljs 全局 CSS,确保颜色生效。
-   配色对齐项目 UI 调色板(主色禁用紫,token 紫仅用于变量,跟 monaco 主题一致)。 */
+/* 2026-07-07 改 v2:代码区黑底,hljs token 配色用浅色高对比版(浅色 token 在黑底上看不清)。
+   .cv-text-pre :deep() scoped 优先级 > 全局 hljs github.css。
+   颜色对应项目 UI 调色板:蓝/绿/橙/青/红;紫仅用于变量。 */
 .cv-text-pre :deep(.hljs-keyword),
 .cv-text-pre :deep(.hljs-selector-tag),
 .cv-text-pre :deep(.hljs-built_in),
-.cv-text-pre :deep(.hljs-name) { color: #2563eb; font-weight: 600; }
+.cv-text-pre :deep(.hljs-name) { color: #60a5fa; font-weight: 600; }
 .cv-text-pre :deep(.hljs-string),
 .cv-text-pre :deep(.hljs-attr),
 .cv-text-pre :deep(.hljs-symbol),
 .cv-text-pre :deep(.hljs-bullet),
-.cv-text-pre :deep(.hljs-link) { color: #16a34a; }
+.cv-text-pre :deep(.hljs-link) { color: #4ade80; }
 .cv-text-pre :deep(.hljs-number),
 .cv-text-pre :deep(.hljs-literal),
-.cv-text-pre :deep(.hljs-meta-number) { color: #ea580c; }
+.cv-text-pre :deep(.hljs-meta-number) { color: #fb923c; }
 .cv-text-pre :deep(.hljs-comment),
-.cv-text-pre :deep(.hljs-quote) { color: #94a3b8; font-style: italic; }
+.cv-text-pre :deep(.hljs-quote) { color: #64748b; font-style: italic; }
 .cv-text-pre :deep(.hljs-function),
 .cv-text-pre :deep(.hljs-title),
 .cv-text-pre :deep(.hljs-attribute),
 .cv-text-pre :deep(.hljs-class),
-.cv-text-pre :deep(.hljs-type) { color: #0891b2; }
+.cv-text-pre :deep(.hljs-type) { color: #22d3ee; }
 .cv-text-pre :deep(.hljs-tag),
-.cv-text-pre :deep(.hljs-meta) { color: #dc2626; }
+.cv-text-pre :deep(.hljs-meta) { color: #f87171; }
 .cv-text-pre :deep(.hljs-variable),
 .cv-text-pre :deep(.hljs-template-variable),
-.cv-text-pre :deep(.hljs-params) { color: #7c3aed; }
-.cv-text-pre :deep(.hljs-deletion) { color: #dc2626; background: #fee2e2; }
-.cv-text-pre :deep(.hljs-addition) { color: #16a34a; background: #dcfce7; }
+.cv-text-pre :deep(.hljs-params) { color: #c4b5fd; }
+.cv-text-pre :deep(.hljs-deletion) { color: #fca5a5; background: #450a0a; }
+.cv-text-pre :deep(.hljs-addition) { color: #86efac; background: #052e16; }
 
 .spinner {
   display: inline-block;
