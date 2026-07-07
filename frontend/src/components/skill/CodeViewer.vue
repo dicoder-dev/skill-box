@@ -7,7 +7,7 @@
 //      简单语法高亮走 highlight.js(已有依赖)
 //   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
 //
-console.log('[CodeViewer v2] loaded at', new Date().toISOString(), 'path:', props.path, 'mode:', props.mode)
+// 2026-07-07 大改:彻底去掉 Monaco。
 // Monaco 在 wails3 dev + macOS webview 环境下持续出问题:
 //   1. ?worker URL 被 Vite dev server 当 SPA fallback 返回 HTML,worker 解析失败
 //   2. editor.main chunk 也偶发不稳定
