@@ -48,3 +48,50 @@ export function getLocale() {
 }
 
 export default i18n
+
+// 2026-07-07 增:plainT(key, values) — 完全脱离 vue-i18n 的 Proxy / Composer 包装,
+// 直接读 language 包取值。给"compute critical 路径"用(例如 SkillFileInlinePanel 的
+// scopeGroupByTool computed — 这种路径一旦 throw 会直接把整段 component update 弄崩,
+// 控制台只看到 "Unhandled Promise Rejection" / "t is not a function")。
+//
+// vue-i18n 9 的 t/getLocale 暴露路径全部走 Proxy,
+// 在 v-if="..." 懒挂载或某些响应链里可能拿到 ProxyObject 而非可调用函数,
+// 兜底不充分。plainT 只读 messages[key] → 永远不会 throw,
+// 找不到时返回 key 字符串。
+const _messages = {
+  'zh-CN': zhCN,
+  'en-US': enUS,
+}
+export function getCurrentLocale() {
+  try {
+    return i18n.global.locale.value || 'zh-CN'
+  } catch (_) {
+    return 'zh-CN'
+  }
+}
+function _lookup(obj, segs) {
+  let cur = obj
+  for (const seg of segs) {
+    if (cur == null) return undefined
+    cur = cur[seg]
+  }
+  return cur
+}
+export function plainT(key, values) {
+  if (!key) return ''
+  // 优先按当前 locale,fallback 到 'zh-CN'
+  const loc = getCurrentLocale()
+  const segs = String(key).split('.')
+  let v = _lookup(_messages[loc], segs)
+  if (v == null && loc !== 'zh-CN') v = _lookup(_messages['zh-CN'], segs)
+  if (v == null) return key
+  if (typeof v === 'string') {
+    if (!values || typeof values !== 'object') return v
+    return v.replace(/\{(\w+)\}/g, (m, k) => {
+      const val = values[k]
+      if (val == null) return m
+      return String(val)
+    })
+  }
+  return v
+}

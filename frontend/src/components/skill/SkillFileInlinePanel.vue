@@ -13,8 +13,7 @@
 // (name / version / description / triggers / author / license / depends_on / target_tools)。
 
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import i18n from '@/core/i18n/index.js'
+import { plainT } from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import FileTreeView from './FileTreeView.vue'
@@ -26,47 +25,20 @@ import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_res
 import { useToastStore } from '@/core/store/toast'
 import { useAppStore } from '@/core/store/app'
 
-// 2026-07-07 改 v2:不止从 useI18n() 解构 t,再用 tt() 包一层做最终兜底。
-// 真实根因:vue-i18n 9 中,某些组合下 useI18n() 拿到的 t 实际是 Composer 实例代理,
-// i18n.global.t 在 setup 早期也可能为 Proxy。直接调用 t('xxx') 触发 Proxy 的
-// .apply/.call 时抛 "t is not a function (t is an instance of ProxyObject)"
-// 并把整个 component render 整段崩掉,Vue 兜底输出 "Unhandled error during
-// execution of component update"。
+// 2026-07-07 改 v3:vue-i18n 在 v-if="..." 懒挂载子组件里 setup 早期取到的 t/composer
+// 是 ProxyObject,所有 t('xxx') 同步调用会抛 "t is not a function" 并把整段
+// component update 弄崩。async/await 路径上的 throw 会变成 Promise rejection,
+// onErrorCaptured 同步 hook 接不到,控制台只有 "Unhandled Promise Rejection" 提示。
 //
-// 解法:用一个普通函数 tt(key) 完整代理翻译;拿到的"t"无论是函数还是 Proxy,
-// tt 最终走 typeof==='function' 走函数,否则穿 ref/computed 把 key 当显示值返回。
-// computed 在 t() 报错时也不会让 template 崩。
-function resolveTranslator() {
-  // 1. 优先 composer proxy 暴露的 t 函数(computed 直接拿)
-  const composer = i18n.global
-  let cand = null
-  if (composer && typeof composer.t === 'function') cand = composer.t.bind(composer)
-  // 2. useI18n 拿一次,Vue 自己内部一般会包装好
-  if (!cand) {
-    try {
-      const ctx = useI18n()
-      if (ctx && typeof ctx.t === 'function') cand = ctx.t.bind(ctx)
-    } catch (_) { /* ignored */ }
-  }
-  // 3. 返回一个永远可调用的函数
-  return function tt(key, values) {
-    if (typeof cand === 'function') {
-      try {
-        const out = cand(key, values)
-        // vue-i18n 翻译后的合法值是 string 或 array 等可序列化对象
-        if (out == null) return key
-        // 防御:若仍返回了 Proxy(罕见),降级 toString()
-        if (typeof out === 'object' && typeof out.toString === 'function') {
-          const s = out.toString()
-          if (s && s !== '[object Object]') return s
-        }
-        return out
-      } catch (_) { return key }
-    }
-    return key
-  }
-}
-const t = resolveTranslator()
+// 这一版的修法:完全脱离 vue-i18n,直接读 language 包(纯函数,无法 throw)。
+// 见 core/i18n/index.js 的 plainT 实现 — 永远返回 string,绝不 throw。
+//
+// 二次保险:plainT 也可能因为 import 失败 / 早期 module 解析异常变成 undefined,
+// 这里再做一次 typeof 检测,最后兜底就是直接返回 key 字符串(永远不 throw)。
+let _t = plainT
+if (typeof _t !== 'function') _t = (key) => (key == null ? '' : String(key))
+// 兼容调用 t(key, values) 的两参形式(plainT 已经支持)
+const t = _t
 const toast = useToastStore()
 const appStore = useAppStore()
 
