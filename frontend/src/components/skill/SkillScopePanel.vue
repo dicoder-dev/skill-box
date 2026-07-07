@@ -120,6 +120,8 @@ const scopeGroupByTool = computed(() => {
       // 不在 group 上挂 icon 字段了,template 用 ToolIcon + findTool(tool_id) 直接取
       hitCount: toolHits.filter((h) => h.exists).length,
       hasHit: toolHits.some((h) => h.exists),
+      // 2026-07-08 增:工具是否在全局作用域启用。template 据此在数量标签前显示"全局"chip。
+      hasGlobal: toolHits.some((h) => h.scope === 'global' && h.exists),
       targets,
     })
   }
@@ -383,6 +385,9 @@ onErrorCaptured((err) => {
             class="ssp-scope-tool-icon"
           />
           <span class="ssp-scope-row-name">{{ group.display }}</span>
+          <!-- 2026-07-08 增:工具启用了全局时,在数量标签前显示"全局"chip,
+               让用户一眼看出"这个 skill 是生效在全局还是项目级"。 -->
+          <span v-if="group.hasGlobal" class="ssp-scope-row-global" :title="'已启用全局作用域'">全局</span>
           <span v-if="group.hitCount > 0" class="ssp-scope-row-count">{{ group.hitCount }}</span>
         </button>
         <ul v-if="!isCollapsed(group.tool_id)" class="ssp-scope-targets">
@@ -567,6 +572,19 @@ onErrorCaptured((err) => {
   padding: 1px 6px;
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+/* 2026-07-08 增:工具启用全局时的"全局"chip。
+   视觉上跟 hitCount 数字 chip 区分:用实心蓝底+白字,表示"这是一个生效位置",
+   而 hitCount 是数量徽章。 */
+.ssp-scope-row-global {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  background: var(--accent-blue);
+  color: #fff;
   border-radius: 999px;
   flex-shrink: 0;
 }

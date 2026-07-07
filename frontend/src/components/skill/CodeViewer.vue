@@ -161,7 +161,11 @@ async function mountMonaco() {
   monacoModel = monaco.editor.createModel(localText.value || '', monacoLang.value)
   monacoEditor = monaco.editor.create(editorContainer.value, {
     model: monacoModel,
-    theme: isDark() ? 'skillbox-dark' : 'skillbox-light',
+    // 2026-07-08 改:强制用 skillbox-dark 主题,跟 .cv-text-wrap 黑底统一;
+    // 否则站点是浅色主题时 Monaco 走 skillbox-light(背景 #fafafa 白色),
+    // 在黑底容器内"白底编辑器"显得很突兀。token 配色两边都用亮色版
+    // (蓝/绿/橙/青/红/紫)都好看,无视觉冲突。
+    theme: 'skillbox-dark',
     automaticLayout: true,
     // 字体 / 行高跟只读视图 hljs <pre> 完全一致(13px / 1.6 → 21px),
     // 切模式视觉不跳。

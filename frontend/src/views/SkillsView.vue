@@ -2957,33 +2957,39 @@ onUnmounted(() => {
   margin: 20px 0;
 }
 
-/* 行内 code — 浅色徽章 */
+/* 行内 code — 深色徽章背景(蓝紫渐变)+ 白字,跟代码块深底风格统一 */
 .md-body :deep(code) {
   font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
   font-size: 0.88em;
-  background: var(--bg-subtle, rgba(110, 118, 129, 0.12));
-  color: var(--accent-blue);
-  padding: 1px 6px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  color: #e2e8f0;
+  padding: 1px 7px;
   border-radius: 4px;
-  border: 1px solid var(--border);
+  border: 1px solid #334155;
+  font-weight: 500;
 }
+/* 行内 code 内嵌 token 配色 — hljs 在 markdown-it 的 code 选项里不会跑行内
+   (只有 fence 块才 highlight),所以行内 code 不会有 .hljs-* span,这一组
+   选择器保持占位,即使不命中也不影响。 */
 
 /* 代码块(highlight.js 输出 <pre class="hljs"><code class="hljs language-xxx">)
-   深色底 + 顶部语言徽章(用 ::before 在 pre 上展示语言标签) */
+   2026-07-08 改:深色底(GitHub dark 同款 #0d1117)+ 浅字 + 顶部语言徽章。
+   旧版 #f6f8fa 浅底在 SkillViewer cv-md-wrap 同区域底色(亮色)对不上,
+   跟 CodeViewer 黑底也割裂。统一用深底,跟站点整体视觉一致。 */
 .md-body :deep(pre.hljs) {
   position: relative;
   margin: 14px 0;
   padding: 14px 16px;
-  background: #f6f8fa;
-  border: 1px solid var(--border);
+  background: #0d1117;
+  border: 1px solid #30363d;
   border-radius: var(--radius-sm, 6px);
   overflow-x: auto;
   font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
   font-size: 12.5px;
   line-height: 1.65;
-  color: #24292f;
+  color: #c9d1d9;
 }
-/* 语言徽章 */
+/* 语言徽章 — 深色风格 */
 .md-body :deep(pre.hljs code[class*="language-"])::before {
   content: attr(class);
   position: absolute;
@@ -2992,9 +2998,9 @@ onUnmounted(() => {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-muted, #6b7280);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  color: #8b949e;
+  background: #161b22;
+  border: 1px solid #30363d;
   padding: 1px 6px;
   border-radius: 3px;
   font-family: 'JetBrains Mono', monospace;
