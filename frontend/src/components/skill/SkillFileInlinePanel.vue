@@ -83,6 +83,14 @@ function setMode(skillName, path, m) {
   if (!k) return
   editModeMap[k] = m
 }
+// 2026-07-07 增:清指定文件的编辑态,回到 view 模式。
+// 用在切换 skill/file 前,保证新选中的文件默认是 view 模式,
+// 而不是继承前一个 skill 的 edit 状态。
+function clearMode(skillName, path) {
+  const k = modeKey(skillName, path)
+  if (!k) return
+  delete editModeMap[k]
+}
 
 function splitSkillMd(text) {
   if (!text) return { frontmatter: '', body: text }
@@ -146,9 +154,107 @@ onMounted(() => {
   fetchStoreRoot()
 })
 
-function onSelectFile(file) {
+// 2026-07-07 改:切换文件前也走 dirty 检查。
+// 用户改完 SKILL.md 后点其他文件(目录树里)→ 弹三选项。
+// dirty 检查按"任一文件 dirty"算,不只是当前选中文件。
+async function onSelectFile(file) {
+  if (!file || !file.path) return
+  if (file.path === selectedKey.value) return
+  const verdict = await ensureCleanBeforeSwitch()
+  if (verdict === 'cancel') return
   selectedFile.value = file
   selectedKey.value = file.path
+}
+
+// 2026-07-07 增:切换前 dirty 检查 + 询问逻辑。
+// 父组件在切换 skill / 切换文件前调 ensureCleanBeforeSwitch(),有 dirty 弹
+// 三选项(保存 / 放弃 / 取消),等用户决策后再决定是否继续切换。
+// 设计目标:无论保存/放弃,dirty 状态都要被清掉(用户的核心诉求),编辑态也
+// 回到 view(避免切换后新文件继承 edit 模式)。
+//
+// 返回值约定(给父调用方):
+//   'proceed'  → 允许切换(用户已保存或放弃)
+//   'cancel'   → 不切换(用户取消)
+//   'busy'     → 当前正在另一个保存流程中,父应该也阻断切换
+const _discardResolve = ref(null)
+const discardOpen = ref(false)
+const discardFilePath = ref('')
+const discardFileName = ref('')
+
+async function ensureCleanBeforeSwitch() {
+  // 2026-07-07 改:用最新的 dirtyPaths 计算 — computed isDirty 只反映当前选中文件,
+  // 这里要"任一文件 dirty 都算脏"。
+  if (!dirtyPaths.value || dirtyPaths.value.size === 0) {
+    // 即使没 dirty,如果当前文件处于 edit 模式,也要清掉(切走后不该继承 edit)。
+    // 这是用户反馈"打开其他 skill 默认是处于编辑状态"那个 bug 的修法。
+    clearModeOnLeave()
+    return 'proceed'
+  }
+  // 拿第一个 dirty 文件(多文件 dirty 时也只问一次,统一处理)
+  const firstDirty = Array.from(dirtyPaths.value)[0]
+  discardFilePath.value = firstDirty
+  discardFileName.value = (firstDirty || '').split('/').pop() || firstDirty
+  discardOpen.value = true
+  return new Promise((resolve) => { _discardResolve.value = resolve })
+}
+
+// 切换前清当前选中文件的 edit 模式(进入 view)
+function clearModeOnLeave() {
+  const sk = props.skill
+  const path = selectedFile.value?.path
+  if (!path) return
+  clearMode(sk?.name, path)
+}
+
+async function onDiscardSave() {
+  discardOpen.value = false
+  // 保存当前 dirty 文件(只保存第一个 dirty;实际 InlinePanel 里只支持单文件保存,
+  // 这里就按现有 saveCurrent 走)
+  const r = _discardResolve.value
+  _discardResolve.value = null
+  if (!r) return
+  // 把 selectedFile 切到 dirty 文件再保存
+  const target = props.files.find((f) => f.path === discardFilePath.value)
+  if (target) {
+    selectedFile.value = target
+    selectedKey.value = target.path
+  }
+  try {
+    await saveCurrent()
+  } catch (_) { /* saveCurrent 内部已 toast */ }
+  // saveCurrent 成功后 dirtyPaths 已被清;编辑态也清掉。
+  clearModeOnLeave()
+  r('proceed')
+}
+
+function onDiscardDrop() {
+  discardOpen.value = false
+  const r = _discardResolve.value
+  _discardResolve.value = null
+  if (!r) return
+  // 放弃:直接清掉所有 dirty(同步 localFiles 到原内容),并清编辑态。
+  resetAllDirty()
+  clearModeOnLeave()
+  r('proceed')
+}
+
+function onDiscardCancel() {
+  discardOpen.value = false
+  const r = _discardResolve.value
+  _discardResolve.value = null
+  if (!r) return
+  r('cancel')
+}
+
+function resetAllDirty() {
+  // 把 dirty 文件的 localFiles 同步回原 content
+  for (const dirtyPath of dirtyPaths.value) {
+    const f = props.files.find((x) => x.path === dirtyPath)
+    if (!f) continue
+    const orig = dirtyPath === 'SKILL.md' ? splitSkillMd(f.content || '').body : (f.content || '')
+    localFiles.set(dirtyPath, orig)
+  }
+  dirtyPaths.value = new Set()
 }
 
 const currentContent = computed(() => {
@@ -350,6 +456,16 @@ onErrorCaptured((err) => {
 })
 
 onUnmounted(() => {})
+
+// 2026-07-07 增:暴露给父组件的方法。
+// 父在切换 skill / 切换文件前调 ensureCleanBeforeSwitch(),有 dirty 时弹
+// 三选项弹窗,等用户决策返回 'proceed' / 'cancel' 后再决定是否继续。
+// resetDirtyNow 是父级强制清 dirty 的兜底(例如删除 skill 流程不需要询问)。
+defineExpose({
+  ensureCleanBeforeSwitch,
+  resetAllDirty,
+  isAnyDirty: () => dirtyPaths.value.size > 0,
+})
 </script>
 
 <template>
@@ -498,6 +614,30 @@ onUnmounted(() => {})
       </div>
       <template #footer>
         <button class="primary" @click="closeFrontmatter">关闭</button>
+      </template>
+    </Modal>
+
+    <!-- 2026-07-07 增:切换前的 dirty 询问弹窗(三选项:保存/放弃/取消)。
+         ensureCleanBeforeSwitch() 返回的 Promise 由 _discardResolve 接住,
+         等用户点击对应按钮再 resolve。 -->
+    <Modal
+      v-model="discardOpen"
+      size="sm"
+      title="文件已修改"
+      :close-on-mask="false"
+    >
+      <p class="sfip-discard-msg">
+        文件 <code>{{ discardFileName }}</code> 已被修改,切换前请选择如何处理:
+      </p>
+      <ul class="sfip-discard-tips">
+        <li><strong>保存修改</strong>:写盘后再切换</li>
+        <li><strong>放弃修改</strong>:丢弃本地编辑,加载目标 skill / 文件</li>
+        <li><strong>取消</strong>:留在当前页面继续编辑</li>
+      </ul>
+      <template #footer>
+        <button type="button" class="ghost" @click="onDiscardCancel">取消</button>
+        <button type="button" class="danger" @click="onDiscardDrop">放弃修改</button>
+        <button type="button" class="primary" @click="onDiscardSave">保存修改</button>
       </template>
     </Modal>
   </div>
@@ -777,5 +917,32 @@ onUnmounted(() => {})
 .sfip-fm-empty {
   color: var(--text-faint);
   font-style: italic;
+}
+
+/* 2026-07-07 增:dirty 询问弹窗样式 */
+.sfip-discard-msg {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.sfip-discard-msg code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  padding: 1px 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.sfip-discard-tips {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+.sfip-discard-tips strong {
+  color: var(--text);
+  font-weight: 600;
 }
 </style>

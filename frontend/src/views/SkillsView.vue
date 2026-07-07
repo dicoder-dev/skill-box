@@ -354,10 +354,19 @@ function extractBody(skillmd) {
   return m ? m[1].trim() : skillmd
 }
 
+// 2026-07-07 增:SkillFileInlinePanel 的 ref,父级在切换 skill/file 前调
+// ensureCleanBeforeSwitch() 触发 dirty 询问弹窗(组件内部自管)。
+const inlinePanelRef = ref(null)
+
 // 选中列表项
-function selectItem(row) {
+async function selectItem(row) {
   // 切换 skill 时清掉内联编辑态,避免把旧 skill 的 editBody 带到新 skill
   if (editing.value) cancelInlineEdit()
+  // 2026-07-07 增:切换前 dirty 询问 — InlinePanel 弹"保存/放弃/取消",等用户决策
+  if (inlinePanelRef.value && typeof inlinePanelRef.value.ensureCleanBeforeSwitch === 'function') {
+    const verdict = await inlinePanelRef.value.ensureCleanBeforeSwitch()
+    if (verdict === 'cancel') return
+  }
   selectedKey.value = skillKey(row)
   loadCurrent(row)
 }
@@ -789,6 +798,11 @@ function closeDelete() {
 async function confirmDelete() {
   if (!deleteTarget.value || deleteBusy.value) return
   const target = deleteTarget.value
+  // 2026-07-07 增:删 skill 前,如果 InlinePanel 有 dirty,直接清掉(不弹询问 —
+  // 删 skill 时文件都一起没,留 dirty 编辑无意义)。
+  if (target.kind === 'skill' && inlinePanelRef.value?.isAnyDirty?.()) {
+    inlinePanelRef.value.resetAllDirty()
+  }
   const cascade = !!deleteCascade.value
   deleteBusy.value = true
   try {
@@ -1539,6 +1553,7 @@ onUnmounted(() => {
         <section class="detail-section detail-body">
           <SkillFileInlinePanel
             v-if="current && currentFiles.length"
+            ref="inlinePanelRef"
             :files="currentFiles"
             :skill="{
               name: current.name,
