@@ -37,6 +37,10 @@ import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 // 2026-07-04 增:md-body 内 .md-external-link 点击统一走 platform.openExternal(Commit 2)。
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import 'highlight.js/styles/github.css'
+// 2026-07-08 增:GitHub README 同款排版(h1-h6 标题层级 / 列表 / 引用 / 表格 / 任务列表
+// 全套标准化样式)。9KB,CodeViewer 在 md-body 上加 markdown-body 类启用。
+// 站点主题色 / 行内 code / 代码块深底仍由下面 50 条 .md-body :deep() 自定义覆盖。
+import 'github-markdown-css/github-markdown.css'
 import { platform } from '@/platform'
 import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 import { useToastStore } from '@/core/store/toast'

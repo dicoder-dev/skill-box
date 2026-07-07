@@ -19,6 +19,7 @@ import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import OfficeViewer from '@/components/skill/OfficeViewer.vue'
+import CsvViewer from '@/components/skill/CsvViewer.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
@@ -49,6 +50,9 @@ const ext = computed(() => {
 })
 
 const isMarkdown = computed(() => ['md', 'markdown'].includes(ext.value))
+
+// 2026-07-08 增:CSV 文件走 CsvViewer 表格化预览(只读),编辑模式仍走 Monaco。
+const isCsv = computed(() => ext.value === 'csv')
 
 // 2026-07-08 增:office 文档类型(.docx / .pdf / .xlsx / .xls / .pptx)走 vue-office 在线预览,
 // 不再归到二进制兜底。OFFICE_EXTS 是可预览类型,BINARY_EXTS 是真不能预览(图片/压缩包)。
@@ -104,6 +108,9 @@ const EXT_TO_HLJS = {
   md: 'markdown', markdown: 'markdown',
   txt: 'plaintext', log: 'plaintext',
   vue: 'xml', svelte: 'xml',
+  // 2026-07-08 增:CSV 在 monaco 编辑模式用内置 csv language id(highlight.js 无 csv
+  // language,会让 escapeHtml 走 fallback,monaco 自带 csv 至少给分隔符高亮)。
+  csv: 'plaintext',
 }
 const language = computed(() => EXT_TO_HLJS[ext.value] || 'plaintext')
 
@@ -293,6 +300,14 @@ const lineNumbers = computed(() => {
       class="cv-office"
     />
 
+    <!-- 2026-07-08 增:CSV 文件表格化预览(只读视图)。
+         编辑模式仍走下面 monaco 分支(高亮 + 列分隔感知),保持一致编辑体验。 -->
+    <CsvViewer
+      v-if="isCsv && !editable"
+      :content="content"
+      class="cv-csv"
+    />
+
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />
@@ -318,7 +333,7 @@ const lineNumbers = computed(() => {
       />
       <div
         v-else
-        class="cv-md md-body"
+        class="cv-md md-body markdown-body"
         v-html="renderedMd"
         @click="onMdClick"
       />
@@ -368,6 +383,12 @@ const lineNumbers = computed(() => {
 }
 /* 2026-07-08 增:office 预览区占满 CodeViewer */
 .cv-office {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+/* 2026-07-08 增:CSV 表格化预览占满 CodeViewer */
+.cv-csv {
   flex: 1;
   min-height: 0;
   display: flex;
