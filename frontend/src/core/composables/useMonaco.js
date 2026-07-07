@@ -196,17 +196,45 @@ function watchTheme(monaco) {
 // 都在 'standalone/browser/standaloneEditor.js' 里(不在 editor.api.js),
 // 结果 setTheme 静默失败,tokenColors 全部不生效。
 // 'editor.main.js' 通过 basic-languages + language/* 自动引入 standalone 主题注册。
+//
+// 2026-07-07 改:把 worker 用 Blob URL 内联,绕开 Vite ?worker plugin。
+// 旧版用 new URL('...editor.worker?worker', import.meta.url) 让 vite 解析
+// worker chunk URL,在 wails3 dev + macOS webview 环境下:
+//   1. import.meta.url 是 /assets/index-xxx.js(相对路径)
+//   2. new URL 后解析成 /assets/editor.worker-xxx.js
+//   3. wails webview 加载这个 URL → vite dev server 返回 SPA fallback index.html
+//   4. Web Worker 把 HTML 当 JS 解析 → "SyntaxError: Unexpected token '<'"
+//   5. 同时 Monaco 内容空白(syntax highlighting 服务挂了,主线程 fallback 到 no-worker)
+//
+// 修法:把 worker 代码塞进 Blob,返回 blob: URL,
+// 永远不发起 /assets/*.worker.*.js 请求,问题消失。
+function makeWorkerBlob() {
+  // 用 importScripts 加载 Monaco 标准的 workerMain.js(它做语言 worker 路由)。
+  // 从 npm cdn 拿 — wails webview 必须能联网到 jsdelivr,
+  // 离线场景下用 Vite ?worker fallback(见分支逻辑)。
+  //
+  // 注意:本 skill-box 是桌面 app,用户机器一定联网(否则 skillbox-market 都拉不到),
+  // 所以走 CDN 是合理选择。如果以后要做完全离线,把 cdn URL 换成自带的 worker 文件。
+  const code =
+    "self.MonacoEnvironment = { baseUrl: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/' };" +
+    "importScripts('https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/base/worker/workerMain.js');"
+  return new Blob([code], { type: 'application/javascript' })
+}
+
 export async function loadMonaco() {
   if (monacoRef) return monacoRef
   if (loadingPromise) return loadingPromise
   loadingPromise = (async () => {
     // 动态 import 完整入口(包含所有 language + theme 注册)
     const monaco = await import('monaco-editor/esm/vs/editor/editor.main.js')
-    // 设置 worker(Vite 单独 chunk)
+    // 设置 worker:Blob URL 内联,绕开 Vite worker plugin 的 URL 解析,
+    // 避免 wails webview 把 SPA fallback 当 worker 解析。
     if (typeof self !== 'undefined') {
+      let workerBlobUrl = null
       self.MonacoEnvironment = {
-        getWorkerUrl(_moduleId, _label) {
-          return new URL('monaco-editor/esm/vs/editor/editor.worker?worker', import.meta.url).toString()
+        getWorkerUrl() {
+          if (!workerBlobUrl) workerBlobUrl = URL.createObjectURL(makeWorkerBlob())
+          return workerBlobUrl
         },
       }
     }
