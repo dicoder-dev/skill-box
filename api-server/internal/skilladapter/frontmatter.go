@@ -334,6 +334,20 @@ func ReadSkillDir(dir string) (Canonical, error) {
 		if err != nil {
 			return err
 		}
+		// 2026-07-07 改:过滤掉 macOS 系统元数据文件(.DS_Store / ._*) 和其他隐藏文件。
+		// 跟 skillstore.store.go walkFiles 同款规则。
+		// 旧版不过滤 → apply 进 home store 后,getSkill 返回的 canonical.files 第一个
+		// 就是 .DS_Store 二进制(396KB),JSON 序列化时含非法 \uXXXX escape,
+		// 前端 JSON.parse 抛 SyntaxError: Unexpected token → CodeViewer 不渲染 → 文件区空白。
+		if rel == "" || rel == "." {
+			return nil
+		}
+		segs := strings.Split(filepath.ToSlash(rel), "/")
+		for _, seg := range segs {
+			if strings.HasPrefix(seg, ".") {
+				return nil
+			}
+		}
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return err

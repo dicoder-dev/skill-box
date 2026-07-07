@@ -1022,6 +1022,22 @@ func walkFiles(root string) ([]skilladapter.File, error) {
 		if err != nil {
 			return err
 		}
+		// 2026-07-07 改:过滤掉 macOS 系统元数据文件(.DS_Store / ._*) 和其他隐藏文件。
+		// 旧版 walkFiles 不过滤,.DS_Store 二进制被原样读进 Content → 序列化为 JSON 时含
+		// 大量非法 \uXXXX escape 序列 → 前端 JSON.parse 抛 SyntaxError: Unexpected token。
+		// 附带副作用:响应体从几 KB 涨到几百 KB(.DS_Store 二进制 → UTF-8 转义后巨大)。
+		// 过滤规则跟前端 FileTreeView.buildTree 保持一致:
+		//   - rel 任一段以 . 开头 → 跳过
+		//   - 顶层或子目录里的隐藏文件都不保留
+		if rel == "" || rel == "." {
+			return nil
+		}
+		segs := strings.Split(filepath.ToSlash(rel), "/")
+		for _, seg := range segs {
+			if strings.HasPrefix(seg, ".") {
+				return nil
+			}
+		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
