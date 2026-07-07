@@ -11,7 +11,7 @@
 // 2026-06-29 改:左侧从扁平列表升级为多级分组树,新增右键菜单 + 拖拽 + 级联删除。
 // 详情区(右侧 / 弹窗 / 编辑器)逻辑保持不变,只从"通过 name 定位"改为"通过 path 定位"。
 
-import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, onUpdated, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
@@ -200,13 +200,22 @@ function toggleAI() { aiOpen.value = !aiOpen.value }
 // 2026-07-04 改:文件浏览器从抽屉改成内联面板,直接放正文右侧,不再需要 fileDrawerOpen。
 // currentFiles 仍保留(供 SkillFileInlinePanel 用)。
 const currentFiles = ref([])
-watch(
-  () => current.value?._full?.canonical?.files,
-  (files) => {
+
+// 2026-07-07 改 v2:不依赖 vue 的 watch(wails webview ESM chunk 偶发 ReferenceError: watch,
+// 跟 SkillFileInlinePanel v6 修复同源)。改用 onUpdated + 手动引用比较。
+let _lastFullRef = null
+let _lastFilesRef2 = null
+function _syncCurrentFiles() {
+  const full = current.value?._full
+  const files = full?.canonical?.files
+  // 任一引用变化都触发同步(全量替换 currentFiles,避免深层引用比较)
+  if (full !== _lastFullRef || files !== _lastFilesRef2) {
+    _lastFullRef = full
+    _lastFilesRef2 = files
     currentFiles.value = (files || []).map((f) => ({ ...f }))
-  },
-  { immediate: true },
-)
+  }
+}
+onUpdated(_syncCurrentFiles)
 
 // 2026-07-04 增(Commit 4):抽屉内文件保存后,主区同步。
 //   - 如果改的是 SKILL.md,同步刷新 currentMd / currentBody,主区预览实时更新
@@ -372,11 +381,18 @@ async function selectItem(row) {
 }
 
 // 监听选中 key 变化(支持按 Enter 在搜索结果中跳转)
-watch(selectedKey, (k) => {
+// 2026-07-07 改 v2:不依赖 vue 的 watch(wails webview ESM chunk 偶发 ReferenceError: watch,
+// 跟 SkillFileInlinePanel v6 修复同源)。改用 onUpdated + 手动比较。
+let _lastSelectedKey = null
+function _syncSelectedKey() {
+  const k = selectedKey.value
+  if (k === _lastSelectedKey) return
+  _lastSelectedKey = k
   if (!k) return
   const row = items.value.find((x) => skillKey(x) === k)
   if (row) loadCurrent(row)
-})
+}
+onUpdated(_syncSelectedKey)
 
 // ====== 搜索 / 翻页 ======
 function onSearchEnter() {

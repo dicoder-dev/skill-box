@@ -8,7 +8,7 @@
 //
 // 2026-07-04 增:首页技能文件浏览器。
 
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 // 2026-07-04 增:SKILL.md 等 .md 文件在可编辑时用 Tiptap 所见即所得,
@@ -183,39 +183,59 @@ function disposeEditor() {
 //   - 旧版 useMonaco 直接作为数组元素传,Vue 把 ref 当成 reactive 跟踪的源,可能不会立即触发
 //   - 旧版 immediate: false → 首次挂载不调 ensureMonaco,容器空
 //   - 修复:统一用 getter 形式,immediate: true + nextTick 等容器就绪
-watch(
-  [() => props.path, () => props.content, () => useMonaco.value],
-  async () => {
-    if (!useMonaco.value) {
-      disposeEditor()
-      return
-    }
-    // 等容器 ref 挂到 DOM 上
-    if (!monacoContainer.value) {
-      await nextTick()
-    }
-    if (!monacoContainer.value) return
-    if (!editor) {
-      await ensureMonaco()
-    }
-    if (!editor) return
-    // 切文件时,先 dispose 旧 model,创建新 model(切换 language)
-    if (model) { try { model.dispose() } catch (_) {} }
-    const { monaco } = await loadMonaco()
-    model = monaco.editor.createModel(props.content || '', language.value)
-    suppressEmit = true
-    editor.setModel(model)
-    suppressEmit = false
-    // 切文件后清除 dirty 状态
-    emit('dirty-change', false)
-  },
-  { immediate: true },
-)
+// 2026-07-07 改 v2:不依赖 vue 的 watch(wails webview ESM chunk 偶发 ReferenceError: watch,
+// 跟 SkillFileInlinePanel v6 修复同源)。改用 onUpdated + 手动依赖追踪。
+// watch 原来的 3 个依赖 path / content / useMonaco,任一变化都触发重建。
+let _lastPath = null
+let _lastContent = null
+let _lastUseMonaco = null
+async function _syncEditor() {
+  const curPath = props.path
+  const curContent = props.content
+  const curUseMonaco = useMonaco.value
+  if (curPath === _lastPath && curContent === _lastContent && curUseMonaco === _lastUseMonaco) {
+    return
+  }
+  _lastPath = curPath
+  _lastContent = curContent
+  _lastUseMonaco = curUseMonaco
+  if (!curUseMonaco) {
+    disposeEditor()
+    return
+  }
+  // 等容器 ref 挂到 DOM 上
+  if (!monacoContainer.value) {
+    await nextTick()
+  }
+  if (!monacoContainer.value) return
+  if (!editor) {
+    await ensureMonaco()
+  }
+  if (!editor) return
+  // 切文件时,先 dispose 旧 model,创建新 model(切换 language)
+  if (model) { try { model.dispose() } catch (_) {} }
+  const { monaco } = await loadMonaco()
+  model = monaco.editor.createModel(curContent || '', language.value)
+  suppressEmit = true
+  editor.setModel(model)
+  suppressEmit = false
+  // 切文件后清除 dirty 状态
+  emit('dirty-change', false)
+}
+onUpdated(_syncEditor)
+// 2026-07-07 改 v2 补充:onUpdated 在子组件首次 patch 之前不触发,
+// ensureMonaco 必须立刻跑一次保证 editor 创建并填入 props.content,否则文件空白。
+onMounted(_syncEditor)
 
 // 监听 mode 变化(Monaco 实例化后切换 readOnly)
-watch(() => props.mode, (m) => {
-  if (editor) editor.updateOptions({ readOnly: m !== 'edit' })
-})
+// 2026-07-07 改 v2:不依赖 vue 的 watch。onUpdated 内检测 props.mode 变化 → updateOptions
+let _lastMode = null
+function _syncMode() {
+  if (props.mode === _lastMode) return
+  _lastMode = props.mode
+  if (editor) editor.updateOptions({ readOnly: props.mode !== 'edit' })
+}
+onUpdated(_syncMode)
 
 onBeforeUnmount(() => {
   disposeEditor()
