@@ -397,8 +397,9 @@ onUnmounted(() => {})
         <div class="sfip-tree-wrap">
           <!-- 2026-07-07 增:文件树加标题栏,跟 .ssp-scope-header 风格一致 -->
           <header class="sfip-tree-header">
-            <IconPark icon="mdi:file-tree-outline" width="13" height="13" />
-            <span>文件</span>
+            <!-- 不用问号类图标;跟作用域 mdi:map-marker-outline 区分开,选 mdi:folder-multiple-outline -->
+            <IconPark icon="mdi:folder-multiple-outline" width="13" height="13" />
+            <span>skill 目录</span>
             <span class="sfip-tree-header-count">{{ (files || []).length }} 个</span>
           </header>
           <FileTreeView

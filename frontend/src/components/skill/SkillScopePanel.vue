@@ -47,7 +47,7 @@ function toolDisplay(toolID) {
   return t.display_name || t.display || t.tool_id || toolShort(toolID)
 }
 
-const LABEL_SCOPE = '作用域'
+const LABEL_SCOPE = 'skill 作用域'
 const LABEL_GLOBAL = '全局'
 const LABEL_PROJECT_PREFIX = '项目 #'
 const LABEL_EMPTY = '该技能尚未写入任何工具/位置'
@@ -62,6 +62,13 @@ const scopeHits = ref([])
 const scopeLoading = ref(false)
 const scopeError = ref('')
 const scopeCollapsed = ref(null)
+// 2026-07-07 增:作用域区整体可展开/收起(标题栏点击切换)。
+// true = 整体收起(只看到标题);false = 展开(看到工具列表)。
+// 默认 true(收起)— 跟"默认折叠全部 tool"叠加,第一次进入时整块不占视觉空间。
+const sectionCollapsed = ref(true)
+function toggleSection() {
+  sectionCollapsed.value = !sectionCollapsed.value
+}
 
 const busyKey = ref('')
 function busyKeyFor(toolID, scope, projectID) {
@@ -115,6 +122,12 @@ const scopeGroupByTool = computed(() => {
       targets,
     })
   }
+  // 2026-07-07 改:作用域区工具排序 — 按 hitCount(存在命中数)降序,越多越前面;
+  // 同数按 tool_id 字母序兜底,保证排序稳定。
+  out.sort((a, b) => {
+    if (b.hitCount !== a.hitCount) return b.hitCount - a.hitCount
+    return String(a.tool_id).localeCompare(String(b.tool_id))
+  })
   return out
 })
 
@@ -317,13 +330,26 @@ onErrorCaptured((err) => {
   <!-- 2026-07-07 改 v2:? + 兜底。computed 偶发返回 undefined 时?. 退化到 undefined.length 也返 undefined,
        v-else-if 自动判断为 false → 走 v-else fallback(v-else 显示 EMPTY 文案 + 不转圈)。 -->
   <section v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)" class="ssp-scope">
-    <header class="ssp-scope-header">
-      <!-- 2026-07-07 改:换图标 mdi:earth → mdi:map-marker-outline,
-           earth 太通用(常见于 i18n/语言),改用"地点标记"跟"作用域=生效位置"语义更贴。 -->
+    <!-- 2026-07-07 改:作用域标题栏改成可点击 button,点击切换整体展开/收起。
+         右侧加 chevron 图标提示状态。sectionCollapsed = true 时只显示标题,
+         隐藏 .ssp-scope-list;收起态下 max-height 收紧避免占太多空间。 -->
+    <button
+      type="button"
+      class="ssp-scope-header ssp-scope-header-toggle"
+      :aria-expanded="!sectionCollapsed"
+      @click="toggleSection"
+    >
       <IconPark icon="mdi:map-marker-outline" width="13" height="13" />
       <span>{{ LABEL_SCOPE }}</span>
-    </header>
-    <ul class="ssp-scope-list">
+      <span class="ssp-scope-header-count">{{ scopeGroupByTool.length }} 个工具</span>
+      <IconPark
+        :icon="sectionCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'"
+        width="13"
+        height="13"
+        class="ssp-scope-header-chevron"
+      />
+    </button>
+    <ul v-if="!sectionCollapsed" class="ssp-scope-list">
       <li
         v-for="group in (scopeGroupByTool || [])"
         :key="group.tool_id"
@@ -434,6 +460,38 @@ onErrorCaptured((err) => {
   color: var(--text-dim);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+/* 2026-07-07 改:作用域标题栏变成可点击 button 后的样式 reset。
+   跟 .sfip-tree-header 同款风格(uppercase + sticky + bg-subtle + border-bottom)。
+   收起态(sectionCollapsed=true)下整块只占标题一行,不再 max-height:45%,自然收缩。 */
+.ssp-scope-header-toggle {
+  width: 100%;
+  background: var(--bg-subtle);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  text-transform: uppercase;
+  transition: background 0.12s ease;
+}
+.ssp-scope-header-toggle:hover { background: var(--bg-hover); }
+.ssp-scope-header-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+  padding: 1px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.ssp-scope-header-chevron {
+  margin-left: 4px;
+  color: var(--text-faint);
 }
 .ssp-scope-list {
   list-style: none;
