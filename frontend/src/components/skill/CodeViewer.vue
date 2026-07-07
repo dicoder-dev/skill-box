@@ -3,49 +3,43 @@
 //
 // 三种渲染分支:
 //   1. Markdown(.md / .markdown)→ renderMarkdownView 渲染(只读预览)
-//   2. 纯文本 / 代码(.py / .js / .json / ...)→ Monaco 只读 / 可编辑
+//   2. 纯文本 / 代码(.py / .js / .json / ...)→ 原生 textarea(可编辑)+ <pre>(只读),
+//      简单语法高亮走 highlight.js(已有依赖)
 //   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
 //
-// 2026-07-04 增:首页技能文件浏览器。
+// 2026-07-07 大改:彻底去掉 Monaco。
+// Monaco 在 wails3 dev + macOS webview 环境下持续出问题:
+//   1. ?worker URL 被 Vite dev server 当 SPA fallback 返回 HTML,worker 解析失败
+//   2. editor.main chunk 也偶发不稳定
+//   3. SyntaxError: Unexpected token '<' + 文件区空白
+// 改用 textarea + highlight.js <pre>,零外部 chunk 依赖,稳。
 
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref } from 'vue'
+import { computed, nextTick, onMounted, onUpdated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-// 2026-07-04 增:SKILL.md 等 .md 文件在可编辑时用 Tiptap 所见即所得,
-// 与 SkillsView 旧版"正文编辑"体验一致(粗体/斜体/标题/列表/链接工具栏)。
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
-import { loadMonaco, isDark as monacoIsDark } from '@/core/composables/useMonaco.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
+// highlight.js 用于代码高亮(只读视图),跟 markdown_view.js 共享 CSS。
+import hljs from 'highlight.js/lib/common'
 
 const { t } = useI18n()
 const toast = useToastStore()
 
 const props = defineProps({
-  // 文件相对路径
   path: { type: String, default: '' },
-  // 文件内容
   content: { type: String, default: '' },
-  // 2026-07-04 改:editable boolean 改成 mode 二态,语义更清晰
-  //   'view'  - 只读渲染(markdown v-html / Monaco readOnly)
-  //   'edit'  - 可编辑(markdown Tiptap / Monaco readOnly=false)
-  // 默认 'view'(用户点编辑按钮后才进 'edit')
   mode: { type: String, default: 'view' },
-  // 技能在 store_root 下的相对路径(用于拼绝对路径,显示"在文件夹打开")
-  // 格式: <group_path>/<name>(group_path 可能为空)
   skillRelPath: { type: String, default: '' },
-  // store_root 绝对路径(后端 /api/skillbox/skills/store-info 拿到)
   storeRoot: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:content', 'dirty-change', 'update:mode'])
 
-// editable = mode === 'edit'(后续内部用这个,不改字段名影响太多)
 const editable = computed(() => props.mode === 'edit')
 
-// 文件后缀
 const ext = computed(() => {
   if (!props.path) return ''
   const idx = props.path.lastIndexOf('.')
@@ -54,7 +48,6 @@ const ext = computed(() => {
 
 const isMarkdown = computed(() => ['md', 'markdown'].includes(ext.value))
 
-// 二进制扩展名(图片 / pdf / 压缩包)
 const BINARY_EXTS = [
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico',
   'pdf',
@@ -62,7 +55,6 @@ const BINARY_EXTS = [
 ]
 const isBinary = computed(() => BINARY_EXTS.includes(ext.value))
 
-// 大文件阈值(Monaco 加载保护)
 const LARGE_FILE_BYTES = 1024 * 1024
 const isLarge = computed(() => (props.content || '').length > LARGE_FILE_BYTES)
 
@@ -71,49 +63,76 @@ const fileName = computed(() => {
   return props.path.slice(props.path.lastIndexOf('/') + 1)
 })
 
-// markdown 渲染
 const renderedMd = computed(() => isMarkdown.value ? renderMarkdownView(props.content || '') : '')
 
-// markdown 容器点击委托
 function onMdClick(e) {
   handleExternalClick(e)
 }
 
-// ====== Monaco 集成 ======
-const monacoContainer = ref(null)
-const monacoLoading = ref(false)
-let editor = null
-let model = null
-let suppressEmit = false
-
-// 文件后缀 → monaco language id
-const EXT_TO_LANG = {
+// 文件后缀 → highlight.js language id(常见覆盖,找不到就 plaintext)
+const EXT_TO_HLJS = {
   py: 'python',
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   ts: 'typescript', tsx: 'typescript',
   json: 'json',
   yaml: 'yaml', yml: 'yaml',
-  sh: 'shell', bash: 'shell', zsh: 'shell',
+  sh: 'bash', bash: 'bash', zsh: 'bash',
   go: 'go', rs: 'rust',
-  html: 'html', htm: 'html',
-  css: 'css', scss: 'css', less: 'css',
+  html: 'xml', htm: 'xml',
+  css: 'css', scss: 'scss', less: 'less',
   sql: 'sql',
   toml: 'ini', ini: 'ini', cfg: 'ini',
-  xml: 'xml', svg: 'xml',
-  java: 'java', kt: 'kotlin', scala: 'scala',
+  xml: 'xml',
+  java: 'java', kt: 'kotlin',
   rb: 'ruby', php: 'php',
   c: 'c', h: 'cpp', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
   md: 'markdown', markdown: 'markdown',
   txt: 'plaintext', log: 'plaintext',
-  vue: 'html', svelte: 'html',
-  dockerfile: 'dockerfile',
+  vue: 'xml', svelte: 'xml',
+}
+const language = computed(() => EXT_TO_HLJS[ext.value] || 'plaintext')
+
+// 高亮后的 HTML:每次 props.path/content 变化重新计算。
+// highlight.js 是同步库,直接调用即可。
+const highlightedHtml = computed(() => {
+  const v = props.content || ''
+  try {
+    if (language.value && hljs.getLanguage(language.value)) {
+      const result = hljs.highlight(v, { language: language.value, ignoreIllegals: true })
+      return result.value
+    }
+    return escapeHtml(v)
+  } catch (_) {
+    return escapeHtml(v)
+  }
+})
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
-const language = computed(() => EXT_TO_LANG[ext.value] || 'plaintext')
+// 编辑器本地缓冲(避免 typing 时把 input value 跟 props.content 不同步造成光标跳动)。
+// 注意:父级 InlinePanel 也用 localFiles 缓存,这里再缓存一次纯粹为了 input 用,
+// 跟父级双向同步用 watch + emit 实现。
+const localText = ref(props.content || '')
+// 用 watch 在 props.content 变化时同步本地(防止父级 loadCurrent 后内容没进 input)
+watch(() => props.content, (v) => {
+  if (v !== localText.value) localText.value = v || ''
+})
 
-// 2026-07-04 增(Commit 5):"在文件夹打开"按钮
-// 拼绝对路径: storeRoot + skillRelPath + / + path
-// storeRoot / skillRelPath 由父级 SkillFileDrawer 注入(后端 /api/skillbox/skills/store-info)
+function onTextareaInput(e) {
+  const v = e.target.value
+  localText.value = v
+  emit('update:content', v)
+  emit('dirty-change', v !== (props.content || ''))
+}
+
+// 在文件夹打开
 async function openInFolder() {
   if (!props.storeRoot || !props.skillRelPath) {
     toast.error(t('common.openFailed', { msg: 'storeRoot 未知' }))
@@ -131,115 +150,37 @@ async function openInFolder() {
   }
 }
 
-// 是否应使用 Monaco(非 markdown / 非二进制 / 非过大)
-const useMonaco = computed(() => !isMarkdown.value && !isBinary.value && !isLarge.value)
-
-async function ensureMonaco() {
-  if (editor) return
-  monacoLoading.value = true
-  try {
-    const { monaco } = await loadMonaco()
-    editor = monaco.editor.create(monacoContainer.value, {
-      value: props.content || '',
-      language: language.value,
-      // 2026-07-04 改:显式传 theme 字段,否则 Monaco 用默认 'vs',
-      // useMonaco 里 setTheme 设的全局主题不会自动应用到这个 editor 实例。
-      theme: monacoIsDark() ? 'skillbox-dark' : 'skillbox-light',
-      readOnly: !editable.value,
-      automaticLayout: true,
-      minimap: { enabled: false },
-      fontSize: 13,
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-      wordWrap: 'on',
-      scrollBeyondLastLine: false,
-      lineNumbers: 'on',
-      folding: true,
-      renderWhitespace: 'selection',
-      smoothScrolling: true,
-      contextmenu: false,
-    })
-    model = editor.getModel()
-    // 2026-07-04 增(Commit 4):内容变化 → emit update:content + dirty-change
-    if (props.editable) {
-      model.onDidChangeContent(() => {
-        if (suppressEmit) return
-        const v = model.getValue()
-        emit('update:content', v)
-        emit('dirty-change', v !== (props.content || ''))
-      })
-    }
-  } finally {
-    monacoLoading.value = false
-  }
-}
-
-function disposeEditor() {
-  if (model) { try { model.dispose() } catch (_) {} model = null }
-  if (editor) { try { editor.dispose() } catch (_) {} editor = null }
-}
-
-// 监听 path / content 变化,更新 Monaco 内容
-// 2026-07-04 修(Commit 6 - 修复空白 bug):
-//   - 旧版 useMonaco 直接作为数组元素传,Vue 把 ref 当成 reactive 跟踪的源,可能不会立即触发
-//   - 旧版 immediate: false → 首次挂载不调 ensureMonaco,容器空
-//   - 修复:统一用 getter 形式,immediate: true + nextTick 等容器就绪
-// 2026-07-07 改 v2:不依赖 vue 的 watch(wails webview ESM chunk 偶发 ReferenceError: watch,
-// 跟 SkillFileInlinePanel v6 修复同源)。改用 onUpdated + 手动依赖追踪。
-// watch 原来的 3 个依赖 path / content / useMonaco,任一变化都触发重建。
-let _lastPath = null
-let _lastContent = null
-let _lastUseMonaco = null
-async function _syncEditor() {
-  const curPath = props.path
-  const curContent = props.content
-  const curUseMonaco = useMonaco.value
-  if (curPath === _lastPath && curContent === _lastContent && curUseMonaco === _lastUseMonaco) {
-    return
-  }
-  _lastPath = curPath
-  _lastContent = curContent
-  _lastUseMonaco = curUseMonaco
-  if (!curUseMonaco) {
-    disposeEditor()
-    return
-  }
-  // 等容器 ref 挂到 DOM 上
-  if (!monacoContainer.value) {
-    await nextTick()
-  }
-  if (!monacoContainer.value) return
-  if (!editor) {
-    await ensureMonaco()
-  }
-  if (!editor) return
-  // 切文件时,先 dispose 旧 model,创建新 model(切换 language)
-  if (model) { try { model.dispose() } catch (_) {} }
-  const { monaco } = await loadMonaco()
-  model = monaco.editor.createModel(curContent || '', language.value)
-  suppressEmit = true
-  editor.setModel(model)
-  suppressEmit = false
-  // 切文件后清除 dirty 状态
-  emit('dirty-change', false)
-}
-onUpdated(_syncEditor)
-// 2026-07-07 改 v2 补充:onUpdated 在子组件首次 patch 之前不触发,
-// ensureMonaco 必须立刻跑一次保证 editor 创建并填入 props.content,否则文件空白。
-onMounted(_syncEditor)
-
-// 监听 mode 变化(Monaco 实例化后切换 readOnly)
-// 2026-07-07 改 v2:不依赖 vue 的 watch。onUpdated 内检测 props.mode 变化 → updateOptions
-let _lastMode = null
-function _syncMode() {
-  if (props.mode === _lastMode) return
-  _lastMode = props.mode
-  if (editor) editor.updateOptions({ readOnly: props.mode !== 'edit' })
-}
-onUpdated(_syncMode)
-
-onBeforeUnmount(() => {
-  disposeEditor()
+// 行号生成:把内容按 \n split,渲染成左侧数字列(只读视图用)。
+// 性能:1MB 文件按 \n 分 ~ 数万行,Vue 渲染 <li> 会卡;所以行号限制在 1万 以内。
+const lineCount = computed(() => {
+  const v = props.content || ''
+  if (!v) return 1
+  return Math.min(v.split('\n').length, 10000)
 })
+const lineNumbers = computed(() => {
+  const n = lineCount.value
+  const arr = new Array(n)
+  for (let i = 0; i < n; i++) arr[i] = i + 1
+  return arr
+})
+
+// tab 缩进支持:Tab 键插入 2 空格而不是跳焦
+function onTextareaKeydown(e) {
+  if (e.key !== 'Tab') return
+  e.preventDefault()
+  const ta = e.target
+  const start = ta.selectionStart
+  const end = ta.selectionEnd
+  const v = localText.value
+  const insert = '  '
+  const next = v.slice(0, start) + insert + v.slice(end)
+  localText.value = next
+  emit('update:content', next)
+  emit('dirty-change', next !== (props.content || ''))
+  nextTick(() => {
+    ta.selectionStart = ta.selectionEnd = start + insert.length
+  })
+}
 </script>
 
 <template>
@@ -256,7 +197,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- Markdown 渲染:可编辑时用 Tiptap 所见即所得,只读时用 v-html -->
+    <!-- Markdown:可编辑用 Tiptap,只读用 v-html -->
     <div v-else-if="isMarkdown" class="cv-md-wrap">
       <RichTextEditor
         v-if="editable"
@@ -287,13 +228,31 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- Monaco(代码 / 纯文本) -->
-    <div v-else class="cv-monaco-wrap">
-      <div v-if="monacoLoading" class="cv-monaco-loading">
-        <span class="spinner" />
-        <span>加载编辑器…</span>
+    <!-- 代码/纯文本:可编辑模式用 textarea + 行号,只读模式用 <pre> + highlight.js -->
+    <div v-else class="cv-text-wrap">
+      <div class="cv-text-toolbar">
+        <span class="cv-text-lang">{{ language }}</span>
       </div>
-      <div ref="monacoContainer" class="cv-monaco" />
+      <div class="cv-text-body">
+        <div v-if="editable" class="cv-text-edit">
+          <div class="cv-text-gutter">
+            <span v-for="n in lineNumbers" :key="n" class="cv-text-line-no">{{ n }}</span>
+          </div>
+          <textarea
+            class="cv-text-input"
+            spellcheck="false"
+            :value="localText"
+            @input="onTextareaInput"
+            @keydown="onTextareaKeydown"
+          />
+        </div>
+        <div v-else class="cv-text-view">
+          <div class="cv-text-gutter">
+            <span v-for="n in lineNumbers" :key="n" class="cv-text-line-no">{{ n }}</span>
+          </div>
+          <pre class="cv-text-pre hljs"><code v-html="highlightedHtml" /></pre>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -310,12 +269,10 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 20px 28px;
-  /* 2026-07-07 改:跟 SkillsView .md-body 同步放大,保持两个 MD 渲染区观感一致 */
   font-size: 14.5px;
   line-height: 1.7;
   color: var(--text);
 }
-/* 2026-07-04 增:markdown 编辑态容器,让 RichTextEditor 自适应填满 */
 .cv-md-wrap {
   flex: 1;
   min-height: 0;
@@ -328,29 +285,6 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-.cv-monaco-wrap {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  display: flex;
-}
-.cv-monaco {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-}
-.cv-monaco-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-faint);
-  font-size: 13px;
-  background: var(--bg-card);
-  z-index: 2;
 }
 .cv-binary,
 .cv-large {
@@ -395,6 +329,105 @@ onBeforeUnmount(() => {
   border-color: var(--accent-blue);
   color: var(--accent-blue);
 }
+
+/* ===== 代码/纯文本分支 ===== */
+.cv-text-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+.cv-text-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.cv-text-lang {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 500;
+}
+.cv-text-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 行号列(共用) */
+.cv-text-gutter {
+  flex-shrink: 0;
+  width: 48px;
+  padding: 12px 8px;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-faint);
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cv-text-line-no {
+  display: block;
+}
+
+/* 编辑模式:textarea */
+.cv-text-edit {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.cv-text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 2;
+}
+.cv-text-input:focus {
+  background: var(--bg-card);
+}
+
+/* 只读模式:<pre> + highlight.js */
+.cv-text-view {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: auto;
+}
+.cv-text-pre {
+  flex: 1;
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow: visible;
+}
+
 .spinner {
   display: inline-block;
   width: 16px;
@@ -408,10 +441,6 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 2026-07-04 改:细化预览区滚动条(默认 14px 太粗太黑,改 6px 细款 + 浅灰)。
-   范围:.code-viewer 内一切可滚动节点(包含 Monaco 内部 .monaco-scrollable-element)。
-   桌面端 webview 走 webkit 内核,Web 端 Chrome/Safari 走 webkit,
-   Firefox 走 scrollbar-width 兜底。 */
 .code-viewer * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
