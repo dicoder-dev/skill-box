@@ -390,9 +390,10 @@ onUnmounted(() => {})
 
     <div class="sfip-body">
       <nav class="sfip-left">
-        <!-- 作用域区已迁到 <SkillScopePanel>,本组件不直接渲染 t() -->
-        <SkillScopePanel :skill="skill" />
-
+        <!-- 2026-07-07 改 v3:作用域区移到文件树底部。
+             旧版:作用域在顶部 → 用户第一眼看到的是 scope,文件树被挤。
+             新版:文件树在上(占主要空间),作用域在底部(辅助信息,默认折叠,
+             用户主动展开才看得到生效位置)。 -->
         <div class="sfip-tree-wrap">
           <FileTreeView
             v-if="(files || []).length"
@@ -402,6 +403,7 @@ onUnmounted(() => {})
             @select-file="onSelectFile"
           />
         </div>
+        <SkillScopePanel :skill="skill" />
       </nav>
 
       <main class="sfip-viewer">
@@ -619,6 +621,9 @@ onUnmounted(() => {})
   min-height: 0;
   overflow: auto;
 }
+
+/* 2026-07-07 改 v3:作用域区移到文件树底部,文件树占满主要高度,
+   作用域用 flex-shrink:0 固定在底部一块,ScopePanel 内部自己 max-height:50% 兜底。 */
 .sfip-viewer {
   flex: 1;
   min-width: 0;

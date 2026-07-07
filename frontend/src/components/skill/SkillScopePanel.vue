@@ -12,7 +12,9 @@
 import { ref, computed, onMounted, onUpdated, onErrorCaptured } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
 import { useToastStore } from '@/core/store/toast'
+import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 
@@ -21,6 +23,29 @@ const props = defineProps({
 })
 
 const toast = useToastStore()
+// 2026-07-07 改:作用域区图标 fallback — 后端 scope-status 返回的 tool 元数据不一定带 icon_file,
+// 优先用 store 里全量工具的 ToolView(自定义图标 + mdi_icon 完整配置)。
+const toolsStore = useToolsStore()
+const toolsById = computed(() => {
+  const m = {}
+  for (const t of toolsStore.items || []) {
+    if (t && t.tool_id) m[t.tool_id] = t
+  }
+  return m
+})
+function findTool(toolID) {
+  // 先在 toolsStore 全量工具表里查(有完整 icon_file / mdi_icon / display_name)
+  const fromStore = toolsById.value[toolID]
+  if (fromStore) return fromStore
+  // 兜底:scope-status 返回的轻量 tool 元数据
+  const fromScope = scopeTools.value.find((x) => x.tool_id === toolID)
+  return fromScope || null
+}
+function toolDisplay(toolID) {
+  const t = findTool(toolID)
+  if (!t) return toolShort(toolID)
+  return t.display_name || t.display || t.tool_id || toolShort(toolID)
+}
 
 const LABEL_SCOPE = '作用域'
 const LABEL_GLOBAL = '全局'
@@ -49,10 +74,6 @@ function isScopeTargetBusy(group, target) {
 function toolShort(toolID) {
   if (!toolID) return '?'
   return toolID.charAt(0).toUpperCase() + toolID.slice(1)
-}
-function toolIcon(toolID) {
-  const t = scopeTools.value.find((x) => x.tool_id === toolID)
-  return t?.icon || 'mdi:puzzle-outline'
 }
 function targetLabel(target) {
   if (!target) return ''
@@ -87,8 +108,8 @@ const scopeGroupByTool = computed(() => {
     })
     out.push({
       tool_id: tool.tool_id,
-      display: tool.display_name || tool.tool_id,
-      icon: toolIcon(tool.tool_id),
+      display: toolDisplay(tool.tool_id),
+      // 不在 group 上挂 icon 字段了,template 用 ToolIcon + findTool(tool_id) 直接取
       hitCount: toolHits.filter((h) => h.exists).length,
       hasHit: toolHits.some((h) => h.exists),
       targets,
@@ -122,7 +143,7 @@ function resetCollapsed() {
   }
 }
 
-async function loadScope() {
+async function loadScope({ resetCollapsed: shouldReset } = {}) {
   const sk = props.skill
   if (!sk || !sk.name) return
   scopeLoading.value = true
@@ -134,9 +155,10 @@ async function loadScope() {
     })
     scopeTools.value = resp?.tools || []
     scopeHits.value = resp?.hits || []
-    // 2026-07-07 改:加载完直接默认折叠所有工具,等用户主动展开。
-    // 旧版这里之前置 null(全展开)太挤。
-    resetCollapsed()
+    // 2026-07-07 改 v4:
+    //   - resetCollapsed=true  → 切 skill(初次进入)时调用,默认折叠全部
+    //   - resetCollapsed=false → apply/undo / scope-refresh 事件后调用,保留用户展开态
+    if (shouldReset) resetCollapsed()
   } catch (e) {
     scopeError.value = e?.message || String(e)
   } finally {
@@ -156,15 +178,20 @@ function _syncWatch() {
   _lastSkillName = curName
   _lastSkillVersion = curVersion
   if (!curName) return
-  scopeCollapsed.value = null
-  loadScope()
+  // 2026-07-07 改 v4:切 skill 必须 reset 折叠态,旧折叠对该 skill 的 tool_id 集合无意义。
+  // loadScope 内部根据参数决定是否 reset。
+  loadScope({ resetCollapsed: true })
 }
 onUpdated(_syncWatch)
 
-function onScopeRefresh() { loadScope() }
+function onScopeRefresh() {
+  // 2026-07-07 改 v4:外部 scope-refresh(用户保存 SKILL.md / 重拉数据等)
+  // 不应该把用户的折叠状态清掉。apply/undo 完成后自己显式调 loadScope() 也是保留态。
+  loadScope()
+}
 
 onMounted(() => {
-  if (props.skill?.name) loadScope()
+  if (props.skill?.name) loadScope({ resetCollapsed: true })
   window.addEventListener('skillbox:scope-refresh', onScopeRefresh)
 })
 
@@ -312,7 +339,14 @@ onErrorCaptured((err) => {
             height="12"
             class="ssp-scope-chevron"
           />
-          <IconPark :icon="group.icon" width="12" height="12" />
+          <!-- 2026-07-07 改:用 ToolIcon 渲染真图标(icon_file 优先 + mdi 兜底),
+               findTool 优先查 toolsStore 全量工具表;store 没数据时降级到
+               scopeTools(后端 scope-status 返回的轻量工具元数据)。 -->
+          <ToolIcon
+            :tool="findTool(group.tool_id) || { mdi_icon: 'mdi:puzzle-outline' }"
+            :size="13"
+            class="ssp-scope-tool-icon"
+          />
           <span class="ssp-scope-row-name">{{ group.display }}</span>
           <span v-if="group.hitCount > 0" class="ssp-scope-row-count">{{ group.hitCount }}</span>
         </button>
@@ -375,7 +409,9 @@ onErrorCaptured((err) => {
 .ssp-scope {
   border-bottom: 1px solid var(--border);
   background: var(--bg-subtle);
-  max-height: 50%;
+  /* 2026-07-07 改 v4:作用域区移到文件树底部,不要再 max-height:50%(占满左栏下半),
+     让它作为底部一块自然收缩,文件树占主空间。 */
+  max-height: 45%;
   overflow: auto;
   flex-shrink: 0;
   /* 2026-07-07 修:必须显式 width:100% + max-width:100% + box-sizing,
@@ -430,6 +466,14 @@ onErrorCaptured((err) => {
 }
 .ssp-scope-row:hover { background: var(--bg-hover); }
 .ssp-scope-chevron { color: var(--text-faint); flex-shrink: 0; }
+.ssp-scope-tool-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+}
 .ssp-scope-row-name {
   flex: 1;
   font-weight: 500;
