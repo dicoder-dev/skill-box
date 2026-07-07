@@ -356,11 +356,12 @@ const lineNumbers = computed(() => {
     </div>
 
     <!-- 代码/纯文本:可编辑模式用 Monaco(自带高亮+补全),只读模式用 <pre> + highlight.js。
-         2026-07-08 改 v5:加 !isCsv && !isOffice 排除条件,确保 CSV/office 文件绝不进 hljs
-         plaintext 渲染链。用户反馈:"CSV view 模式上半表格 + 下半 plaintext 同时存在"
-         就是因为 CsvViewer/OfficeViewer 是独立 v-if,跟 cv-text-wrap v-else 链互不排斥,
-         Vue 同时渲染多个独立 v-if 兄弟元素。 -->
-    <div v-if="!isCsv && !isOffice" class="cv-text-wrap">
+         2026-07-08 改 v6:加 !isMarkdown && !isCsv && !isOffice 排除条件,确保
+         md/csv/office 文件绝不进 hljs plaintext 渲染链。
+         用户反馈:"md view 模式上半 markdown 渲染 + 下半 markdown plaintext 同时存在",
+         根因跟 CSV 一样:CsvViewer/OfficeViewer/cv-md-wrap 都跟 cv-text-wrap
+         不互斥(独立 v-if vs v-else 链),多个独立条件命中时多个兄弟元素同时渲染。 -->
+    <div v-if="!isMarkdown && !isCsv && !isOffice" class="cv-text-wrap">
       <div class="cv-text-toolbar">
         <span class="cv-text-lang">{{ language }}</span>
       </div>
