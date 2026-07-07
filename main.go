@@ -75,7 +75,7 @@ func main() {
 	app := desktop.NewApp(desktop.AppConfig{
 		Name: "Skill Box",
 		Size: desktop.WindowSizeConfig{
-			Mode:        desktop.WindowSizeModeRatio,
+			Mode:        desktop.WindowSizeModeFixed,
 			WidthRatio:  0.9,
 			HeightRatio: 0.9,
 			AspectRatio: "16:9", // 宽高比锁 16:9,无论屏幕如何窗口都是 16:9

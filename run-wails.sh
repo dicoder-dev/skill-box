@@ -47,12 +47,42 @@ esac
 
 echo "✅ 已选择任务: ${TASK} (wails3 task ${TASK})"
 
-# 先释放端口
+# 释放端口:查找并杀掉占用 PORT 的进程
+echo "🧹 准备释放端口 ${PORT} ..."
+
+# 优先使用 ./kill_port.sh(如果存在)
 if [ -f "./kill_port.sh" ]; then
-  echo "🧹 准备释放端口 ${PORT} ..."
   bash ./kill_port.sh "${PORT}"
 else
-  echo "⚠️  未找到 ./kill_port.sh,跳过端口清理"
+  # 内置兜底逻辑:直接查找占用端口的进程并 kill
+  PIDS=""
+  # 兼容 lsof (macOS/Linux)
+  if command -v lsof >/dev/null 2>&1; then
+    PIDS=$(lsof -ti tcp:"${PORT}" 2>/dev/null || true)
+  fi
+
+  # 兜底:兼容 ss / fuser
+  if [ -z "$PIDS" ] && command -v fuser >/dev/null 2>&1; then
+    PIDS=$(fuser "${PORT}/tcp" 2>/dev/null | tr -d ' ' || true)
+  fi
+
+  if [ -n "$PIDS" ]; then
+    echo "🔍 端口 ${PORT} 被以下进程占用: ${PIDS}"
+    for PID in ${PIDS}; do
+      # 跳过当前 shell 自身及父进程
+      if [ "${PID}" != "$$" ] && [ "${PID}" != "${PPID}" ]; then
+        # 取进程名用于日志
+        PNAME=$(ps -p "${PID}" -o comm= 2>/dev/null || echo "unknown")
+        echo "💀 杀掉进程 ${PID} (${PNAME})"
+        kill -9 "${PID}" 2>/dev/null || true
+      fi
+    done
+    # 等待端口真正释放
+    sleep 1
+    echo "✅ 端口 ${PORT} 已释放"
+  else
+    echo "ℹ️  端口 ${PORT} 未被占用,无需清理"
+  fi
 fi
 
 echo "▶️  执行: wails3 task ${TASK}"
