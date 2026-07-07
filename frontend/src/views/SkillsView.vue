@@ -1482,11 +1482,10 @@ onUnmounted(() => {
       </div>
 
       <template v-else>
-        <!-- 2026-07-07 改:detail-toolbar 简化成"面包屑式技能名@版本 + 右侧操作图标"。
-             旧版的"标题 + 版本 + 描述 + 触发词 + 编辑按钮 + source 徽章"整段
-             detail-title-block 删除,改成一个极简面包屑(.detail-toolbar-name),
-             正文的元数据(描述/触发词)现在通过 SkillFileInlinePanel 顶部的
-             [i] frontmatter 弹窗查看,不在 toolbar 内展开占用空间。 -->
+        <!-- 2026-07-07 改 v2:detail-toolbar 进一步简化 — 删掉右侧 5 个图标按钮
+             (测试/标签/在文件夹打开/删除/AI),把这组操作全部迁到 SkillFileInlinePanel
+             的 #actions slot,跟 [i] 信息按钮同一栏依次排列。
+             这里只剩左上的「面包屑(技能名@版本 + source 徽章) + 编辑态切换按钮」一行。 -->
         <header class="detail-toolbar">
           <div class="detail-toolbar-name">
             <IconPark icon="mdi:cube-outline" width="14" height="14" />
@@ -1526,61 +1525,11 @@ onUnmounted(() => {
               </button>
             </template>
           </div>
-
-          <div class="detail-actions">
-            <!-- 2026-06-26 改:把原生 :title 换成 :data-tip,触发全局 CSS 自定义 tooltip(0 延迟),
-                 否则浏览器原生 title 会有 ~1s 延迟,体感很慢 -->
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipTest')"
-              :aria-label="t('skills.list.tooltipTest')"
-              :disabled="testing"
-              @click="triggerTest"
-            >
-              <span v-if="testing" class="spinner spinner-sm"></span>
-              <IconPark v-else icon="mdi:test-tube" width="16" height="16" />
-            </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipTag')"
-              :aria-label="t('skills.list.tooltipTag')"
-              @click="openTagDialog"
-            >
-              <IconPark icon="mdi:tag-outline" width="16" height="16" />
-            </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipOpenFolder')"
-              :aria-label="t('skills.list.tooltipOpenFolder')"
-              @click="openInFolder"
-            >
-              <IconPark icon="mdi:folder-outline" width="16" height="16" />
-            </button>
-            <!-- 2026-07-04 改:复制路径从工具栏移到右键菜单,详见 onSkillContextMenu ctxCopyPath 项 -->
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipDelete')"
-              :aria-label="t('skills.list.tooltipDelete')"
-              @click="removeCurrent"
-            >
-              <IconPark icon="mdi:delete" width="16" height="16" />
-            </button>
-            <button
-              class="icon-btn ai-btn"
-              :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-              :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-              @click="toggleAI"
-            >
-              <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="16" height="16" />
-            </button>
-            <!-- 2026-07-04 改:抽屉改内联面板,移除 [📁] 按钮(改用右侧固定面板浏览) -->
-            <!-- (旧) <button class="icon-btn" ... @click="fileDrawerOpen = true"> ... </button> -->
-          </div>
         </header>
 
         <!-- 2026-06-26 新增:编辑态的描述/触发词 编辑区移到 toolbar 外,
              变成 detail-pane 下的独立 section,跟其他 detail-section 一样占满整页宽度
-             (放在 toolbar 内会被 detail-actions(右侧 6 个图标按钮)挤掉 35% 宽度) -->
+             (放在 toolbar 内会被原来的 detail-actions(6 个图标按钮)挤掉 35% 宽度) -->
         <section v-if="editing" class="detail-section detail-edit-fields">
           <div class="editor-field-full">
             <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
@@ -1644,7 +1593,55 @@ onUnmounted(() => {
               canonical: current._full?.canonical,
             }"
             @saved="onDrawerSaved"
-          />
+          >
+            <!-- 2026-07-07 改:右上角 5 个图标操作搬到这里,跟 [i] 信息按钮同一栏,
+                 顺序 [测试 | 标签 | 在文件夹打开 | 删除 | AI] 在 [i] 左侧依次排列。
+                 数据流向不变,@click / :data-tip / :disabled 都保留原语义。 -->
+            <template #actions>
+              <button
+                class="icon-btn"
+                :data-tip="t('skills.list.tooltipTest')"
+                :aria-label="t('skills.list.tooltipTest')"
+                :disabled="testing"
+                @click="triggerTest"
+              >
+                <span v-if="testing" class="spinner spinner-sm"></span>
+                <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
+              </button>
+              <button
+                class="icon-btn"
+                :data-tip="t('skills.list.tooltipTag')"
+                :aria-label="t('skills.list.tooltipTag')"
+                @click="openTagDialog"
+              >
+                <IconPark icon="mdi:tag-outline" width="15" height="15" />
+              </button>
+              <button
+                class="icon-btn"
+                :data-tip="t('skills.list.tooltipOpenFolder')"
+                :aria-label="t('skills.list.tooltipOpenFolder')"
+                @click="openInFolder"
+              >
+                <IconPark icon="mdi:folder-outline" width="15" height="15" />
+              </button>
+              <button
+                class="icon-btn"
+                :data-tip="t('skills.list.tooltipDelete')"
+                :aria-label="t('skills.list.tooltipDelete')"
+                @click="removeCurrent"
+              >
+                <IconPark icon="mdi:delete" width="15" height="15" />
+              </button>
+              <button
+                class="icon-btn ai-btn"
+                :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
+                :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
+                @click="toggleAI"
+              >
+                <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="15" height="15" />
+              </button>
+            </template>
+          </SkillFileInlinePanel>
           <p v-else-if="!currentFiles.length && !currentLoading" class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
         </section>
       </template>
@@ -2611,12 +2608,9 @@ onUnmounted(() => {
   gap: 6px;
 }
 
-.detail-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
+/* 2026-07-07 改:.detail-actions 已删(5 个图标按钮搬到 SkillFileInlinePanel 的 #actions slot)。
+   .icon-btn 仍保留(其它位置,如 Tag 弹窗按钮,可能仍用得上),仅去掉它的全局 variant 默认样式。
+   注意:.icon-btn 的尺寸/间距/hover 仍由 SkillFileInlinePanel 内 .sfip-actions :deep(.icon-btn) 接管。 */
 
 .icon-btn {
   width: 32px;
@@ -2644,8 +2638,10 @@ onUnmounted(() => {
 .icon-btn.ai-btn { color: var(--accent-blue); }
 .icon-btn.ai-btn:hover { background: var(--accent-blue-bg); border-color: var(--accent-blue-border); }
 
-/* 让 danger hover 提示删除样式 - 用 :nth-last-child 单独标红 */
-.detail-actions .icon-btn[aria-label="删除"]:hover:not(:disabled) {
+/* 2026-07-07 改:删除按钮 danger hover 样式从旧的 .detail-actions 选择器下移出,
+   改成全局 .icon-btn[aria-label="删除"] 兜底(SkillFileInlinePanel 内 #actions
+   也会匹配上)。不依赖父级 .detail-actions 容器。 */
+.icon-btn[aria-label="删除"]:hover:not(:disabled) {
   background: var(--danger-dim);
   color: var(--danger);
   border-color: var(--danger);

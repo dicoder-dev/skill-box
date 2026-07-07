@@ -14,6 +14,7 @@
 
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import i18n from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import FileTreeView from './FileTreeView.vue'
@@ -25,7 +26,17 @@ import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_res
 import { useToastStore } from '@/core/store/toast'
 import { useAppStore } from '@/core/store/app'
 
-const { t } = useI18n()
+// 2026-07-07 改:不再从 useI18n() 解构 t,改用 i18n.global.t 直接拿翻译函数。
+// 根因:本组件是被 <SkillFileInlinePanel v-if="..."> 懒挂载的子组件,
+// v-if 条件命中的瞬间才会执行 setup();在某些场景下 useI18n() 拿到的 t
+// 是 ProxyObject 包装层而不是可调用函数,computed 内 t('xxx') 会抛
+// "t is not a function (t is an instance of ProxyObject)"。
+// 从 i18n.global.t 直接拿取绑 setup 时机的依赖,永远返回 Function。
+// 兜底:即便这里也拿到 Proxy,tt() 也是安全的(t 直接作为 key 返回)。
+const { t: _tFromUseI18n } = useI18n()
+const t = (typeof i18n.global.t === 'function')
+  ? i18n.global.t
+  : (typeof _tFromUseI18n === 'function' ? _tFromUseI18n : (key) => key)
 const toast = useToastStore()
 const appStore = useAppStore()
 
@@ -651,6 +662,13 @@ function closeFrontmatter() { fmOpen.value = false }
         <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
         <span class="sfip-count">{{ (files || []).length }} files</span>
       </div>
+      <!-- 2026-07-07 改:SkillsView 的工具栏操作(测试/标签/文件夹/删除/AI 等)
+           移到本组件的 sfip-actions 插槽中,跟 [i] 信息按钮同一栏、[i] 左侧依次展示。
+           父组件 <SkillFileInlinePanel> 通过 #actions 传入图标按钮。
+           父组件不传时本区为空(组件可独立用作 OnboardingView 文件浏览器等)。 -->
+      <div class="sfip-actions">
+        <slot name="actions" />
+      </div>
       <!-- 2026-07-04 增:SKILL.md frontmatter 弹窗按钮(只读展示,不影响编辑)
            frontmatter 里有 name / version / triggers / description 等元数据,
            单独看比混在 markdown 正文里更清晰。 -->
@@ -871,6 +889,7 @@ function closeFrontmatter() { fmOpen.value = false }
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
   flex-shrink: 0;
+  gap: 6px;
 }
 .sfip-title-block {
   display: flex;
@@ -896,6 +915,34 @@ function closeFrontmatter() { fmOpen.value = false }
   background: var(--bg-subtle);
   border-radius: 999px;
 }
+/* 2026-07-07 增:父组件透传的操作按钮(测试/标签/在文件夹打开/删除/AI)。
+   margin-left:auto 把整个 actions 区块推到右侧,[i] 按钮紧邻其右。 */
+.sfip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+/* 父组件透传的按钮继承 26×26 风格,与 [i] 信息按钮同尺寸。 */
+.sfip-actions :deep(.icon-btn) {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.sfip-actions :deep(.icon-btn:hover:not(:disabled)) {
+  background: var(--bg-hover);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
 .sfip-fm-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -907,7 +954,6 @@ function closeFrontmatter() { fmOpen.value = false }
   justify-content: center;
   border-radius: 6px;
   cursor: pointer;
-  margin-left: auto;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .sfip-fm-btn:hover {
