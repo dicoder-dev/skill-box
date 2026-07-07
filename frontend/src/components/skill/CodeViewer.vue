@@ -6,8 +6,9 @@
 //   2. 纯文本 / 代码(.py / .js / .json / ...):
 //      - 只读模式: highlight.js <pre> 高亮
 //      - 编辑模式: Monaco Editor(完整语法高亮 + 自动补全 + 括号匹配 + 缩进参考线)
-//   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
-//   4. 大文件(> 1MB)→ 兜底 + "在文件夹打开"
+//   3. Office 文档(.docx / .pdf / .xlsx / .xls / .pptx)→ @vue-office 在线预览
+//   4. 二进制(.png / .jpg / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
+//   5. 大文件(> 1MB)→ 兜底 + "在文件夹打开"
 //
 // 2026-07-08 改:编辑模式从 textarea 重新换回 Monaco。useMonaco.js 已经修了
 // wails3 webview 下 worker 被 SPA fallback 截胡的问题(动态 import + MonacoEnvironment
@@ -17,6 +18,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
+import OfficeViewer from '@/components/skill/OfficeViewer.vue'
 import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
@@ -48,9 +50,22 @@ const ext = computed(() => {
 
 const isMarkdown = computed(() => ['md', 'markdown'].includes(ext.value))
 
+// 2026-07-08 增:office 文档类型(.docx / .pdf / .xlsx / .xls / .pptx)走 vue-office 在线预览,
+// 不再归到二进制兜底。OFFICE_EXTS 是可预览类型,BINARY_EXTS 是真不能预览(图片/压缩包)。
+const OFFICE_EXTS = ['docx', 'pdf', 'xlsx', 'xls', 'pptx']
+// ext → OfficeViewer 子组件 kind(因为 docx/excel/pdf/pptx 是 vue-office 4 个不同组件入口)
+const OFFICE_KIND_BY_EXT = {
+  docx: 'docx',
+  pdf: 'pdf',
+  xlsx: 'excel', xls: 'excel',
+  pptx: 'pptx',
+}
+const officeKind = computed(() => OFFICE_KIND_BY_EXT[ext.value] || '')
+const isOffice = computed(() => OFFICE_EXTS.includes(ext.value))
+
 const BINARY_EXTS = [
+  // 2026-07-08 改:去掉 pdf(走 office 预览),保留图片 + 压缩包。
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico',
-  'pdf',
   'zip', 'tar', 'gz', 'tgz', '7z', 'rar',
 ]
 const isBinary = computed(() => BINARY_EXTS.includes(ext.value))
@@ -270,6 +285,14 @@ const lineNumbers = computed(() => {
 
 <template>
   <div class="code-viewer">
+    <!-- 2026-07-08 增:office 文档(.docx / .pdf / .xlsx / .xls / .pptx)走 vue-office 在线预览 -->
+    <OfficeViewer
+      v-if="isOffice"
+      :kind="officeKind"
+      :content="content"
+      class="cv-office"
+    />
+
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />
@@ -342,6 +365,12 @@ const lineNumbers = computed(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* 2026-07-08 增:office 预览区占满 CodeViewer */
+.cv-office {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 .cv-md {
   flex: 1;

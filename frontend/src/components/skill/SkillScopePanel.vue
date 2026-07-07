@@ -576,17 +576,17 @@ onErrorCaptured((err) => {
   flex-shrink: 0;
 }
 /* 2026-07-08 增:工具启用全局时的"全局"chip。
-   视觉上跟 hitCount 数字 chip 区分:用实心蓝底+白字,表示"这是一个生效位置",
-   而 hitCount 是数量徽章。 */
+   2026-07-08 改 v2:跟 .ssp-scope-row-count 视觉一致(同色同字号同圆角),
+   之前用实心蓝底+白字跟数量徽章视觉打架,看着像两个不同元素;
+   用户反馈希望保持同款 — 区分靠位置(数量标签在前)+ 文案("全局" vs 数字)。 */
 .ssp-scope-row-global {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 11px;
   padding: 1px 6px;
-  background: var(--accent-blue);
-  color: #fff;
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
   border-radius: 999px;
   flex-shrink: 0;
+  font-weight: 500;
 }
 .ssp-scope-targets {
   list-style: none;
