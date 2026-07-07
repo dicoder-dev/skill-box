@@ -62,6 +62,8 @@ const _messages = {
   'zh-CN': zhCN,
   'en-US': enUS,
 }
+// 2026-07-07 增:把 messages 也 export 出去,供 plainT/直接 const-key 取值使用
+export const messages = _messages
 export function getCurrentLocale() {
   try {
     return i18n.global.locale.value || 'zh-CN'
