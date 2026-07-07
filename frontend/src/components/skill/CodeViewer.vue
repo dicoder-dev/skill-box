@@ -185,10 +185,6 @@ function onTextareaKeydown(e) {
 
 <template>
   <div class="code-viewer">
-    <!-- 2026-07-07 临时调试:在 dev tools 里能直接看到当前 path/content/mode -->
-    <div style="padding: 4px 8px; background: #fef3c7; color: #92400e; font-size: 11px; font-family: monospace;">
-      DBG CodeViewer: path={{ path || '(empty)' }}, mode={{ mode }}, contentLen={{ (content || '').length }}, isMarkdown={{ isMarkdown }}, isBinary={{ isBinary }}, isLarge={{ isLarge }}, editable={{ editable }}
-    </div>
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />

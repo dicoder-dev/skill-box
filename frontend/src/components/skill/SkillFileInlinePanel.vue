@@ -28,7 +28,7 @@ import { useToastStore } from '@/core/store/toast'
 // 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
 // 用 console 时间戳确认这次是否拿到新版本。
 // 用户在桌面端启用 devtools (wails3 dev 默认开 Cmd+Opt+I) 看 console 输出。
-console.log('[SkillFileInlinePanel v6] loaded at', new Date().toISOString(), 'no-watch import')
+console.log('[SkillFileInlinePanel v6] loaded at', new Date().toISOString(), 'no-watch import, no-console')
 
 // 2026-07-07 v4:不再尝试从 vue-i18n 拿 t,直接读 messages 对象兜底。
 // 但为了避免"再抛"再次发生,这里完全不再调 plainT()。template 内所有
@@ -131,7 +131,6 @@ function _syncLocalFiles() {
   const sk = props.skill
   const curFilesRef = props.files
   const curName = sk?.name
-  console.log('[InlinePanel] _syncLocalFiles called, files count:', (props.files || []).length, 'selectedFile:', selectedFile.value?.path, 'sample content len:', (props.files?.[0]?.content || '').length)
   if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
   // 跟 _syncSelectedFile 共享判断,省一次比较
   _lastFilesRef = curFilesRef
@@ -158,13 +157,20 @@ onMounted(() => {
 // 2026-07-07 改:切换文件前也走 dirty 检查。
 // 用户改完 SKILL.md 后点其他文件(目录树里)→ 弹三选项。
 // dirty 检查按"任一文件 dirty"算,不只是当前选中文件。
+//
+// 2026-07-07 修:file 参数从 FileTreeView emit 出来,FileTreeView.buildTree
+// 输出的 file 对象只有 {name, path, size},**没有 content**。如果直接
+// selectedFile.value = file → displayContent 算 selectedFile.value.content
+// 是 undefined → 空白。修法:从 props.files 里 find 出含 content 的原始对象。
 async function onSelectFile(file) {
   if (!file || !file.path) return
   if (file.path === selectedKey.value) return
   const verdict = await ensureCleanBeforeSwitch()
   if (verdict === 'cancel') return
-  selectedFile.value = file
-  selectedKey.value = file.path
+  // 从 props.files 里拿完整的 {path, content} 对象(包含 content)
+  const full = props.files.find((f) => f.path === file.path) || file
+  selectedFile.value = full
+  selectedKey.value = full.path
 }
 
 // 2026-07-07 增:切换前 dirty 检查 + 询问逻辑。

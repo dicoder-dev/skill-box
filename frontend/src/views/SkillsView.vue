@@ -213,7 +213,6 @@ function _syncCurrentFiles() {
     _lastFullRef = full
     _lastFilesRef2 = files
     currentFiles.value = (files || []).map((f) => ({ ...f }))
-    console.log('[SkillsView] _syncCurrentFiles updated, files count:', currentFiles.value.length, 'first file:', currentFiles.value[0]?.path, 'content len:', (currentFiles.value[0]?.content || '').length)
   }
 }
 onUpdated(_syncCurrentFiles)
