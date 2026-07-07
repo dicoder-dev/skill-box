@@ -1,20 +1,19 @@
 <script setup>
 // CodeViewer - 技能包内单文件预览/编辑器
 //
-// 三种渲染分支:
-//   1. Markdown(.md / .markdown)→ renderMarkdownView 渲染(只读预览)
-//   2. 纯文本 / 代码(.py / .js / .json / ...)→ 原生 textarea(可编辑)+ <pre>(只读),
-//      简单语法高亮走 highlight.js(已有依赖)
+// 渲染分支:
+//   1. Markdown(.md / .markdown)→ Tiptap 编辑 / v-html 只读
+//   2. 纯文本 / 代码(.py / .js / .json / ...):
+//      - 只读模式: highlight.js <pre> 高亮
+//      - 编辑模式: Monaco Editor(完整语法高亮 + 自动补全 + 括号匹配 + 缩进参考线)
 //   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
+//   4. 大文件(> 1MB)→ 兜底 + "在文件夹打开"
 //
-// 2026-07-07 大改:彻底去掉 Monaco。
-// Monaco 在 wails3 dev + macOS webview 环境下持续出问题:
-//   1. ?worker URL 被 Vite dev server 当 SPA fallback 返回 HTML,worker 解析失败
-//   2. editor.main chunk 也偶发不稳定
-//   3. SyntaxError: Unexpected token '<' + 文件区空白
-// 改用 textarea + highlight.js <pre>,零外部 chunk 依赖,稳。
+// 2026-07-08 改:编辑模式从 textarea 重新换回 Monaco。useMonaco.js 已经修了
+// wails3 webview 下 worker 被 SPA fallback 截胡的问题(动态 import + MonacoEnvironment
+// 内联 Blob worker 指向 jsdelivr workerMain.js),这次直接复用。
 
-import { computed, nextTick, onMounted, onUpdated, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
@@ -22,11 +21,8 @@ import { renderMarkdownView } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
-// highlight.js 用于代码高亮(只读视图),跟 markdown_view.js 共享 CSS。
-// 2026-07-07 改:从 'highlight.js/lib/common'(35 种语言 subset)换成全量
-// 'highlight.js'(384 种语言自带 register)。common 模式下 py / js / ts / json
-// / sh / toml / 等都不可用,hljs.getLanguage() 返 null → highlightedHtml 走
-// escapeHtml 分支 → 没有 span → 看不到高亮。多 50KB,稳定。
+import { loadMonaco, isDark } from '@/core/composables/useMonaco'
+// highlight.js 用于只读视图高亮(全量包, 384 语言)。
 import hljs from 'highlight.js'
 
 const { t } = useI18n()
@@ -96,6 +92,15 @@ const EXT_TO_HLJS = {
 }
 const language = computed(() => EXT_TO_HLJS[ext.value] || 'plaintext')
 
+// 2026-07-08 增:Monaco 编辑器用的 language id 映射。
+// 大部分跟 hljs id 一致(Monaco 也用 javascript / typescript / python / ...)。
+// Monaco 没内置的(vue / svelte)fallback 到 html 拿到基础 HTML/CSS/JS 高亮。
+const EXT_TO_MONACO = {
+  ...EXT_TO_HLJS,
+  vue: 'html', svelte: 'html',
+}
+const monacoLang = computed(() => EXT_TO_MONACO[ext.value] || 'plaintext')
+
 // 高亮后的 HTML:每次 props.path/content 变化重新计算。
 // highlight.js 是同步库,直接调用即可。
 const highlightedHtml = computed(() => {
@@ -120,21 +125,106 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;')
 }
 
-// 编辑器本地缓冲(避免 typing 时把 input value 跟 props.content 不同步造成光标跳动)。
-// 注意:父级 InlinePanel 也用 localFiles 缓存,这里再缓存一次纯粹为了 input 用,
-// 跟父级双向同步用 watch + emit 实现。
+// ====== Monaco 编辑器实例 ======
+//
+// 2026-07-08 增:编辑模式挂载 Monaco,提供语法高亮 + 自动补全 + 括号匹配。
+// 实例 / model 用 let 存(不响应式),防止 Vue 包装成本;只有 editorContainer 是 ref
+// 让模板挂载。suppressNextChange 是防回环的关键:
+//   props.content 变 → setValue → onDidChangeContent 触发 → 用户输入回环
+//   用一个 flag 让 setValue 之后第一次 onDidChangeContent 直接吞掉。
+
+// 2026-07-08 改:localText ref 从 Monaco 块下方移到这里(在 mountMonaco 之前声明),
+// 因为 mountMonaco 内 createModel 要读 localText.value。
+// 同时 props.content watch 同步扩展到 Monaco model:setValue 触发 onDidChangeContent
+// 时用 suppressNextChange 吞掉,避免 emit 回环。
 const localText = ref(props.content || '')
-// 用 watch 在 props.content 变化时同步本地(防止父级 loadCurrent 后内容没进 input)
 watch(() => props.content, (v) => {
-  if (v !== localText.value) localText.value = v || ''
+  const next = v || ''
+  if (next !== localText.value) localText.value = next
+  if (monacoModel && monacoModel.getValue() !== next) {
+    suppressNextChange = true
+    monacoModel.setValue(next)
+  }
 })
 
-function onTextareaInput(e) {
-  const v = e.target.value
-  localText.value = v
-  emit('update:content', v)
-  emit('dirty-change', v !== (props.content || ''))
+const editorContainer = ref(null)
+let monacoEditor = null
+let monacoModel = null
+let monacoRef = null   // { monaco } from loadMonaco(),供 watch 里 setModelLanguage 用
+let suppressNextChange = false
+
+async function mountMonaco() {
+  if (!editorContainer.value || monacoEditor) return
+  const loaded = await loadMonaco()
+  monacoRef = loaded
+  const monaco = loaded.monaco
+  monacoModel = monaco.editor.createModel(localText.value || '', monacoLang.value)
+  monacoEditor = monaco.editor.create(editorContainer.value, {
+    model: monacoModel,
+    theme: isDark() ? 'skillbox-dark' : 'skillbox-light',
+    automaticLayout: true,
+    // 字体 / 行高跟只读视图 hljs <pre> 完全一致(13px / 1.6 → 21px),
+    // 切模式视觉不跳。
+    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+    fontSize: 13,
+    lineHeight: 21,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    tabSize: 2,
+    insertSpaces: true,
+    wordWrap: 'off',
+    renderLineHighlight: 'line',
+    lineNumbers: 'on',                 // Monaco 自带行号,删除 CodeViewer 自定义 gutter
+    glyphMargin: false,
+    folding: true,
+    quickSuggestions: { other: true, comments: false, strings: true },
+    suggestOnTriggerCharacters: true,
+    bracketPairColorization: { enabled: true },
+  })
+  monacoModel.onDidChangeContent(() => {
+    if (suppressNextChange) {
+      suppressNextChange = false
+      return
+    }
+    const v = monacoModel.getValue()
+    localText.value = v
+    emit('update:content', v)
+    emit('dirty-change', v !== (props.content || ''))
+  })
 }
+
+function unmountMonaco() {
+  if (monacoEditor) {
+    monacoEditor.dispose()
+    monacoEditor = null
+  }
+  if (monacoModel) {
+    monacoModel.dispose()
+    monacoModel = null
+  }
+}
+onBeforeUnmount(unmountMonaco)
+
+// 2026-07-08 增:editable 切换时挂载/卸载 Monaco。
+//   - false → true:nextTick 等模板把 editorContainer 挂上再创建 editor
+//   - true → false:立刻 dispose,避免来回切累积实例
+watch(editable, (now) => {
+  if (now) {
+    nextTick(mountMonaco)
+  } else {
+    unmountMonaco()
+  }
+})
+
+// 2026-07-08 增:file 类型变化时(用户在 InlinePanel 里切到其他文件),
+// CodeViewer 被 :key 重建,本组件整体 unmount → onBeforeUnmount 触发 dispose。
+// 这里是单文件内的扩展名变化(理论上不会发生,InlinePanel 切文件用 :key 重建),
+// 防御性保留:同组件内 ext 变化时切换 model language。
+watch(monacoLang, (lang) => {
+  if (monacoRef && monacoModel) {
+    monacoRef.monaco.editor.setModelLanguage(monacoModel, lang)
+  }
+})
 
 // 在文件夹打开
 async function openInFolder() {
@@ -169,22 +259,9 @@ const lineNumbers = computed(() => {
 })
 
 // tab 缩进支持:Tab 键插入 2 空格而不是跳焦
-function onTextareaKeydown(e) {
-  if (e.key !== 'Tab') return
-  e.preventDefault()
-  const ta = e.target
-  const start = ta.selectionStart
-  const end = ta.selectionEnd
-  const v = localText.value
-  const insert = '  '
-  const next = v.slice(0, start) + insert + v.slice(end)
-  localText.value = next
-  emit('update:content', next)
-  emit('dirty-change', next !== (props.content || ''))
-  nextTick(() => {
-    ta.selectionStart = ta.selectionEnd = start + insert.length
-  })
-}
+//
+// 2026-07-08 删:Monaco 自带 tabSize:2 / insertSpaces:true,不再需要手写 keydown。
+// function onTextareaKeydown(e) { ... }
 </script>
 
 <template>
@@ -232,23 +309,16 @@ function onTextareaKeydown(e) {
       </button>
     </div>
 
-    <!-- 代码/纯文本:可编辑模式用 textarea + 行号,只读模式用 <pre> + highlight.js -->
+    <!-- 代码/纯文本:可编辑模式用 Monaco(自带高亮+补全),只读模式用 <pre> + highlight.js -->
     <div v-else class="cv-text-wrap">
       <div class="cv-text-toolbar">
         <span class="cv-text-lang">{{ language }}</span>
       </div>
       <div class="cv-text-body">
+        <!-- 2026-07-08 改:编辑分支换成 Monaco 容器,删掉手工 gutter(行号 Monaco 自带)。
+             只读分支保留手工 gutter,因为 hljs <pre> 没有自带行号。 -->
         <div v-if="editable" class="cv-text-edit">
-          <div class="cv-text-gutter">
-            <span v-for="n in lineNumbers" :key="n" class="cv-text-line-no">{{ n }}</span>
-          </div>
-          <textarea
-            class="cv-text-input"
-            spellcheck="false"
-            :value="localText"
-            @input="onTextareaInput"
-            @keydown="onTextareaKeydown"
-          />
+          <div ref="editorContainer" class="cv-monaco-host" />
         </div>
         <div v-else class="cv-text-view">
           <div class="cv-text-gutter">
@@ -391,30 +461,27 @@ function onTextareaKeydown(e) {
   display: block;
 }
 
-/* 编辑模式:textarea */
+/* 编辑模式:Monaco */
 .cv-text-edit {
   flex: 1;
   display: flex;
   min-height: 0;
+  min-width: 0;
+  position: relative;
 }
-.cv-text-input {
+.cv-monaco-host {
   flex: 1;
   min-width: 0;
-  padding: 12px 16px;
-  border: none;
-  outline: none;
-  resize: none;
-  /* 2026-07-07 改 v2:编辑态背景纯黑 + 文字浅灰,跟只读视图同款风格 */
-  background: #0a0a0a;
-  color: #e2e8f0;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre;
-  tab-size: 2;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
-.cv-text-input:focus {
-  background: #0a0a0a;
+/* 2026-07-08 增:Monaco 内部容器也需要 height 100%,
+   否则父容器 height 没被吃掉,editor 显示在错误位置。 */
+.cv-monaco-host .monaco-editor,
+.cv-monaco-host .monaco-scrollable-element {
+  position: absolute !important;
+  inset: 0;
 }
 
 /* 只读模式:<pre> + highlight.js */
