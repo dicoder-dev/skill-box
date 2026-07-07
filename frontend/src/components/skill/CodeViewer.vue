@@ -301,9 +301,10 @@ const lineNumbers = computed(() => {
     />
 
     <!-- 2026-07-08 增:CSV 文件表格化预览(只读视图)。
-         编辑模式仍走下面 monaco 分支(高亮 + 列分隔感知),保持一致编辑体验。
-         :key="path + (editable ? ':edit' : ':view')" 强制 mode 切换时 remount,
-         避免 Vue 复用同一 CsvViewer 实例导致 content/内部状态不刷新。 -->
+         编辑模式仍走 monaco 编辑器;view 模式走 CsvViewer 表格。
+         2026-07-08 改 v4:用独立 v-if=\"isCsv && !editable\"(而不是 v-else-if 跟 OfficeViewer 链),
+         然后下面 cv-text-wrap 用 v-if=\"!isCsv\" 二次校验,确保 CSV 永不进 hljs plaintext
+         渲染链(用户截图反馈:上半表格 + 下半 plaintext 同时存在)。 -->
     <CsvViewer
       v-if="isCsv && !editable"
       :key="path + ':view'"
@@ -354,8 +355,12 @@ const lineNumbers = computed(() => {
       </button>
     </div>
 
-    <!-- 代码/纯文本:可编辑模式用 Monaco(自带高亮+补全),只读模式用 <pre> + highlight.js -->
-    <div v-else class="cv-text-wrap">
+    <!-- 代码/纯文本:可编辑模式用 Monaco(自带高亮+补全),只读模式用 <pre> + highlight.js。
+         2026-07-08 改 v5:加 !isCsv && !isOffice 排除条件,确保 CSV/office 文件绝不进 hljs
+         plaintext 渲染链。用户反馈:"CSV view 模式上半表格 + 下半 plaintext 同时存在"
+         就是因为 CsvViewer/OfficeViewer 是独立 v-if,跟 cv-text-wrap v-else 链互不排斥,
+         Vue 同时渲染多个独立 v-if 兄弟元素。 -->
+    <div v-if="!isCsv && !isOffice" class="cv-text-wrap">
       <div class="cv-text-toolbar">
         <span class="cv-text-lang">{{ language }}</span>
       </div>
