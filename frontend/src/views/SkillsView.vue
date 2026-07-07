@@ -1482,50 +1482,7 @@ onUnmounted(() => {
       </div>
 
       <template v-else>
-        <!-- 2026-07-07 改 v2:detail-toolbar 进一步简化 — 删掉右侧 5 个图标按钮
-             (测试/标签/在文件夹打开/删除/AI),把这组操作全部迁到 SkillFileInlinePanel
-             的 #actions slot,跟 [i] 信息按钮同一栏依次排列。
-             这里只剩左上的「面包屑(技能名@版本 + source 徽章) + 编辑态切换按钮」一行。 -->
-        <header class="detail-toolbar">
-          <div class="detail-toolbar-name">
-            <IconPark icon="mdi:cube-outline" width="14" height="14" />
-            <span class="detail-toolbar-name-text">
-              {{ current.name }}<span class="muted">@{{ current.version }}</span>
-            </span>
-            <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']" class="detail-toolbar-source">
-              {{ current.source || 'local' }}
-            </span>
-            <!-- 编辑态切换按钮留在 toolbar,不放回 title 块,跟右侧图标按钮并列紧凑 -->
-            <button
-              v-if="!editing"
-              class="ghost-link detail-toolbar-edit"
-              :title="t('common.edit')"
-              @click="startInlineEdit"
-            >
-              <IconPark icon="mdi:pencil" width="12" height="12" />
-              {{ t('common.edit') }}
-            </button>
-            <template v-else>
-              <button
-                class="title-action-btn title-action-cancel"
-                :disabled="editSaving"
-                @click="cancelInlineEdit"
-              >
-                <IconPark icon="mdi:close" width="13" height="13" />
-                {{ t('common.cancel') }}
-              </button>
-              <button
-                class="title-action-btn title-action-save"
-                :disabled="editSaving"
-                @click="saveInlineEdit"
-              >
-                <span v-if="editSaving" class="spinner spinner-sm"></span>
-                <IconPark v-else icon="mdi:content-save" width="13" height="13" />
-                {{ editSaving ? t('common.processing') : t('common.save') }}
-              </button>
-            </template>
-          </div>
-        </header>
+
 
         <!-- 2026-06-26 新增:编辑态的描述/触发词 编辑区移到 toolbar 外,
              变成 detail-pane 下的独立 section,跟其他 detail-section 一样占满整页宽度
@@ -1594,6 +1551,39 @@ onUnmounted(() => {
             }"
             @saved="onDrawerSaved"
           >
+            <!-- 2026-07-07 改 v3:把"编辑 / 取消 / 保存"按钮搬到 InlinePanel 面包屑行内,
+                 跟 [i] 信息按钮同一栏、[i] 左侧依次排列(渲染顺序:name-actions → actions → [i])。
+                 这些按钮控制当前 skill 的内联编辑态,state 在 SkillsView 侧,slot 形式透传。 -->
+            <template #name-actions>
+              <button
+                v-if="!editing"
+                class="ghost-link sfip-name-action-edit"
+                :title="t('common.edit')"
+                @click="startInlineEdit"
+              >
+                <IconPark icon="mdi:pencil" width="12" height="12" />
+                {{ t('common.edit') }}
+              </button>
+              <template v-else>
+                <button
+                  class="title-action-btn title-action-cancel"
+                  :disabled="editSaving"
+                  @click="cancelInlineEdit"
+                >
+                  <IconPark icon="mdi:close" width="12" height="12" />
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  class="title-action-btn title-action-save"
+                  :disabled="editSaving"
+                  @click="saveInlineEdit"
+                >
+                  <span v-if="editSaving" class="spinner spinner-sm"></span>
+                  <IconPark v-else icon="mdi:content-save" width="12" height="12" />
+                  {{ editSaving ? t('common.processing') : t('common.save') }}
+                </button>
+              </template>
+            </template>
             <!-- 2026-07-07 改:右上角 5 个图标操作搬到这里,跟 [i] 信息按钮同一栏,
                  顺序 [测试 | 标签 | 在文件夹打开 | 删除 | AI] 在 [i] 左侧依次排列。
                  数据流向不变,@click / :data-tip / :disabled 都保留原语义。 -->

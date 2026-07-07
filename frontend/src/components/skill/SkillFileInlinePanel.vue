@@ -26,17 +26,47 @@ import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_res
 import { useToastStore } from '@/core/store/toast'
 import { useAppStore } from '@/core/store/app'
 
-// 2026-07-07 改:不再从 useI18n() 解构 t,改用 i18n.global.t 直接拿翻译函数。
-// 根因:本组件是被 <SkillFileInlinePanel v-if="..."> 懒挂载的子组件,
-// v-if 条件命中的瞬间才会执行 setup();在某些场景下 useI18n() 拿到的 t
-// 是 ProxyObject 包装层而不是可调用函数,computed 内 t('xxx') 会抛
-// "t is not a function (t is an instance of ProxyObject)"。
-// 从 i18n.global.t 直接拿取绑 setup 时机的依赖,永远返回 Function。
-// 兜底:即便这里也拿到 Proxy,tt() 也是安全的(t 直接作为 key 返回)。
-const { t: _tFromUseI18n } = useI18n()
-const t = (typeof i18n.global.t === 'function')
-  ? i18n.global.t
-  : (typeof _tFromUseI18n === 'function' ? _tFromUseI18n : (key) => key)
+// 2026-07-07 改 v2:不止从 useI18n() 解构 t,再用 tt() 包一层做最终兜底。
+// 真实根因:vue-i18n 9 中,某些组合下 useI18n() 拿到的 t 实际是 Composer 实例代理,
+// i18n.global.t 在 setup 早期也可能为 Proxy。直接调用 t('xxx') 触发 Proxy 的
+// .apply/.call 时抛 "t is not a function (t is an instance of ProxyObject)"
+// 并把整个 component render 整段崩掉,Vue 兜底输出 "Unhandled error during
+// execution of component update"。
+//
+// 解法:用一个普通函数 tt(key) 完整代理翻译;拿到的"t"无论是函数还是 Proxy,
+// tt 最终走 typeof==='function' 走函数,否则穿 ref/computed 把 key 当显示值返回。
+// computed 在 t() 报错时也不会让 template 崩。
+function resolveTranslator() {
+  // 1. 优先 composer proxy 暴露的 t 函数(computed 直接拿)
+  const composer = i18n.global
+  let cand = null
+  if (composer && typeof composer.t === 'function') cand = composer.t.bind(composer)
+  // 2. useI18n 拿一次,Vue 自己内部一般会包装好
+  if (!cand) {
+    try {
+      const ctx = useI18n()
+      if (ctx && typeof ctx.t === 'function') cand = ctx.t.bind(ctx)
+    } catch (_) { /* ignored */ }
+  }
+  // 3. 返回一个永远可调用的函数
+  return function tt(key, values) {
+    if (typeof cand === 'function') {
+      try {
+        const out = cand(key, values)
+        // vue-i18n 翻译后的合法值是 string 或 array 等可序列化对象
+        if (out == null) return key
+        // 防御:若仍返回了 Proxy(罕见),降级 toString()
+        if (typeof out === 'object' && typeof out.toString === 'function') {
+          const s = out.toString()
+          if (s && s !== '[object Object]') return s
+        }
+        return out
+      } catch (_) { return key }
+    }
+    return key
+  }
+}
+const t = resolveTranslator()
 const toast = useToastStore()
 const appStore = useAppStore()
 
@@ -417,6 +447,25 @@ function onScopeRefresh() {
   loadScopeStatus()
 }
 
+// 2026-07-07 改 v2:errorCaptured 兜底
+// 残留 runtime 错误可能仍来自外部依赖(computed / watch / 上游 prop),
+// 加 onErrorCaptured 把异常吞掉 + 标记 renderError,template 内降级到 safe 视图,
+// 而不是让 Vue 把整段 component update 杀掉。
+// 这样用户至少能看到空白错误占位 + reload 按钮,而不是黑屏。
+import { onErrorCaptured } from 'vue'
+const renderError = ref(null)
+function safeReload() {
+  renderError.value = null
+  if (props.skill?.name) loadScopeStatus()
+}
+onErrorCaptured((err) => {
+  // eslint-disable-next-line no-console
+  console.error('[SkillFileInlinePanel captured]', err)
+  renderError.value = err?.message || String(err)
+  // 返回 false 阻止继续冒泡(否则父组件 onErrorCaptured 也会拿到,但本组件已经处理)
+  return false
+})
+
 onMounted(() => {
   fetchStoreRoot()
   if (props.skill?.name) loadScopeStatus()
@@ -655,12 +704,30 @@ function closeFrontmatter() { fmOpen.value = false }
 </script>
 
 <template>
-  <div class="sfip">
+  <!-- 2026-07-07 改 v2:errorCaptured 兜底。捕获到子组件 render 异常时显示降级 UI,
+       用户能看清楚 skill 元数据、点 reload 重拉 scope,不至于整个组件消失黑屏。 -->
+  <div v-if="renderError" class="sfip-error">
+    <IconPark icon="mdi:alert-circle-outline" width="22" height="22" />
+    <h4>技能详情加载出错</h4>
+    <p class="sfip-error-msg">{{ renderError }}</p>
+    <button class="primary sm" @click="safeReload">
+      <IconPark icon="mdi:refresh" width="14" height="14" />
+      重试
+    </button>
+  </div>
+  <div v-else class="sfip">
     <header class="sfip-header">
       <div class="sfip-title-block">
         <IconPark icon="mdi:folder-multiple-outline" width="16" height="16" />
         <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+        <span v-if="skill?.source" :class="['badge', skill.source === 'market' ? 'blue' : 'gray']">{{ skill.source }}</span>
         <span class="sfip-count">{{ (files || []).length }} files</span>
+        <!-- 2026-07-07 改 v3:面包屑行内的内联操作(编辑 / 取消 / 保存),由父组件通过
+             #name-actions 传入。位置在 sfip-name 右侧、空格隔开,不会被 actions 区
+             的 margin-left:auto 推走。 -->
+        <span class="sfip-name-actions">
+          <slot name="name-actions" />
+        </span>
       </div>
       <!-- 2026-07-07 改:SkillsView 的工具栏操作(测试/标签/文件夹/删除/AI 等)
            移到本组件的 sfip-actions 插槽中,跟 [i] 信息按钮同一栏、[i] 左侧依次展示。
@@ -881,6 +948,28 @@ function closeFrontmatter() { fmOpen.value = false }
   height: 100%;
   min-height: 0;
   background: var(--bg-card);
+}
+/* 2026-07-07 改 v2:errorCaptured 降级 UI 样式 */
+.sfip-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 40px 24px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  text-align: center;
+}
+.sfip-error h4 { margin: 0; font-size: 15px; color: var(--text); }
+.sfip-error-msg {
+  margin: 0;
+  max-width: 480px;
+  font-size: 12px;
+  color: var(--danger);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  word-break: break-all;
 }
 .sfip-header {
   display: flex;
