@@ -14,7 +14,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
@@ -110,13 +110,12 @@ async function saveInlineEdit() {
   const newDescription = (editDescription.value || '').trim()
   editSaving.value = true
   try {
-    // 2026-06-26 改:在 updateSkill 之前先快照已启用的 (tool, scope, project_id) 组合,
-    // 因为 updateSkill 成功后要遍历它们调 apply,把新内容同步拷贝到磁盘。
-    // 快照必须在 updateSkill 之前,避免 apply 链路重入(虽然 updateSkill 不会改 scopeHits)
+    // 2026-07-07 改:scope 区从 SkillsView 搬到 SkillFileInlinePanel 后,
+    // 这里的 apply 回放逻辑删除 — InlinePanel 自管 scope,会监听 skillbox:scope-refresh
+    // 事件拉取最新状态。SKILL.md 写盘到 home store 后,下次 enabled tool 重新
+    // 加载时(symlink 模式)自然拿到新内容;copy 模式需用户在 InlinePanel 手动
+    // 重启用工具(预期行为,避免自动回放踩到 forceUndoApply 等副作用)。
     const targetSkill = { ...current.value }
-    const existingApplies = scopeHits.value
-      .filter((h) => h.exists)
-      .map((h) => ({ tool_id: h.tool_id, scope: h.scope, project_id: h.project_id || 0 }))
     // 先同步到 currentMeta(用户视角的"立刻反馈")
     currentMeta.description = newDescription
     currentMeta.triggers = newTriggers
@@ -139,51 +138,13 @@ async function saveInlineEdit() {
     currentMd.value = newMd
     currentBody.value = extractBody(newMd)
     editing.value = false
-    // 2026-06-26 改:遍历已启用的 (tool, scope, project) 组合,逐个调 apply 让磁盘上的
-    // 副本同步到新内容。后端 apply 本身就是"覆盖"语义(走 PreSnapshot + 原子写),
-    // 所以前端只要"再调一次 apply"就完成同步。
-    // 失败不阻断(主保存已成功),统一在末尾弹 toast 汇总。
-    if (existingApplies.length) {
-      // 2026-07-03 改:Service.Apply 即便逐 tool 失败也返 200,所以这里不能只 catch
-      // HTTP 异常,还要 inspectApplyResult 读 res.all_ok / res.partial_failure,把
-      // "HTTP 200 但磁盘落盘失败"的隐藏失败也累加到 failItems。
-      const failItems = []
-      for (const a of existingApplies) {
-        try {
-          const res = await applySkill({
-            name: targetSkill.name,
-            scope: a.scope,
-            project_id: a.project_id,
-            tools: [a.tool_id],
-          })
-          const ins = inspectApplyResult(res)
-          if (!ins.allOk) {
-            // 失败明细从 res 抽 (可能多个 tool 失败,但单 apply 单 tool,所以一般 0~1 条)
-            failItems.push(...ins.failedItems.map((f) => ({
-              tool: f.tool || a.tool_id,
-              scope: a.scope,
-              msg: f.error,
-            })))
-          }
-        } catch (e) {
-          failItems.push({ tool: a.tool_id, scope: a.scope, msg: e?.message || String(e) })
-        }
-      }
-      if (failItems.length) {
-        // 失败明细用 partial_failed key(2026-07-03 新增),带多行 detail。
-        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
-        toast.error(t('skills.apply.partialFailed', {
-          ok: existingApplies.length - failItems.length,
-          total: existingApplies.length,
-          detail,
-        }), 6000)
-      } else {
-        toast.success(t('skills.editor.syncAllSuccess', { n: existingApplies.length }))
-      }
-    } else {
-      // 没在已启用命中 → 提示"未同步到任何工具/项目",用户知道主保存成功但磁盘上还没生效
-      toast.info(t('skills.editor.syncNone', { name: targetSkill.name }))
-    }
+    // 2026-07-07 改:scope 区从 SkillsView 搬到 SkillFileInlinePanel 后,这里不再
+    // 遍历 enabled scope 调 apply(InlinePanel 自管 scope-status,磁盘副本同步
+    // 由用户在工具列表手动重启用,或下次 enabled tool 重新加载时自然拿到新内容)。
+    // 触发 InlinePanel 重拉一次 scope,这样刚保存的 SKILL.md 元数据如果改了
+    // tool/scope 关联也能及时反映。
+    window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
+    toast.success(t('skills.editor.saveOk', { name: targetSkill.name }))
   } catch (e) {
     editError.value = e?.message || String(e)
   } finally {
@@ -210,36 +171,6 @@ function rebuildSkillMd(newBody, newTriggers, newDescription) {
   return `---\n${yaml}\n---\n\n${newBody || ''}\n`
 }
 
-// ====== Scope 两级展示(2026-06-24 改:不再可写,纯只读展示后端实时扫描结果) ======
-// 旧版"勾选全局/项目 → 写回 scope 字段"的设计,被后端"直接读文件系统"方案替代。
-// 现在只展示当前 skill 在 (tool, scope, project) 笛卡尔积下的实际存在情况:
-//   - 工具行:5 个编程工具 chip,数字徽章 = 该工具下有几处命中
-//   - 作用域行:全局 + 各项目 chip,chip 内角标列出哪些工具里有命中
-// 不再写库、不再触发 updateSkill;用户要变更生效位置直接通过本地文件操作。
-const scopeTools = ref([])        // [{tool_id, display_name, icon}]
-const scopeProjects = ref([])     // [{id, name, alias, root_path}]
-const scopeHits = ref([])         // [{tool_id, scope, project_id, project_label, path, exists, is_system}]
-const scopeLoading = ref(false)
-const scopeError = ref('')
-
-// 2026-06-25 改:工具行 chip 改成"单选切换器",作用域 chip 只对当前选中工具生效。
-// 未选中工具时,作用域 chip 置灰不可点,提示"先选工具"。
-const selectedToolID = ref(null)  // 当前选中的 tool_id;null = 未选
-
-// 2026-06-25 二改:工具 chip 点击后,后端正在重拉 scopeStatus 时,
-// 在工具 chip 上显示 spinner 反馈用户"我正在同步磁盘状态"。
-const syncingToolID = ref(null)   // 同步中的 tool_id;null = 未同步
-
-// 2026-06-25 增:成功启用/停用后,被操作的 (scope, project_id) 短暂高亮 2s
-// 用于让用户眼睛锁定刚操作的 chip。值是 key('global' | 'p:<id>')。
-const flashTargetKey = ref(null)
-let _flashTimer = null
-function flashTarget(key) {
-  flashTargetKey.value = key
-  if (_flashTimer) clearTimeout(_flashTimer)
-  _flashTimer = setTimeout(() => { flashTargetKey.value = null }, 2000)
-}
-
 // 全局 toast
 const toast = useToastStore()
 
@@ -255,336 +186,13 @@ const toolsById = computed(() => {
   return m
 })
 
-// 工具名 → 显示名(优先用后端 tools 数组;缺省时退化到 tool_id 本身)
-const toolDisplay = computed(() => {
-  const m = {}
-  for (const t of scopeTools.value) m[t.tool_id] = t.display_name || t.tool_id
-  return m
-})
-
-// 工具名 → 图标(2026-06-30 后端化:icon 字段由 toolspecs/*.yaml 的 mdi_icon 决定,
-// 前端不再硬编码 TOOL_ICON_MAP,新工具适配零前端改动)。
+// 2026-07-07 改:toolIcon 不再依赖 scopeTools(scope 已搬走),改用 toolsById 查
+// toolsStore,缺省时退化到 puzzle outline。toolsStore 在 onMounted 时 load,
+// 编辑器弹窗(APPLY_TOOLS)直接读这里取 icon 即可,不会触发额外请求。
 function toolIcon(toolID) {
-  const t = scopeTools.value.find((x) => x.tool_id === toolID)
+  const t = toolsById.value[toolID]
   return t?.icon || 'mdi:puzzle-outline'
 }
-function toolShort(toolID) {
-  // 短名:codex/claude/opencode/cursor/trae 直接用 id,首字母大写
-  if (!toolID) return '?'
-  return toolID.charAt(0).toUpperCase() + toolID.slice(1)
-}
-
-// 命中聚合(后端按路径逐条返回,前端按 (scope, project_id) 聚合成"一个 chip")
-//
-// key 规则:
-//   - global:'global'
-//   - project:'p:<id>'
-// value: { key, scope, project_id, project_label, hits: [...], existsCount }
-const scopeTargets = computed(() => {
-  const map = new Map()
-  for (const h of scopeHits.value) {
-    const key = h.scope === 'global' ? 'global' : `p:${h.project_id}`
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        scope: h.scope,
-        project_id: h.project_id || 0,
-        project_label: h.project_label || (h.scope === 'global' ? t('skills.list.scopeGlobalChip') : ''),
-        hits: [],
-        existsCount: 0,
-      })
-    }
-    const e = map.get(key)
-    e.hits.push(h)
-    if (h.exists) e.existsCount++
-  }
-  // 全局放最前,其余项目按 project_id 升序
-  const list = Array.from(map.values())
-  list.sort((a, b) => {
-    if (a.scope !== b.scope) return a.scope === 'global' ? -1 : 1
-    return a.project_id - b.project_id
-  })
-  return list
-})
-
-// 工具聚合:每个 tool_id 对应 { tool_id, display, icon, hitCount, hasHit }
-const scopeToolSummary = computed(() => {
-  const out = []
-  for (const t of scopeTools.value) {
-    const hits = scopeHits.value.filter((h) => h.tool_id === t.tool_id)
-    const hitCount = hits.filter((h) => h.exists).length
-    out.push({
-      tool_id: t.tool_id,
-      display: t.display_name || t.tool_id,
-      icon: toolIcon(t.tool_id),
-      hitCount,
-      hasHit: hitCount > 0,
-    })
-  }
-  return out
-})
-
-// 2026-06-25 删:isScopeTargetDisabled 不再用,未选工具时点 chip 改弹 toast 提示。
-function selectedToolHitExists(target) {
-  if (!selectedToolID.value) return false
-  const h = target.hits.find((x) => x.tool_id === selectedToolID.value)
-  return !!(h && h.exists)
-}
-function selectedToolBusy(target) {
-  if (!selectedToolID.value) return false
-  return target.hits.some((h) => h.tool_id === selectedToolID.value && isBusy(h.tool_id, h.scope, h.project_id))
-}
-
-// 2026-06-25 二改:加 silent 选项。
-//   - silent=false(默认):切换 scopeLoading,模板 v-if 会让整段 scope 区替换成 spinner;
-//     适合"切 skill / 首次加载",需要先展示骨架再填数据。
-//   - silent=true:不切 scopeLoading,保留旧 chip 视觉只更新 scopeHits;
-//     适合"选工具时重拉同步",用户已能看到 chip,只是要后台刷新。
-// silent 模式失败:不弹全屏 error 段(避免盖住 chip),把错误塞进 scopeError 静默记录
-// (tool-level scope 本身就是只读镜像,失败不会阻断操作)。
-async function loadScopeStatus({ silent = false } = {}) {
-  if (!current.value) return
-  if (!silent) scopeLoading.value = true
-  scopeError.value = ''
-  try {
-    const resp = await getSkillScopeStatus({
-      name: current.value.name,
-      version: current.value.version,
-    })
-    scopeTools.value = resp?.tools || []
-    scopeProjects.value = resp?.projects || []
-    scopeHits.value = resp?.hits || []
-    // 2026-06-25:加载完成后,如果之前选中的工具不在新工具列表里,清空选中
-    if (selectedToolID.value && !scopeTools.value.some((t) => t.tool_id === selectedToolID.value)) {
-      selectedToolID.value = null
-    }
-  } catch (e) {
-    scopeError.value = e?.message || String(e)
-    if (!silent) {
-      scopeTools.value = []
-      scopeProjects.value = []
-      scopeHits.value = []
-    }
-    selectedToolID.value = null
-  } finally {
-    if (!silent) scopeLoading.value = false
-  }
-}
-
-// ====== scope chip 点击行为(2026-06-24 新增) ======
-// 行为:未生效 chip → 调 apply(同名已存在时弹确认框让用户选覆盖);
-// 已生效 chip → 调 unapply(弹 danger 确认框二次确认)。
-// 进度反馈:用 busyKey 标记当前操作的 (tool_id, scope, project_id),
-// 在 chip 上显示 spinner 避免重复点击。
-const busyKey = ref('') // 形如 "claude|global|0",空表示无操作中
-
-function busyKeyFor(toolID, scope, projectID) {
-  return `${toolID}|${scope}|${projectID || 0}`
-}
-
-function isBusy(toolID, scope, projectID) {
-  return busyKey.value === busyKeyFor(toolID, scope, projectID)
-}
-
-// 工具 chip 行:点击行为 — 切换"选中工具"(单选)
-// 2026-06-25 改:不再触发批量启用/停用,仅做"工具选择器";后续作用域 chip 的
-// 启用/停用都基于 selectedToolID 做单条操作。
-// 2026-06-25 二改:切到某工具时,调一次 getSkillScopeStatus 完整重拉,
-// 把该工具在所有 (全局 + 各项目) 路径的 SKILL.md 存在状态同步到 UI;
-// 这样用户从外部 cp 文件后,选工具就能立刻看到状态变化。
-async function handleToolChipClick(toolSummary) {
-  // 单选切换:同一工具再点 = 取消;不同工具 = 切换
-  if (selectedToolID.value === toolSummary.tool_id) {
-    selectedToolID.value = null
-    return
-  }
-  selectedToolID.value = toolSummary.tool_id
-  // 同步重拉 scopeStatus,把磁盘最新状态反映到 scopeHits
-  // 全量重扫后,selectedToolHitExists(tg) 会基于新数据重新计算 chip 态
-  // 用 silent:不切 scopeLoading,保留旧 chip 视觉,只静默更新 scopeHits
-  syncingToolID.value = toolSummary.tool_id
-  try {
-    await loadScopeStatus({ silent: true })
-  } finally {
-    syncingToolID.value = null
-  }
-}
-
-// 作用域 chip 行:点击行为 — 仅对 selectedToolID 做单条启用/停用
-// 2026-06-25 改:从"全工具批量"改为"对当前选中工具做单条操作"。
-// - 未选工具:直接 return(模板已 disabled,这里再做防御)
-// - 选中工具在该 (scope, project) 下不存在命中 → 启用
-// - 选中工具在该 (scope, project) 下已存在命中 → 停用
-// doApplyOne / doUnapplyOne 内部已经包含 loadScopeStatus + toast + flash,
-//
-// 这里不再重复刷新。
-async function handleScopeChipClick(target) {
-  if (!current.value) return
-  if (!selectedToolID.value) {
-    // 2026-06-25 改:不再 return,给用户一个明确提示,告诉他要点上面工具行。
-    toast.info(t('skills.list.scopeSelectToolFirst'))
-    return
-  }
-  const targetTool = selectedToolID.value
-  const targetHit = target.hits.find((h) => h.tool_id === targetTool)
-  const toolLabel = toolDisplay.value[targetTool] || targetTool
-  if (targetHit && targetHit.exists) {
-    // 已生效 → 停用单条
-    const ok = await openConfirm({
-      title: t('skills.list.unapplyConfirmTitle'),
-      message: t('skills.list.unapplyConfirmMessage', {
-        name: current.value.name,
-        tool: toolLabel,
-        scope: target.project_label,
-      }),
-      confirmText: t('common.delete'),
-      variant: 'danger',
-    })
-    if (!ok) return
-    await doUnapplyOne(targetHit)
-    return
-  }
-  // 未生效 → 启用单条
-  // 若后端未返回该 (scope, project) 的占位记录(从未写入过),需要构造一条
-  // 不存在的 hit 用于 doApplyOne
-  const fakeHit = targetHit || {
-    tool_id: targetTool,
-    scope: target.scope,
-    project_id: target.project_id || 0,
-    exists: false,
-  }
-  const ok = await openConfirm({
-    title: t('skills.list.applyConfirmTitle'),
-    message: t('skills.list.applyConfirmMessage', {
-      name: current.value.name,
-      tool: toolLabel,
-      scope: target.project_label,
-    }),
-    confirmText: t('common.confirm'),
-  })
-  if (!ok) return
-  await doApplyOne(fakeHit)
-}
-
-// doApplyOne 启用单个 (tool, scope, project) 组合。
-//
-// 后端是 cskillapply.ApplySkill:入参 { scope, project_id, name, tools: [toolID] },
-// 同名已存在时由 skillapp 内部走 PreSnapshot + 原子覆盖,所以前端不用单独弹覆盖确认。
-//
-// 2026-06-25 改:成功后弹 toast + 闪 chip,失败弹 error toast。
-// 顺序:先 await apply → await loadScopeStatus 刷新磁盘状态 → 再 toast + flash,
-// 这样 toast/flash 出现时 chip 已经处于"已生效"选中态,语义对齐。
-async function doApplyOne(h) {
-  busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
-  // 2026-06-25 二改:锁住 apply 时的 skill 元数据,避免 await 期间用户切到别的 skill
-  // 导致后续 patch 找错列表项。
-  const targetSkill = current.value ? { ...current.value } : null
-  try {
-    // 2026-07-03 改:Service.Apply 即便单 tool 失败也返 200,所以拿响应后必须
-    // 用 inspectApplyResult 读 res.all_ok / res.partial_failure 才能区分
-    // 真正成功 vs 后端把失败静默吞掉的场景。
-    const res = await applySkill({
-      name: targetSkill.name,
-      scope: h.scope,
-      project_id: h.project_id || 0,
-      tools: [h.tool_id],
-    })
-    await loadScopeStatus()
-    // 2026-06-25 三改:用确定性增量 patch(锁定 targetSkill + 显式 toolId/scope/op),
-    // 不依赖 scopeHits 推算,避免 await 期间 current 变化或 scopeHits 被污染。
-    patchAppliedTools(targetSkill, h.tool_id, h.scope, 'add')
-    const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
-    flashTarget(targetKey)
-    const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
-    const ins = inspectApplyResult(res)
-    if (ins.allOk) {
-      toast.success(t('skills.list.applySuccess', {
-        path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
-      }))
-    } else {
-      // 单 tool apply 时 res.all_ok=false 等同于该 tool 落盘失败,
-      // 弹 partial_failed toast 告知用户具体哪个 tool + 错误。
-      const detail = formatFailedDetail(ins.failedItems)
-      toast.error(t('skills.apply.partialFailed', {
-        ok: (res?.applies?.length || 0) - ins.failedItems.length,
-        total: res?.applies?.length || 0,
-        detail,
-      }), 6000)
-      // scope 区小字也同步展示错误,便于用户立刻定位。
-      scopeError.value = detail
-    }
-  } catch (e) {
-    toast.error(t('skills.list.applyFailed', { msg: e?.message || String(e) }))
-    scopeError.value = t('skills.list.applyFailed', { msg: e?.message || String(e) })
-  } finally {
-    busyKey.value = ''
-  }
-}
-
-// doUnapplyOne 停用单个 (tool, scope, project) 组合。
-//
-// 后端用 skillapp 的 apply/undo 机制(走 PreSnapshot 还原或删目标文件),
-// 但 undo 是按 apply_id 撤销,所以前端先 listApplies 找最近一条未撤销的 apply_id。
-// 没找到就报错(用户应该是从外部把目录删了,不走 skillbox undo)。
-//
-// 2026-06-25 改:成功/失败都用 toast 反馈。toast/flash 在 loadScopeStatus 之后,
-//
-// 保证 flash 那 2s 内 chip 已经是"已停用"态(从 chip-active → chip-muted)。
-async function doUnapplyOne(h) {
-  busyKey.value = busyKeyFor(h.tool_id, h.scope, h.project_id)
-  // 2026-06-25 二改:锁住 undo 时的 skill 元数据(同上,避免 await 期间 current 被切走)
-  const targetSkill = current.value ? { ...current.value } : null
-  try {
-    const list = await listApplies({
-      scope: h.scope,
-      name: targetSkill.name,
-      tool: h.tool_id,
-      status: 'applied',
-      page: 1,
-      size: 1, // 找最近一条即可
-    })
-    const last = list?.items?.[0]
-    if (!last) {
-      // 2026-06-25 增:DB 没记录(用户手动 cp / 外部安装,scope-status 命中但
-      // skill_applies 表里没行)→ 走 force-undo 走 scope-status 删磁盘 +
-      // 插占位 rolled_back 行。project_id 这里 h 可能没带(0),后端会从
-      // h.scope=project 时从项目列表里按 id 定位,project_id=0 + scope=project
-      // 找不到会返 404。
-      await forceUndoApply({
-        scope: h.scope,
-        project_id: h.project_id || 0,
-        name: targetSkill.name,
-        tool: h.tool_id,
-      })
-      await loadScopeStatus()
-      patchAppliedTools(targetSkill, h.tool_id, h.scope, 'remove')
-      const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
-      flashTarget(targetKey)
-      const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
-      toast.success(t('skills.list.unapplySuccess', {
-        path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
-      }))
-      return
-    }
-    await undoApply({ apply_id: last.id })
-    // 注:后端 SkillApply entity 主键 json tag 是 "id",不是 "apply_id"
-    await loadScopeStatus()
-    // 2026-06-25 三改:用确定性增量 patch(锁定 targetSkill + 显式 toolId/scope/op)
-    patchAppliedTools(targetSkill, h.tool_id, h.scope, 'remove')
-    const targetKey = h.scope === 'global' ? 'global' : `p:${h.project_id}`
-    flashTarget(targetKey)
-    const toolLabel = toolDisplay.value[h.tool_id] || h.tool_id
-    toast.success(t('skills.list.unapplySuccess', {
-      path: `${toolLabel} · ${h.scope === 'global' ? t('skills.list.scopeGlobalChip') : `#${h.project_id}`}`,
-    }))
-  } catch (e) {
-    toast.error(t('skills.list.unapplyFailed', { msg: e?.message || String(e) }))
-    scopeError.value = t('skills.list.unapplyFailed', { msg: e?.message || String(e) })
-  } finally {
-    busyKey.value = ''
-  }
-}
-
 // AI 侧栏
 const aiOpen = ref(false)
 function toggleAI() { aiOpen.value = !aiOpen.value }
@@ -603,7 +211,8 @@ watch(
 // 2026-07-04 增(Commit 4):抽屉内文件保存后,主区同步。
 //   - 如果改的是 SKILL.md,同步刷新 currentMd / currentBody,主区预览实时更新
 //   - 重新拉一次 detail(确保 files 与磁盘一致)
-//   - 走与 saveInlineEdit 相同的"已 enabled scope 重放 apply"流程(共用逻辑)
+//   - 派发 skillbox:scope-refresh 让 SkillFileInlinePanel 重拉 scope-status
+//     (避免组件内重复调 getSkillScopeStatus:这里用事件统一驱动)
 async function onDrawerSaved({ path, content }) {
   if (path === 'SKILL.md') {
     currentMd.value = content
@@ -616,45 +225,10 @@ async function onDrawerSaved({ path, content }) {
       await loadCurrent(row)
     } catch (_) { /* 忽略,主区渲染靠 currentMd/currentBody 即可 */ }
   }
-  // 同步到已 enabled 的工具 / 项目(skill 全文被 updateSkill 重写后,磁盘副本要回放)
-  // 复用 saveInlineEdit 的 existingApplies / failItems 逻辑,这里抽不出太细的函数,
-  // 复制一份(避免内联编辑那条路被这个改动影响)
-  try {
-    const existingApplies = scopeHits.value
-      .filter((h) => h.exists)
-      .map((h) => ({ tool_id: h.tool_id, scope: h.scope, project_id: h.project_id || 0 }))
-    if (existingApplies.length) {
-      const failItems = []
-      for (const a of existingApplies) {
-        try {
-          const res = await applySkill({
-            name: current.value.name,
-            scope: a.scope,
-            project_id: a.project_id,
-            tools: [a.tool_id],
-          })
-          const ins = inspectApplyResult(res)
-          if (!ins.allOk) {
-            failItems.push(...ins.failedItems.map((f) => ({
-              tool: f.tool || a.tool_id,
-              scope: a.scope,
-              msg: f.error,
-            })))
-          }
-        } catch (e) {
-          failItems.push({ tool: a.tool_id, scope: a.scope, msg: e?.message || String(e) })
-        }
-      }
-      if (failItems.length) {
-        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
-        toast.error(t('skills.apply.partialFailed', {
-          ok: existingApplies.length - failItems.length,
-          total: existingApplies.length,
-          detail,
-        }), 6000)
-      }
-    }
-  } catch (_) { /* scope 重放失败不影响主保存成功 */ }
+  // 2026-07-07 改:不再在 parent 做 enabled scope 的 apply 回放 — scope 区已搬到
+  // SkillFileInlinePanel,InlinePanel 内部自管 scope-status,这里只派发
+  // skillbox:scope-refresh 事件通知它重拉(InlinePanel 在 onMounted 监听该事件)。
+  window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
 }
 
 // 2026-06-25 二改:skillKey 改为只取 name(后端 listSkills 不返回 scope/project_id,
@@ -670,32 +244,10 @@ function skillKey(p) {
   return p.path || p.name || ''
 }
 
-// 2026-06-25 增 + 二改:apply/unapply 成功后,用锁定的 toolId + scope 局部更新
-// items 里指定 skill 的 applied_tools 字段。
-//
-// 2026-06-29 改:items 现在是 computed(派生自 store.flatItems),只读;
-// 改 store 内部的 tree 节点(走 store helper),让响应式正确传播。
-function patchAppliedTools(targetSkill, toolId, scope, op) {
-  if (!targetSkill || !toolId || scope !== 'global') return // 只 global 改列表项
-  const targetPath = targetSkill.path || targetSkill.name
-  if (!targetPath) return
-  // 找到 tree 中对应 path 的叶子节点,直接更新它的 skill_meta.applied_tools
-  const walk = (nodes) => {
-    for (const n of nodes || []) {
-      if (!n.is_group && n.path === targetPath) {
-        if (!n.skill_meta) n.skill_meta = {}
-        const set = new Set(n.skill_meta.applied_tools || [])
-        if (op === 'add') set.add(toolId)
-        else if (op === 'remove') set.delete(toolId)
-        n.skill_meta.applied_tools = Array.from(set)
-        return true
-      }
-      if (n.is_group && walk(n.children)) return true
-    }
-    return false
-  }
-  walk(skillTree.tree)
-}
+// 2026-07-07 改:scope 区搬到 SkillFileInlinePanel 后,apply/unapply 全部在
+// InlinePanel 内部完成,这里不再需要 patch 列表项 — InlinePanel 完成 apply/undo
+// 后会 dispatch 'skillbox:scope-refresh',parent 只需 reload 列表(store 内部会
+// 重新同步 applied_tools)。原 patchAppliedTools 整段删除。
 
 // AI 输入的上下文 = 当前 skill 的 body
 const currentSkillMd = computed(() => currentBody.value || '')
@@ -744,15 +296,10 @@ async function loadCurrent(row) {
   if (!row) return
   currentLoading.value = true
   currentError.value = ''
-  // 2026-06-25 二改:去掉切走前的 syncLocalAppliedTools。
-  // 旧版用旧 scopeHits 推算旧 current 的 applied_tools,但旧 scopeHits 可能是 []
-  // (loadScopeStatus 还没跑完),会把列表项清空。改用"只在 mutation 路径 sync"。
-  // 2026-06-25:切 skill 时清掉"工具选中"和 scope 状态,避免把旧 skill 的选择带过来
-  selectedToolID.value = null
-  scopeHits.value = []
-  scopeTools.value = []
-  scopeProjects.value = []
-  scopeError.value = ''
+  // 2026-07-07 改:scope 区已搬到 SkillFileInlinePanel,parent 不再需要清旧 scope
+  // 状态 — InlinePanel 通过 watch props.skill 变化自动重拉 scope-status 并
+  // 重置折叠态(null = 全展开)。这里把旧版"清 selectedToolID / scopeHits /
+  // scopeTools / scopeProjects / scopeError"那段删掉。
   try {
     // 2026-06-29 改:用 path 传(支持多级分组);name 是叶子短名(后端 SplitPath 兜底)
     const full = await getSkill({
@@ -778,8 +325,9 @@ async function loadCurrent(row) {
       const out = await listTags({ scope: 'global', name: row.name })
       currentTagList.value = out?.items || []
     } catch (_) { currentTagList.value = [] }
-    // 拉 scope 实时状态(工具/作用域两级展示)
-    await loadScopeStatus()
+    // 2026-07-07 改:scope-status 拉到工作由 SkillFileInlinePanel 自管
+    // (通过 watch props.skill 触发 + scope-refresh 事件驱动),parent 不再调用
+    // loadScopeStatus。
   } catch (e) {
     // 2026-07-05 增:识别后端 corrupted_file 错误(磁盘 SKILL.md 损坏),
     // 给用户弹清晰的"需手动修复"提示,而不是单纯的"网络/服务错误"。
@@ -1802,13 +1350,17 @@ const rootDropHover = ref(false)
 // 当前选中 skill 的 scope-status,让用户切回首页时立刻看到新的磁盘形态
 // (copy → symlink 或反向)而无需手动点 chip 触发 silent 刷新。
 //
+// 2026-07-07 改:scope 区搬到 SkillFileInlinePanel,parent 不再直接调
+// loadScopeStatus — 改成 dispatch 'skillbox:scope-refresh' 事件,InlinePanel
+// 内部监听这个事件后自己 loadScopeStatus。这样保持单一真相源。
+//
 // appBus 由 App.vue 行 22-39 provide;window event 兜底兼容 web 端
 // (无 inject 上下文)和未来跨 webview 场景。
 const appBus = inject('appBus', null)
 function onSkillsRefresh() {
   // 仅在已选 skill 时刷新;未选时由 reload 在下次切 skill 时自然覆盖。
   if (current.value) {
-    loadScopeStatus({ silent: true })
+    window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
   }
 }
 
@@ -1930,67 +1482,49 @@ onUnmounted(() => {
       </div>
 
       <template v-else>
-        <!-- 顶部 toolbar -->
+        <!-- 2026-07-07 改:detail-toolbar 简化成"面包屑式技能名@版本 + 右侧操作图标"。
+             旧版的"标题 + 版本 + 描述 + 触发词 + 编辑按钮 + source 徽章"整段
+             detail-title-block 删除,改成一个极简面包屑(.detail-toolbar-name),
+             正文的元数据(描述/触发词)现在通过 SkillFileInlinePanel 顶部的
+             [i] frontmatter 弹窗查看,不在 toolbar 内展开占用空间。 -->
         <header class="detail-toolbar">
-          <div class="detail-title-block">
-            <div class="detail-title-row">
-              <h1 class="detail-name">{{ current.name }}</h1>
-              <code
-                class="detail-version"
-                role="button"
-                tabindex="0"
-                :title="t('skills.tag.titlePrefix')"
-                @click="openTagDialog"
-                @keyup.enter="openTagDialog"
-              >@{{ current.version }}</code>
-              <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']">{{ current.source || 'local' }}</span>
-              <!-- 2026-06-25 改:编辑按钮从 detail-body 顶部搬到 detail-title-row 右侧(在 LOCAL 徽章之后)
-                   2026-06-26 二改:编辑态时,同位置显示"取消/保存"实心按钮(替换 ghost-link) -->
-              <div class="detail-title-actions">
-                <button
-                  v-if="!editing"
-                  class="ghost-link"
-                  :title="t('common.edit')"
-                  @click="startInlineEdit"
-                >
-                  <IconPark icon="mdi:pencil" width="12" height="12" />
-                  {{ t('common.edit') }}
-                </button>
-                <!-- 编辑态:同位置显示 取消 / 保存 实心按钮 -->
-                <template v-else>
-                  <button
-                    class="title-action-btn title-action-cancel"
-                    :disabled="editSaving"
-                    @click="cancelInlineEdit"
-                  >
-                    <IconPark icon="mdi:close" width="13" height="13" />
-                    {{ t('common.cancel') }}
-                  </button>
-                  <button
-                    class="title-action-btn title-action-save"
-                    :disabled="editSaving"
-                    @click="saveInlineEdit"
-                  >
-                    <span v-if="editSaving" class="spinner spinner-sm"></span>
-                    <IconPark v-else icon="mdi:content-save" width="13" height="13" />
-                    {{ editSaving ? t('common.processing') : t('common.save') }}
-                  </button>
-                </template>
-              </div>
-            </div>
-
-            <!-- 2026-06-25 改:description 下方接触发词行内展示(查看态保留在 title-block 紧凑展示);
-             2026-06-27 改:description 前面加 desc-label(与 triggers-label 风格一致) -->
-            <div v-if="!editing && currentMeta.description" class="detail-desc-row">
-              <span class="triggers-label desc-label">{{ t('skills.editor.descShort') }}</span>
-              <p class="detail-desc">{{ currentMeta.description }}</p>
-            </div>
-
-            <!-- 2026-06-25 改:触发词行内展示,在 description 下方(查看态) -->
-            <div v-if="!editing && (currentMeta.triggers || []).length" class="detail-triggers-row">
-              <span class="triggers-label">{{ t('skills.editor.triggers') }}</span>
-              <span class="meta-text">{{ (currentMeta.triggers || []).join('、') }}</span>
-            </div>
+          <div class="detail-toolbar-name">
+            <IconPark icon="mdi:cube-outline" width="14" height="14" />
+            <span class="detail-toolbar-name-text">
+              {{ current.name }}<span class="muted">@{{ current.version }}</span>
+            </span>
+            <span :class="['badge', current.source === 'market' ? 'blue' : 'gray']" class="detail-toolbar-source">
+              {{ current.source || 'local' }}
+            </span>
+            <!-- 编辑态切换按钮留在 toolbar,不放回 title 块,跟右侧图标按钮并列紧凑 -->
+            <button
+              v-if="!editing"
+              class="ghost-link detail-toolbar-edit"
+              :title="t('common.edit')"
+              @click="startInlineEdit"
+            >
+              <IconPark icon="mdi:pencil" width="12" height="12" />
+              {{ t('common.edit') }}
+            </button>
+            <template v-else>
+              <button
+                class="title-action-btn title-action-cancel"
+                :disabled="editSaving"
+                @click="cancelInlineEdit"
+              >
+                <IconPark icon="mdi:close" width="13" height="13" />
+                {{ t('common.cancel') }}
+              </button>
+              <button
+                class="title-action-btn title-action-save"
+                :disabled="editSaving"
+                @click="saveInlineEdit"
+              >
+                <span v-if="editSaving" class="spinner spinner-sm"></span>
+                <IconPark v-else icon="mdi:content-save" width="13" height="13" />
+                {{ editSaving ? t('common.processing') : t('common.save') }}
+              </button>
+            </template>
           </div>
 
           <div class="detail-actions">
@@ -2081,115 +1615,10 @@ onUnmounted(() => {
           {{ openError }}
         </p>
 
-        <!-- scope 两级(2026-06-24 改:只读,展示实时扫描结果;2026-06-26 改:编辑态隐藏;
-             2026-06-27 改:做成独立卡片样式,与上下 toolbar/编辑器 视觉隔离) -->
-        <section v-if="!editing" class="detail-section scope-card">
-          <header class="section-header">
-            <h3>
-              <IconPark icon="mdi:earth" width="14" height="14" />
-              {{ t('skills.list.scopeLabel') }}
-            </h3>
-            <span v-if="!scopeLoading && scopeHits.length" class="muted small-hint">
-              {{ t('skills.list.scopeHitCount', { n: scopeHits.filter((h) => h.exists).length }) }}
-            </span>
-          </header>
+        <!-- 2026-07-07 改:scope 区整段删除,已搬到 SkillFileInlinePanel 左栏顶部。
+             旧版"工具行 + 作用域行"两行 chip 现在改为 InlinePanel 内部的
+             "以工具为父级分组,展开后竖向列出生效位置"折叠树。 -->
 
-          <p v-if="scopeLoading" class="section-loading">
-            <span class="spinner spinner-sm"></span>
-            <span class="muted">…</span>
-          </p>
-          <p v-else-if="scopeError" class="message message-error">
-            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-            {{ scopeError }}
-          </p>
-
-          <template v-else>
-            <!-- 第一行:工具(5 个)— 单选切换器(2026-06-25 改)
-                 视觉态:
-                   - 命中(主色填充) = 该工具有生效记录
-                   - 选中(蓝色边框) = 用户当前正在为这个工具选作用域
-                   - 命中 + 选中 = 主色填充 + 蓝色加粗边框
-                   - 未命中 + 未选中 = 虚线 muted -->
-            <div class="scope-row">
-              <span class="scope-row-label">{{ t('skills.list.scopeToolsRow') }}</span>
-              <div class="chip-row">
-                <button
-                  v-for="t in scopeToolSummary"
-                  :key="t.tool_id"
-                  type="button"
-                  :class="[
-                    'chip', 'chip-tool',
-                    t.hasHit ? 'chip-active' : 'chip-muted',
-                    selectedToolID === t.tool_id ? 'chip-tool-selected' : '',
-                    syncingToolID === t.tool_id ? 'chip-tool-syncing' : '',
-                  ]"
-                  :title="t.hasHit
-                    ? `${t.display}: ${t.hitCount} 处生效`
-                    : `${t.display}: 0 处生效`"
-                  @click="handleToolChipClick(t)"
-                >
-                  <span
-                    v-if="syncingToolID === t.tool_id"
-                    class="spinner spinner-sm chip-spinner"
-                  ></span>
-                  <IconPark v-else :icon="t.icon" width="12" height="12" />
-                  <span>{{ toolShort(t.tool_id) }}</span>
-                  <span v-if="t.hitCount > 0" class="chip-count">{{ t.hitCount }}</span>
-                </button>
-                <span v-if="selectedToolID" class="chip-tool-selected-hint muted">
-                  {{ t('skills.list.scopeToolSelected', { tool: toolDisplay[selectedToolID] || selectedToolID }) }}
-                </span>
-              </div>
-            </div>
-
-            <!-- 第二行:作用域(全局 + 各项目)— 仅当选中工具后才显示(2026-06-26 改)
-                 视觉态:
-                   - 选中工具在该 chip 内已生效 → 蓝色 active
-                   - 选中工具在该 chip 内未生效 → muted(虚线) -->
-            <div v-if="selectedToolID" class="scope-row">
-              <span class="scope-row-label">{{ t('skills.list.scopeTargetsRow') }}</span>
-              <div class="chip-row">
-                <button
-                  v-for="tg in scopeTargets"
-                  :key="tg.key"
-                  type="button"
-                  :class="[
-                    'chip', 'chip-scope-target',
-                    selectedToolHitExists(tg) ? 'chip-active' : 'chip-muted',
-                    !selectedToolID ? 'chip-target-no-tool' : '',
-                    selectedToolBusy(tg) ? 'chip-busy' : '',
-                    flashTargetKey === tg.key ? 'chip-flash' : '',
-                  ]"
-                  :title="selectedToolHitExists(tg) ? t('skills.list.unapplyConfirmTitle') : t('skills.list.applyConfirmTitle')"
-                  @click="handleScopeChipClick(tg)"
-                >
-                  <span
-                    v-if="selectedToolBusy(tg)"
-                    class="spinner spinner-sm chip-spinner"
-                  ></span>
-                  <IconPark
-                    v-else
-                    :icon="tg.scope === 'global' ? 'mdi:earth' : 'mdi:folder-outline'"
-                    width="12"
-                    height="12"
-                  />
-                  <span>{{ tg.project_label }}</span>
-                  <span v-if="selectedToolHitExists(tg)" class="chip-mini-list">
-                    <IconPark
-                      :icon="toolIcon(selectedToolID)"
-                      width="10"
-                      height="10"
-                      class="chip-mini-icon"
-                    />
-                  </span>
-                </button>
-                <span v-if="!scopeTargets.length" class="chip-empty muted">
-                  {{ t('skills.list.scopeEmpty') }}
-                </span>
-              </div>
-            </div>
-          </template>
-        </section>
 
         <!-- 标签 section:2026-06-25 改 — 不再展示 chip 列表,改为点击版本号弹出标签弹窗。
              section 本身保留,只显示一行说明 + "管理"按钮占位也行,但用户只要求"不打 tag 部分显示"。
@@ -3050,47 +2479,66 @@ onUnmounted(() => {
 }
 
 .detail-toolbar {
+  /* 2026-07-07 改:detail-toolbar 简化为单行。
+     旧版 .detail-title-block / .detail-name / .detail-version / .detail-desc-row /
+     .detail-triggers-row / .triggers-label / .scope-card / .scope-row / .chip-tool* /
+     .chip-scope-target* / .chip-flash / .chip-busy / .chip-mini-* 整段删除。
+     顶部 toolbar 现在只放一个 .detail-toolbar-name(面包屑) + .detail-actions(5 个图标按钮)。
+     toolbar 整体 padding 收紧,vertical center,贴合"轻量级"风格。 */
   position: sticky;
   top: 0;
   z-index: 5;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 8px 16px;
+  min-height: 40px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.detail-title-block {
-  min-width: 0;
-  flex: 1;
-}
-
-.detail-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-/* 2026-06-25 新增:标题行右侧"编辑"按钮容器
-   2026-06-26 改:编辑态时,容器内显示"取消/保存"实心按钮(替换 ghost-link) */
-.detail-title-actions {
+.detail-toolbar-name {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: auto; /* 顶到最右 */
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+}
+.detail-toolbar-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.detail-toolbar-name .muted {
+  color: var(--text-faint);
+  font-weight: 400;
+  margin-left: 2px;
+}
+.detail-toolbar-source {
+  font-size: 10px;
+  padding: 1px 6px;
+  font-weight: 500;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+}
+.detail-toolbar-edit {
+  margin-left: 8px;
+  height: 26px;
+  font-size: 11px;
+  padding: 0 8px;
 }
 
-/* 2026-06-26 新增:标题行右侧的"取消/保存"实心按钮 */
+/* 2026-06-26 新增:标题行右侧的"取消/保存"实心按钮(沿用,2026-07-07 改放进 detail-toolbar-name 行内) */
 .title-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 28px;
+  height: 26px;
   padding: 0 10px;
   font-size: 12px;
   font-weight: 500;
@@ -3098,6 +2546,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.12s ease;
   border: 1px solid transparent;
+  margin-left: 6px;
 }
 .title-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -3123,81 +2572,13 @@ onUnmounted(() => {
   border-color: var(--text);
 }
 
-.detail-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.detail-version {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-family: 'JetBrains Mono', monospace;
-  background: var(--primary-dim);
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-/* 2026-06-25 改:点击版本号弹出 tag 弹窗,所以 .detail-version 视觉上是可点的 */
-.detail-version:hover {
-  background: var(--primary);
-  color: var(--bg-card);
-}
-.detail-version:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 1px;
-}
-
-/* 2026-06-27 改:从 toolbar 内部搬到 info-card 后,占满整个 detail-pane 宽度(约 100%),
-   不再限 2 行,长描述自然多行展示(原本在 toolbar 内被右边 6 个图标按钮挤压到约 60%) */
-/* 2026-06-27 改:description 行 — 与 triggers-row 同样结构,前面加 desc-label */
-.detail-desc-row {
-  margin: 8px 0 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text);
-  width: 100%;
-}
-.detail-desc-row .detail-desc {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  word-break: break-word;
-}
-/* 2026-06-27 改:把 description 文本改成更"内容"色,跟 triggers 的内容同款 var(--text),
-   避免 description 用 --text-dim 显得次要(用户反馈需要明显展示) */
-.detail-desc-row .detail-desc { color: var(--text); }
-
-/* 兼容旧位置单独使用 .detail-desc(若有其他组件依赖) */
-.detail-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
 /* 2026-06-25 新增:编辑态的 description 编辑框
    2026-06-26 改:边框变细(默认 1px 淡边 + 焦点 1px 实线 + 主色 box-shadow,去掉 3px 厚光晕),
-   不固定 width,跟父容器(.detail-title-block,flex:1)自适应占满整页宽度 */
+   不固定 width,跟父容器自适应占满整页宽度 */
 .desc-editor {
   margin: 6px 0 0;
   display: block;
   width: 100%;
-  /* 2026-06-26 改:精确锁 2 行高(13 × 1.5 × 2 + 16 padding + 2 border = 57),
-     与 rows="2" 对齐;min-height 留作下限保护,内容多了自动扩 */
   height: 57px;
   min-height: 57px;
   padding: 8px 10px;
@@ -3219,48 +2600,15 @@ onUnmounted(() => {
 }
 .desc-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* 2026-06-26 新增:编辑态的描述/触发词 编辑区独立 section
-   跟其他 detail-section 一样 padding,内部 editor-field-full 占满 */
+/* 2026-06-26 新增:编辑态的描述/触发词 编辑区独立 section */
 .detail-edit-fields {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--bg-subtle); /* 跟 toolbar 区分,提示"这块在编辑" */
+  background: var(--bg-subtle);
 }
 .detail-edit-fields .editor-field-full {
   gap: 6px;
-}
-
-/* 2026-06-25 新增:触发词行内展示 — 在 description 下方
-   2026-06-27 改:从 toolbar 内部搬到 info-card 后,占满整页宽度;
-   .meta-text 用 flex:1 占满触发词标签右侧所有空间 */
-.detail-triggers-row {
-  margin: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text);
-  width: 100%;
-}
-.detail-triggers-row.editing {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 4px;
-}
-/* 2026-06-27 改:触发词文本占满标签右侧所有空间,长内容自然多行 */
-.detail-triggers-row .meta-text {
-  flex: 1;
-  min-width: 0;
-}
-.triggers-label {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  padding-top: 3px;
 }
 
 .detail-actions {
@@ -3318,18 +2666,8 @@ onUnmounted(() => {
 }
 
 /* 2026-06-27 改:作用域区做成独立卡片 — 白底 + 圆角 + 上下 margin,
-   与上下 toolbar(白)/ 编辑器(白) 通过 border + margin 形成视觉边界。
-   卡片四边完整 border(包括 bottom),detail-body 自己加 border-top 形成
-   "▢ 卡片 → 12px 空白 → ━ 分隔线 → 正文" 清晰分段,避免卡片看起来被截断 */
-.detail-section.scope-card {
-  margin: 12px 20px;
-  padding: 14px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  gap: 10px;
-}
-.detail-section.scope-card .section-header h3 { color: var(--text); }
+/* 2026-07-07 改:scope-card 整段样式删除(scope 区已搬到 SkillFileInlinePanel)。
+   detail-section 的通用 padding 还在,scope 不再需要单独的卡片样式。 */
 
 .detail-section.detail-meta-row {
   flex-direction: row;
@@ -3447,173 +2785,17 @@ onUnmounted(() => {
 }
 
 /* ============================================
-   Scope 两级布局(2026-06-24)
-   - 第一行:工具(5 个)— 命中用 chip-active,未命中用 chip-muted
-   - 第二行:作用域(全局/各项目)— chip-active 标志有命中,
-     chip-mini-list 内显示命中工具的 mdi 图标
+   2026-07-07 改:Scope 两级布局(2026-06-24 旧版)整段删除。
+   旧 .scope-row / .scope-row-label / .chip-tool / .chip-scope-target* /
+   .chip-busy / .chip-flash / .chip-mini-* / .chip-count / .chip-spinner /
+   .chip-tool-selected / .chip-tool-syncing 全部不再使用。
+   新的 scope 区在 SkillFileInlinePanel 内部,样式走 .sfip-scope*。
    ============================================ */
-.scope-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.scope-row:last-child { margin-bottom: 0; }
-.scope-row-label {
-  flex: 0 0 64px;
-  font-size: 12px;
-  color: var(--text-faint);
-  font-weight: 500;
-  padding-top: 6px;
-  letter-spacing: 0.3px;
-}
 
-/* 工具行 chip:active 用主色(黑),未命中用 muted(2026-06-25 改:不降透明度,正常显示就好) */
-.chip-tool {
-  cursor: pointer;
-  background: var(--bg-card);
-  color: var(--text);
-  border-color: var(--border);
-  border-style: dashed; /* 未命中虚线边框,有命中时 active 覆盖回 solid */
-  font-family: inherit;
-  position: relative;
-}
-.chip-tool.chip-muted:hover { background: var(--bg-hover); color: var(--text); }
-/* 2026-06-26 改:工具行 chip 命中态改用蓝色(var(--accent-blue)),不再用黑色,
-   与作用域行 chip-active 保持一致,整体配色更协调 */
-.chip-tool.chip-active {
-  background: var(--accent-blue);
-  color: #fff;
-  border-color: var(--accent-blue);
-  border-style: solid;
-}
-.chip-tool.chip-active:hover { background: var(--accent-blue); color: #fff; }
-
-/* 2026-06-26 改:工具 chip 命中 + 选中叠加态 — 蓝色背景 + 蓝色边框(与作用域行一致) */
-.chip-tool.chip-active.chip-tool-selected {
-  background: var(--accent-blue);
-  color: #fff;
-  border-color: var(--accent-blue);
-}
-
-/* 2026-06-25 新增:工具 chip "已选中"(单选切换器)态
-   - 2026-06-26 改:用主色(黑)边框区分"操作选中",不再用蓝色,
-     避免与"已启用"色(蓝填充)混淆,用户一眼能区分"我正在为哪个工具操作"
-   - 2026-06-26 二改:边框从 2px+1px shadow 收成 1px(双层用 box-shadow 模拟),
-     不再显粗;颜色从黑改紫色(var(--accent-violet)),与已启用蓝 / 未选灰 三色清晰区分 */
-.chip-tool.chip-tool-selected {
-  border-color: var(--accent-violet);
-  border-width: 1px;
-  /* 1px 双层边框:外层 inset 1px,内层 outset 0.5px 累加视觉为 1.5px,
-     避免 border-width 切换导致尺寸跳动 */
-  border-style: solid;
-  box-shadow: inset 0 0 0 1px var(--accent-violet);
-}
-.chip-tool.chip-tool-selected .chip-count {
-  background: var(--accent-violet-bg);
-  color: var(--accent-violet);
-}
-.chip-tool.chip-active.chip-tool-selected .chip-count {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-}
-
-/* 工具行尾部提示:当前已选工具 */
+/* 编辑器弹窗"适用工具"chip 行尾提示(保留,2026-06-26 引入,跟 .chip-tool-pick 配合用) */
 .chip-tool-selected-hint {
   font-size: 11px;
   padding-left: 4px;
-}
-
-/* 2026-06-25 二改:工具 chip 正在同步磁盘(后端重拉 scopeStatus) */
-.chip-tool-syncing {
-  cursor: wait;
-  opacity: 0.85;
-}
-
-.chip-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  margin-left: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  background: var(--bg-card);
-  color: var(--text);
-  border-radius: 8px;
-}
-.chip-tool.chip-active .chip-count {
-  background: var(--bg-card);
-  color: var(--text);
-}
-
-/* 作用域行 chip:active 蓝色,未命中 muted(2026-06-25 改:不降透明度,正常显示) */
-.chip-scope-target {
-  cursor: pointer;
-  font-family: inherit;
-}
-.chip-scope-target.chip-muted {
-  background: var(--bg-card);
-  color: var(--text);
-  border-color: var(--border);
-  border-style: dashed;
-}
-.chip-scope-target.chip-muted:hover { background: var(--bg-hover); color: var(--text); }
-.chip-scope-target.chip-active {
-  background: var(--accent-blue-bg);
-  color: var(--accent-blue);
-  border-color: var(--accent-blue-border);
-  border-style: solid;
-}
-.chip-scope-target.chip-active:hover {
-  background: var(--accent-blue-bg);
-  color: var(--accent-blue);
-}
-
-/* 2026-06-25 改:未选工具时生效位置 chip 不再 disabled,只是视觉稍弱以提示用户"先选工具" */
-.chip-scope-target.chip-target-no-tool {
-  opacity: 0.85;
-}
-.chip-scope-target.chip-target-no-tool:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-/* busy 状态 — 操作中,弱化视觉,显示 spinner */
-.chip-busy {
-  cursor: wait !important;
-  opacity: 0.6 !important;
-  pointer-events: none;
-}
-.chip-spinner {
-  width: 10px;
-  height: 10px;
-  border-width: 1.5px;
-}
-
-/* 2026-06-25 新增:操作成功后的脉冲高亮,2s 内让用户眼睛锁定刚操作的 chip */
-@keyframes chipFlash {
-  0%   { box-shadow: 0 0 0 3px var(--accent-blue); transform: scale(1); }
-  20%  { box-shadow: 0 0 0 4px var(--accent-blue); transform: scale(1.04); }
-  100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
-}
-.chip-flash {
-  animation: chipFlash 1.6s ease-out;
-}
-
-.chip-mini-list {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 4px;
-  padding-left: 6px;
-  border-left: 1px solid var(--accent-blue-border);
-}
-.chip-mini-icon {
-  color: var(--accent-blue);
-  opacity: 0.85;
 }
 
 .section-loading {
