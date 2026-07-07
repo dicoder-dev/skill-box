@@ -462,8 +462,15 @@ onUnmounted(() => {})
       </main>
     </div>
 
-    <!-- Frontmatter modal(纯展示,不调 t()) -->
-    <Modal v-if="fmOpen" size="md" :title="(skill?.name || '') + ' · frontmatter'" @close="closeFrontmatter">
+    <!-- 2026-07-07 修:Modal 必须用 v-model 绑 modelValue(组件内部 watch modelValue 控制渲染),
+         旧版用 v-if="fmOpen" + @close="closeFrontmatter" 看似能调,但组件内部 <div v-if="modelValue">
+         modelValue 始终是 undefined,所以 mask 永远不渲染 → 弹窗不出现。 -->
+    <Modal
+      v-model="fmOpen"
+      size="md"
+      :title="(skill?.name || '') + ' · frontmatter'"
+      @close="closeFrontmatter"
+    >
       <div class="sfip-fm-body">
         <table v-if="frontmatterEntries.length" class="sfip-fm-table">
           <tbody>

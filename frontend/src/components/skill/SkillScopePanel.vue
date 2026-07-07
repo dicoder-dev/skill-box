@@ -11,6 +11,7 @@
 
 import { ref, computed, onMounted, onUpdated, onErrorCaptured } from 'vue'
 import IconPark from '@/components/IconPark.vue'
+import Modal from '@/components/Modal.vue'
 import { useToastStore } from '@/core/store/toast'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
@@ -105,7 +106,20 @@ function toggle(toolID) {
   const next = new Set(cur)
   if (next.has(toolID)) next.delete(toolID)
   else next.add(toolID)
-  scopeCollapsed.value = next.size === scopeTools.value.length ? null : next
+  // 2026-07-07 修:全展开时(null)删除最后一个折叠项 → 重新回到全展开(null);
+  // 全折叠(所有 tool 都折叠)时,保留 Set(否则所有 group 同时展开太挤)。
+  const allCollapsed = next.size === scopeTools.value.length && scopeTools.value.length > 0
+  scopeCollapsed.value = next.size === 0 ? null : (allCollapsed ? next : next)
+}
+
+// 2026-07-07 改 v3:默认折叠全部工具,用户主动点开才展开。
+// 旧版 scopeCollapsed = null → isCollapsed 返 false → 全展开,信息密度太高。
+function resetCollapsed() {
+  if (scopeTools.value && scopeTools.value.length) {
+    scopeCollapsed.value = new Set(scopeTools.value.map((t) => t.tool_id))
+  } else {
+    scopeCollapsed.value = null
+  }
 }
 
 async function loadScope() {
@@ -120,6 +134,9 @@ async function loadScope() {
     })
     scopeTools.value = resp?.tools || []
     scopeHits.value = resp?.hits || []
+    // 2026-07-07 改:加载完直接默认折叠所有工具,等用户主动展开。
+    // 旧版这里之前置 null(全展开)太挤。
+    resetCollapsed()
   } catch (e) {
     scopeError.value = e?.message || String(e)
   } finally {
@@ -213,14 +230,41 @@ async function doUnapplyOne(target, group) {
 async function handleClick(group, target) {
   if (busyKey.value) return
   if (target.exists) {
-    const ok = window.confirm(`确定要从 ${group.display} · ${targetLabel(target)} 删除 skill "${props.skill.name}"?`)
-    if (!ok) return
-    await doUnapplyOne(target, group)
+    // 2026-07-07 改:用自管 Modal 替代 window.confirm。
+    // 旧版 window.confirm 在 wails desktop webview 内被默认禁用/拦截,
+    // 用户点完"生效位置"按钮后 confirm 默默返回 false → 流程中断,
+    // 用户感受就是"点了没反应"。
+    confirmAction.value = {
+      kind: 'unapply',
+      title: '停用作用域',
+      message: `确定要从 ${group.display} · ${targetLabel(target)} 删除 skill "${props.skill.name}"?`,
+      group, target,
+    }
   } else {
-    const ok = window.confirm(`确定要把 skill "${props.skill.name}" 复制到 ${group.display} · ${targetLabel(target)}?`)
-    if (!ok) return
-    await doApplyOne(target, group)
+    confirmAction.value = {
+      kind: 'apply',
+      title: '启用作用域',
+      message: `确定要把 skill "${props.skill.name}" 复制到 ${group.display} · ${targetLabel(target)}?`,
+      group, target,
+    }
   }
+}
+
+// 2026-07-07 增:自管确认弹窗状态(替代 window.confirm,适配 wails webview)
+const confirmAction = ref(null)
+const confirmOpen = computed({
+  get: () => !!confirmAction.value,
+  set: (v) => { if (!v) confirmAction.value = null },
+})
+async function onConfirmYes() {
+  const a = confirmAction.value
+  confirmAction.value = null
+  if (!a) return
+  if (a.kind === 'apply') await doApplyOne(a.target, a.group)
+  else await doUnapplyOne(a.target, a.group)
+}
+function onConfirmNo() {
+  confirmAction.value = null
 }
 
 // ====== ErrorBoundary 兜底(本组件独立 render,出错只影响自己) ======
@@ -309,6 +353,22 @@ onErrorCaptured((err) => {
     <span class="ssp-spinner ssp-spinner-xs"></span>
   </p>
   <p v-else class="ssp-scope-empty-tip">{{ LABEL_EMPTY }}</p>
+
+  <!-- 2026-07-07 增:自管确认弹窗,替代 window.confirm。
+       wails desktop webview 默认禁用 window.confirm,直接调确认会被静默拒绝。 -->
+  <Modal
+    v-model="confirmOpen"
+    size="sm"
+    :title="confirmAction?.title || ''"
+    :close-on-mask="false"
+    @close="onConfirmNo"
+  >
+    <p class="ssp-confirm-msg">{{ confirmAction?.message || '' }}</p>
+    <template #footer>
+      <button type="button" class="ghost" @click="onConfirmNo">取消</button>
+      <button type="button" class="primary" @click="onConfirmYes">确定</button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
@@ -318,6 +378,13 @@ onErrorCaptured((err) => {
   max-height: 50%;
   overflow: auto;
   flex-shrink: 0;
+  /* 2026-07-07 修:必须显式 width:100% + max-width:100% + box-sizing,
+     否则 .ssp-scope-list/.ssp-scope-row 在 flex 子项里按内容撑开,
+     把左栏宽度顶出去超出界面。 */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 .ssp-scope-header {
   display: flex;
@@ -334,10 +401,20 @@ onErrorCaptured((err) => {
   list-style: none;
   margin: 0;
   padding: 0 0 6px;
+  /* 2026-07-07 修:列表容器限制宽度,长工具名/路径不撑出父级 */
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-.ssp-scope-group { padding: 0; }
+.ssp-scope-group {
+  padding: 0;
+  min-width: 0;
+}
 .ssp-scope-row {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -349,12 +426,18 @@ onErrorCaptured((err) => {
   font-size: 13px;
   cursor: pointer;
   text-align: left;
+  box-sizing: border-box;
 }
 .ssp-scope-row:hover { background: var(--bg-hover); }
 .ssp-scope-chevron { color: var(--text-faint); flex-shrink: 0; }
 .ssp-scope-row-name {
   flex: 1;
   font-weight: 500;
+  /* 2026-07-07 修:长工具名截断,否则"启用"按钮会被挤出 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .ssp-scope-row-count {
   font-size: 11px;
@@ -362,6 +445,7 @@ onErrorCaptured((err) => {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
   border-radius: 999px;
+  flex-shrink: 0;
 }
 .ssp-scope-targets {
   list-style: none;
@@ -370,6 +454,8 @@ onErrorCaptured((err) => {
 }
 .ssp-scope-target {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -383,6 +469,7 @@ onErrorCaptured((err) => {
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
+  box-sizing: border-box;
 }
 .ssp-scope-target-active {
   background: var(--accent-blue-bg);
@@ -395,7 +482,14 @@ onErrorCaptured((err) => {
   color: var(--text);
 }
 .ssp-scope-target:disabled { opacity: 0.5; cursor: not-allowed; }
-.ssp-scope-target-name { flex: 1; }
+.ssp-scope-target-name {
+  flex: 1;
+  /* 2026-07-07 修:长路径/项目名截断 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 .ssp-scope-empty,
 .ssp-scope-empty-tip {
   font-size: 11px;
@@ -451,5 +545,13 @@ onErrorCaptured((err) => {
   cursor: pointer;
   font-size: 12px;
   margin-left: auto;
+}
+
+/* 2026-07-07 增:自管确认弹窗文案 */
+.ssp-confirm-msg {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
 }
 </style>
