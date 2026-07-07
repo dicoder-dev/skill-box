@@ -71,6 +71,10 @@ export const MDI_TO_ICONPARK = {
   // 添加 / 移除
   'plus':                         'Plus',
   'plus-box':                     'Plus',
+  // 2026-07-07 增:minus 映射。plus/minus 用作"展开/收起"切换,旧版没有 Minus 映射,
+  // 所有收起态图标 fallback 到 Help(问号),用户视觉上看不到区分。
+  // IconPark 的 Minus 类存在(lib/map.d.ts 已验证),直接补上。
+  'minus':                        'Minus',
   'tray-arrow-down':              'Download',        // 下箭头托盘 → 下载
 
   // 刷新 / 同步 / 加载
