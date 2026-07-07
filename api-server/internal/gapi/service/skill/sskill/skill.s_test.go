@@ -178,3 +178,60 @@ func TestList_FilterByName(t *testing.T) {
 		t.Errorf("keyword 'al' = %+v", got)
 	}
 }
+
+// TestUpdate_PartialFilesDropsOthers 2026-07-08 增:Save 接口是"原子全量覆盖"语义,
+// 必须 caller 拼齐完整的 files 数组才能不丢文件;否则只 send 当前 dirty 文件,其他
+// 文件会因 tmp 目录没被写而消失。本测试复现根因,作为契约固定下来:
+// 任何调用方如果遇到 "传 files 但丢文件",责任在 caller,而非 store。
+// 详见 SkillFileInlinePanel.saveCurrent (frontend) 为修复点的对应改动。
+func TestUpdate_PartialFilesDropsOthers(t *testing.T) {
+	svc, storeRoot := newTestService(t)
+	mk := skilladapter.Manifest{
+		Name: "partial", Version: "0.1.0",
+		Description: "this is a partial update repro for partial save", Triggers: []string{"t"},
+	}
+	if _, err := svc.Create(&sskill.WriteInput{
+		Scope:    "global",
+		Manifest: mk,
+		Files: []skilladapter.File{
+			{Path: "a.md", Content: "AAA"},
+			{Path: "b.md", Content: "BBB"},
+			{Path: "c.md", Content: "CCC"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	full, _ := svc.GetFull("partial")
+	if len(full.Files) < 4 { // SKILL.md + a + b + c
+		t.Fatalf("precondition: expected 4 files, got %d", len(full.Files))
+	}
+	// 模拟前端只 send 当前 dirty 文件(契约未对齐)
+	if _, err := svc.Update("partial", &sskill.WriteInput{
+		Scope:    "global",
+		Manifest: mk,
+		Files: []skilladapter.File{
+			{Path: "a.md", Content: "AAA-modified"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	full, _ = svc.GetFull("partial")
+	// SKILL.md + a.md(b/c 应该丢失) — 确认根因可复现
+	var gotPaths []string
+	for _, f := range full.Files {
+		gotPaths = append(gotPaths, f.Path)
+	}
+	t.Logf("after partial update: files = %v", gotPaths)
+	for _, lost := range []string{"b.md", "c.md"} {
+		// 磁盘侧再二次校验
+		if _, err := os.Stat(filepath.Join(storeRoot, "partial", lost)); err == nil {
+			t.Errorf("BUG NOT REPRODUCED: %s unexpectedly still exists on disk", lost)
+		}
+	}
+	// 兜底断言:确认这两个文件已不在 full.Files 里(契约硬性)
+	for _, f := range full.Files {
+		if f.Path == "b.md" || f.Path == "c.md" {
+			t.Errorf("partial update MUST drop %s per current Save contract; got %+v", f.Path, gotPaths)
+		}
+	}
+}

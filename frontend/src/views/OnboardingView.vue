@@ -219,17 +219,34 @@ const foundByTool = computed(() => {
     if (!groups[f.tool_id].name) groups[f.tool_id].name = f.tool_name || f.tool_id
     groups[f.tool_id].items.push(f)
   }
-  // 组内按 category(user 先 system 后)稳定排序。
+  // 组内排序。
+  // 2026-07-08 改:rank 优先级 —— 可勾选的项排最上面;客户端 store 已存在的同名
+  // 项(置灰 + "已存在"标)次之;system 级别(置灰 + 系统提示)最后。
+  // 用 isDisabled + existingNames 派生 rank,不动其它判定逻辑。
   for (const tid of Object.keys(groups)) {
     groups[tid].items.sort((a, b) => {
-      const ax = a.category === 'system' ? 1 : 0
-      const bx = b.category === 'system' ? 1 : 0
-      if (ax !== bx) return ax - bx
+      const ra = sortRank(a)
+      const rb = sortRank(b)
+      if (ra !== rb) return ra - rb
+      // 同 rank 内仍按 name 字典序,保证稳定
       return a.name.localeCompare(b.name)
     })
   }
   return groups
 })
+
+// 2026-07-08 增:派生排序 rank。
+//   0 = 可勾选(category=user 且 客户端 store 没同名)
+//   1 = 客户端已存在同名(user 但已被 import,置灰)
+//   2 = system 级别(置灰,后端不允许)
+// 注意复用 isDisabled 的 category 判定,但不去看跨工具同名互斥(selected.value),
+// 避免"勾上某个就乱序" — 排序应是稳定的快照视图,不该跟 selected 状态耦合。
+function sortRank(f) {
+  if (f && f.category === 'system') return 2
+  const n = String((f && f.name) || '').toLowerCase()
+  if (existingNames.value && existingNames.value.has(n)) return 1
+  return 0
+}
 
 const toolTabs = computed(() =>
   Object.entries(foundByTool.value).map(([tid, g]) => ({

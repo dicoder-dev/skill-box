@@ -389,12 +389,32 @@ async function saveCurrent() {
   saving.value = true
   saveError.value = ''
   try {
-    const newMd = rebuildSkillMd()
-    const files = []
-    if (path === 'SKILL.md') {
-      files.push({ path: 'SKILL.md', content: newMd })
-    } else {
-      files.push({ path, content: localFiles.get(path) || '' })
+    // 2026-07-08 改:后端 store.Save 是"原子全量覆盖"语义(SKILL.md 用 manifest 重渲,
+    // 其它 files 走 c.Files 全量写到 tmp 目录再 rename)— 必须由 caller 拼出完整的
+    // files 数组,否则就会丢文件。旧实现只 send 当前 dirty 文件 → 其他文件
+    // 走 tmp 写不到 → os.RemoveAll 把原目录删了 → 那些文件就消失了。
+    // 这里拿 props.files 当骨架,dirty 行用 localFiles 最新值,未 dirty 行用
+    // 原 content 透传,确保发出去跟磁盘原本一致。
+    const incomingFiles = (props.files || []).map((f) => {
+      if (!f || !f.path) return null
+      // SKILL.md 比较特殊:后端会用 RenderSkillMD(c.Manifest) 强制重写,
+      // 这里送不送 content 都会被覆盖;但为了语义清晰,dirty 时仍按 localFiles 的 body 重拼
+      if (dirtyPaths.value.has(f.path)) {
+        if (f.path === 'SKILL.md') {
+          const localBody = localFiles.get('SKILL.md') || ''
+          return { path: 'SKILL.md', content: rebuildSkillMdFromBody(localBody) }
+        }
+        return { path: f.path, content: localFiles.get(f.path) || '' }
+      }
+      return { path: f.path, content: f.content || '' }
+    }).filter(Boolean)
+    // 兜底:极端情况 props.files 为空(还没回填)→ 退化为老行为 + 弹警告
+    if (incomingFiles.length === 0) {
+      const fallback = path === 'SKILL.md'
+        ? { path: 'SKILL.md', content: rebuildSkillMd() }
+        : { path, content: localFiles.get(path) || '' }
+      incomingFiles.push(fallback)
+      saveError.value = '提示:文件列表为空,只提交了当前文件,保存后其他文件会丢失 — 请等待目录加载完成后再保存。'
     }
     await updateSkill({
       scope: sk.scope || 'global',
@@ -405,18 +425,47 @@ async function saveCurrent() {
       manifest: sk.canonical?.manifest || {
         name: sk.name, version: sk.version,
       },
-      files,
+      files: incomingFiles,
     })
     const s = new Set(dirtyPaths.value)
     s.delete(path)
     dirtyPaths.value = s
-    emit('saved', { path, content: path === 'SKILL.md' ? newMd : localFiles.get(path) })
+    // 同步 clean 所有"刚被发出去"的文件(包括 SKILL.md 重建后的新内容)
+    for (const f of incomingFiles) {
+      const stored = f.path === 'SKILL.md' ? splitSkillMd(f.content || '').body : (f.content || '')
+      localFiles.set(f.path, stored)
+      s.delete(f.path)
+    }
+    dirtyPaths.value = s
+    const savedContent = path === 'SKILL.md' ? rebuildSkillMd() : (localFiles.get(path) || '')
+    emit('saved', { path, content: savedContent })
   } catch (e) {
     saveError.value = e?.message || String(e)
     toast.error(`保存失败: ${saveError.value}`)
   } finally {
     saving.value = false
   }
+}
+
+// 2026-07-08 增:跟 rebuildSkillMd 配套的"从 body 反推完整 SKILL.md"的工具。
+// 复用已有 frontmatter(不从 localFiles 拿 frontmatter,因为 editor 只编辑 body),
+// 拼上 body 得到完整字符串。原 rebuildSkillMd() 默认从 props.files 取 SKILL.md 的
+// frontmatter;这里签名保持一致,通过参数显式传入 body。
+function rebuildSkillMdFromBody(body) {
+  const fmLines = []
+  for (const k of FM_KEY_ORDER) {
+    if (!(k in frontmatter.value)) continue
+    const v = frontmatter.value[k]
+    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
+    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
+  }
+  for (const k of Object.keys(frontmatter.value)) {
+    if (FM_KEY_ORDER.includes(k)) continue
+    const v = frontmatter.value[k]
+    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
+    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
+  }
+  return `---\n${fmLines.join('\n')}\n---\n\n${body || ''}\n`
 }
 
 function rebuildSkillMd() {
