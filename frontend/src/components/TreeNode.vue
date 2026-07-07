@@ -217,7 +217,7 @@ function isDropTarget(node) {
         @dragstart="onDragStart(node, $event)"
       >
         <IconPark
-          :icon="isCollapsed(node) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
+          :icon="isCollapsed(node) ? 'mdi:plus' : 'mdi:minus'"
           width="16"
           height="16"
           class="tree-caret"

@@ -2851,8 +2851,10 @@ onUnmounted(() => {
 }
 
 .md-body {
-  font-size: 12.5px;
-  line-height: 1.65;
+  /* 2026-07-07 改:字体 12.5px → 14.5px,正文偏小阅读吃力,统一放大一档。
+     标题层级同步上调,代码块字体保持 13px(代码密度天然需要更紧凑)。 */
+  font-size: 14.5px;
+  line-height: 1.7;
   color: var(--text);
   word-wrap: break-word;
 }
@@ -2862,22 +2864,22 @@ onUnmounted(() => {
 .md-body :deep(h2),
 .md-body :deep(h3),
 .md-body :deep(h4) {
-  margin: 22px 0 10px;
+  margin: 24px 0 12px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.4;
 }
 .md-body :deep(h1) {
-  font-size: 20px;
-  padding-bottom: 6px;
+  font-size: 24px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-.md-body :deep(h2) { font-size: 17px; }
-.md-body :deep(h3) { font-size: 15px; }
-.md-body :deep(h4) { font-size: 14px; color: var(--text-muted, #6b7280); }
+.md-body :deep(h2) { font-size: 20px; }
+.md-body :deep(h3) { font-size: 17px; }
+.md-body :deep(h4) { font-size: 15px; color: var(--text-muted, #6b7280); }
 
 /* 段落 */
-.md-body :deep(p) { margin: 8px 0; }
+.md-body :deep(p) { margin: 10px 0; }
 
 /* 列表 */
 .md-body :deep(ul),

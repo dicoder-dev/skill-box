@@ -64,8 +64,9 @@ const scopeError = ref('')
 const scopeCollapsed = ref(null)
 // 2026-07-07 增:作用域区整体可展开/收起(标题栏点击切换)。
 // true = 整体收起(只看到标题);false = 展开(看到工具列表)。
-// 默认 true(收起)— 跟"默认折叠全部 tool"叠加,第一次进入时整块不占视觉空间。
-const sectionCollapsed = ref(true)
+// 2026-07-07 改 v2:默认 false — 用户进首页就应该能看到作用域生效位置,
+// 不需要先点开"问号图标"。sectionCollapsed 控制整块可见性。
+const sectionCollapsed = ref(false)
 function toggleSection() {
   sectionCollapsed.value = !sectionCollapsed.value
 }
@@ -339,11 +340,17 @@ onErrorCaptured((err) => {
       :aria-expanded="!sectionCollapsed"
       @click="toggleSection"
     >
-      <IconPark icon="mdi:map-marker-outline" width="13" height="13" />
+      <!-- 2026-07-07 改:问号图标(mdi:help-circle-outline),跟"作用域"语义最贴。
+           "作用域"本质上就是"这个 skill 在哪些工具/位置上生效",本质是个问号问题。
+           mdi:help-circle-outline 是 mdi 标准图标,确定存在。 -->
+      <IconPark icon="mdi:help-circle-outline" width="13" height="13" />
       <span>{{ LABEL_SCOPE }}</span>
       <span class="ssp-scope-header-count">{{ scopeGroupByTool.length }} 个工具</span>
+      <!-- 2026-07-07 改:展开收起箭头 chevron-up/down → plus/minus。
+           plus = 当前是合上点开后展开,minus = 当前是展开点合上。
+           跟 TreeNode/FileTreeNode 同步。 -->
       <IconPark
-        :icon="sectionCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'"
+        :icon="sectionCollapsed ? 'mdi:plus' : 'mdi:minus'"
         width="13"
         height="13"
         class="ssp-scope-header-chevron"
@@ -362,7 +369,7 @@ onErrorCaptured((err) => {
           @click="toggle(group.tool_id)"
         >
           <IconPark
-            :icon="isCollapsed(group.tool_id) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
+            :icon="isCollapsed(group.tool_id) ? 'mdi:plus' : 'mdi:minus'"
             width="12"
             height="12"
             class="ssp-scope-chevron"

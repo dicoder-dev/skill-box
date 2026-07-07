@@ -135,7 +135,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children 
     >
       <div class="file-row file-row-dir" @click="toggleCollapse(dir)">
         <IconPark
-          :icon="isCollapsed(dir) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
+          :icon="isCollapsed(dir) ? 'mdi:plus' : 'mdi:minus'"
           width="14"
           height="14"
           class="file-caret"

@@ -290,8 +290,9 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 20px 28px;
-  font-size: 12.5px;
-  line-height: 1.65;
+  /* 2026-07-07 改:跟 SkillsView .md-body 同步放大,保持两个 MD 渲染区观感一致 */
+  font-size: 14.5px;
+  line-height: 1.7;
   color: var(--text);
 }
 /* 2026-07-04 增:markdown 编辑态容器,让 RichTextEditor 自适应填满 */
