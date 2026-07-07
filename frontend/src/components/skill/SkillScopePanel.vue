@@ -9,7 +9,7 @@
 //
 // 文案策略:跟 InlinePanel 同 — 全部常量字符串,不调 t(),避免 i18n Proxy 报错。
 
-import { ref, computed, onMounted, onErrorCaptured } from 'vue'
+import { ref, computed, onMounted, onUpdated, onErrorCaptured } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import { useToastStore } from '@/core/store/toast'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
@@ -127,14 +127,22 @@ async function loadScope() {
   }
 }
 
-watch(
-  () => [props.skill?.name, props.skill?.version],
-  () => {
-    if (!props.skill?.name) return
-    scopeCollapsed.value = null
-    loadScope()
-  },
-)
+// 2026-07-07 改 v6:不依赖 vue 的 watch(同 SkillFileInlinePanel 修复理由),
+// 改用 onUpdated + 手动引用比较。
+let _lastSkillName = null
+let _lastSkillVersion = null
+function _syncWatch() {
+  const sk = props.skill
+  const curName = sk?.name
+  const curVersion = sk?.version
+  if (curName === _lastSkillName && curVersion === _lastSkillVersion) return
+  _lastSkillName = curName
+  _lastSkillVersion = curVersion
+  if (!curName) return
+  scopeCollapsed.value = null
+  loadScope()
+}
+onUpdated(_syncWatch)
 
 function onScopeRefresh() { loadScope() }
 

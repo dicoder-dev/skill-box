@@ -15,7 +15,7 @@
 //   - scope 区迁移到 <SkillScopePanel> 子组件,本组件只传 props
 //   - Frontmatter / CodeViewer / FileTreeView 已是独立子组件,不重写
 
-import { computed, onMounted, onUnmounted, reactive, ref, watch, onErrorCaptured } from 'vue'
+import { computed, onMounted, onUnmounted, onUpdated, reactive, ref, onErrorCaptured } from 'vue'
 import { plainT, messages } from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
@@ -24,6 +24,11 @@ import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
 import { updateSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { useToastStore } from '@/core/store/toast'
+
+// 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
+// 用 console 时间戳确认这次是否拿到新版本。
+// 用户在桌面端启用 devtools (wails3 dev 默认开 Cmd+Opt+I) 看 console 输出。
+console.log('[SkillFileInlinePanel v5] loaded at', new Date().toISOString(), 'no-watch import')
 
 // 2026-07-07 v4:不再尝试从 vue-i18n 拿 t,直接读 messages 对象兜底。
 // 但为了避免"再抛"再次发生,这里完全不再调 plainT()。template 内所有
@@ -87,40 +92,59 @@ function splitSkillMd(text) {
 }
 
 // 选中文件 → localFiles 填充,响应 props.files 变化
-watch(
-  () => [props.files, props.skill?.name],
-  () => {
-    const files = props.files
-    if (!files || !files.length) {
-      selectedFile.value = null
-      selectedKey.value = ''
-      localFiles.clear()
-      dirtyPaths.value = new Set()
-      return
-    }
-    const prev = selectedKey.value
-    const target = (prev && files.find((f) => f.path === prev))
-      || files.find((f) => f.path === 'SKILL.md')
-      || files[0]
-    selectedFile.value = target
-    selectedKey.value = target?.path || ''
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.files,
-  () => {
+// 2026-07-07 改 v6:不依赖 vue 的 watch(esm cache 缺 watch 函数,
+// webview 拿到的 chunk 里 ReferenceError: Can't find variable: watch),
+// 改用 onUpdated + 手动依赖追踪 — 每次父组件 patch 后重新检查 props。
+let _lastFilesRef = null
+let _lastSkillName = null
+function _syncSelectedFile() {
+  const sk = props.skill
+  const files = props.files
+  const curFilesRef = files
+  const curName = sk?.name
+  if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
+  _lastFilesRef = curFilesRef
+  _lastSkillName = curName
+  if (!files || !files.length) {
+    selectedFile.value = null
+    selectedKey.value = ''
     localFiles.clear()
-    for (const f of props.files || []) {
-      const c = f.content || ''
-      const stored = f.path === 'SKILL.md' ? splitSkillMd(c).body : c
-      localFiles.set(f.path, stored)
-    }
     dirtyPaths.value = new Set()
-  },
-  { immediate: true, deep: true },
-)
+    return
+  }
+  const prev = selectedKey.value
+  const target = (prev && files.find((f) => f.path === prev))
+    || files.find((f) => f.path === 'SKILL.md')
+    || files[0]
+  selectedFile.value = target
+  selectedKey.value = target?.path || ''
+}
+function _syncLocalFiles() {
+  const sk = props.skill
+  const curFilesRef = props.files
+  const curName = sk?.name
+  if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
+  // 跟 _syncSelectedFile 共享判断,省一次比较
+  _lastFilesRef = curFilesRef
+  _lastSkillName = curName
+  localFiles.clear()
+  for (const f of props.files || []) {
+    const c = f.content || ''
+    const stored = f.path === 'SKILL.md' ? splitSkillMd(c).body : c
+    localFiles.set(f.path, stored)
+  }
+  dirtyPaths.value = new Set()
+}
+onUpdated(() => {
+  _syncSelectedFile()
+  _syncLocalFiles()
+})
+// 首次同步在 onMounted 里跑一次
+onMounted(() => {
+  _syncSelectedFile()
+  _syncLocalFiles()
+  fetchStoreRoot()
+})
 
 function onSelectFile(file) {
   selectedFile.value = file
@@ -325,9 +349,6 @@ onErrorCaptured((err) => {
   return false
 })
 
-onMounted(() => {
-  fetchStoreRoot()
-})
 onUnmounted(() => {})
 </script>
 
