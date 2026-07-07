@@ -21,6 +21,12 @@ const emit = defineEmits(['done'])
 
 const phase = ref('scan')
 const appBus = inject('appBus', null)
+// 2026-07-07 增:在 OnboardingImportDialog 套用本组件做弹窗时,
+// 父组件 provide 一个 notifyImportDone(result) 回调,我们一拿到后端
+// 响应就主动通知外部刷新首页,不再依赖用户点"完成"按钮。
+// 单独访问 OnboardingView(独立路由)时无注入,降级为只 emit('done') 的旧行为。
+const notifyImportDone = inject('notifyImportDone', null)
+const resetImportDoneSig = inject('resetImportDoneSig', null)
 
 const loading = ref(false)
 const error = ref('')
@@ -360,6 +366,14 @@ async function doImport() {
     phase.value = 'import'
     success.value = t('onboarding.okImport', { ok: res.ok, failed: res.failed })
     await loadStatus()
+    // 2026-07-07 增:成功响应落地即通知父弹窗(OnboardingImportDialog),
+    // 让 SkillsView 立即 reload,不再依赖用户点"完成"按钮。
+    // 注入缺失(独立路由访问)时降级为旧 emit('done') 行为。
+    if (notifyImportDone) {
+      notifyImportDone(res)
+    } else if (emit) {
+      emit('done', res)
+    }
   } catch (e) {
     error.value = t('onboarding.errImport', { msg: e?.message || e })
   } finally {
@@ -373,6 +387,8 @@ function reset() {
   importResult.value = null
   selected.value = new Set()
   activeToolId.value = ''
+  // 2026-07-07 增:再扫一次时清掉上次的结果指纹锁,确保下一次成功导入能再次上报
+  if (resetImportDoneSig) resetImportDoneSig()
 }
 
 function goSkills() {

@@ -12,7 +12,7 @@
 //
 // 2026-07-01 新增,跟 OnboardingView(扫工具)并列放在 OnboardingImportDialog tab 容器里。
 
-import { ref } from 'vue'
+import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
@@ -23,6 +23,13 @@ const { t } = useI18n()
 const toast = useToastStore()
 
 const emit = defineEmits(['done'])
+
+// 2026-07-07 增:在 OnboardingImportDialog 套用本组件做弹窗时,
+// 父组件 provide 一个 notifyImportDone(result) 回调,拿到后端响应立刻通知
+// 父组件 → SkillsView 立即 reload,不再依赖用户点"完成"按钮。
+// 单独使用(没有 provide)时降级为只走 emit('done') 的旧行为。
+const notifyImportDone = inject('notifyImportDone', null)
+const resetImportDoneSig = inject('resetImportDoneSig', null)
 
 // phase: 'idle' | 'busy' | 'done'
 const phase = ref('idle')
@@ -122,6 +129,14 @@ function onImportResult(r) {
   phase.value = 'done'
   if (r?.ok > 0) {
     toast.push({ type: 'success', message: t('onboarding.local.okImport', { ok: r.ok, failed: r.failed || 0 }) })
+    // 2026-07-07 增:真实导入成功立即通知父弹窗(OnboardingImportDialog),
+    // 让 SkillsView 立刻 reload,而不是等用户点"完成"才刷新。
+    // 注入缺失(单独使用本组件)时降级为旧 emit('done') 行为。
+    if (notifyImportDone) {
+      notifyImportDone(r)
+    } else if (emit) {
+      emit('done', r)
+    }
   }
 }
 
@@ -129,6 +144,8 @@ function reset() {
   phase.value = 'idle'
   result.value = null
   error.value = ''
+  // 2026-07-07 增:再导一次时清掉上次的结果指纹锁,确保下一次成功导入能再次上报
+  if (resetImportDoneSig) resetImportDoneSig()
 }
 
 function finish() {
