@@ -218,6 +218,9 @@ async function handleClick(group, target) {
 // ====== ErrorBoundary 兜底(本组件独立 render,出错只影响自己) ======
 const localError = ref(null)
 function safeReload() { localError.value = null; loadScope() }
+// 2026-07-07 改 v2:必须 return false 阻止错误继续冒泡到父组件
+// (父 SkillFileInlinePanel 也有 onErrorCaptured,如果不 return false,会被父级再次捕获,
+// 显示成父组件的"加载出错"覆盖页,而不是 scope 区自己的降级 UI)。
 onErrorCaptured((err) => {
   console.error('[SkillScopePanel captured]', err)
   localError.value = err?.message || String(err)
@@ -232,14 +235,16 @@ onErrorCaptured((err) => {
     <span>{{ LABEL_TITLE_ERROR }}: {{ localError }}</span>
     <button class="link" @click="safeReload">{{ LABEL_RETRY }}</button>
   </div>
-  <section v-else-if="!scopeLoading && scopeGroupByTool.length" class="ssp-scope">
+  <!-- 2026-07-07 改 v2:? + 兜底。computed 偶发返回 undefined 时?. 退化到 undefined.length 也返 undefined,
+       v-else-if 自动判断为 false → 走 v-else fallback(v-else 显示 EMPTY 文案 + 不转圈)。 -->
+  <section v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)" class="ssp-scope">
     <header class="ssp-scope-header">
       <IconPark icon="mdi:earth" width="13" height="13" />
       <span>{{ LABEL_SCOPE }}</span>
     </header>
     <ul class="ssp-scope-list">
       <li
-        v-for="group in scopeGroupByTool"
+        v-for="group in (scopeGroupByTool || [])"
         :key="group.tool_id"
         class="ssp-scope-group"
       >
