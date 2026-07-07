@@ -213,9 +213,13 @@ function _syncCurrentFiles() {
     _lastFullRef = full
     _lastFilesRef2 = files
     currentFiles.value = (files || []).map((f) => ({ ...f }))
+    console.log('[SkillsView] _syncCurrentFiles updated, files count:', currentFiles.value.length, 'first file:', currentFiles.value[0]?.path, 'content len:', (currentFiles.value[0]?.content || '').length)
   }
 }
 onUpdated(_syncCurrentFiles)
+// 2026-07-07 改 v2 补充:onUpdated 在首次 patch 之前不触发,
+// 首次进页面 currentFiles 应该立刻同步一次。
+onMounted(_syncCurrentFiles)
 
 // 2026-07-04 增(Commit 4):抽屉内文件保存后,主区同步。
 //   - 如果改的是 SKILL.md,同步刷新 currentMd / currentBody,主区预览实时更新
