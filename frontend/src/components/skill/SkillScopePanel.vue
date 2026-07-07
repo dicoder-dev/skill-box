@@ -318,7 +318,9 @@ onErrorCaptured((err) => {
        v-else-if 自动判断为 false → 走 v-else fallback(v-else 显示 EMPTY 文案 + 不转圈)。 -->
   <section v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)" class="ssp-scope">
     <header class="ssp-scope-header">
-      <IconPark icon="mdi:earth" width="13" height="13" />
+      <!-- 2026-07-07 改:换图标 mdi:earth → mdi:map-marker-outline,
+           earth 太通用(常见于 i18n/语言),改用"地点标记"跟"作用域=生效位置"语义更贴。 -->
+      <IconPark icon="mdi:map-marker-outline" width="13" height="13" />
       <span>{{ LABEL_SCOPE }}</span>
     </header>
     <ul class="ssp-scope-list">

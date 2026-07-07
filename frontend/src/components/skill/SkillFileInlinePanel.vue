@@ -395,6 +395,12 @@ onUnmounted(() => {})
              新版:文件树在上(占主要空间),作用域在底部(辅助信息,默认折叠,
              用户主动展开才看得到生效位置)。 -->
         <div class="sfip-tree-wrap">
+          <!-- 2026-07-07 增:文件树加标题栏,跟 .ssp-scope-header 风格一致 -->
+          <header class="sfip-tree-header">
+            <IconPark icon="mdi:file-tree-outline" width="13" height="13" />
+            <span>文件</span>
+            <span class="sfip-tree-header-count">{{ (files || []).length }} 个</span>
+          </header>
           <FileTreeView
             v-if="(files || []).length"
             :files="files"
@@ -620,6 +626,36 @@ onUnmounted(() => {})
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+/* 2026-07-07 增:文件树标题,跟作用域 .ssp-scope-header 风格一致 */
+.sfip-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.sfip-tree-header-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+  padding: 1px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
 /* 2026-07-07 改 v3:作用域区移到文件树底部,文件树占满主要高度,
