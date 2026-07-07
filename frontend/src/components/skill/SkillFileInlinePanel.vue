@@ -587,8 +587,11 @@ defineExpose({
 
       <main class="sfip-viewer">
         <header class="sfip-viewer-header">
-          <span class="sfip-viewer-path">{{ selectedFile?.path || LABEL_NO_FILE }}</span>
-          <span v-if="selectedFile?.path" class="sfip-viewer-size">{{ fileSize }} B</span>
+          <!-- 2026-07-08 改:不再显示 selectedFile.path + fileSize,
+               CodeViewer 内部 cv-text-toolbar 已经显示 language 标签,
+               顶部 path + size 是冗余信息(用户从左边文件树知道当前选的是哪个)。
+               只保留右侧的操作按钮(铅笔/眼睛 + dirty + 放弃/保存)。 -->
+          <span class="sfip-viewer-spacer" />
           <button
             v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
@@ -880,6 +883,8 @@ defineExpose({
   flex: 1;
 }
 .sfip-viewer-size { color: var(--text-faint); }
+/* 2026-07-08 增:替代 .sfip-viewer-path 的弹性占位,让右侧操作按钮右对齐 */
+.sfip-viewer-spacer { flex: 1; }
 .sfip-viewer-dirty {
   color: var(--accent-amber, #b8860b);
   font-size: 11px;

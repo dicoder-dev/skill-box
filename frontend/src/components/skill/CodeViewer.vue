@@ -301,9 +301,12 @@ const lineNumbers = computed(() => {
     />
 
     <!-- 2026-07-08 增:CSV 文件表格化预览(只读视图)。
-         编辑模式仍走下面 monaco 分支(高亮 + 列分隔感知),保持一致编辑体验。 -->
+         编辑模式仍走下面 monaco 分支(高亮 + 列分隔感知),保持一致编辑体验。
+         :key="path + (editable ? ':edit' : ':view')" 强制 mode 切换时 remount,
+         避免 Vue 复用同一 CsvViewer 实例导致 content/内部状态不刷新。 -->
     <CsvViewer
       v-if="isCsv && !editable"
+      :key="path + ':view'"
       :content="content"
       class="cv-csv"
     />

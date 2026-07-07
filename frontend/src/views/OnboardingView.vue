@@ -7,7 +7,7 @@
 //
 // 完成导入后,phase 会进入 'done',用户点"再扫一次"触发 reset,点"去技能页查看" 触发 done 事件。
 
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { getOnboardingStatus, runOnboardingScan, runOnboardingImport } from '@/api/skillbox/onboarding'
@@ -416,6 +416,91 @@ onMounted(async () => {
   await loadStatus()
   await doScan()
 })
+
+// ===== 工具 tab 栏横向拖拽滑动 =====
+// 2026-07-08 增:.tool-tabs 用 overflow-x:auto + 隐藏滚动条,只能靠 shift+wheel 才能
+// 横向滚(wails3 webview 在 vertical wheel 上不识别为 horizontal,Mac trackpad 也只
+// 是 native scroll)。CSS 原生不提供"鼠标拖拽滑动",这里加一个轻量 mousedown +
+// mousemove + mouseup 把鼠标横向位移换算成 scrollLeft。
+// 设计:
+//   - 仅在 .tool-tabs 区域拖;滚动条放在空白处,不拦截 tab 点击。
+//   - 拖动期间临时给容器加 .is-dragging 类(cursor:grabbing + 阻止文本选中)。
+//   - 拖动期间阻止原生 click(避免拖完误触 tab 切换):
+//     用一个临时"位移阈值 4px"决定是否真的是拖;小于阈值说明是 click,放行。
+//   - 横向 wheel 兜底:把 vertical delta 喂给 scrollLeft(垂直被原生滚动条吃掉)。
+const toolTabsRef = ref(null)
+const tabBarDragging = ref(false)
+let _dragStartX = 0
+let _dragStartScrollLeft = 0
+let _dragMoved = 0       // 累计位移,>= 4 就视为拖
+let _dragJustDragged = false
+
+function onTabBarMouseDown(e) {
+  // 仅左键、且起点在容器内空白处:如果点在 button 上,我们仍然允许启动拖拽
+  // (拖到一半再松开不会触发 click,因为 mouseup 会调 preventDefault 配合 _dragJustDragged)
+  if (e.button !== 0) return
+  const el = toolTabsRef.value
+  if (!el || !el.contains(e.target)) return
+  // 如果点中的是 button(.tool-tab),暂存状态,在 mousemove 决定是否进入拖模式
+  // (tab 点击优先级更高)。这里只要 mousedown 在容器里就启动监听。
+  _dragStartX = e.clientX
+  _dragStartScrollLeft = el.scrollLeft
+  _dragMoved = 0
+  _dragJustDragged = false
+  tabBarDragging.value = false
+  window.addEventListener('mousemove', onTabBarMouseMove)
+  window.addEventListener('mouseup', onTabBarMouseUp, { once: true })
+}
+
+function onTabBarMouseMove(e) {
+  const el = toolTabsRef.value
+  if (!el) return
+  const dx = e.clientX - _dragStartX
+  _dragMoved = Math.abs(dx)
+  if (_dragMoved >= 4) {
+    if (!tabBarDragging.value) {
+      tabBarDragging.value = true
+      _dragJustDragged = true
+      // 阻止文本选中 / 原生 drag
+      e.preventDefault()
+    }
+    el.scrollLeft = _dragStartScrollLeft - dx
+  }
+}
+
+function onTabBarMouseUp() {
+  window.removeEventListener('mousemove', onTabBarMouseMove)
+  // 给浏览器一帧时间让 click 事件触发,如果刚拖过,吞掉这次 click
+  if (_dragJustDragged) {
+    const swallow = (ev) => {
+      ev.stopPropagation()
+      ev.preventDefault()
+      document.removeEventListener('click', swallow, true)
+    }
+    document.addEventListener('click', swallow, { capture: true, once: true })
+  }
+  // 微延迟清理 .is-dragging(否则 transition 抖)
+  setTimeout(() => { tabBarDragging.value = false; _dragJustDragged = false }, 0)
+}
+
+// 横向 wheel 兜底(wails3 webview + Mac 上很多场景 vertical wheel 不天然横转)
+function onTabBarWheel(e) {
+  const el = toolTabsRef.value
+  if (!el) return
+  // 优先尊重用户主动按了 shift(浏览器原生会横转 — 但这里也接管,使行为一致)
+  // 没按 shift、且 deltaY 是垂直、且容器有水平溢出 → 把 vertical delta 喂给横滚
+  const overflow = el.scrollWidth - el.clientWidth
+  if (overflow <= 0) return
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && (e.shiftKey || true)) {
+    e.preventDefault()
+    el.scrollLeft += e.deltaY
+  }
+}
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onTabBarMouseMove)
+  window.removeEventListener('mouseup', onTabBarMouseUp)
+})
 </script>
 
 <template>
@@ -468,7 +553,13 @@ onMounted(async () => {
 
       <div v-else>
         <!-- 工具 tab 栏:瑞士风,上划线 + 数字徽章 -->
-        <div class="tool-tabs" role="tablist">
+        <div
+          ref="toolTabsRef"
+          :class="['tool-tabs', { 'is-dragging': tabBarDragging }]"
+          role="tablist"
+          @mousedown="onTabBarMouseDown"
+          @wheel.passive="onTabBarWheel"
+        >
           <button
             v-for="tab in toolTabs"
             :key="tab.toolId"
@@ -890,6 +981,23 @@ onMounted(async () => {
   /* 完全隐藏滚动条:Firefox / Webkit 都吃 */
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* 2026-07-08 改:鼠标拖拽滑动提示 cursor:grab,拖动期间切到 grabbing。
+     user-select 阻止拖动时选中文字;overscroll-behavior 避免滚链到外层 card。 */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+.tool-tabs.is-dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+}
+
+.tool-tabs.is-dragging * {
+  /* 拖动期间禁用子元素 click hover 高亮,避免视觉残留 */
+  pointer-events: none;
 }
 
 .tool-tabs::-webkit-scrollbar {
