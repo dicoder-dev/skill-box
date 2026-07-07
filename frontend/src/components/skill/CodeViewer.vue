@@ -7,7 +7,7 @@
 //      简单语法高亮走 highlight.js(已有依赖)
 //   3. 二进制(.png / .jpg / .pdf / .zip / ...)→ 兜底"不支持预览" + "在文件夹打开"
 //
-// 2026-07-07 大改:彻底去掉 Monaco。
+console.log('[CodeViewer v2] loaded at', new Date().toISOString(), 'path:', props.path, 'mode:', props.mode)
 // Monaco 在 wails3 dev + macOS webview 环境下持续出问题:
 //   1. ?worker URL 被 Vite dev server 当 SPA fallback 返回 HTML,worker 解析失败
 //   2. editor.main chunk 也偶发不稳定
@@ -185,6 +185,10 @@ function onTextareaKeydown(e) {
 
 <template>
   <div class="code-viewer">
+    <!-- 2026-07-07 临时调试:在 dev tools 里能直接看到当前 path/content/mode -->
+    <div style="padding: 4px 8px; background: #fef3c7; color: #92400e; font-size: 11px; font-family: monospace;">
+      DBG CodeViewer: path={{ path || '(empty)' }}, mode={{ mode }}, contentLen={{ (content || '').length }}, isMarkdown={{ isMarkdown }}, isBinary={{ isBinary }}, isLarge={{ isLarge }}, editable={{ editable }}
+    </div>
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />

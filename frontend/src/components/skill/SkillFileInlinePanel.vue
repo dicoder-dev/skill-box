@@ -28,7 +28,7 @@ import { useToastStore } from '@/core/store/toast'
 // 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
 // 用 console 时间戳确认这次是否拿到新版本。
 // 用户在桌面端启用 devtools (wails3 dev 默认开 Cmd+Opt+I) 看 console 输出。
-console.log('[SkillFileInlinePanel v5] loaded at', new Date().toISOString(), 'no-watch import')
+console.log('[SkillFileInlinePanel v6] loaded at', new Date().toISOString(), 'no-watch import')
 
 // 2026-07-07 v4:不再尝试从 vue-i18n 拿 t,直接读 messages 对象兜底。
 // 但为了避免"再抛"再次发生,这里完全不再调 plainT()。template 内所有
@@ -131,6 +131,7 @@ function _syncLocalFiles() {
   const sk = props.skill
   const curFilesRef = props.files
   const curName = sk?.name
+  console.log('[InlinePanel] _syncLocalFiles called, files count:', (props.files || []).length, 'selectedFile:', selectedFile.value?.path, 'sample content len:', (props.files?.[0]?.content || '').length)
   if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
   // 跟 _syncSelectedFile 共享判断,省一次比较
   _lastFilesRef = curFilesRef
