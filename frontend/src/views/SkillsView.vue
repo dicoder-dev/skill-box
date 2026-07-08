@@ -306,6 +306,14 @@ async function reload() {
     await skillTree.load({ keyword: keyword.value || undefined })
     // total 从 store 的 flatItems.length 派生(兼容旧字段)
     total.value = skillTree.totalSkills
+    // 2026-07-08 增:首次进入 / 搜索结果刷新时,若尚未选中任何 skill 且非搜索态,
+    // 自动选中根目录下第一个 skill,fallback 到首个 group 内的首个 skill;
+    // store 内部已包含"找不到则返回 null"的语义,此时详情区空状态会提示用户新建。
+    // 搜索态不自动选(用户输入关键字时预期是搜索结果列表,自动跳详情反而打扰)。
+    if (!selectedKey.value && !skillTree.selectedPath && !keyword.value) {
+      const first = skillTree.findFirstSelectableNode()
+      if (first) await selectItem(first)
+    }
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
@@ -1595,8 +1603,27 @@ onUnmounted(() => {
     <section class="detail-pane">
       <!-- 空状态 -->
       <div v-if="!current" class="detail-empty">
-        <IconPark icon="mdi:cursor-default-click-outline" width="40" height="40" />
-        <p class="empty-title">{{ t('skills.list.selectToView') }}</p>
+        <!-- 2026-07-08 改:空状态分两种 — 库里完全没技能时引导新建/导入;
+             有技能但未选中时(用户主动取消选中)仍是原"从左侧选一个"提示。 -->
+        <template v-if="!loading && !total">
+          <IconPark icon="mdi:package-variant-closed-plus" width="48" height="48" />
+          <p class="empty-title">{{ t('skills.list.noSkillTitle') }}</p>
+          <p class="empty-hint">{{ t('skills.list.noSkillHint') }}</p>
+          <div class="empty-actions">
+            <button class="primary" @click="startNew">
+              <IconPark icon="mdi:plus" width="14" height="14" />
+              {{ t('skills.list.noSkillBtnCreate') }}
+            </button>
+            <button class="ghost" @click="goOnboarding">
+              <IconPark icon="mdi:tray-arrow-down" width="14" height="14" />
+              {{ t('skills.list.noSkillBtnImport') }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <IconPark icon="mdi:cursor-default-click-outline" width="40" height="40" />
+          <p class="empty-title">{{ t('skills.list.selectToView') }}</p>
+        </template>
       </div>
 
       <template v-else>
@@ -2592,6 +2619,50 @@ onUnmounted(() => {
   margin: 0;
   font-size: 14px;
   color: var(--text-dim);
+}
+
+/* 2026-07-08 增:无任何技能时的引导空状态(标题 / 副标题 / 两枚 CTA 按钮) */
+.detail-empty .empty-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.5;
+}
+.detail-empty .empty-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.detail-empty .empty-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.detail-empty .empty-actions button.primary {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+}
+.detail-empty .empty-actions button.primary:hover {
+  filter: brightness(1.05);
+}
+.detail-empty .empty-actions button.ghost {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.detail-empty .empty-actions button.ghost:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
 }
 
 .detail-toolbar {

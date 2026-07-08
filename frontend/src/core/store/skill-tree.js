@@ -73,6 +73,38 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   // 派生:总 skill 数(供 badge / 统计)
   const totalSkills = computed(() => flatItems.value.length)
 
+  // 2026-07-08 增:首页默认打开第一个技能 — 找"根目录下第一个 skill 叶子";
+  // 若根目录下没有 skill,则找第一个 group,递归进入 group 取第一个 skill。
+  // 都找不到返回 null,前端空状态提示用户新建。
+  // 顺序策略:跳过 group 节点直接找 !is_group,与后端 sortTreeNodes 的
+  // "(IsGroup desc, Name asc)" 排序一致 — 根下第一个 skill = tree 中第一个
+  // is_group=false 节点(同组内按字典序);若不存在,递归进第一个 group。
+  function findFirstSelectableNode() {
+    const nodes = tree.value || []
+    // 第一步:根目录下找第一个 skill 叶子
+    for (const n of nodes) {
+      if (!n.is_group) return n
+    }
+    // 第二步:根目录下没有 skill,找第一个 group,递归取第一个 skill
+    const walk = (list) => {
+      for (const n of list || []) {
+        if (!n.is_group) return n
+        if (n.is_group && n.children) {
+          const inner = walk(n.children)
+          if (inner) return inner
+        }
+      }
+      return null
+    }
+    for (const n of nodes) {
+      if (n.is_group && n.children) {
+        const found = walk(n.children)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
   // 工具:从 tree 移除一个 skill 节点(乐观更新,失败时 reload)
   function removeSkillByPath(path) {
     const removeIn = (nodes) => {
@@ -410,5 +442,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     toggleCollapse, setSelected, setDropTarget,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,
+    // 2026-07-08 增:首页默认打开第一个技能 — 根下首个 skill 叶子,fallback 到首个 group 内的首个 skill
+    findFirstSelectableNode,
   }
 })

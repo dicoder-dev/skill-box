@@ -201,6 +201,11 @@ const messages = {
       btnImportSkillTitle: '从已装工具导入',
       searchTitle: '按名称过滤',
       selectToView: '从左侧选一个技能查看详情',
+      // 2026-07-08 增:空状态引导用户新建第一个技能
+      noSkillTitle: '还没有任何技能',
+      noSkillHint: '点上方"新建"创建第一个技能,或"导入"从已装工具拉取',
+      noSkillBtnCreate: '新建技能',
+      noSkillBtnImport: '从已装工具导入',
       noFilesHint: '该技能没有可渲染的正文',
       scopeLabel: '作用域',
       scopeGlobalChip: '全局',
