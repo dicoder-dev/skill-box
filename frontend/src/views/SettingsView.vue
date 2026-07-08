@@ -64,7 +64,10 @@ function emitSkillsRefresh(payload) {
 }
 
 async function loadPrefs() {
-  if (!isDesktop.value) return
+  // 2026-07-08 改:web 端也走 prefs。/api/desktop/prefs 是普通 Gin 路由,
+  // 不依赖 wails 绑定,web 形态下 platform.prefs 现在也走真实 HTTP,
+  // 所以这里不再按 isDesktop 早退。否则 web 形态下用户切回设置页
+  // 永远读不到刚切换的 apply_mode(停留在初始 'copy')。
   try {
     const snap = await platform.prefs.getAll()
     applyModeSupported.value = snap && typeof snap === 'object'
@@ -119,13 +122,9 @@ async function countApplied() {
 async function onApplyModeChange(newMode) {
   if (applyModeBusy.value) return
   if (newMode === applyMode.value) return
-  if (!isDesktop.value) {
-    // Web 端:平台层 prefs 不持久化,直接改本地 ref + 提示。
-    applyMode.value = newMode
-    applyModeHint.value = t('settings.saved')
-    setTimeout(() => (applyModeHint.value = ''), 1500)
-    return
-  }
+  // 2026-07-08 改:web 端也走真实 prefs 持久化(走 /api/desktop/prefs,与
+  // 桌面端同实现)。原先 web 降级只改本地 ref 不持久化,切回设置页时
+  // applyMode 回到初始 'copy',给用户"切换失败"的错觉。
   // 1) 先把模式切到 settings(后续 apply 立刻按新模式)
   applyModeBusy.value = true
   try {

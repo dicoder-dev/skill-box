@@ -173,10 +173,34 @@ function createWebPlatform() {
       async list() { return [] },
     },
     prefs: {
-      // web 端 prefs 用 /api/user/prefs 之类的业务路由(暂未实现),此处返回空
-      async get() { return ['', false] },
-      async set() { return false },
-      async getAll() { return {} },
+      // 2026-07-08 改:web 端也走 /api/desktop/prefs,与桌面端同实现。
+      // 原先 web 版返空导致 settings.apply_mode 在 web 形态下只改本地 ref
+      // 不持久化,切回设置页时回到初始 copy,误以为"切换失败"。
+      // /api/desktop/prefs 是普通 Gin 路由,不依赖 wails 绑定,web 也能直接调。
+      get: async (key) => {
+        try {
+          const r = await http.get(`/api/desktop/prefs?key=${encodeURIComponent(key)}`)
+          return [r?.value ?? '', !!r?.exists]
+        } catch (_) {
+          return ['', false]
+        }
+      },
+      set: async (key, value) => {
+        try {
+          await http.put('/api/desktop/prefs', { key, value: String(value) })
+          return true
+        } catch (_) {
+          return false
+        }
+      },
+      getAll: async () => {
+        try {
+          const r = await http.get('/api/desktop/prefs')
+          return r?.items || {}
+        } catch (_) {
+          return {}
+        }
+      },
     },
   }
 }
