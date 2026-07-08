@@ -9,7 +9,7 @@
 //
 // 文案策略:跟 InlinePanel 同 — 全部常量字符串,不调 t(),避免 i18n Proxy 报错。
 
-import { ref, computed, onMounted, onUpdated, onErrorCaptured } from 'vue'
+import { ref, computed, onMounted, onUpdated, onUnmounted, onErrorCaptured } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
@@ -209,6 +209,14 @@ function onScopeRefresh() {
 onMounted(() => {
   if (props.skill?.name) loadScope({ resetCollapsed: true })
   window.addEventListener('skillbox:scope-refresh', onScopeRefresh)
+})
+// 2026-07-08 增:旧版漏 onUnmounted 清理 listener,导致 ScopePanel 实例重建时
+// (InlinePanel 走 :key 重 mount)旧的 window listener 滞留,后续 dispatchEvent
+// 会触发所有还活着的 instance 各发一次 scope-status。证据:用户 apply
+// code-review 后日志里出现 canvas-design 的 scope-status 请求,实际 UI 上
+// canvas-design 不在视野内,是上一个 ScopePanel 实例残留监听造成的幽灵请求。
+onUnmounted(() => {
+  window.removeEventListener('skillbox:scope-refresh', onScopeRefresh)
 })
 
 // ===== Apply / Undo =====
