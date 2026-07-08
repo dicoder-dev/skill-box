@@ -382,11 +382,14 @@ async function selectItem(row) {
   if (inlinePanelRef.value && typeof inlinePanelRef.value.ensureCleanBeforeSwitch === 'function') {
     const verdict = await inlinePanelRef.value.ensureCleanBeforeSwitch()
     if (verdict === 'cancel') return
-    // 2026-07-08 改:proceed 后立即调一次 clearAllEditState 双保险,
-    // 确保旧 skill 的 editModeMap / dirtyPaths 在 loadCurrent 之前就清空,
-    // 避免 _syncSelectedFile 在 onUpdated 跑之前 user 就看到残留 edit 态。
-    if (typeof inlinePanelRef.value.clearAllEditState === 'function') {
-      inlinePanelRef.value.clearAllEditState()
+    // 2026-07-08 改:proceed 后立即调一次 clearEditingState 双保险,
+    // 确保旧 skill 的当前编辑态在 loadCurrent 之前就清空,避免
+    // _syncSelectedFile 在 onUpdated 跑之前 user 就看到残留 edit 态。
+    // (旧版叫 clearAllEditState,一刀切重构后改名为 clearEditingState,
+    // 没同步改 SkillsView 时 typeof 返回 'undefined' 静默失效 → currentEditingPath
+    // 永远残留,新 skill 进去默认 edit,出现"不同 skill 之间不该有关联"的 bug。)
+    if (typeof inlinePanelRef.value.clearEditingState === 'function') {
+      inlinePanelRef.value.clearEditingState()
     }
   }
   selectedKey.value = skillKey(row)
