@@ -475,14 +475,14 @@ onErrorCaptured((err) => {
 }
 /* 2026-07-08 增:展开态下高度锁死 —— 用户反馈"点击工具展开 targets 时
    此面板高度不能变"。实现方式:
-   - panel 自身 height + flex-basis 锁成 SECTION_EXPANDED_HEIGHT(340px),
+   - panel 自身 height + flex-basis 锁成 SECTION_EXPANDED_HEIGHT(300px),
      不论里面 tool 列表展开几个 targets,panel 占用的 flex 空间恒定
    - .ssp-scope-list(工具组列表)内部 max-height + overflow-y auto,
      内容溢出走内部滚动,不会再撑开 panel
    这样保证展开状态下 .sfip-tree-wrap(文件树)的高度不被压缩 */
 .ssp-scope.is-expanded {
-  height: 340px;
-  flex: 0 0 340px;
+  height: 300px;
+  flex: 0 0 300px;
   display: flex;
   flex-direction: column;
 }
