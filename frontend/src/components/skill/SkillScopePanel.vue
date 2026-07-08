@@ -330,9 +330,17 @@ onErrorCaptured((err) => {
     <span>{{ LABEL_TITLE_ERROR }}: {{ localError }}</span>
     <button class="link" @click="safeReload">{{ LABEL_RETRY }}</button>
   </div>
-  <!-- 2026-07-07 改 v2:? + 兜底。computed 偶发返回 undefined 时?. 退化到 undefined.length 也返 undefined,
-       v-else-if 自动判断为 false → 走 v-else fallback(v-else 显示 EMPTY 文案 + 不转圈)。 -->
-  <section v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)" class="ssp-scope">
+  <!-- 2026-07-08 改:作用域区高度锁死策略
+       - sectionCollapsed=true(整体收起):只显示 header 一行,高度由内容决定,约 36px
+       - sectionCollapsed=false(整体展开):面板高度锁成固定值(SECTION_EXPANDED_HEIGHT),
+        内部 list 用 overflow:auto 滚动;无论用户点击几个工具展开其下 targets,
+        面板自身高度永远不变,只内部滚动,不再把 .sfip-tree-wrap 挤压缩小
+       - 实现:.ssp-scope 切换 .is-expanded class,展开态下设 height + flex-basis 固定,
+        .ssp-scope-list 设 max-height + overflow-y auto 内部滚动 -->
+  <section
+    v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
+    :class="['ssp-scope', { 'is-expanded': !sectionCollapsed }]"
+  >
     <!-- 2026-07-07 改:作用域标题栏改成可点击 button,点击切换整体展开/收起。
          右侧加 chevron 图标提示状态。sectionCollapsed = true 时只显示标题,
          隐藏 .ssp-scope-list;收起态下 max-height 收紧避免占太多空间。 -->
@@ -454,8 +462,6 @@ onErrorCaptured((err) => {
   background: var(--bg-subtle);
   /* 2026-07-07 改 v4:作用域区移到文件树底部,不要再 max-height:50%(占满左栏下半),
      让它作为底部一块自然收缩,文件树占主空间。 */
-  max-height: 45%;
-  overflow: auto;
   flex-shrink: 0;
   /* 2026-07-07 修:必须显式 width:100% + max-width:100% + box-sizing,
      否则 .ssp-scope-list/.ssp-scope-row 在 flex 子项里按内容撑开,
@@ -464,6 +470,21 @@ onErrorCaptured((err) => {
   max-width: 100%;
   box-sizing: border-box;
   min-width: 0;
+  /* 2026-07-08 改:折叠态(sectionCollapsed=true)下只显示 header,
+     高度由内容自然撑开,不设固定高度,避免空占空间 */
+}
+/* 2026-07-08 增:展开态下高度锁死 —— 用户反馈"点击工具展开 targets 时
+   此面板高度不能变"。实现方式:
+   - panel 自身 height + flex-basis 锁成 SECTION_EXPANDED_HEIGHT(280px),
+     不论里面 tool 列表展开几个 targets,panel 占用的 flex 空间恒定
+   - .ssp-scope-list(工具组列表)内部 max-height + overflow-y auto,
+     内容溢出走内部滚动,不会再撑开 panel
+   这样保证展开状态下 .sfip-tree-wrap(文件树)的高度不被压缩 */
+.ssp-scope.is-expanded {
+  height: 280px;
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
 }
 .ssp-scope-header {
   display: flex;
@@ -526,6 +547,12 @@ onErrorCaptured((err) => {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  /* 2026-07-08 改:展开态下,list 占 panel 减 header 的剩余高度,
+     内部工具组展开后溢出走 overflow-y auto,不再撑开外层 panel */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .ssp-scope-group {
   padding: 0;
