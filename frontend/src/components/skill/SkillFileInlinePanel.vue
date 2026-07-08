@@ -628,11 +628,11 @@ defineExpose({
           <!-- 2026-07-08 改:删掉"返回预览"按钮(原 mode=edit 分支)。
                用户决定编辑后只能一直编辑,通过"放弃修改"或"保存"按钮离开编辑态。
                避免中间态视觉混乱 — 编辑完直接保存,不要再预览一遍。 -->
-          <!-- 2026-07-08 改:dirty 标签 + 放弃/保存 按钮在编辑态下无条件显示,
-               不要只看 isDirty。原因:resetLock 80ms 窗口 + Tiptap 异步 onUpdate
-               会让 isDirty 在用户改完字后短暂回 false,看起来按钮"消失"。
-               改用 `currentMode === 'edit' || isDirty`,编辑态下按钮恒显示,
-               退出编辑态回到 view 模式后按钮立即消失(此时既不在编辑也没 dirty)。 -->
+          <!-- 2026-07-08 改 v2:两个按钮显示策略分开 —
+               "放弃修改" 始终在编辑态下显示(currentMode === 'edit' || isDirty),
+                用户没改东西也能放弃(回到 view 模式,等于"取消编辑")。
+               "保存" 只在 isDirty 时显示,避免空保存(没改任何东西调 saveCurrent
+                是浪费一次 HTTP)。同时 dirty 标签 ● 未保存 也只在 isDirty 时显示。 -->
           <span v-if="isDirty" class="sfip-viewer-dirty">{{ LABEL_DIRTY }}</span>
           <button
             v-if="currentMode === 'edit' || isDirty"
@@ -643,7 +643,7 @@ defineExpose({
             @click="resetCurrent"
           >{{ LABEL_DISCARD }}</button>
           <button
-            v-if="currentMode === 'edit' || isDirty"
+            v-if="isDirty"
             class="sfip-btn sfip-btn-primary"
             :disabled="saving"
             :data-tip="saving ? LABEL_SAVING : LABEL_SAVE"
