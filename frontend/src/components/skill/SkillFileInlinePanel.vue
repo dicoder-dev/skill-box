@@ -30,6 +30,12 @@ import { useToastStore } from '@/core/store/toast'
 // 用户在桌面端启用 devtools (wails3 dev 默认开 Cmd+Opt+I) 看 console 输出。
 console.log('[SkillFileInlinePanel v6] loaded at', new Date().toISOString(), 'no-watch import, no-console')
 
+// 2026-07-08 增:edit mode 切换诊断日志开关 —— 用户反馈"切到其他 skill 默认是
+// 编辑模式"那个 bug,临时打开才能看清 setMode / clearAllEditState /
+// _syncSelectedFile 的实际触发时序。确认 bug 修好后改成 false 即可停。
+const DEBUG_EDIT_MODE = true
+const dlog = (...args) => { if (DEBUG_EDIT_MODE) console.log(...args) }
+
 // 2026-07-07 v4:不再尝试从 vue-i18n 拿 t,直接读 messages 对象兜底。
 // 但为了避免"再抛"再次发生,这里完全不再调 plainT()。template 内所有
 // 用户可见文案一律用常量字符串(下方 LABEL_* 常量)。
@@ -80,7 +86,9 @@ function getMode(skillName, path) {
 function setMode(skillName, path, m) {
   const k = modeKey(skillName, path)
   if (!k) return
+  const prev = editModeMap[k] || 'view'
   editModeMap[k] = m
+  dlog('[sfip setMode]', { skillName, path, mode: m, prev, k })
   // 2026-07-08 修:刚进入 edit 模式时,Tiptap useEditor 创建过程中 ProseMirror
   // 会重新解析初始 content(htmlToMarkdown(renderMarkdown(origBody)))并触发
   // 一次 onUpdate emit,emit 出来的 markdown 跟 origBody 字符串不完全等价
@@ -117,6 +125,7 @@ function clearMode(skillName, path) {
 // (SkillsView 调 ensureCleanBeforeSwitch → 决策 'proceed' → 切到新 skill 前调)。
 // 直接清 editModeMap / dirtyPaths / selectedFile 的 mode,不依赖 onUpdated 时机。
 function clearAllEditState() {
+  dlog('[sfip clearAllEditState] before=', JSON.stringify({ keys: Object.keys(editModeMap), dirtySize: dirtyPaths.value.size }))
   for (const k of Object.keys(editModeMap)) delete editModeMap[k]
   dirtyPaths.value = new Set()
   resetLockUntil = 0
@@ -150,6 +159,7 @@ function _syncSelectedFile() {
   // module-level 残留的(用户切走又切回),不清就仍然处于 edit,体验不对。
   const skillSwitched = curName !== _lastSkillName || curVersion !== _lastSkillVersion
   if (skillSwitched) {
+    dlog('[sfip _syncSelectedFile] skillSwitched=true, clean editModeMap. before keys=', Object.keys(editModeMap), 'lastName=', _lastSkillName, 'curName=', curName)
     for (const k of Object.keys(editModeMap)) delete editModeMap[k]
     dirtyPaths.value = new Set()
   }
@@ -276,8 +286,13 @@ async function onDiscardSave() {
   try {
     await saveCurrent()
   } catch (_) { /* saveCurrent 内部已 toast */ }
-  // saveCurrent 成功后 dirtyPaths 已被清;编辑态也清掉。
-  clearModeOnLeave()
+  // 2026-07-08 改:saveCurrent 成功后清所有 edit 态(不只当前一个)。
+  // 旧版 clearModeOnLeave 只清 selectedFile 的 mode,如果 editModeMap 里有
+  // 其他 path 也残留(用户改完没保存又被丢弃的),切到其他 skill 后这些残留
+  // 不影响(因为 modeKey 含 skillName),但如果当前 skill 内 dirty 来回切文件,
+  // 其他 path 的 modeMap 还是会留着 → 重进 edit 看得到之前别的文件残留。
+  // 切到新 skill 时 selectItem 还会再清一遍兜底。
+  clearAllEditState()
   r('proceed')
 }
 
@@ -286,9 +301,9 @@ function onDiscardDrop() {
   const r = _discardResolve.value
   _discardResolve.value = null
   if (!r) return
-  // 放弃:直接清掉所有 dirty(同步 localFiles 到原内容),并清编辑态。
-  resetAllDirty()
-  clearModeOnLeave()
+  // 2026-07-08 改:放弃后清所有 edit 态(不只当前一个)—— 之前只 clearModeOnLeave
+  // 是漏的根因,残留会影响后续 onUpdated 看到旧 mode。
+  clearAllEditState()
   r('proceed')
 }
 
@@ -325,7 +340,14 @@ const displayContent = computed(() => {
   return currentContent.value
 })
 
-const currentMode = computed(() => getMode(props.skill?.name, selectedFile.value?.path || ''))
+const currentMode = computed(() => {
+  const skillName = props.skill?.name
+  const path = selectedFile.value?.path || ''
+  const k = modeKey(skillName, path)
+  const m = k ? (editModeMap[k] || 'view') : 'view'
+  dlog('[sfip currentMode]', { skillName, path, k, mode: m, allKeys: Object.keys(editModeMap) })
+  return m
+})
 
 const isDirty = computed(() => {
   const path = selectedFile.value?.path

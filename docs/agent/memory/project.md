@@ -31,3 +31,11 @@
 * **CodeViewer 多分支 v-if 互斥(2026-07-08)**:CodeViewer 的 6 个渲染分支(Office / Csv / binary / md / large / cv-text-wrap)用独立 v-if + v-else 链组合时,**必须保证互斥**,否则多个兄弟元素同框渲染。CsvViewer `/ OfficeViewer / cv-md-wrap` 用独立 `v-if="isX"`(不走 v-else-if)是为了 vs 内部子组件独立 mount/unmount 干净;cv-text-wrap 紧接着用 `v-if` + 排除条件(!isMarkdown && !isOffice)切断剩下的代码/纯文本/CSV(edit 模式)走 Monaco 的路径。**特别坑的是 CSV**:csv 同时有 view 表格(`v-if="isCsv && !editable"`)和 edit Monaco,所以 cv-text-wrap 排除条件要写 `!isMarkdown && !isOffice`(不算 csv),算 csv 就会把 edit 模式 csv 卡掉 → 用户看到编辑区空白。**诊断口诀**:csv 进编辑模式白屏,先看 cv-text-wrap 排除条件有没有把 csv 误排除。
 
 * **编辑器初始化 emit 不能当 dirty(2026-07-08)**:刚进编辑模式时,Save 按钮立刻出现的根因 —— `useEditor` 初始化(md)/ `createModel` + `setValue`(Monaco)会触发一次 onUpdate / onDidChangeContent,emit 回来的内容跟原始 orig **不完全相等**(Tiptap ProseMirror 标准化末尾换行 / 空白,Monaco createModel 会触发 onDidChangeContent),简单 `v !== orig` 判 dirty 就误报。**修法 = 内容归一化比对**:`onContentChange` 和 `isDirty` computed 都用 `normTail(s) = s.replace(/\s+$/g, '')`(只去末尾空白)比对,只要去除末尾 normalize 差异后 v 跟 orig 相等,就不标 dirty。用户真实输入会改中间任意字符,v 跟 orig 的末尾归一化后仍然不等,不影响 dirty 检测。**比"时间窗锁"更稳**:时间窗锁(MD 放弃修改那次用 80ms)依赖 emit 时机,而 emit 时机受 worker 异步加载、nextTick、watch flush 时序等影响,不一定在 80ms 内落地;归一化比对不需要猜时机。
+
+* **CSV / Office / Markdown / 大文件渲染分支互斥矩阵(2026-07-08,7768526)** — CodeViewer 内部 6+ 渲染分支(Office / CSV / 二进制 / MD / 大文件 / 代码文本),历史上用 `v-if` + `v-else-if` 链组合但漏了 CSV,导致 4 个独立 bug:
+  1. **CSV view 双视图**:CsvViewer `v-if="isCsv && !editable"` 跟 cv-text-wrap 的 `v-else` 不互斥 → 表格 + hljs plaintext 同框 → 259e36a 加 `!isCsv` 排除修好。
+  2. **MD view 双视图**:cv-md-wrap `v-else-if="isMarkdown"` + cv-text-wrap `v-else` 不互斥 → markdown 渲染 + plaintext 同框 → 9631e4c 加 `!isMarkdown` 排除修好。
+  3. **CSV 编辑空白**:CsvViewer 卡 view(只 !editable 进)+ cv-text-wrap 卡 edit(!isCsv 排除进不去) → 两端都被卡 → **7748526 改 v-else-if 把 csv 拉进同条互斥链,内部再用 v-if="!editable" 二分**(view → CsvViewer 表格,edit → Monaco 容器),cv-text-wrap 的排除条件相应去掉 !isCsv。
+  4. **跨 skill 残留 edit 模式**:onDiscardDrop/onDiscardSave 原本只调 `clearModeOnLeave`(清 selectedFile 单文件 mode),editModeMap 全局残留 → 切到新 skill 后 view 模式应该进得去,但**同 skill 内残留** + onUpdated 时序不可靠就有 bug → 改调 `clearAllEditState`(全清)兜底。
+  
+  **结构层面验收口诀**:CodeViewer 模板改动时,**先数有多少独立 v-if + 多少 v-else 链,每个文件类型必须落在唯一一个"待渲染分支"**。OfficeViewer 因为 4 种 kind 用 vue-office 不同组件入口,短暂保留独立 v-if 不进 v-else 链(注释里写明)。新加文件类型(比如 .docx)在 OfficeViewer OFF_EXTS 里加,不要新开独立 v-if 又忘了排除 cv-text-wrap。
