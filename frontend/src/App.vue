@@ -178,6 +178,11 @@ function switchTab(k) {
   tab.value = k
   if (k === 'skills') refreshStats()
   if (isMobile.value) sidebarOpen.value = false
+  // 2026-07-08 增:广播 tab 切换事件,让 SettingsView 等视图在重新进入
+  // 时能重新拉 prefs(避免 v-if 复用组件导致 onMounted 不再触发,
+  // 应用方式等设置状态停留在旧值)。window event 兜底兼容 web 端。
+  try { eventBus.emit('app:tab-change', k) } catch (_) { /* no-op */ }
+  window.dispatchEvent(new CustomEvent('skillbox:tab-change', { detail: k }))
 }
 
 // 跨组件跳转

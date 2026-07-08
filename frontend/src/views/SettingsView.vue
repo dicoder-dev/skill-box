@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, watch, inject } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
@@ -226,7 +226,30 @@ async function testNotify() {
   }
 }
 
-onMounted(loadPrefs)
+onMounted(() => {
+  loadPrefs()
+  // 2026-07-08 增:监听 tab 切换,切回 settings 时重新拉 prefs。
+  // 根因:App.vue 用 v-if/v-else-if 切 tab,组件实例会被保留,
+  // onMounted 不会再触发,导致 applyMode 等设置停留在旧值。
+  // 监听 'app:tab-change'(appBus)+ window event 兜底,与 SkillsView
+  // 监听 'skills:refresh' 的模式保持一致。
+  appBus?.on?.('app:tab-change', onTabChange)
+  window.addEventListener('skillbox:tab-change', onWindowTabChange)
+})
+
+onUnmounted(() => {
+  appBus?.off?.('app:tab-change', onTabChange)
+  window.removeEventListener('skillbox:tab-change', onWindowTabChange)
+})
+
+function onTabChange(target) {
+  // 只在切回 settings 时刷新;切走不刷(避免无意义请求)。
+  // payload 在 App.vue switchTab 中为 tab key 字符串。
+  if (target === 'settings') loadPrefs()
+}
+function onWindowTabChange(e) {
+  onTabChange(e?.detail)
+}
 </script>
 
 <template>
