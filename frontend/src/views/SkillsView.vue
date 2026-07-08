@@ -1443,6 +1443,13 @@ const rootDropHover = ref(false)
 // loadScopeStatus — 改成 dispatch 'skillbox:scope-refresh' 事件,InlinePanel
 // 内部监听这个事件后自己 loadScopeStatus。这样保持单一真相源。
 //
+// 2026-07-08 改:SkillsView 收到 skills:refresh / skillbox:skills-refresh 后,
+// **必须**也 reload 一次 skill 树 — 树节点的 applied_tools 字段来自
+// ListTree 后端注入,前端不重算。用户在右侧 scope 面板启用/停用某 tool 后,
+// 左侧 chip 才会跟着更新(否则永远是初始拉到的旧值)。
+// 同一份 reload 在 InlinePanel / ScopePanel 自己 dispatch 出的
+// skillbox:scope-refresh 上也复用 — 不分两条路径,统一走 onScopeChange。
+//
 // appBus 由 App.vue 行 22-39 provide;window event 兜底兼容 web 端
 // (无 inject 上下文)和未来跨 webview 场景。
 const appBus = inject('appBus', null)
@@ -1453,11 +1460,32 @@ function onSkillsRefresh() {
   }
 }
 
+// 2026-07-08 增:apply / unapply 触发的"列表也要刷"事件统一入口。
+// - 转发 skillbox:scope-refresh 给 InlinePanel,刷新右侧 scope 状态
+//   (InlinePanel 内的 ScopePanel 自己也在监听这个事件,会自己 loadScope)。
+// - 调 skillTree.load() 重拉树,刷新左侧 chip(applied_tools 字段)
+//   跟 store 的 reload 路径一致(带 keyword / 保留选中态),不会清空。
+// 之所以不在 onSkillsRefresh 里也加 reload:skills:refresh 是 Settings
+// 迁移场景,迁移完成会重置 store 状态,这里由调用方决定何时 reload;
+// 本方法只服务"日常 scope 切换"的轻量刷新。
+function onScopeChange() {
+  window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
+  // 静默 reload:不弹 loading,不打断用户当前操作。
+  // 失败不阻断(列表里 chip 显示旧值用户也能接受,主要功能在右侧完成)。
+  skillTree.load({ keyword: keyword.value || undefined }).catch(() => { /* 忽略 */ })
+}
+
 onMounted(() => {
   reload()
   appBus?.on?.('skills:refresh', onSkillsRefresh)
   // 兜底:与 MarketView 跳 tab 的兼容写法对齐(行 119 dispatchEvent)
   window.addEventListener('skillbox:skills-refresh', onSkillsRefresh)
+  // 2026-07-08 增:ScopePanel 在 apply/unapply 完成后 dispatch 出来的
+  // skillbox:scope-refresh,这里直接走 onScopeChange(刷右侧 scope + 重拉左树)。
+  // 注意:不挂 onSkillsRefresh 的同一个事件名 — skills:refresh 是"全量迁移
+  // 场景"(Settings 改完),不重拉树不行;scope-refresh 是用户日常操作,
+  // 必须走静默 load,避免 loading 闪屏。
+  window.addEventListener('skillbox:scope-refresh', onScopeChange)
   // 2026-07-03 增:首次进入时拉工具列表,让 TreeNode 的 chip icon 有数据。
   // 如果用户先进 ToolsView 再进首页,这里 load() 会复用 store.items 缓存,
   // 实际不发请求(items.length > 0)。
@@ -1469,6 +1497,7 @@ onMounted(() => {
 onUnmounted(() => {
   appBus?.off?.('skills:refresh', onSkillsRefresh)
   window.removeEventListener('skillbox:skills-refresh', onSkillsRefresh)
+  window.removeEventListener('skillbox:scope-refresh', onScopeChange)
 })
 </script>
 

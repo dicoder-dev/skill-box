@@ -223,6 +223,12 @@ async function doApplyOne(target, group) {
       tools: [group.tool_id],
     })
     await loadScope()
+    // 2026-07-08 修:apply 完成后必须 dispatch 事件,让 SkillsView 重新拉
+    // skill 树 — 树节点的 applied_tools 字段不重算的话,左侧 chip 永远显示
+    // 旧状态(用户禁用某 tool 后,左侧 chip 仍显示该 tool)。
+    // 注释里早就写了"apply 完成后 dispatch skillbox:scope-refresh",
+    // 但实际代码漏掉了,这次补上。
+    window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
     const ins = inspectApplyResult(res)
     if (ins.allOk) {
       toast.success(`已启用 ${group.display} · ${targetLabel(target)}`)
@@ -262,6 +268,8 @@ async function doUnapplyOne(target, group) {
       await undoApply({ apply_id: last.id })
     }
     await loadScope()
+    // 2026-07-08 修:同 doApplyOne,unapply 后也必须 dispatch,左侧 chip 才会同步消失。
+    window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
     toast.success(`已停用 ${group.display} · ${targetLabel(target)}`)
   } catch (e) {
     toast.error(`停用失败: ${e?.message || e}`)
