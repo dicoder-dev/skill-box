@@ -889,21 +889,25 @@ defineExpose({
   align-items: center;
   gap: 4px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 .sfip-actions :deep(.icon-btn) {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-faint);
-  width: 26px;
+  width: 28px;
   height: 26px;
+  flex: 0 0 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   cursor: pointer;
   padding: 0;
+  overflow: hidden;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
+.sfip-actions :deep(.icon-btn) > * { flex: 0 0 auto; }
 .sfip-actions :deep(.icon-btn:hover:not(:disabled)) {
   background: var(--bg-hover);
   color: var(--accent-blue);
@@ -913,13 +917,17 @@ defineExpose({
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-faint);
-  width: 26px;
+  width: 28px;
   height: 26px;
+  flex: 0 0 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .sfip-fm-btn:hover {
