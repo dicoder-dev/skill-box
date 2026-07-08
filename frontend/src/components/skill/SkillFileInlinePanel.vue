@@ -440,6 +440,9 @@ async function saveCurrent() {
     }
     dirtyPaths.value = s
     const savedContent = path === 'SKILL.md' ? rebuildSkillMd() : (localFiles.get(path) || '')
+    // 2026-07-08 改:保存成功后退出编辑态,跟 resetCurrent 一致。"放弃/保存"
+    // 按钮自动消失,工具栏恢复显示"编辑"铅笔图标。
+    setMode(props.skill?.name, path, 'view')
     emit('saved', { path, content: savedContent })
   } catch (e) {
     saveError.value = e?.message || String(e)
@@ -510,6 +513,10 @@ function resetCurrent() {
   const s = new Set(dirtyPaths.value)
   s.delete(path)
   dirtyPaths.value = s
+  // 2026-07-08 改:放弃成功后退出编辑态,回到 view 模式。这样"放弃/保存"按钮
+  // 自动消失(由 v-if="currentMode === 'edit' || isDirty" 控制),工具栏恢复
+  // 显示"编辑"铅笔图标;CodeViewer 内部从 Monaco/Tiptap 切回 hljs 只读渲染。
+  setMode(props.skill?.name, path, 'view')
 }
 
 // 2026-07-08 增:resetLock 时间窗,绝对时间戳;onContentChange 检查 now < resetLockUntil。
