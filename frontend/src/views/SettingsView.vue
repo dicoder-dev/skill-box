@@ -41,7 +41,13 @@ const desktopPrefs = reactive({
 // applyModeSupported: web 端 platform.prefs 在 web 实现里返空,允许 UI 仍展示
 // 但切换后端不会落盘,降级为"仅本会话生效"。这里通过首次读取的 snap 是否
 // 拿到 key 来判断;首屏读不到时仍允许用户点,后端会忽略非空 key 之外的值。
-const applyMode = ref('copy') // 'copy' | 'symlink'
+//
+// 2026-07-08 改:默认值从 'copy' 改成空串,避免"还没加载完"和"后端真存
+// 的就是 copy"两种状态在 UI 上无法区分。用户报告"切回设置页总是
+// 复制"——可能是默认值跟后端一致导致以为没刷新,其实是没刷新。
+// 空串时 UI 上"复制"和"软连接"两个按钮都不高亮,一眼能看出"还没
+// 加载",加载完后才高亮正确的那个。
+const applyMode = ref('') // '' | 'copy' | 'symlink'
 const applyModeHint = ref('')
 const applyModeBusy = ref(false)
 const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿到 keys 判断)
@@ -70,6 +76,12 @@ async function loadPrefs() {
   // 永远读不到刚切换的 apply_mode(停留在初始 'copy')。
   try {
     const snap = await platform.prefs.getAll()
+    // 调试日志:DevTools console 可看到此次拉到的 snap,排查"切回还是 copy"必备。
+    // 2026-07-08 加:之前一直查不出根因就是因为没看 console 日志。
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log('[SettingsView] loadPrefs snap=', JSON.stringify(snap))
+    }
     applyModeSupported.value = snap && typeof snap === 'object'
     if (snap && snap['skillbox.apply_mode']) {
       applyMode.value = snap['skillbox.apply_mode'] === 'symlink' ? 'symlink' : 'copy'
