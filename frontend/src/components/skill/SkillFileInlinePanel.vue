@@ -334,7 +334,12 @@ const isDirty = computed(() => {
   const current = localFiles.get(path) || ''
   const origFull = selectedFile.value?.content || ''
   const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
-  return current !== orig
+  // 2026-07-08 改 v2:跟 onContentChange 内的 dirty 判断保持一致,走"去掉末尾
+  // 空白后比对"的归一化逻辑 —— 应对编辑器初始化时 emit 的尾随空白差异
+  // (Tiptap 标准化、Monaco createModel 触发 onDidChangeContent 等),只有真正
+  // 内容变更才视为 dirty。
+  const normTail = (s) => String(s || '').replace(/\s+$/g, '')
+  return normTail(current) !== normTail(orig)
 })
 
 const fileSize = computed(() => (currentContent.value || '').length)
@@ -345,19 +350,38 @@ function onContentChange(v) {
   if (Date.now() < resetLockUntil) return
   const path = selectedFile.value?.path
   if (!path) return
-  localFiles.set(path, v || '')
   const origFull = selectedFile.value?.content || ''
   const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
-  // 2026-07-08 改:进 edit 模式时的 80ms 时间窗内,不更新 dirtyPaths。
-  // 这段时间 Tiptap 可能因为 useEditor 创建 / setContent 触发 ProseMirror 重新
-  // 解析 + emit,emit 出来的 markdown 跟原始 orig 不完全等价(标准化),不应判 dirty。
-  // 但 localFiles 仍然同步,保证编辑器状态对得上。
-  if (Date.now() < enterEditGuardUntil) {
+  // 2026-07-08 改 v2:原来用 setMode 时打的 80ms enterEditGuardUntil 时间窗不可靠
+  // —— Tiptap/Monaco 初始化 emit 时机不可控(异步加载 worker + nextTick + ...
+  // 都可能滞后超过 80ms),导致"刚进编辑模式就因 emit 的内容跟 orig 不完全等价
+  // 而被判 dirty"。Tiptap 初始化会规范化末尾换行 / 空白;Monaco createModel
+  // 写完整字符串时会触发一次 onDidChangeContent。
+  //
+  // 改用**内容归一化比对**:把 emit 回来的 v 跟 orig 都做一次"取最后一行尾随空白
+  // 归一化"再比,只要去掉末尾 normalize 差异后内容相等,就不算 dirty。这是
+  // 编辑器初始化 emit 的本质特征,不影响用户真实输入(用户改中间任何字符 v
+  // 跟 orig 都不会归一化到相等)。
+  const normalizeTail = (s) => String(s || '').replace(/\s+$/g, '')
+  const v0 = Date.now() < enterEditGuardUntil
+  if (v0) {
+    // 锁窗内仍同步 localFiles(让编辑器状态对得上),但 dirtyPaths 不算 dirty
+    localFiles.set(path, v || '')
     return
   }
+  localFiles.set(path, v || '')
+  if (normalizeTail(v) === normalizeTail(orig)) {
+    // 初始化 emit 的尾巴:不更新 dirtyPaths
+    if (dirtyPaths.value.has(path)) {
+      const s = new Set(dirtyPaths.value)
+      s.delete(path)
+      dirtyPaths.value = s
+    }
+    return
+  }
+  // v 跟 orig 不只是"尾随空白"差异,真正的内容变更 → 标 dirty
   const s = new Set(dirtyPaths.value)
-  if ((v || '') !== orig) s.add(path)
-  else s.delete(path)
+  s.add(path)
   dirtyPaths.value = s
 }
 

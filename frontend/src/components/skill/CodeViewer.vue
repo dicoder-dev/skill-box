@@ -360,8 +360,12 @@ const lineNumbers = computed(() => {
          md/csv/office 文件绝不进 hljs plaintext 渲染链。
          用户反馈:"md view 模式上半 markdown 渲染 + 下半 markdown plaintext 同时存在",
          根因跟 CSV 一样:CsvViewer/OfficeViewer/cv-md-wrap 都跟 cv-text-wrap
-         不互斥(独立 v-if vs v-else 链),多个独立条件命中时多个兄弟元素同时渲染。 -->
-    <div v-if="!isMarkdown && !isCsv && !isOffice" class="cv-text-wrap">
+         不互斥(独立 v-if vs v-else 链),多个独立条件命中时多个兄弟元素同时渲染。
+         2026-07-08 改 v7:CSV 在 view 模式走 CsvViewer(上面 v-if="isCsv && !editable"),
+         在 edit 模式**仍然**走 cv-text-wrap(Monaco),所以这里的条件应该是
+         "非 markdown、非 office",CSV 已经由 !editable 排除了 view 模式,
+         这里只要排除掉 md/office 即可(否则 CSV 编辑模式进不去 Monaco 容器)。 -->
+    <div v-if="!isMarkdown && !isOffice" class="cv-text-wrap">
       <div class="cv-text-toolbar">
         <span class="cv-text-lang">{{ language }}</span>
       </div>
