@@ -104,14 +104,26 @@ function splitSkillMd(text) {
 // 改用 onUpdated + 手动依赖追踪 — 每次父组件 patch 后重新检查 props。
 let _lastFilesRef = null
 let _lastSkillName = null
+let _lastSkillVersion = null
 function _syncSelectedFile() {
   const sk = props.skill
   const files = props.files
   const curFilesRef = files
   const curName = sk?.name
-  if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
+  const curVersion = sk?.version
+  if (curFilesRef === _lastFilesRef && curName === _lastSkillName && curVersion === _lastSkillVersion) return
+  // 2026-07-08 修:检测到切换 skill(name 或 version 不同)时,先把旧 skill 的
+  // editModeMap / dirtyPaths 清掉,避免用户切回旧 skill 时仍处于上次的 edit 态。
+  // modeKey 虽然含 skillName 不会跨 skill 污染,但同 skill 内 editModeMap 是
+  // module-level 残留的(用户切走又切回),不清就仍然处于 edit,体验不对。
+  const skillSwitched = curName !== _lastSkillName || curVersion !== _lastSkillVersion
+  if (skillSwitched) {
+    for (const k of Object.keys(editModeMap)) delete editModeMap[k]
+    dirtyPaths.value = new Set()
+  }
   _lastFilesRef = curFilesRef
   _lastSkillName = curName
+  _lastSkillVersion = curVersion
   if (!files || !files.length) {
     selectedFile.value = null
     selectedKey.value = ''
