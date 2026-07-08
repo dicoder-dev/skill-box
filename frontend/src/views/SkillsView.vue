@@ -1597,6 +1597,7 @@ onUnmounted(() => {
                 v-if="!editing"
                 class="ghost-link sfip-name-action-edit"
                 :title="t('common.edit')"
+                :data-tip="t('common.edit')"
                 @click="startInlineEdit"
               >
                 <IconPark icon="mdi:pencil" width="12" height="12" />
@@ -1606,6 +1607,8 @@ onUnmounted(() => {
                 <button
                   class="title-action-btn title-action-cancel"
                   :disabled="editSaving"
+                  :title="t('common.cancel')"
+                  :data-tip="t('common.cancel')"
                   @click="cancelInlineEdit"
                 >
                   <IconPark icon="mdi:close" width="12" height="12" />
@@ -1614,6 +1617,8 @@ onUnmounted(() => {
                 <button
                   class="title-action-btn title-action-save"
                   :disabled="editSaving"
+                  :title="t('common.save')"
+                  :data-tip="editSaving ? t('common.processing') : t('common.save')"
                   @click="saveInlineEdit"
                 >
                   <span v-if="editSaving" class="spinner spinner-sm"></span>

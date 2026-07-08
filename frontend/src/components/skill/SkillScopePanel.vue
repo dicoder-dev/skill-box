@@ -342,10 +342,10 @@ onErrorCaptured((err) => {
       :aria-expanded="!sectionCollapsed"
       @click="toggleSection"
     >
-      <!-- 2026-07-07 改:问号图标(mdi:help-circle-outline),跟"作用域"语义最贴。
-           "作用域"本质上就是"这个 skill 在哪些工具/位置上生效",本质是个问号问题。
-           mdi:help-circle-outline 是 mdi 标准图标,确定存在。 -->
-      <IconPark icon="mdi:help-circle-outline" width="13" height="13" />
+      <!-- 2026-07-08 改:用 Local(图标位置 marker)替代原 mdi:help-circle-outline(Help)。
+           "作用域" 语义核心是"这个 skill 在哪些工具/位置上生效",位置/坐标定位图标比问号更贴切。
+           用 PascalCase 直传 iconpark 组件名,避免 mdi 映射兜底导致 fallback 到问号。 -->
+      <IconPark icon="Local" width="13" height="13" />
       <span>{{ LABEL_SCOPE }}</span>
       <span class="ssp-scope-header-count">{{ scopeGroupByTool.length }} 个工具</span>
       <!-- 2026-07-07 改:展开收起箭头 chevron-up/down → plus/minus。
@@ -367,7 +367,7 @@ onErrorCaptured((err) => {
         <button
           type="button"
           class="ssp-scope-row"
-          :title="group.display"
+          :data-tip="group.display"
           @click="toggle(group.tool_id)"
         >
           <IconPark

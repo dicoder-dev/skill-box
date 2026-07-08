@@ -293,6 +293,9 @@ const isDirty = computed(() => {
 const fileSize = computed(() => (currentContent.value || '').length)
 
 function onContentChange(v) {
+  // 2026-07-08 增:重置锁窗口内的 emit 丢弃,避免 Tiptap 飞行中的异步 update 把
+  // 已经重置的 localFiles 重新写回用户的最新内容(详见 resetCurrent 注释)。
+  if (Date.now() < resetLockUntil) return
   const path = selectedFile.value?.path
   if (!path) return
   localFiles.set(path, v || '')
@@ -493,11 +496,25 @@ function resetCurrent() {
   if (!path) return
   const origFull = selectedFile.value?.content || ''
   const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
+  // 2026-07-08 修:放弃修改要点 2 次才生效的根因 — Tiptap 编辑器的 onUpdate 是
+  // 防抖异步(且 Markdown→HTML→Markdown 转换后字符串跟编辑器实时内容不完全等价),
+  // 用户点"放弃修改"瞬间,可能还有一帧 onUpdate 在飞行中:resetCurrent 把 localFiles
+  // 重置回 orig 后,Tiptap 那一帧 emit 触发 onContentChange 再次写回用户的最新内容,
+  // dirtyPaths 重新被加上,看起来像"放弃失败"。py/json 等 Monaco 走同步
+  // onDidChangeContent,没有这个异步窗口,所以一次就生效。
+  //
+  // 修法:resetCurrent 时打 resetLock 标记,接下来 80ms 内 CodeViewer 传回来的
+  // update:content 全部丢弃(避免被 Tiptap 飞行中那一帧覆盖)。Monaco 走同样逻辑,
+  // 保证两个编辑器的重置行为统一。
+  resetLockUntil = Date.now() + 80
   localFiles.set(path, orig)
   const s = new Set(dirtyPaths.value)
   s.delete(path)
   dirtyPaths.value = s
 }
+
+// 2026-07-08 增:resetLock 时间窗,绝对时间戳;onContentChange 检查 now < resetLockUntil。
+let resetLockUntil = 0
 
 // ====== ErrorBoundary (render error 兜底) ======
 const renderError = ref(null)
@@ -538,7 +555,7 @@ defineExpose({
   <div v-else class="sfip">
     <header class="sfip-header">
       <div class="sfip-title-block">
-        <IconPark icon="mdi:folder-multiple-outline" width="16" height="16" />
+        <IconPark icon="FileCabinet" width="16" height="16" />
         <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
         <span v-if="skill?.source" :class="['badge', skill.source === 'market' ? 'blue' : 'gray']">{{ skill.source }}</span>
         <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
@@ -552,11 +569,11 @@ defineExpose({
       <button
         v-if="hasFrontmatter"
         class="sfip-fm-btn"
-        :title="LABEL_FRONTMATTER_TITLE"
+        :data-tip="LABEL_FRONTMATTER_TITLE"
         :aria-label="LABEL_FRONTMATTER_TITLE"
         @click="openFrontmatter"
       >
-        <IconPark icon="mdi:information-outline" width="15" height="15" />
+        <IconPark icon="Info" width="15" height="15" />
       </button>
     </header>
 
@@ -569,8 +586,9 @@ defineExpose({
         <div class="sfip-tree-wrap">
           <!-- 2026-07-07 增:文件树加标题栏,跟 .ssp-scope-header 风格一致 -->
           <header class="sfip-tree-header">
-            <!-- 不用问号类图标;跟作用域 mdi:map-marker-outline 区分开,选 mdi:folder-multiple-outline -->
-            <IconPark icon="mdi:folder-multiple-outline" width="13" height="13" />
+            <!-- 2026-07-08 改:PascalCase 直传 FileCabinet(避免 mdi 映射兜底导致的"看不见"
+                 现象)。多文件柜图标跟"skill 目录树"语义贴合(文件夹集合)。 -->
+            <IconPark icon="FileCabinet" width="13" height="13" />
             <span>skill 目录</span>
             <span class="sfip-tree-header-count">{{ (files || []).length }} 个</span>
           </header>
@@ -595,36 +613,40 @@ defineExpose({
           <button
             v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
-            :title="LABEL_EDIT"
+            :data-tip="LABEL_EDIT"
             :aria-label="LABEL_EDIT"
             @click="setMode(props.skill?.name, selectedFile.path, 'edit')"
           >
-            <IconPark icon="mdi:pencil-outline" width="14" height="14" />
+            <IconPark icon="Edit" width="14" height="14" />
           </button>
           <button
             v-else-if="selectedFile?.path && currentMode === 'edit'"
             class="sfip-mode-btn sfip-mode-btn-active"
-            :title="LABEL_PREVIEW"
+            :data-tip="LABEL_PREVIEW"
             :aria-label="LABEL_PREVIEW"
             @click="setMode(props.skill?.name, selectedFile.path, 'view')"
           >
-            <IconPark icon="mdi:eye-outline" width="14" height="14" />
+            <IconPark icon="View" width="14" height="14" />
           </button>
           <span v-if="isDirty" class="sfip-viewer-dirty">{{ LABEL_DIRTY }}</span>
           <button
             v-if="isDirty"
             class="sfip-btn"
             :disabled="saving"
+            :data-tip="LABEL_DISCARD"
+            :aria-label="LABEL_DISCARD"
             @click="resetCurrent"
           >{{ LABEL_DISCARD }}</button>
           <button
             v-if="isDirty"
             class="sfip-btn sfip-btn-primary"
             :disabled="saving"
+            :data-tip="saving ? LABEL_SAVING : LABEL_SAVE"
+            :aria-label="LABEL_SAVE"
             @click="saveCurrent"
           >
             <span v-if="saving" class="sfip-spinner"></span>
-            <IconPark v-else icon="mdi:content-save" width="13" height="13" />
+            <IconPark v-else icon="Save" width="13" height="13" />
             {{ saving ? LABEL_SAVING : LABEL_SAVE }}
           </button>
         </header>
