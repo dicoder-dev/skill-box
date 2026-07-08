@@ -300,18 +300,6 @@ const lineNumbers = computed(() => {
       class="cv-office"
     />
 
-    <!-- 2026-07-08 增:CSV 文件表格化预览(只读视图)。
-         编辑模式仍走 monaco 编辑器;view 模式走 CsvViewer 表格。
-         2026-07-08 改 v4:用独立 v-if=\"isCsv && !editable\"(而不是 v-else-if 跟 OfficeViewer 链),
-         然后下面 cv-text-wrap 用 v-if=\"!isCsv\" 二次校验,确保 CSV 永不进 hljs plaintext
-         渲染链(用户截图反馈:上半表格 + 下半 plaintext 同时存在)。 -->
-    <CsvViewer
-      v-if="isCsv && !editable"
-      :key="path + ':view'"
-      :content="content"
-      class="cv-csv"
-    />
-
     <!-- 二进制兜底 -->
     <div v-if="isBinary" class="cv-binary">
       <IconPark icon="mdi:file-image-outline" width="56" height="56" />
@@ -355,16 +343,30 @@ const lineNumbers = computed(() => {
       </button>
     </div>
 
+    <!-- 2026-07-08 改 v8:CSV 文件 - view 模式表格化预览,edit 模式 Monaco 编辑器。
+         改 v-else-if 把 CSV 拉进 v-else 链(binary/md/large 同条链),跟前几个 v-if 互斥。
+         历史 v5/v6 写法用独立 v-if="isCsv && !editable" 配 cv-text-wrap 的 !isCsv 排除,
+         csv view 模式没问题,但 csv edit 模式两端都被卡 (CsvViewer 卡 view,cv-text-wrap 卡 csv),
+         结果编辑区空白 —— 用户这次反馈的就是这个。改成 v-else-if 之后 csv 跟 md/binary/
+         large 自然互斥;CSV 内部再用 v-if="!editable" 二分(view → CsvViewer 表格 / edit → Monaco)。
+         OfficeViewer 维持独立 v-if(子组件多 kind,统一 v-else 复杂度高,先不动)。 -->
+    <div v-else-if="isCsv" class="cv-csv-wrap">
+      <CsvViewer
+        v-if="!editable"
+        :key="path + ':view'"
+        :content="content"
+        class="cv-csv"
+      />
+      <div v-else class="cv-text-edit">
+        <div ref="editorContainer" class="cv-monaco-host" />
+      </div>
+    </div>
+
     <!-- 代码/纯文本:可编辑模式用 Monaco(自带高亮+补全),只读模式用 <pre> + highlight.js。
-         2026-07-08 改 v6:加 !isMarkdown && !isCsv && !isOffice 排除条件,确保
-         md/csv/office 文件绝不进 hljs plaintext 渲染链。
-         用户反馈:"md view 模式上半 markdown 渲染 + 下半 markdown plaintext 同时存在",
-         根因跟 CSV 一样:CsvViewer/OfficeViewer/cv-md-wrap 都跟 cv-text-wrap
-         不互斥(独立 v-if vs v-else 链),多个独立条件命中时多个兄弟元素同时渲染。
-         2026-07-08 改 v7:CSV 在 view 模式走 CsvViewer(上面 v-if="isCsv && !editable"),
-         在 edit 模式**仍然**走 cv-text-wrap(Monaco),所以这里的条件应该是
-         "非 markdown、非 office",CSV 已经由 !editable 排除了 view 模式,
-         这里只要排除掉 md/office 即可(否则 CSV 编辑模式进不去 Monaco 容器)。 -->
+         2026-07-08 改 v6:加 !isMarkdown && !isOffice 排除条件(CSV 已挪到独立 v-else-if 分支),
+         确保 md/office 文件绝不进 hljs plaintext 渲染链。用户之前的双视图 bug 根因跟 CSV
+         一样,所以 9631e4c 才补上 isMarkdown。现在 CSV 走上面 v-else-if 分支,这里只需排除
+         md/office。 -->
     <div v-if="!isMarkdown && !isOffice" class="cv-text-wrap">
       <div class="cv-text-toolbar">
         <span class="cv-text-lang">{{ language }}</span>
