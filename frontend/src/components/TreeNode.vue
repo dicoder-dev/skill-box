@@ -281,13 +281,17 @@ function isDropTarget(node) {
         </div>
       </div>
 
-      <!-- 递归子节点(仅分组,展开时) -->
+      <!-- 递归子节点(仅分组,展开时)。
+           2026-07-08 修:必须把 :tools-by-id 也透传,否则子分组下的 skill 节点
+           拿不到 toolsById,toolIconFile(tid) 永远拿不到 icon_file → 退化到
+           硬编码 mdi 兜底,显示不出"数据库配置的图标"。 -->
       <TreeNode
         v-if="node.is_group && !isCollapsed(node) && (node.children || []).length"
         :nodes="node.children"
         :selected-path="selectedPath"
         :collapsed-paths="collapsedPaths"
         :drop-target-path="dropTargetPath"
+        :tools-by-id="toolsById"
         :depth="depth + 1"
         :parent-path="fullPath(node)"
         @select-skill="(n) => emit('select-skill', n)"
