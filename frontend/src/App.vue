@@ -17,6 +17,11 @@ const { t } = useI18n()
 
 const tab = ref('skills')
 
+// 2026-07-08 增:把 tab key 响应式 provide 出去,SettingsView 等子视图
+// 可以直接 watch 它来决定何时刷新数据,比事件总线更直接(无需关心
+// 注册时机、emit 时序)。事件总线那条路径保留,作为兼容兜底。
+provide('activeTab', tab)
+
 // 轻量事件总线
 const eventBus = (() => {
   const listeners = new Map()

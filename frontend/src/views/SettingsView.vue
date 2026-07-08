@@ -50,6 +50,11 @@ const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿
 // 让 SkillsView 静默重拉当前选中 skill 的 scope-status,以反映新的磁盘形态。
 // appBus 由 App.vue 行 22-39 provide;window event 兜底兼容 web 端(无 inject)。
 const appBus = inject('appBus', null)
+// 2026-07-08 增:直接 inject App.vue 的 activeTab ref,watch 它决定何时刷 prefs。
+// 这条链路比事件总线更稳:不依赖 on/off 注册、不依赖 emit 时序、
+// 不会因为事件名拼错静默失败。事件总线路径保留作为兜底(主要面向 web 端
+// 或未来跨 webview 场景)。
+const activeTab = inject('activeTab', null)
 function emitSkillsRefresh(payload) {
   if (appBus?.emit) {
     appBus.emit('skills:refresh', payload)
@@ -231,8 +236,16 @@ onMounted(() => {
   // 2026-07-08 增:监听 tab 切换,切回 settings 时重新拉 prefs。
   // 根因:App.vue 用 v-if/v-else-if 切 tab,组件实例会被保留,
   // onMounted 不会再触发,导致 applyMode 等设置停留在旧值。
-  // 监听 'app:tab-change'(appBus)+ window event 兜底,与 SkillsView
-  // 监听 'skills:refresh' 的模式保持一致。
+  //
+  // 三条路径一起上,任何一条生效就行,提高健壮性:
+  //   1) watch(activeTab): 最稳,直接追响应式 ref,杜绝事件名拼错 / 时序问题
+  //   2) appBus 'app:tab-change': 兼容未来跨 webview 场景
+  //   3) window 'skillbox:tab-change': 兜底 web 端(无 inject)
+  if (activeTab) {
+    watch(activeTab, (v) => {
+      if (v === 'settings') loadPrefs()
+    }, { immediate: false })
+  }
   appBus?.on?.('app:tab-change', onTabChange)
   window.addEventListener('skillbox:tab-change', onWindowTabChange)
 })
