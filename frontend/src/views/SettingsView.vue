@@ -42,12 +42,13 @@ const desktopPrefs = reactive({
 // 但切换后端不会落盘,降级为"仅本会话生效"。这里通过首次读取的 snap 是否
 // 拿到 key 来判断;首屏读不到时仍允许用户点,后端会忽略非空 key 之外的值。
 //
-// 2026-07-08 改:默认值从 'copy' 改成空串,避免"还没加载完"和"后端真存
-// 的就是 copy"两种状态在 UI 上无法区分。用户报告"切回设置页总是
-// 复制"——可能是默认值跟后端一致导致以为没刷新,其实是没刷新。
-// 空串时 UI 上"复制"和"软连接"两个按钮都不高亮,一眼能看出"还没
-// 加载",加载完后才高亮正确的那个。
-const applyMode = ref('') // '' | 'copy' | 'symlink'
+// 2026-07-08 改回:默认值改回 'copy'。上一版改空串想区分"没加载"和"加载完
+// 真的是 copy",但实测用户反馈'什么都没选中'——空串 + 拉不到数据 =
+// 完全空白,体验更糟。回到 'copy' 默认值保证首屏永远有选中态,即便
+// loadPrefs 暂时失败,UI 仍合理。后端真存 symlink 时,loadPrefs 拉
+// 到会立刻覆盖回 'symlink'(几 ms 内),用户能感知到闪烁但不会出现
+// '什么都没选'的卡死状态。
+const applyMode = ref('copy') // 'copy' | 'symlink'
 const applyModeHint = ref('')
 const applyModeBusy = ref(false)
 const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿到 keys 判断)
@@ -69,11 +70,13 @@ function emitSkillsRefresh(payload) {
   window.dispatchEvent(new CustomEvent('skillbox:skills-refresh', { detail: payload }))
 }
 
+// 2026-07-08 改:在 setup 同步阶段直接调 loadPrefs(),不等 onMounted。
+// 原因:Vue 的 v-if 切换 tab 时,组件实例保留,onMounted 不会再触发;
+// 之前依赖 onMounted(loadPrefs) 意味着切回设置页根本不刷新。
+// 把 loadPrefs 调用挪到 setup() 同步阶段后,首次进设置页时立即发起请求;
+// watch(activeTab) 负责后续切回时的刷新。
+// 注意:loadPrefs 是 async,这里只是启动,不 await,不影响 setup 同步返回。
 async function loadPrefs() {
-  // 2026-07-08 改:web 端也走 prefs。/api/desktop/prefs 是普通 Gin 路由,
-  // 不依赖 wails 绑定,web 形态下 platform.prefs 现在也走真实 HTTP,
-  // 所以这里不再按 isDesktop 早退。否则 web 形态下用户切回设置页
-  // 永远读不到刚切换的 apply_mode(停留在初始 'copy')。
   try {
     const snap = await platform.prefs.getAll()
     // 调试日志:DevTools console 可看到此次拉到的 snap,排查"切回还是 copy"必备。
@@ -94,6 +97,7 @@ async function loadPrefs() {
     applyModeSupported.value = false
   }
 }
+loadPrefs()
 
 async function savePref(key, value) {
   if (!isDesktop.value) return
@@ -243,15 +247,14 @@ async function testNotify() {
 }
 
 onMounted(() => {
-  loadPrefs()
-  // 2026-07-08 增:监听 tab 切换,切回 settings 时重新拉 prefs。
-  // 根因:App.vue 用 v-if/v-else-if 切 tab,组件实例会被保留,
-  // onMounted 不会再触发,导致 applyMode 等设置停留在旧值。
+  // 注意:不再在这里调 loadPrefs(),改成 setup 同步阶段调(见 loadPrefs()
+  // 函数定义之后)。原因:Vue 的 v-if 切换 tab 时,组件实例保留,
+  // onMounted 不会再触发;在 setup 同步调一次后,首次进设置页就有数据。
   //
-  // 三条路径一起上,任何一条生效就行,提高健壮性:
-  //   1) watch(activeTab): 最稳,直接追响应式 ref,杜绝事件名拼错 / 时序问题
-  //   2) appBus 'app:tab-change': 兼容未来跨 webview 场景
-  //   3) window 'skillbox:tab-change': 兜底 web 端(无 inject)
+  // 监听 tab 切换,切回 settings 时重新拉 prefs:
+  //   1) watch(activeTab): 主链路,直接追响应式 ref
+  //   2) appBus 'app:tab-change': 跨 webview 兼容
+  //   3) window 'skillbox:tab-change': 兜底 web 端无 inject
   if (activeTab) {
     watch(activeTab, (v) => {
       if (v === 'settings') loadPrefs()
