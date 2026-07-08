@@ -76,6 +76,15 @@ const currentMeta = reactive({ description: '', triggers: [] })
 const currentTagList = ref([])    // 当前 skill 的 tag 列表
 const currentLoading = ref(false)
 const currentError = ref('')
+// 2026-07-08 增:对当前选中 skill 生成稳定 identity,绑到 SkillFileInlinePanel :key,
+// 切 skill 时强制重建 InlinePanel 实例 → setup 重跑 → currentEditingPath
+// 默认 '' → 任何"打开即 view"的诉求都天然满足。完全绕开"在 patch 时机不可
+// 靠的状态清理"问题。
+const currentIdentity = computed(() => {
+  const c = current.value
+  if (!c) return ''
+  return `${c.name || ''}@${c.version || ''}@${c.scope || ''}@${c.project_id || 0}@${c.source || ''}`
+})
 
 // 内联编辑(2026-06-25 三改:同时编辑 description + 触发词 + 正文)
 const editing = ref(false)            // 是否处于内联编辑态
@@ -1581,10 +1590,15 @@ onUnmounted(() => {
 
         <!-- 2026-07-04 改 v2:正文区直接换成 SkillFileInlinePanel(目录树 + 预览/编辑),
              不再单独渲染 SKILL.md。SKILL.md 现在是文件树里的一个文件,
-             点开就在右侧预览/编辑。 -->
+             点开就在右侧预览/编辑。
+             2026-07-08 改 v3 加 :key="currentIdentity" — 每次切 skill 直接重建 InlinePanel,
+             setup 重跑 → currentEditingPath 默认空,根本进不去残留 edit 模式。
+             这是最暴力的"绝对兜底":不要在 setup 之外靠 cleanup 函数 / 检测清理
+             路径,直接让组件实例彻底重建,初始状态保证空。 -->
         <section class="detail-section detail-body">
           <SkillFileInlinePanel
             v-if="current && currentFiles.length"
+            :key="currentIdentity"
             ref="inlinePanelRef"
             :files="currentFiles"
             :skill="{
