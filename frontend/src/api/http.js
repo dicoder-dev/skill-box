@@ -82,10 +82,17 @@ export const http = {
   async request(method, path, body) {
     const base = await resolveBaseURL()
     const url = `${base}${path}`
-    const opts = {
-      method,
-      headers: { 'Content-Type': 'application/json' },
+    // 2026-07-08 改:GET/DELETE 不主动设 Content-Type,避免后端
+    // BindParamsHandler 在 application/json 分支走 ShouldBindJSON 失败
+    // (虽然 prefs 这条路径里 handler 自己读 query 不依赖 binding,但统一
+    // 按 CLAUDE.md 那条记忆的规矩来,避免未来新加的 GET 端点踩这个坑)。
+    // POST/PUT/PATCH 默认 application/json,业务方传了 Content-Type 走业务方。
+    const opts = { method }
+    const headers = {}
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+      headers['Content-Type'] = 'application/json'
     }
+    opts.headers = headers
     if (body !== undefined) {
       opts.body = typeof body === 'string' ? body : JSON.stringify(body)
     }

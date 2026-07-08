@@ -83,16 +83,29 @@ async function loadPrefs() {
     // 2026-07-08 加:之前一直查不出根因就是因为没看 console 日志。
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
-      console.log('[SettingsView] loadPrefs snap=', JSON.stringify(snap))
+      console.log('[SettingsView] loadPrefs snap=', JSON.stringify(snap), 'applyMode before=', applyMode.value)
     }
     applyModeSupported.value = snap && typeof snap === 'object'
-    if (snap && snap['skillbox.apply_mode']) {
-      applyMode.value = snap['skillbox.apply_mode'] === 'symlink' ? 'symlink' : 'copy'
+    // 2026-07-08 改:用 != null 替代 truthy 判断,避免后端存 'copy'/'symlink' 这种
+    // 非空字符串时被误判。同时 snap['skillbox.apply_mode'] 可能是字符串也可能
+    // 是 undefined,统一用 Object.hasOwn 判断 key 是否存在。
+    if (snap && Object.prototype.hasOwnProperty.call(snap, 'skillbox.apply_mode')) {
+      const v = snap['skillbox.apply_mode']
+      const next = v === 'symlink' ? 'symlink' : 'copy'
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log('[SettingsView] applyMode value from snap=', v, 'next=', next)
+      }
+      applyMode.value = next
     }
     for (const k of Object.keys(desktopPrefs)) {
       if (snap[k] != null) desktopPrefs[k] = snap[k]
     }
   } catch (e) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.error('[SettingsView] loadPrefs error=', e)
+    }
     prefsSupported.value = false
     applyModeSupported.value = false
   }
