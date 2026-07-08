@@ -1476,8 +1476,14 @@ function onSkillsRefresh() {
 // 之所以不在 onSkillsRefresh 里也加 reload:skills:refresh 是 Settings
 // 迁移场景,迁移完成会重置 store 状态,这里由调用方决定何时 reload;
 // 本方法只服务"日常 scope 切换"的轻量刷新。
+//
+// 2026-07-08 修:删掉本函数开头的 window.dispatchEvent('skillbox:scope-refresh')。
+// 原写法触发自递归派发:doApplyOne/ScopePanel 派发事件 → 本函数被调 → 本函数又
+// dispatch 同一事件 → 本函数又收到 → 又 dispatch → 浏览器同步派发循环,1 秒内
+// N(N=递归深度)次 GET /skills + N 次 GET /scope-status。本函数已经因为收到事件
+// 被调用,不需要再转发给自己。InlinePanel 内的 ScopePanel 自己也在监听这个事件,
+// 会自己收到事件去 loadScope,所以也不需要父级转发。
 function onScopeChange() {
-  window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
   // 静默 reload:不弹 loading,不打断用户当前操作。
   // 失败不阻断(列表里 chip 显示旧值用户也能接受,主要功能在右侧完成)。
   skillTree.load({ keyword: keyword.value || undefined }).catch(() => { /* 忽略 */ })
