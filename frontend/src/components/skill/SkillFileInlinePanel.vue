@@ -81,7 +81,30 @@ function setMode(skillName, path, m) {
   const k = modeKey(skillName, path)
   if (!k) return
   editModeMap[k] = m
+  // 2026-07-08 修:刚进入 edit 模式时,Tiptap useEditor 创建过程中 ProseMirror
+  // 会重新解析初始 content(htmlToMarkdown(renderMarkdown(origBody)))并触发
+  // 一次 onUpdate emit,emit 出来的 markdown 跟 origBody 字符串不完全等价
+  // (Tiptap 会标准化 trailing newline / 空白 / entity),直接被 onContentChange
+  // 判成 dirty → 保存按钮立刻出现,看起来"进编辑就脏了"。
+  //
+  // 修法:setMode('edit') 时打 enterEditGuardUntil 时间戳,接下来 80ms 内
+  // onContentChange 仍然同步 localFiles(让编辑器状态对得上),但**不更新
+  // dirtyPaths**,避免误判 dirty。80ms 后解锁,后续 user 真正输入才会变 dirty。
+  if (m === 'edit') {
+    enterEditGuardUntil = Date.now() + 80
+    // 进编辑时把 dirtyPaths 当前 path 清掉(进 edit 还没改,不应是 dirty)
+    if (path && dirtyPaths.value.has(path)) {
+      const s = new Set(dirtyPaths.value)
+      s.delete(path)
+      dirtyPaths.value = s
+    }
+  }
 }
+
+// 2026-07-08 增:跟 resetLock 并列的另一个时间窗锁,专门处理"刚进 edit 模式时
+// Tiptap 初始化 emit"导致的虚假 dirty。resetLock 处理"reset/save 后 Tiptap 飞行帧",
+// enterEditGuard 处理"刚开编辑器 Tiptap 标准化 content"。
+let enterEditGuardUntil = 0
 // 2026-07-07 增:清指定文件的编辑态,回到 view 模式。
 // 用在切换 skill/file 前,保证新选中的文件默认是 view 模式,
 // 而不是继承前一个 skill 的 edit 状态。
@@ -89,6 +112,15 @@ function clearMode(skillName, path) {
   const k = modeKey(skillName, path)
   if (!k) return
   delete editModeMap[k]
+}
+// 2026-07-08 增:彻底清空所有 edit 状态和 dirty,用在切 skill 前
+// (SkillsView 调 ensureCleanBeforeSwitch → 决策 'proceed' → 切到新 skill 前调)。
+// 直接清 editModeMap / dirtyPaths / selectedFile 的 mode,不依赖 onUpdated 时机。
+function clearAllEditState() {
+  for (const k of Object.keys(editModeMap)) delete editModeMap[k]
+  dirtyPaths.value = new Set()
+  resetLockUntil = 0
+  enterEditGuardUntil = 0
 }
 
 function splitSkillMd(text) {
@@ -178,6 +210,8 @@ async function onSelectFile(file) {
   if (file.path === selectedKey.value) return
   const verdict = await ensureCleanBeforeSwitch()
   if (verdict === 'cancel') return
+  // 2026-07-08 改:proceed 后双保险,确保切到新文件前 editModeMap 干净。
+  if (verdict === 'proceed') clearAllEditState()
   // 从 props.files 里拿完整的 {path, content} 对象(包含 content)
   const full = props.files.find((f) => f.path === file.path) || file
   selectedFile.value = full
@@ -203,9 +237,11 @@ async function ensureCleanBeforeSwitch() {
   // 2026-07-07 改:用最新的 dirtyPaths 计算 — computed isDirty 只反映当前选中文件,
   // 这里要"任一文件 dirty 都算脏"。
   if (!dirtyPaths.value || dirtyPaths.value.size === 0) {
-    // 即使没 dirty,如果当前文件处于 edit 模式,也要清掉(切走后不该继承 edit)。
+    // 2026-07-08 改:即使没 dirty,如果当前文件处于 edit 模式,也要清掉(切走后不该继承 edit)。
     // 这是用户反馈"打开其他 skill 默认是处于编辑状态"那个 bug 的修法。
-    clearModeOnLeave()
+    // 之前只调 clearModeOnLeave(单文件),现在改 clearAllEditState(全部 edit 记录 + dirty),
+    // 彻底确保切走之后新 skill 不会命中任何残留 editModeMap key。
+    clearAllEditState()
     return 'proceed'
   }
   // 拿第一个 dirty 文件(多文件 dirty 时也只问一次,统一处理)
@@ -312,6 +348,13 @@ function onContentChange(v) {
   localFiles.set(path, v || '')
   const origFull = selectedFile.value?.content || ''
   const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
+  // 2026-07-08 改:进 edit 模式时的 80ms 时间窗内,不更新 dirtyPaths。
+  // 这段时间 Tiptap 可能因为 useEditor 创建 / setContent 触发 ProseMirror 重新
+  // 解析 + emit,emit 出来的 markdown 跟原始 orig 不完全等价(标准化),不应判 dirty。
+  // 但 localFiles 仍然同步,保证编辑器状态对得上。
+  if (Date.now() < enterEditGuardUntil) {
+    return
+  }
   const s = new Set(dirtyPaths.value)
   if ((v || '') !== orig) s.add(path)
   else s.delete(path)
@@ -556,6 +599,7 @@ defineExpose({
   ensureCleanBeforeSwitch,
   resetAllDirty,
   isAnyDirty: () => dirtyPaths.value.size > 0,
+  clearAllEditState,
 })
 </script>
 

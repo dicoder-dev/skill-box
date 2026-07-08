@@ -382,6 +382,12 @@ async function selectItem(row) {
   if (inlinePanelRef.value && typeof inlinePanelRef.value.ensureCleanBeforeSwitch === 'function') {
     const verdict = await inlinePanelRef.value.ensureCleanBeforeSwitch()
     if (verdict === 'cancel') return
+    // 2026-07-08 改:proceed 后立即调一次 clearAllEditState 双保险,
+    // 确保旧 skill 的 editModeMap / dirtyPaths 在 loadCurrent 之前就清空,
+    // 避免 _syncSelectedFile 在 onUpdated 跑之前 user 就看到残留 edit 态。
+    if (typeof inlinePanelRef.value.clearAllEditState === 'function') {
+      inlinePanelRef.value.clearAllEditState()
+    }
   }
   selectedKey.value = skillKey(row)
   loadCurrent(row)
