@@ -281,6 +281,8 @@ const messages = {
       // 2026-06-29 增:根目录拖入视觉提示 + no-op 提示
       dropToRoot: '放到根',
       alreadyAtRoot: '目标已在根,无需移动',
+      // 2026-07-08 增:skill 不能拖到另一个 skill 上,只能拖到分组或根
+      dropOnSkillNotAllowed: 'skill 只能拖到分组或根目录下',
       loadingTree: '加载技能树…',
     },
 

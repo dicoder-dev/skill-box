@@ -1334,19 +1334,44 @@ function isGroupDescendant(child, parent) {
 // 用 document.elementsFromPoint 找"鼠标下最顶层的 .tree-row",
 // 读它的 data-node-path 属性,得到目标 group path。
 // 返回 '' 表示鼠标在容器空白处 = 拖到根。
+//
+// 2026-07-08 改:拖拽目标**只能是 group 或根**。
+// 之前 data-node-path 同时挂在 group 和 skill 行上,
+// detectTargetGroupPath 拿到 skill path 后,onTreeDrop 直接当 dstGroupPath
+// 调 moveSkill,导致 skill 能拖到另一个 skill 上(违反用户预期)。
+// 修法:遍历 elementsFromPoint,只取 group 节点;
+// 鼠标下只有 skill 节点时返回空字符串(等同拖到根的反向兜底,
+// onContainerDrop 内部会再判一次 "拖到 skill 上" 走显式拒绝)。
+// 不直接拒绝是因为拖到根 vs 拖到 skill 在 dragover 阶段还看不出区别,
+// 让 drop 时再判定更稳。
 function detectTargetGroupPath(x, y) {
   // elementsFromPoint 在 Vue/transition 动画中可能短暂返回 [],用 || [] 兜底
   const els = (typeof document !== 'undefined' && document.elementsFromPoint)
     ? document.elementsFromPoint(x, y) || []
     : []
   for (const el of els) {
-    // 跳过 .tree-container 自身(它的 dataset.nodePath 可能是 undefined,
-    // 但我们要的是它内部的 .tree-row,继续往下找)
-    if (el.dataset && el.dataset.nodePath !== undefined) {
+    // 只接受 group 节点(data-node-is-group="1")作为拖入目标。
+    // skill 节点直接跳过,避免把 skill path 误当成 group path。
+    if (el.dataset && el.dataset.nodeIsGroup === '1' && el.dataset.nodePath !== undefined) {
       return el.dataset.nodePath
     }
   }
   return ''
+}
+
+// 2026-07-08 增:drop 阶段精确判定鼠标下最顶层 .tree-row。
+// 用 dataset 上是否有 nodeIsGroup 区分 group / skill,没有 .tree-row
+// 命中就返回 null(用户拖到容器空白处 = 拖到根)。
+function pickTopRowUnderCursor(x, y) {
+  const els = (typeof document !== 'undefined' && document.elementsFromPoint)
+    ? document.elementsFromPoint(x, y) || []
+    : []
+  for (const el of els) {
+    if (el.dataset && el.dataset.nodeIsGroup !== undefined) {
+      return el
+    }
+  }
+  return null
 }
 
 function onContainerDragOver(e) {
@@ -1379,6 +1404,15 @@ function onContainerDrop(e) {
   try {
     source = JSON.parse(raw)
   } catch (_) {
+    return
+  }
+  // 2026-07-08 改:drop 阶段必须严格校验目标。
+  // dragover 阶段用 detectTargetGroupPath 已经只接受 group(允许返回 '' 兜底),
+  // 但 drop 时需要再确认:鼠标下最顶层的 .tree-row 必须是 group 节点。
+  // 如果落在 skill 节点上,显式拒绝并 toast。
+  const topRow = pickTopRowUnderCursor(e.clientX, e.clientY)
+  if (topRow && topRow.dataset && topRow.dataset.nodeIsGroup === '0') {
+    toast.info(t('skills.list.dropOnSkillNotAllowed'))
     return
   }
   const targetPath = detectTargetGroupPath(e.clientX, e.clientY)

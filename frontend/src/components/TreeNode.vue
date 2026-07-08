@@ -211,6 +211,8 @@ function isDropTarget(node) {
         v-if="node.is_group"
         class="tree-row tree-row-group"
         :data-node-path="fullPath(node)"
+        :data-node-is-group="1"
+        :data-node-parent-path="parentPath"
         draggable="true"
         @click="onClickGroup(node, $event)"
         @contextmenu="onContextMenu(node, $event)"
@@ -240,6 +242,8 @@ function isDropTarget(node) {
         v-else
         class="tree-row tree-row-skill"
         :data-node-path="fullPath(node)"
+        :data-node-is-group="0"
+        :data-node-parent-path="parentPath"
         draggable="true"
         @click="onClickSkill(node, $event)"
         @contextmenu="onContextMenu(node, $event)"

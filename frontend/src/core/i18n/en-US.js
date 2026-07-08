@@ -277,6 +277,8 @@ const messages = {
       // 2026-06-29 new: drop-to-root visual hint + no-op toast
       dropToRoot: 'Drop to root',
       alreadyAtRoot: 'Already at root, nothing to move',
+      // 2026-07-08 new: a skill can only be dropped onto a group or the root
+      dropOnSkillNotAllowed: 'A skill can only be dropped onto a group or the root',
       loadingTree: 'Loading skills…',
     },
 
