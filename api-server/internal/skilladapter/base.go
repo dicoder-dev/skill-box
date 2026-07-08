@@ -91,6 +91,26 @@ func (b *BaseAdapter) LocalName(c Canonical) string {
 	return c.Manifest.Name
 }
 
+// UserPath 默认实现:取 Tools[scope] 单值。
+//
+// 2026-07-08 增:applier 写盘只关心 user category 的单条 path,system path 不参与。
+// 与 DiscoverPaths(并 user + system 后多 path,给 scope-status 多 chip 用)的
+// 职责分离:本方法只服务"单 user 写盘目标"语义。
+//
+// 空 Tools[scope] 返 "" + nil(让 caller 决定如何处理);多条视为数据脏,
+// 返 ErrMultipleUserPaths(防御性,DB 层 uniqueIndex(tool_id, scope, category)
+// 应已兜底,这里是兜底兜底)。
+func (b *BaseAdapter) UserPath(scope string) (string, error) {
+	paths := b.Tools[scope]
+	if len(paths) == 0 {
+		return "", nil
+	}
+	if len(paths) > 1 {
+		return "", fmt.Errorf("%w: %s scope=%s has %d user paths", ErrMultipleUserPaths, b.ID, scope, len(paths))
+	}
+	return paths[0], nil
+}
+
 func (b *BaseAdapter) Validate(c Canonical) error {
 	if c.Manifest.Name == "" {
 		return fmt.Errorf("%s: skill name is empty", b.ID)

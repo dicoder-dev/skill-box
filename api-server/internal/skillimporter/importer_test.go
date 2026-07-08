@@ -34,6 +34,9 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
 func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+// 2026-07-08 增:Adapter 接口加 UserPath,stub 默认返 f.dir(与 DiscoverPaths 等价,
+// importer 测试不关心写盘落点,所以单值就够)。
+func (f *fakeAdapter) UserPath(string) (string, error) { return f.dir, nil }
 
 // scanDirForTest 等价于 BaseAdapter.Scan 的扫描逻辑(只读 SKILL.md)。
 // 抽出来避免 importer 反向 import base adapter。

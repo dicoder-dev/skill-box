@@ -44,6 +44,9 @@ func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) erro
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
 func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+// 2026-07-08 增:Adapter 接口加 UserPath,stub 默认返 f.root(与 DiscoverPaths 同值;
+// sskillapp 测试不关心写盘落点)。
+func (f *fakeAdapter) UserPath(string) (string, error) { return f.root, nil }
 
 func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.Store, *skilladapter.Registry) {
 	t.Helper()

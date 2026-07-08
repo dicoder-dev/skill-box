@@ -7,6 +7,8 @@
 // 设计要点见 docs/project/需求规划.md 第 7.1 节。
 package skilladapter
 
+import "errors"
+
 // Manifest canonical skill 的元数据。
 //
 // 字段与 skill.yaml 1:1 对应,见 需求规划.md 第 8 节。
@@ -52,6 +54,10 @@ const (
 	ScopeGlobal  = "global"
 	ScopeProject = "project"
 )
+
+// 2026-07-08 增:Adapter.UserPath 防御性错误 —— user category 内同 (tool_id, scope) 多条 path
+// 数据脏,BaseAdapter.UserPath 在数据违反唯一约束时返回。前端 4xx 弹清晰提示。
+var ErrMultipleUserPaths = errors.New("skilladapter: tool has multiple user paths for scope (max 1)")
 
 // ToolID 已支持的目标工具 ID 集合(legacy 命名常量,新工具以 toolspecs/*.yaml
 // 为准,不要在此追加;这里只保留最初 5 个老工具的常量以兼容旧调用方)。
@@ -113,4 +119,16 @@ type Adapter interface {
 	// 前端 phase2 据此把它们列为只读参考、不可勾选。
 	// 不实现则默认全 user(BaseAdapter 已实现,空 SystemPaths 时返回 false)。
 	IsSystemPath(p string) bool
+
+	// UserPath 返回该工具在指定 scope 下"用户级"写盘路径。
+	// 用于 apply:applier 只关心 user 写盘目标(单值),system path 不参与。
+	// 返回 "" + nil 表示该 scope 没有用户级 path(罕见,applier 会转成 4xx)。
+	// 返回多条 user path 时返 ErrMultipleUserPaths —— DB 唯一约束
+	// (tool_id, scope, category=user) 应该兜底,这里是防御性校验,
+	// 数据脏时让 caller 立刻看到错误而不是默默取 paths[0] 写到错位置。
+	//
+	// 2026-07-08 增:修复 claude / codex 同时有 (global,user) + (global,system)
+	// 时 apply 报 "tool X has 2 paths" 的问题。DiscoverPaths 仍负责多 path
+	// 场景(scope-status 笛卡尔积 / importer 多根扫描),本方法只服务单值 apply。
+	UserPath(scope string) (string, error)
 }

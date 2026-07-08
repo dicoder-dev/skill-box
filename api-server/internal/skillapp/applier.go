@@ -186,9 +186,13 @@ func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string 
 
 // resolveTargetDir 把 (tool + scope + project_id + project_root + name) 拼到具体目录。
 //
-// 2026-07-04 改:scope=global 时,要求 DiscoverPaths(scope) 只返回 1 条 path
-// (单 path 模型 — e_tool_path 的 uniqueIndex(tool_id, scope, category) 已兜底),
-// 多条是历史脏数据,直接报错而不是偷偷取 paths[0]。
+// 2026-07-08 改:写盘走 user path 单值模型。system path 不参与 apply 落盘
+// (system 是 vendor curated / plugin 内建,只读参考,不能选为写盘目标)。
+// 改前走 DiscoverPaths(scope),会把 user + system 合并 → claude / codex
+// 在 global 下出现 2 条 path → applier 报错 "tool X has 2 paths"。修复:换成
+// Adapter.UserPath(scope),只取 Tools[scope] 单值,6 处其它 caller
+// (scope-status 3 处 / importer / onboarding / cproject) 仍用 DiscoverPaths,
+// 它们依赖多 path 产生笛卡尔积/多根扫描,语义不冲突。
 //
 //   - scope=project 时,优先用 ProjectRoot(由 caller 从 sproject.Service 查
 //     entity.Project.RootPath 得到)— 这是 Codex / Claude / Cursor 实际读的项目根
@@ -197,20 +201,13 @@ func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string 
 //   - ProjectRoot 为空时,fallback 到旧的占位实现 home/.skillbox/projects/<id>/
 //     (用于测试或 caller 暂时拿不到 root_path 的场景,但 production 必须传)。
 func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope string, projectID uint, projectRoot string) (string, error) {
-	paths, err := ad.DiscoverPaths(scope)
+	parent, err := ad.UserPath(scope)
 	if err != nil {
 		return "", err
 	}
-	if len(paths) == 0 {
-		return "", fmt.Errorf("skillapp: tool %s has no paths for scope %s", ad.ToolID(), scope)
+	if parent == "" {
+		return "", fmt.Errorf("skillapp: tool %s has no user path for scope %s", ad.ToolID(), scope)
 	}
-	if len(paths) > 1 {
-		// 单 path 模型下不应出现;e_tool_path uniqueIndex 已卡死 DB 层,
-		// 走到这里说明 DB 数据脏或运行时未 Reload。直接报错,避免静默取 paths[0]
-		// 让用户误以为 apply 成功(实际只写到其中一个目录)。
-		return "", fmt.Errorf("skillapp: tool %s has %d paths for scope %s (max 1 per (scope, category))", ad.ToolID(), len(paths), scope)
-	}
-	parent := paths[0]
 	if !filepath.IsAbs(parent) {
 		if scope != skilladapter.ScopeProject {
 			return "", fmt.Errorf("skillapp: relative path %q only valid for scope=project", parent)

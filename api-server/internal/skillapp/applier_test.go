@@ -76,6 +76,14 @@ func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) erro
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
 func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
 func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+// 2026-07-08 增:Adapter 接口加 UserPath,fixdefault 走 f.root(同 DiscoverPaths 单值模型)。
+// 真正"DiscoverPaths 返多 path,UserPath 返单 path"的差异在 TestApplyOne_UsesUserPath_NotDiscoverPaths 验证。
+func (f *fakeAdapter) UserPath(scope string) (string, error) {
+	if f.root == "" {
+		return "", nil
+	}
+	return f.root, nil
+}
 
 func newReg(t *testing.T, a skilladapter.Adapter) *skilladapter.Registry {
 	t.Helper()
@@ -386,7 +394,6 @@ func TestApplyOne_CopyMode_Default(t *testing.T) {
 }
 
 func ptrCanon(c skilladapter.Canonical) *skilladapter.Canonical { return &c }
-
 // TestApplyOne_PartialFailure_OnApplyError(2026-07-03):
 // Service.Apply 走宽容语义,即便 ApplyOne 出错仍返 200 给 controller。
 // 这里验证 ApplyResult.PartialFailure 字段在失败/成功路径下被正确赋值:
@@ -497,5 +504,70 @@ func TestApplyOne_SymlinkMode_RealDisk(t *testing.T) {
 	// 4) 源端物理文件没被破坏
 	if _, err := os.Stat(filepath.Join(src, "SKILL.md")); err != nil {
 		t.Errorf("source SKILL.md should be untouched: %v", err)
+	}
+}
+
+// multiPathFakeAdapter 2026-07-08 增:DiscoverPaths 故意返 [user, system] 两条 path,
+// UserPath 只返 user 那条。锁死 resolveTargetDir 走 UserPath 而不是 DiscoverPaths
+// —— 这是修复首页 apply 报 "tool X has 2 paths" 的关键判定。
+//
+// 复用了上面 fakeAdapter 的 Apply / ApplyLink / Scan / LocalName 等行为,
+// 只覆盖 DiscoverPaths / UserPath 这两个差异点,避免重复大段实现。
+type multiPathFakeAdapter struct {
+	fakeAdapter
+	userRoot   string
+	systemRoot string
+}
+
+func (m *multiPathFakeAdapter) DiscoverPaths(scope string) ([]string, error) {
+	return []string{m.userRoot, m.systemRoot}, nil
+}
+
+func (m *multiPathFakeAdapter) UserPath(scope string) (string, error) {
+	return m.userRoot, nil
+}
+
+func (m *multiPathFakeAdapter) IsSystemPath(p string) bool {
+	return p == m.systemRoot
+}
+
+// TestApplyOne_UsesUserPath_NotDiscoverPaths 2026-07-08 增:
+// 复现 bug:adapter 同时配 (global,user) + (global,system) 两条 path(类似
+// claude 的 seed 配置),apply 走 UserPath 后必须用 userRoot,不允许
+// 退化成 DiscoverPaths 多 path 报错。
+func TestApplyOne_UsesUserPath_NotDiscoverPaths(t *testing.T) {
+	userRoot := t.TempDir()
+	systemRoot := t.TempDir()
+	fa := &multiPathFakeAdapter{
+		fakeAdapter: fakeAdapter{id: "claude-ish", root: userRoot},
+		userRoot:    userRoot,
+		systemRoot:  systemRoot,
+	}
+	reg := newReg(t, fa)
+	ap := skillapp.NewApplier(reg)
+
+	res, err := ap.ApplyOne(skillapp.ApplyInput{
+		Scope:     skilladapter.ScopeGlobal,
+		Tools:     []string{"claude-ish"},
+		Canonical: ptrCanon(sampleCanon("code-review")),
+	})
+	if err != nil {
+		t.Fatalf("apply: %v (want success: applier must walk UserPath, not fall back to DiscoverPaths)", err)
+	}
+	if res.Status != skillapp.StatusApplied {
+		t.Fatalf("status = %q, want applied", res.Status)
+	}
+	// 关键判定:target = userRoot/code-review,不是 systemRoot/code-review。
+	if res.TargetPath != filepath.Join(userRoot, "code-review") {
+		t.Errorf("TargetPath = %q, want %q (applier must write to user path, not system)",
+			res.TargetPath, filepath.Join(userRoot, "code-review"))
+	}
+	// system 路径不能误写
+	if _, err := os.Stat(filepath.Join(systemRoot, "code-review")); !os.IsNotExist(err) {
+		t.Errorf("systemRoot should NOT be touched (system path is read-only); stat err = %v", err)
+	}
+	// user 路径 SKILL.md 要在(fakeAdapter.Apply 的写文件逻辑)
+	if _, err := os.Stat(filepath.Join(userRoot, "code-review", "SKILL.md")); err != nil {
+		t.Errorf("userRoot SKILL.md missing: %v", err)
 	}
 }
