@@ -41,7 +41,6 @@ void plainT
 // ===== 常量文案(原 i18n key,直接写中文) =====
 const LABEL_NO_FILE = '未选择文件'
 const LABEL_EDIT = '编辑'
-const LABEL_PREVIEW = '返回预览'
 const LABEL_PICK = '请选择一个文件开始浏览'
 const LABEL_DIRTY = '● 未保存'
 const LABEL_DISCARD = '放弃修改'
@@ -619,15 +618,9 @@ defineExpose({
           >
             <IconPark icon="Edit" width="14" height="14" />
           </button>
-          <button
-            v-else-if="selectedFile?.path && currentMode === 'edit'"
-            class="sfip-mode-btn sfip-mode-btn-active"
-            :data-tip="LABEL_PREVIEW"
-            :aria-label="LABEL_PREVIEW"
-            @click="setMode(props.skill?.name, selectedFile.path, 'view')"
-          >
-            <IconPark icon="View" width="14" height="14" />
-          </button>
+          <!-- 2026-07-08 改:删掉"返回预览"按钮(原 mode=edit 分支)。
+               用户决定编辑后只能一直编辑,通过"放弃修改"或"保存"按钮离开编辑态。
+               避免中间态视觉混乱 — 编辑完直接保存,不要再预览一遍。 -->
           <span v-if="isDirty" class="sfip-viewer-dirty">{{ LABEL_DIRTY }}</span>
           <button
             v-if="isDirty"
