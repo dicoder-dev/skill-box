@@ -447,9 +447,11 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 			return fmt.Errorf("skillstore: move source cleanup failed: %w", rerr)
 		}
 	}
-	// 清理 source 空父目录链
-	srcParent := filepath.Dir(srcDir)
-	_ = removeIfEmpty(srcParent)
+	// 2026-07-08 改:不再清理空 group 目录。
+	// 原逻辑在 451-452 行调 removeIfEmpty(srcParent),把"移走最后一个 skill 后
+	// 变空的源 group 目录"删掉,导致首页树把空 group 隐藏。
+	// 用户原话"分组 a 移空后也要显示",所以保留空 group 目录,
+	// 删分组需要走 DeleteGroupDir 显式操作。
 	return nil
 }
 
