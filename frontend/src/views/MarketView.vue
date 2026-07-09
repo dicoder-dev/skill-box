@@ -296,9 +296,6 @@ function goToHome() {
                 </li>
               </ul>
             </div>
-            <div class="guide-cli">
-              <code>{{ t(`${activeSource.guideKey}.cli`) }}</code>
-            </div>
           </div>
 
           <!-- 2026-07-09 增:输入框 + 安装按钮 -->
@@ -654,6 +651,15 @@ function goToHome() {
   font-size: 12px;
   color: var(--text);
   white-space: nowrap;
+}
+.guide-cli-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
 }
 
 /* 2026-07-09 增:输入示例块 — 每个示例可点击,一键填入输入框 */

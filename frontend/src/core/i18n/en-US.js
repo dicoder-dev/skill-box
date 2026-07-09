@@ -394,7 +394,6 @@ const messages = {
           'code-review',
           'https://skillhub.cn/skills/code-review',
         ],
-        cli: 'npx skills-hub install {slug}',
       },
       skillssh: {
         desc: 'Browse skills.sh (or search "agent skill" on GitHub) → copy the detail page URL or owner/repo@skill identifier → paste below.',
@@ -404,7 +403,6 @@ const messages = {
           'https://skills.sh/anthropics/skills/pdf',
           'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
         ],
-        cli: 'npx skills add {owner}/{repo} --skill {name}',
       },
     },
     input: {

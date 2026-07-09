@@ -400,13 +400,12 @@ const messages = {
     guide: {
       title: '如何安装到 skill-box',
       skillhub: {
-        desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL(或纯 slug) → 粘贴到下方输入框。',
+        desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL(或纯 slug)→ 粘贴到下方输入框。',
         examples: '输入示例',
         examplesList: [
           'code-review',
           'https://skillhub.cn/skills/code-review',
         ],
-        cli: 'npx skills-hub install {slug}',
       },
       skillssh: {
         desc: '在 skills.sh 浏览(或在 GitHub 搜 agent skill)→ 复制详情页 URL 或 owner/repo@skill 标识 → 粘贴到下方输入框。',
@@ -416,7 +415,6 @@ const messages = {
           'https://skills.sh/anthropics/skills/pdf',
           'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
         ],
-        cli: 'npx skills add {owner}/{repo} --skill {name}',
       },
     },
     input: {
