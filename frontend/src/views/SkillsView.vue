@@ -306,6 +306,22 @@ async function reload() {
     await skillTree.load({ keyword: keyword.value || undefined })
     // total 从 store 的 flatItems.length 派生(兼容旧字段)
     total.value = skillTree.totalSkills
+    // 2026-07-09 增:消费 MarketView 留下的"待选 skill name"。
+    // 时序:MarketView 装好 → setPendingSelectName + 切 tab → 本视图 mount + reload。
+    // 必须在 load 完之后再消费,因为要在 flatItems 里查得到。
+    const pendingName = skillTree.consumePendingSelectName()
+    if (pendingName) {
+      const target = skillTree.flatItems.find(
+        (it) => it.name === pendingName || it.path === pendingName
+      )
+      if (target) {
+        await selectItem(target)
+      } else {
+        // 找不到(同名但 path 不同?极端情况)就清掉,避免污染下次
+        console.warn('[SkillsView] pending select skill not found:', pendingName)
+      }
+      return // 优先显示用户指定 skill,不再走下面"自动选第一个"
+    }
     // 2026-07-08 增:首次进入 / 搜索结果刷新时,若尚未选中任何 skill 且非搜索态,
     // 自动选中根目录下第一个 skill,fallback 到首个 group 内的首个 skill;
     // store 内部已包含"找不到则返回 null"的语义,此时详情区空状态会提示用户新建。

@@ -66,9 +66,13 @@ const sources = [
     placeholderKey: 'market.input.placeholderSkillssh',
     guideKey: 'market.guide.skillssh',
     examples: [
-      'anthropics/skills@pdf',
-      'https://skills.sh/anthropics/skills/pdf',
+      // 2026-07-09 改:按"用户友好度"排序
+      // 1. GitHub 详情 URL(最具体,用户从 GitHub 复制最常见)
+      // 2. skills.sh 详情 URL
+      // 3. owner/repo@skill 短标识
       'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+      'https://skills.sh/anthropics/skills/pdf',
+      'anthropics/skills@pdf',
     ],
   },
 ]
@@ -179,6 +183,8 @@ async function handleInstall() {
     await new Promise((r) => setTimeout(r, 250))
     progressStage.value = 'done'
     installing.value = false
+    // 2026-07-09 增:记住刚装好的 skill name,goToHome 时给 SkillsView 用来自动选中
+    lastInstalledName.value = out.skill_name
     toast.success(t('market.success.msg', { name: out.skill_name, version: out.skill_version || '0.1.0' }))
   } catch (e) {
     installing.value = false
@@ -198,12 +204,28 @@ async function handleInstall() {
   }
 }
 
+// 2026-07-09 增:用 skillTree store 的"待选清单"传 skill name 给 SkillsView。
+// 比 window event 更可靠:SkillsView 可能还没 mount,事件就丢了;
+// store 是单例,SkillsView mount 后 + reload 完会自动消费。
+import { useSkillTreeStore } from '@/core/store/skill-tree'
+const skillTree = useSkillTreeStore()
+
 // 成功后「去首页查看」 — 改 activeTab.value = 'skills' (由 App.vue provide 出来)
+//
+// 2026-07-09 改:把刚装好的 skill name 写到 skillTree store,SkillsView mount
+// 后 + reload 完会自动调 setSelected,左侧树节点高亮 + 右侧详情自动出。
 function goToHome() {
+  const installedName = lastInstalledName.value
+  if (installedName) {
+    skillTree.setPendingSelectName(installedName)
+  }
   if (activeTab && typeof activeTab.value !== 'undefined') {
     activeTab.value = 'skills'
   }
 }
+
+// 2026-07-09 增:记住刚装好的 skill name,goToHome 时传给 SkillsView
+const lastInstalledName = ref('')
 </script>
 
 <template>
@@ -242,14 +264,15 @@ function goToHome() {
           class="source-card"
           :style="{ '--accent': activeSource.accent }"
         >
-          <!-- 卡片 head:图标 + 名称 + URL + 「在浏览器中打开」按钮(2026-07-09 改:按钮从顶栏搬到 head 右侧) -->
+          <!-- 卡片 head:图标 + 名称 + 「在浏览器中打开」按钮(2026-07-09 改)
+                 2026-07-09 改:URL(skillhub.cn/skills?sortBy=curated_score / skills.sh/hot)
+                 不再展示在标题下方(用户已通过 source-tabs 知道选哪个,URL 重复占空间) -->
           <div class="source-card-head">
             <div class="source-card-icon">
               <IconPark icon="mdi:open-in-new" width="28" height="28" />
             </div>
             <div class="source-card-titles">
               <h2 class="source-card-name">{{ activeSource.name }}</h2>
-              <p class="source-card-url">{{ activeSource.url }}</p>
             </div>
             <!-- 在浏览器中打开按钮:2026-07-09 改:从顶栏搬到 head 右侧 -->
             <button

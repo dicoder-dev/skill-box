@@ -17,6 +17,7 @@ package skillssh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -508,6 +509,12 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 }
 
 // Download 拉 SKILL.md(从 GitHub raw)转 canonical。
+//
+// 2026-07-09 改:三段式 fallback,跟 skillhub adapter 对齐
+//   1) 6 候选 URL 串行尝试(main/master × skills/.claude/skills/根)
+//   2) 任何一条遇到 GitHub 429 立即终止所有后续候选(避免继续触发限流加重黑名单)
+//   3) 全部失败 → knownCatalogFallback 命中 → 内存构建最小 SKILL.md,
+//      用户至少能拿到一个能 install 的骨架;否则返 ErrRemoteFetchFail
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	if remoteID == "" {
 		return nil, skillmarket.ErrEmptyRemoteID
@@ -533,24 +540,103 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	var lastErr error
 	for _, u := range candidates {
 		body, err := a.fetchBody(ctx, u)
-		if err != nil {
-			lastErr = err
-			continue
+		if err == nil {
+			can, perr := skilladapter.ParseSkillMD(body)
+			if perr != nil {
+				lastErr = perr
+				continue
+			}
+			if can.Manifest.Name == "" {
+				can.Manifest.Name = name
+			}
+			return can, nil
 		}
-		can, perr := skilladapter.ParseSkillMD(body)
-		if perr != nil {
-			lastErr = perr
-			continue
+		lastErr = err
+		// 2026-07-09 增:GitHub 429 立即终止所有后续候选
+		// 触发限流时继续试只会加重黑名单,毫无意义;直接让上层走 fallback。
+		// 用 errors.Is 匹配 http.StatusTooManyRequests,避免字符串拼接误判。
+		if isRateLimited(err) {
+			logger.Warn("skillssh download: GitHub rate limited on %s, abort remaining candidates", u)
+			break
 		}
-		if can.Manifest.Name == "" {
-			can.Manifest.Name = name
-		}
-		return can, nil
 	}
+	// 6 候选全失败(或被 429 早退)→ 兜底:命中 knownCatalogFallback 给个内存骨架。
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no candidate URL matched")
 	}
+	if can := buildFallbackCanonical(remoteID, repo, name); can != nil {
+		logger.Warn("skillssh download: %v; using fallback canonical for %s", lastErr, remoteID)
+		return can, nil
+	}
 	return nil, fmt.Errorf("%w: %v", skillmarket.ErrRemoteFetchFail, lastErr)
+}
+
+// isRateLimited 2026-07-09 增:识别 GitHub raw 返回的 429 / "rate limit exceeded"。
+//
+// httpx 内部把 HTTP 错误统一包成 `status N: <url>` 格式,所以既用 errors.Is 识别
+// http.StatusTooManyRequests,也用 substring 兜底识别 message 里出现的 rate limit 字样
+// (防止 httpx 未来换格式漏掉)。
+func isRateLimited(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, http.ErrAbortHandler) {
+		return false
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "status 429") || strings.Contains(msg, "status 403") {
+		// 403 也算限流(GitHub 未鉴权请求到阈值后会返 403 forbidden)
+		return true
+	}
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "too many requests") ||
+		strings.Contains(lower, "api rate limit exceeded")
+}
+
+// buildFallbackCanonical 2026-07-09 增:命中 knownCatalogFallback 时构建最小 SKILL.md。
+//
+// 跟 skillhub adapter 的 buildFallbackCanonical 行为对齐 — 用户至少能装上骨架
+// (含 frontmatter + Triggers),不会因为网络抖动就完全失败。
+// remoteID 形如 "owner/repo@skill";命中条件:knownCatalogFallback 中能找到同名
+// "{owner}/{repo}@{skill}" 行。
+func buildFallbackCanonical(remoteID, repo, name string) *skilladapter.Canonical {
+	items := parseCatalog(knownCatalogFallback, defaultBaseURL)
+	for _, it := range items {
+		if it.RemoteID == remoteID {
+			body := "---\n"
+			body += "name: " + name + "\n"
+			body += "version: " + firstNonEmptyOr(it.Version, "0.1.0") + "\n"
+			if it.Description != "" {
+				body += "description: " + it.Description + "\n"
+			}
+			if it.Author != "" {
+				body += "author: " + it.Author + "\n"
+			}
+			manifest := skilladapter.Manifest{
+				Name:        name,
+				Version:     firstNonEmptyOr(it.Version, "0.1.0"),
+				Description: it.Description,
+				Author:      it.Author,
+			}
+			if len(manifest.Triggers) == 0 {
+				manifest.Triggers = []string{name}
+			}
+			return &skilladapter.Canonical{
+				Manifest: manifest,
+				Files:    []skilladapter.File{{Path: "SKILL.md", Content: body}},
+			}
+		}
+	}
+	return nil
+}
+
+// firstNonEmptyOr 简单兜底:第一个非空值,都空用 def。
+func firstNonEmptyOr(s, def string) string {
+	if strings.TrimSpace(s) == "" {
+		return def
+	}
+	return s
 }
 
 // fetchBody 拉 URL 文本,自动 gzip 解压 + UA。状态非 2xx 返错。

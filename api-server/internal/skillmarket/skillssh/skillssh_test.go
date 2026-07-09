@@ -291,6 +291,82 @@ func TestDownload_AllCandidatesFail(t *testing.T) {
 	}
 }
 
+// 2026-07-09 增:Download 遇 GitHub 429 必须立即终止,不要继续尝试其他分支。
+//
+// 回归测试:防止未来重构把 429 当普通错误 continue 掉,
+// 那样会触发更多 GitHub 限流请求,加重黑名单。
+func TestDownload_RateLimited_AbortsImmediately(t *testing.T) {
+	var hits int
+	rt := &countingRT{
+		inner: &fakeRT{responses: map[string]fakeResp{
+			// 第一个候选就 429,后面所有候选都不会被尝试
+			"/o/r/main/skills/x/SKILL.md": {status: 429, body: "rate limit exceeded"},
+		}},
+		count: &hits,
+	}
+	a := NewWithClient(&http.Client{Transport: rt})
+	a.SetRawBaseOverride("https://stub")
+	_, err := a.Download(context.Background(), "https://skills.sh", "o/r@x")
+	if err == nil {
+		t.Fatal("expected error (non-fallback remote id)")
+	}
+	// 6 个候选 URL,429 早退应该只命中 1 次
+	if hits != 1 {
+		t.Fatalf("expected exactly 1 fetch (429 abort), got %d", hits)
+	}
+}
+
+// 2026-07-09 增:全失败 + 命中 knownCatalogFallback → 返内存骨架 SKILL.md。
+func TestDownload_AllFail_HitsFallbackCatalog(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		// 全部 404
+		"/anthropics/skills/main/skills/pdf/SKILL.md":     {status: 404, body: ""},
+		"/anthropics/skills/main/pdf/SKILL.md":            {status: 404, body: ""},
+		"/anthropics/skills/master/skills/pdf/SKILL.md":   {status: 404, body: ""},
+		"/anthropics/skills/master/pdf/SKILL.md":          {status: 404, body: ""},
+		"/anthropics/skills/main/.claude/skills/pdf/SKILL.md":   {status: 404, body: ""},
+		"/anthropics/skills/master/.claude/skills/pdf/SKILL.md": {status: 404, body: ""},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	a.SetRawBaseOverride("https://stub")
+	can, err := a.Download(context.Background(), "https://skills.sh", "anthropics/skills@pdf")
+	if err != nil {
+		t.Fatalf("expected fallback hit to succeed, got %v", err)
+	}
+	if can == nil || can.Manifest.Name != "pdf" {
+		t.Fatalf("expected fallback canonical for pdf, got %+v", can)
+	}
+}
+
+// 2026-07-09 增:全失败 + remoteID 不在 knownCatalogFallback → 仍返错。
+func TestDownload_AllFail_NoFallback(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/some/unknown-skill-id/main/skills/x/SKILL.md":   {status: 404, body: ""},
+		"/some/unknown-skill-id/main/x/SKILL.md":          {status: 404, body: ""},
+		"/some/unknown-skill-id/master/skills/x/SKILL.md": {status: 404, body: ""},
+		"/some/unknown-skill-id/master/x/SKILL.md":        {status: 404, body: ""},
+		"/some/unknown-skill-id/main/.claude/skills/x/SKILL.md":   {status: 404, body: ""},
+		"/some/unknown-skill-id/master/.claude/skills/x/SKILL.md": {status: 404, body: ""},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	a.SetRawBaseOverride("https://stub")
+	_, err := a.Download(context.Background(), "https://skills.sh", "some/unknown-skill-id@x")
+	if err == nil {
+		t.Fatal("expected error (not in fallback catalog)")
+	}
+}
+
+// countingRT 包装 fakeRT,记录 RoundTrip 调用次数。
+type countingRT struct {
+	inner *fakeRT
+	count *int
+}
+
+func (c *countingRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	*c.count++
+	return c.inner.RoundTrip(r)
+}
+
 func TestDownload_InvalidRemoteID(t *testing.T) {
 	a := New()
 	_, err := a.Download(context.Background(), "", "")

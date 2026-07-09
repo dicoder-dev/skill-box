@@ -48,9 +48,10 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   const dropTargetPath = ref('')
   // 选中 skill 的 path(供详情区联动)
   const selectedPath = ref('')
-  // 2026-07-03 增:store 物理根目录绝对路径,首次 load 时拉一次。
-  // 用途:把 tree 节点里的相对 path(如 "frontend/code-review")还原成
-  // 绝对路径,供"在文件夹中打开"用。
+  // 2026-07-09 增:待选中的 skill name(由 MarketView 等外部组件设置)
+  // 解决:MarketView 装好跳 skills tab 时,SkillsView 可能还没 mount,
+  // 事件就丢了。这里存个"待选清单",SkillsView mount 后 + list 加载完时检查一次。
+  const pendingSelectName = ref('')
   const storeRoot = ref('')
   const storeRootLoaded = ref(false)
 
@@ -431,15 +432,26 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     dropTargetPath.value = path || ''
   }
 
+  // 2026-07-09 增:外部组件(MarketView)设置"待选 skill name"。
+  // SkillsView 在 onMounted + reload 完成后检查并消费(consume 一次即清空)。
+  function setPendingSelectName(name) {
+    pendingSelectName.value = String(name || '')
+  }
+  function consumePendingSelectName() {
+    const v = pendingSelectName.value
+    pendingSelectName.value = ''
+    return v
+  }
+
   return {
     // state
     tree, loading, error, keyword, collapsedPaths, dropTargetPath, selectedPath,
-    storeRoot, storeRootLoaded,
+    storeRoot, storeRootLoaded, pendingSelectName,
     // getters
     flatItems, totalSkills,
     // actions
     load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup,
-    toggleCollapse, setSelected, setDropTarget,
+    toggleCollapse, setSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,
     // 2026-07-08 增:首页默认打开第一个技能 — 根下首个 skill 叶子,fallback 到首个 group 内的首个 skill
