@@ -383,138 +383,21 @@ const messages = {
     skillRevealFailed: '跳转失败:{msg}',
   },
 
+  // 2026-07-09 改:MarketView 改 iframe 嵌入,卡片 / 拉取 / 源设置全部移除。
+  // 保留 iframe 加载/失败 + 浏览器外跳 + 重载所需 key。
   market: {
     title: '三方市场',
-    subtitle: '从 skillhub.cn / skills.sh 等三方源拉取技能,直接装到 Skill Box 本地 store。',
-    scopeLabel: '作用域:',
-    scopeGlobal: '全局 (global)',
-    scopeProject: '项目 (project)',
-    projectPlaceholder: '选择项目…',
-    searchPlaceholder: '按名称搜索(回车即查)…',
-    // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),以下旧 key 弃用。
-    // 保留旧 key 仅为向后兼容,后续可清理。
-    btnSearch: '搜索',
-    btnRefresh: '刷新源',
-    refreshing: '刷新中…',
-    // 2026-07-01 改:全走 API,新增 loading 文案
-    btnRemoteLoading: '从三方源拉取中…',
-    // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
-    loadingFromSource: '正在从 {source} 拉取目录,最多 90 秒…',
-    btnRefreshAll: '拉取全部',
-    btnRefreshCurrent: '刷新当前搜索',
-    refreshingAll: '拉取全量中…',
-    refreshingCurrent: '刷新搜索中…',
-    errRefreshAll: '拉取全量失败: {msg}',
-    errRefreshCurrent: '刷新搜索失败: {msg}',
-    noSources: '没有可用的源',
-    // 2026-07-01 改:lastRefresh banner 删除,以下 key 弃用
-    lastRefresh: '上次刷新:拉取 {pulled} · 新增 {inserted} · 更新 {updated}',
-    errLoadSources: '源加载失败: {msg}',
-    errLoadList: '列表加载失败: {msg}',
-    errRefresh: '刷新失败: {msg}',
-    // 2026-07-01 改:errInstall → errPull("安装" → "拉取")
-    errPull: '拉取失败: {msg}',
-    // 兼容 alias(2026-07-01)
-    errInstall: '拉取失败: {msg}',
-    okPulled: '已拉取:{name} (v{version})',
-    // 兼容 alias
-    okInstalled: '已拉取:{name} (v{version})',
-    pullConfirm: '确定把 "{name}" 拉取到 {scope} 吗?',
-    // 兼容 alias
-    installConfirm: '确定把 "{name}" 拉取到 {scope} 吗?',
-    btnPull: '拉取',
-    // 兼容 alias
-    btnInstall: '拉取',
-    pulling: '拉取中…',
-    // 兼容 alias
-    installing: '拉取中…',
-    colName: '名称',
-    colVersion: '版本',
-    colAuthor: '作者',
-    colDescription: '描述',
-    colTags: '标签',
-    colStatus: '状态',
-    // 2026-07-01 改:全走 API 后,empty 语义变化(已拉过且 0 结果 = 真没找到,
-    // 不是缓存空),emptyFirstTime 弃用,emptyAfter 文案相应改写
-    emptyFirstTime: '当前源还没拉过。点 "刷新源" 把三方目录拉到本地。',
-    emptyAfter: '没找到匹配的 skill',
-    emptyAfterHint: '换个关键词,或切到其他源试试',
-    loading: '加载中…',
-    // 2026-07-03 增:三方源不可达 banner 文案。
-    // 触发条件:后端 controller 检测 ctx 超时 / 网络层错误,返 502 + market_remote_unreachable 前缀;
-    // 前端 fetch 直接 Failed to fetch 时也归到这一类。展示成"不可达"而非"超时",让用户理解是远端问题。
-    remoteUnavailable: {
-      title: '三方源暂时不可达',
-      hint: '显示来自 {source} 的推荐条目,稍后自动恢复或点重试再拉真实数据。',
-      retry: '重试',
+    subtitle: '内嵌浏览 skillhub.cn / skills.sh 等三方站点的技能目录。',
+    // 顶部源 tab 按钮文案(随 .source-tab 模板渲染)
+    btnReload: '重新加载',
+    btnOpenInBrowser: '在浏览器中打开',
+    // iframe 加载占位
+    iframe: {
+      loading: '正在加载 {source}…',
+      // 第三方站点 X-Frame-Options 拒绝嵌入 / 网络层错误 / 15s 兜底超时 — 都进 error 态
+      blockedTitle: '该站点拒绝被内嵌',
+      blockedHint: '{source} 设置了 X-Frame-Options / CSP 限制,无法直接嵌入到本应用。可以点下方按钮在系统浏览器中打开。',
     },
-    // 2026-06-30 增
-    allSources: '全部源',
-    filterAll: '全部',
-    filterInstalled: '已安装',
-    filterNotInstalled: '未安装',
-    installedChip: '已安装',
-    notInstalledChip: '未安装',
-    appliedTools: '已启用:{tools}',
-    appliedNone: '未启用任何工具',
-    btnViewSkill: '查看技能',
-    // 2026-07-01 改:btnReinstall → btnRepull
-    btnRepull: '再拉取一次',
-    // 兼容 alias
-    btnReinstall: '再拉取一次',
-    btnSourceSettings: '源设置',
-    // 2026-07-04 增:工具栏「前往官网」按钮文案,跳转源官方站点首页(非 API host)。
-    btnGoSourceWebsite: '前往官网',
-    // 2026-07-04 增:卡片底部「前往技能详情」按钮文案,用 item.detail_url 打开三方原始详情页。
-    btnGoDetail: '前往技能详情',
-    // 2026-07-04 增:platform.openExternal 失败时统一 toast 文案。Web 端 / 桌面端共用。
-    errOpenExternal: '打开外链失败: {msg}',
-    // 拉取弹窗(2026-07-01 改:installDialog → pullDialog)
-    pullDialog: {
-      title: '拉取「{name}」到 skill-box',
-      scopeLabel: '拉取到:',
-      toolsLabel: '启用到工具:',
-      selectAll: '全选',
-      selectNone: '全不选',
-      toolsHint: '默认不勾任何工具,需手动勾选要启用的工具(可在「技能」页调整)',
-      // 2026-06-30 增:分组选择
-      groupLabel: '分组:',
-      groupNone: '根(未分组)',
-      groupPlaceholder: 'frontend/react',
-      groupHint: '把 skill 落到这个分组下,空 = 根(未分组)。新分组可点 + 号现场创建。',
-      groupEmpty: '分组路径不能为空',
-      btnNewGroup: '新建',
-      // 2026-07-01 重构:移除 tools 多选,改为信息条(自动启用 5 个工具)
-      applyToTitle: '拉取后自动启用到本机全部 5 个工具:',
-      applyToHint: '如需关闭某个工具,可在「技能」页单独调整。',
-      duplicateTitle: '「{name}」已存在于 skill-box 库',
-      duplicateHint: '同名 skill 已在 skillbox 库中。请选择处理方式:',
-      btnOverwrite: '覆盖',
-      btnSaveAs: '另存为',
-      btnCancel: '取消',
-      saveAsHint: '新名字会保存为 skillbox 库里的另一条 skill。',
-      newNameLabel: '另存为:',
-      confirm: '确认拉取',
-      pulling: '拉取中…',
-      applyPartial: '已拉到本地库,但 {n} 个工具启用失败:{tools}',
-      applyAllOk: '已拉取并自动启用到 {n} 个工具',
-      applyAllFailed: '已拉到本地库,但所有工具启用都失败,可在技能页手动重试',
-      noToolsWarn: '未勾选任何工具:skill 只会写盘到本地,不会自动启用到任何工具目录。',
-    },
-    // 兼容 alias(2026-07-01),所有键都映射到 pullDialog。
-    // 前端模板已切到 pullDialog,这里留 alias 兜底,后续清理时整段删除即可。
-    installDialog: {}, // 占位(实际值在下方用 Object.assign 同步)
-    // 源设置 (P1)
-    sourcesSettings: {
-      title: '源设置',
-      enabled: '启用',
-      disabled: '禁用',
-      baseUrl: 'API 地址',
-      btnSave: '保存',
-      saved: '已保存',
-      saveFailed: '保存失败:{msg}',
-    },
-    legacyInstallWarn: '该接口已弃用,请改用 /install-v2',
   },
 
   onboarding: {
@@ -764,12 +647,7 @@ const messages = {
   },
 }
 
-// 2026-07-01 增:市场域 install → pull 改名。installDialog 段在市场块内已声明为
-// alias 占位(空对象),这里把 pullDialog 同步给 installDialog,
-// 保证旧模板 t('market.installDialog.*') 仍能命中,新模板 t('market.pullDialog.*') 也可。
-// 后续如果 installDialog 真的不再被任何模板引用,可以把空占位整段删掉。
-if (messages.market && messages.market.pullDialog && messages.market.installDialog) {
-  Object.assign(messages.market.installDialog, messages.market.pullDialog)
-}
+// 2026-07-09 改:市场域改成 iframe 嵌入,installDialog / pullDialog / sourcesSettings
+// 等全部 key 已从 market 段移除,这里不再需要 alias 同步。
 
 export default messages

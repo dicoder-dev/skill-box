@@ -374,137 +374,18 @@ const messages = {
     skillRevealFailed: 'Reveal failed: {msg}',
   },
 
+  // 2026-07-09 改:MarketView 改 iframe 嵌入,卡片 / 拉取 / 源设置全部移除。
+  // 保留 iframe 加载/失败 + 浏览器外跳 + 重载所需 key。
   market: {
     title: 'Marketplace',
-    subtitle: 'Pull skills from 3rd-party sources like skillhub.cn / skills.sh into the local Skill Box store.',
-    scopeLabel: 'Scope:',
-    scopeGlobal: 'Global (global)',
-    scopeProject: 'Project (project)',
-    projectPlaceholder: 'Pick a project…',
-    searchPlaceholder: 'Search by name (press Enter)…',
-    btnSearch: 'Search',
-    btnRefresh: 'Refresh source',
-    refreshing: 'Refreshing…',
-    // 2026-07-01 改:全走 API,搜索按钮已删除(Enter 直接查),新增 loading 文案
-    btnRemoteLoading: 'Fetching from upstream…',
-    // 2026-07-01 增:加载态下,告诉用户正在从哪个源拉(配合 mdi:loading 图标)
-    loadingFromSource: 'Fetching catalog from {source}, up to 90s…',
-    // 2026-07-01 deprecated: single refreshing flag replaces these after UI refactor.
-    // Kept as aliases only; safe to remove once no other code references them.
-    btnRefreshAll: 'Fetch all',
-    btnRefreshCurrent: 'Refresh current search',
-    refreshingAll: 'Fetching all…',
-    refreshingCurrent: 'Refreshing search…',
-    errRefreshAll: 'Fetch-all failed: {msg}',
-    errRefreshCurrent: 'Refresh-search failed: {msg}',
-    noSources: 'No available sources',
-    // 2026-07-01 deprecated: lastRefresh banner removed (全走 API 后 refresh 不再被前端调用)
-    lastRefresh: 'Last refresh: pulled {pulled} · added {inserted} · updated {updated}',
-    errLoadSources: 'Failed to load sources: {msg}',
-    errLoadList: 'Failed to load list: {msg}',
-    errRefresh: 'Refresh failed: {msg}',
-    // 2026-07-01 改:errInstall → errPull("install" → "pull")
-    errPull: 'Pull failed: {msg}',
-    // 兼容 alias
-    errInstall: 'Pull failed: {msg}',
-    okPulled: 'Pulled: {name} (v{version})',
-    // 兼容 alias
-    okInstalled: 'Pulled: {name} (v{version})',
-    pullConfirm: 'Pull "{name}" into {scope} ?',
-    // 兼容 alias
-    installConfirm: 'Pull "{name}" into {scope} ?',
-    btnPull: 'Pull',
-    // 兼容 alias
-    btnInstall: 'Pull',
-    pulling: 'Pulling…',
-    // 兼容 alias
-    installing: 'Pulling…',
-    colName: 'name',
-    colVersion: 'version',
-    colAuthor: 'author',
-    colDescription: 'description',
-    colTags: 'tags',
-    colStatus: 'status',
-    // 2026-07-01 改:全走 API 后,empty 语义变化(已拉过且 0 结果 = 真没找到)
-    emptyFirstTime: 'This source has not been pulled yet. Click "Refresh source" to fetch from the upstream catalog.',
-    emptyAfter: 'No matching skills found',
-    emptyAfterHint: 'Try a different keyword, or switch to another source',
-    loading: 'Loading…',
-    // 2026-07-03 added: remote unreachable banner copy.
-    // Triggered when backend returns 502 + "market_remote_unreachable" prefix
-    // (ctx timeout / network errors) or browser fetch fails with "Failed to fetch".
-    // Surfaced as "unreachable" rather than "timeout" so users understand it's the remote's fault.
-    remoteUnavailable: {
-      title: 'Remote source unreachable',
-      hint: 'Showing recommended items from {source}. It will recover automatically, or tap Retry to pull live data.',
-      retry: 'Retry',
+    subtitle: 'Browse third-party skill catalogs like skillhub.cn / skills.sh via embedded web view.',
+    btnReload: 'Reload',
+    btnOpenInBrowser: 'Open in browser',
+    iframe: {
+      loading: 'Loading {source}…',
+      blockedTitle: 'Site refuses embedding',
+      blockedHint: '{source} sets X-Frame-Options / CSP that blocks embedding. Use the button below to open it in your system browser.',
     },
-    // 2026-06-30 added
-    allSources: 'All sources',
-    filterAll: 'All',
-    filterInstalled: 'Installed',
-    filterNotInstalled: 'Not installed',
-    installedChip: 'Installed',
-    notInstalledChip: 'Not installed',
-    appliedTools: 'Applied: {tools}',
-    appliedNone: 'No tools enabled',
-    btnViewSkill: 'View skill',
-    // 2026-07-01 改:btnReinstall → btnRepull
-    btnRepull: 'Re-pull',
-    // 兼容 alias
-    btnReinstall: 'Re-pull',
-    btnSourceSettings: 'Source settings',
-    // 2026-07-04 增:工具栏「前往官网」按钮,跳转源官方站点首页(非 API host)。
-    btnGoSourceWebsite: 'Open website',
-    // 2026-07-04 增:卡片底部「前往技能详情」按钮,用 item.detail_url 打开三方原始详情页。
-    btnGoDetail: 'Open skill page',
-    // 2026-07-04 增:platform.openExternal 失败时统一 toast 文案。
-    errOpenExternal: 'Failed to open external link: {msg}',
-    // pull dialog (2026-07-01 改:installDialog → pullDialog)
-    pullDialog: {
-      title: 'Pull "{name}" into skill-box',
-      scopeLabel: 'Pull into:',
-      toolsLabel: 'Apply to tools:',
-      selectAll: 'Select all',
-      selectNone: 'Deselect all',
-      toolsHint: 'No tools are checked by default. Pick the ones you want to apply (you can adjust in the Skills page)',
-      // 2026-06-30 added
-      groupLabel: 'Group:',
-      groupNone: 'Root (ungrouped)',
-      groupPlaceholder: 'frontend/react',
-      groupHint: 'The skill will be saved under this group. Empty = root. Create a new group inline with the + button.',
-      groupEmpty: 'Group path is required',
-      btnNewGroup: 'New',
-      // 2026-07-01 refactor: remove tool multi-select, show read-only info instead
-      applyToTitle: 'After pull, will be auto-applied to all 5 tools on this machine:',
-      applyToHint: 'Disable individual tools later from the Skills page if needed.',
-      duplicateTitle: '"{name}" already exists in skill-box',
-      duplicateHint: 'A skill with the same name is already in the skillbox store. Pick a strategy:',
-      btnOverwrite: 'Overwrite',
-      btnSaveAs: 'Save as…',
-      btnCancel: 'Cancel',
-      saveAsHint: 'The new name will be saved as a separate skill in the store.',
-      newNameLabel: 'Save as:',
-      confirm: 'Confirm pull',
-      pulling: 'Pulling…',
-      applyPartial: 'Pulled to local store, but {n} tools failed to apply: {tools}',
-      applyAllOk: 'Pulled and applied to {n} tools',
-      applyAllFailed: 'Pulled to local store, but all tool applications failed. Retry from the Skills page.',
-      noToolsWarn: 'No tools selected: the skill will only be saved to the local store without enabling any tool directory.',
-    },
-    // 兼容 alias(2026-07-01),会在文件末尾通过 Object.assign 同步。
-    installDialog: {},
-    // source settings (P1)
-    sourcesSettings: {
-      title: 'Source settings',
-      enabled: 'Enabled',
-      disabled: 'Disabled',
-      baseUrl: 'API URL',
-      btnSave: 'Save',
-      saved: 'Saved',
-      saveFailed: 'Save failed: {msg}',
-    },
-    legacyInstallWarn: 'This endpoint is deprecated, please use /install-v2',
   },
 
   onboarding: {
@@ -753,11 +634,7 @@ const messages = {
   },
 }
 
-// 2026-07-01 增:市场域 install → pull 改名。installDialog 段在市场块内已声明为
-// alias 占位(空对象),这里把 pullDialog 同步给 installDialog,
-// 保证旧模板 t('market.installDialog.*') 仍能命中,新模板 t('market.pullDialog.*') 也可。
-if (messages.market && messages.market.pullDialog && messages.market.installDialog) {
-  Object.assign(messages.market.installDialog, messages.market.pullDialog)
-}
+// 2026-07-09 改:市场域改成 iframe 嵌入,installDialog / pullDialog / sourcesSettings
+// 等全部 key 已从 market 段移除,这里不再需要 alias 同步。
 
 export default messages

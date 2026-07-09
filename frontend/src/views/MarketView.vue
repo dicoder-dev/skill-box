@@ -1,177 +1,139 @@
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+// MarketView.vue - 三方市场(2026-07-09 改:iframe 嵌入外部站点)。
+//
+// 历史:2026-06 ~ 2026-07 期间,走自建后端代理三方源(skillhub.cn / skills.sh),
+// 含卡片网格 + 搜索 + 拉取弹窗 + 源设置 + 详情弹窗,后端有 cmarket / smarket /
+// skillmarket 完整链路(详见 api-server/internal/skillmarket),前端有
+// useMarketStore + MarketPullConfirm + MarketSourceSettings。
+// 改 iframe 之后前端这层全成冗余,已删除:
+//   - frontend/src/core/store/market.js
+//   - frontend/src/api/skillbox/market.js
+//   - frontend/src/components/MarketPullConfirm.vue
+//   - frontend/src/components/MarketSourceSettings.vue
+// 后端 cmarket / smarket / skillmarket 模块未删(独立模块,后续按需清理),
+// 暂时成为 dead code,但不影响前端 build。
+//
+// 当前形态(2026-07-09):
+//   - 顶部 tab:两个固定源(SkillHub / Skills.sh),点哪个切哪个 iframe
+//   - 主体:<iframe> 走 /api/skillbox/market-iframe-proxy/<site>/* 反代(后端
+//     cmarket.iframe_proxy 抹掉 X-Frame-Options / CSP,让 iframe 能加载三方站)
+//   - 加载/失败占位:iframe onLoad 前显示加载中,onError / 15s 超时显示降级提示
+//   - 「在浏览器中打开」按钮走 originUrl 直连三方站,绕开代理
+
+
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-import { useMarketStore } from '@/core/store/market'
-import { useToastStore } from '@/core/store/toast'
-import Modal from '@/components/Modal.vue'
-import MarketPullConfirm from '@/components/MarketPullConfirm.vue'
-import MarketSourceSettings from '@/components/MarketSourceSettings.vue'
 import { platform } from '@/platform'
 
 const { t } = useI18n()
-const market = useMarketStore()
-const toast = useToastStore()
 
-// 注入 appBus 用于跳到 skills tab
-const appBus = inject('appBus', null)
-
-// 状态
-const error = computed(() => market.lastError)
-const loading = computed(() => market.loading)
-// 2026-07-01 改:全走 API 后只剩 loading 单 flag。
-// 每次进入/切 tab/输入搜索,都会走远端,loading 是正反馈。
-const refreshing = computed(() => market.loading)
-
-// 列表
-const items = computed(() => market.skills)
-const total = computed(() => market.total)
-const page = computed(() => market.page)
-const size = computed(() => market.size)
-const totalPages = computed(() => market.totalPages)
-const installed = computed(() => market.installed)
-
-// 源
-const sources = computed(() => market.sources)
-const activeSourceId = computed(() => market.activeSourceId)
-
-// 工具栏
-const keyword = ref('')
-
-function onSearch() {
-  // 2026-07-01 改:全走 API,Enter 走 setKeyword + loadSkills(每次都打远端)。
-  // skillhub 走 ?keyword= 搜索语义;skills.sh 走 50 页 + substring。
-  market.setKeyword(keyword.value)
-  market.loadSkills()
-}
-
-// 2026-07-03 增:常驻重试按钮回调,触发 loadSkills 再次拉取。
-// 保留 try/catch:失败时 store 已设 remoteUnavailable,UI 自动回到 banner 状态。
-async function onRetryRemote() {
-  try {
-    await market.loadSkills()
-  } catch (_e) {
-    // 错误已在 store 里设好,banner 继续显示
-  }
-}
-
-async function onSelectSource(id) {
-  // 2026-07-01 改:全走 API 后每次切源都重新打远端(纯 API,无缓存判断)。
-  market.setSourceActive(id)
-  await market.loadSkills()
-}
-
-// 详情弹窗
-const detailOpen = ref(false)
-const detailItem = ref(null)
-function openDetail(item) {
-  detailItem.value = item
-  detailOpen.value = true
-}
-
-// 2026-07-04 增:卡片底部「前往技能详情」回调,打开 item.detail_url(已由 adapter 映射好)。
+// 固定源列表(2026-07-09 改:不再走后端 sources,直接硬编码两个 iframe 目标 URL)
+// 顺序就是 tab 顺序。
 //
-// detail_url 来源:
-//   - skillhub:apiSkill.Homepage 或拼接 {baseURL}/skills/{slug}
-//   - skills.sh:{baseURL}/{source}/{skillId}
-// 两条路径都已包含原始详情页,直接外跳。空 detail_url 表示该条 item 缺少详情链接,
-// 卡片底部按钮在模板层用 v-if 隐藏。
-async function goDetail(item) {
-  const u = item?.detail_url
-  if (!u) return
-  try {
-    await platform.platform.openExternal(u)
-  } catch (e) {
-    toast.push({
-      type: 'error',
-      message: t('market.errOpenExternal', { msg: e?.message || String(e) }),
-    })
-  }
-}
+// url 字段:不再直接写三方站点 URL(浏览器会被 X-Frame-Options: SAMEORIGIN 拒),
+// 而是走后端 /api/skillbox/market-iframe-proxy/<site>/* 反代(由 cmarket.iframe_proxy
+// 提供,该 handler 会抹掉 X-Frame-Options / Content-Security-Policy)。
+//
+// 原始 URL 用 `originUrl` 字段存,在「在浏览器中打开」按钮里调 platform.openExternal
+// 时直接用原始 URL,绕开代理。
+const sources = [
+  {
+    id: 'skillhub',
+    name: 'SkillHub',
+    // iframe 走的代理 URL(同源 → 不被 X-Frame-Options 拒)
+    url: '/api/skillbox/market-iframe-proxy/skillhub/skills?sortBy=curated_score',
+    // 「在浏览器中打开」用原始 URL(直连 skillhub,不再走代理)
+    originUrl: 'https://skillhub.cn/skills?sortBy=curated_score',
+  },
+  {
+    id: 'skillssh',
+    name: 'Skills.sh',
+    url: '/api/skillbox/market-iframe-proxy/skillssh/hot',
+    originUrl: 'https://www.skills.sh/hot',
+  },
+]
 
-// 源设置弹窗
-const settingsOpen = ref(false)
-function openSettings() {
-  settingsOpen.value = true
-}
+const activeSourceId = ref(sources[0].id)
+const activeSource = computed(
+  () => sources.find((s) => s.id === activeSourceId.value) || sources[0]
+)
 
-// 2026-07-04 增:工具栏「前往官网」回调。
-// 调 platform.platform.openExternal(unified) 跨平台打开外部 URL:
-//   - Web 端:window.open
-//   - Desktop 端:wails BrowserOpenURL(桌面 OS 走系统默认浏览器)
-// activeSource.homepage 由后端 smarket 注入(skillhub→skillhub.cn、skillssh→skills.sh
-// 等),activeSourceId===0 聚合态下没具体源,按钮已禁用,所以这里 homeUrl 必非空。
-async function goSourceWebsite() {
-  const home = market.activeSource?.homepage
-  if (!home) return
-  try {
-    await platform.platform.openExternal(home)
-  } catch (e) {
-    toast.push({
-      type: 'error',
-      message: t('market.errOpenExternal', { msg: e?.message || String(e) }),
-    })
-  }
-}
+// iframe 加载态:
+//   - loading=true:切换 tab 或首次进入,iframe 还没 onLoad
+//   - error=true:iframe onError 触发,或加载超时(15s)后还没 onLoad
+// 这两个 flag 互斥,error 优先于 loading。
+const loading = ref(true)
+const error = ref(false)
+let loadTimer = null
 
-// 安装弹窗
-// 2026-07-01 改:MarketInstallConfirm → MarketPullConfirm。
-const installOpen = ref(false)
-const installItem = ref(null)
-function openInstall(item) {
-  installItem.value = item
-  installOpen.value = true
-}
-
-async function onInstallConfirm(payload) {
-  try {
-    const res = await market.pull(payload)
-    installOpen.value = false
-    // 根据 apply 结果给 toast
-    if (res?.skipped_tools?.length && res.skipped_tools.length > 0) {
-      toast.push({
-        type: 'info',
-        message: t('market.pullDialog.applyPartial', {
-          n: res.skipped_tools.length,
-          tools: res.skipped_tools.join(', '),
-        }),
-      })
-    } else if (res?.apply_result?.all_ok) {
-      toast.push({
-        type: 'success',
-        message: t('market.pullDialog.applyAllOk', { n: res.apply_result?.applies?.length || 0 }),
-      })
-    } else {
-      toast.push({ type: 'success', message: t('market.okPulled', { name: res?.name, version: res?.version }) })
+function resetLoadState() {
+  loading.value = true
+  error.value = false
+  // 15s 兜底:onError 某些情况下不会触发(被同源代理拦截就静默失败),
+  // 所以挂个定时器,15s 后还没 onLoad 就当失败处理。
+  if (loadTimer) clearTimeout(loadTimer)
+  loadTimer = setTimeout(() => {
+    if (loading.value) {
+      loading.value = false
+      error.value = true
     }
-    // 刷新列表(更新 installed 标记)
-    await market.loadSkills()
-  } catch (e) {
-    toast.push({ type: 'error', message: t('market.errPull', { msg: e?.message || e }) })
-  }
+  }, 15_000)
 }
 
-// 跳到 skills tab(已安装时查看)
-function viewSkill(name) {
-  if (appBus && typeof appBus.emit === 'function') {
-    appBus.emit('switch-tab', 'skills')
-  } else {
-    window.dispatchEvent(new CustomEvent('skillbox:switch-tab', { detail: 'skills' }))
+function onIframeLoad() {
+  if (loadTimer) {
+    clearTimeout(loadTimer)
+    loadTimer = null
   }
+  loading.value = false
+  error.value = false
 }
 
-onMounted(async () => {
+function onIframeError() {
+  if (loadTimer) {
+    clearTimeout(loadTimer)
+    loadTimer = null
+  }
+  loading.value = false
+  error.value = true
+}
+
+// 切源:重置加载态,iframe src 由 v-if 卸载 → 重建触发重新加载
+function selectSource(id) {
+  if (id === activeSourceId.value) return
+  activeSourceId.value = id
+}
+
+// 「在新窗口打开」 — 走 platform.openExternal 跨平台:
+//   - Web:window.open
+//   - Desktop:wails BrowserOpenURL(系统默认浏览器)
+async function openInExternal(url) {
   try {
-    await market.loadSources()
-    await market.loadProjects()
-    if (market.activeSourceId) {
-      // 2026-07-01 改:全走 API,直接 loadSkills 即可。
-      // 每次都打远端,loading 是正反馈,失败有 banner + toast。
-      await market.loadSkills()
-    }
+    await platform.platform.openExternal(url)
   } catch (e) {
-    // error 已在 store 里
+    // web 端 window.open 被拦截也算异常,这里静默吞掉,UI 已有提示
   }
+}
+
+function reload() {
+  // 切源走 v-if 重建,同源刷新就强制重建一次:用 src 引用做 key,先切到一个空 src 再切回
+  const cur = activeSourceId.value
+  activeSourceId.value = '__none__'
+  // 下一 tick 切回去,触发 v-if 重建
+  setTimeout(() => {
+    activeSourceId.value = cur
+    resetLoadState()
+  }, 30)
+}
+
+// 切源时重置加载态
+watch(activeSourceId, () => {
+  resetLoadState()
+})
+
+onMounted(() => {
+  resetLoadState()
 })
 </script>
 
@@ -191,328 +153,120 @@ onMounted(async () => {
     </header>
 
     <div class="card">
-      <!-- 2026-07-03 增:三方源不可达 banner。
-           只在 store.remoteUnavailable=true 时显示。包含:
-           - 提示信息(说明当前展示的就是推荐/兜底列表)
-           - 常驻重试按钮(loadSkills 重拉)
-           放在工具栏上方,显眼但不高过主搜索条,避免打断搜索流程。 -->
-      <div v-if="market.remoteUnavailable" class="market-remote-banner">
-        <IconPark icon="mdi:cloud-off-outline" width="16" height="16" class="banner-icon" />
-        <div class="banner-text">
-          <strong>{{ t('market.remoteUnavailable.title') }}</strong>
-          <span>{{ t('market.remoteUnavailable.hint', { source: market.activeSource?.name || '' }) }}</span>
-        </div>
-        <button class="ghost banner-retry" :disabled="loading" @click="onRetryRemote">
-          <IconPark icon="mdi:refresh" width="14" height="14" />
-          {{ t('market.remoteUnavailable.retry') }}
-        </button>
-      </div>
-
-      <!-- 工具栏 -->
-      <div class="toolbar">
-        <div class="toolbar-center">
-          <div class="search-box">
-            <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
-            <input
-              v-model="keyword"
-              type="text"
-              :placeholder="t('market.searchPlaceholder')"
-              class="search-input"
-              @keyup.enter="onSearch"
-            />
-          </div>
-          <button class="ghost" @click="onSearch">
-            <IconPark icon="mdi:magnify" width="14" height="14" />
-            {{ t('common.search') }}
-          </button>
-        </div>
-        <div class="toolbar-right">
-          <!-- 2026-07-04 增:「前往官网」按钮,在源设置左侧。
-               activeSourceId===0(聚合态) 或 activeSource.homepage 为空 时禁用/隐藏。
-               跳转走 platform.platform.openExternal 跨平台打开(桌面 → 系统默认浏览器;
-               Web → window.open),与现有 SkillsView 跨页外链行为一致。 -->
-          <button
-            v-if="market.activeSource?.homepage"
-            class="ghost"
-            :title="market.activeSource.homepage"
-            @click="goSourceWebsite"
-          >
-            <IconPark icon="mdi:open-in-new" width="14" height="14" />
-            {{ t('market.btnGoSourceWebsite') }}
-          </button>
-          <button class="ghost" :disabled="!sources.length" @click="openSettings">
-            <IconPark icon="mdi:cog-outline" width="14" height="14" />
-            {{ t('market.btnSourceSettings') }}
-          </button>
-          <!-- 2026-07-01 改:全走 API 后,Enter 已经每次都打远端,搜索按钮被删除。
-               工具栏右侧只留「源设置」一个 action;搜索 = 直接 Enter 输入框即可触发。 -->
-        </div>
-      </div>
-
-      <!-- 源选择标签 -->
+      <!-- 顶部源 tab(2026-07-09 改:从动态 sources 简化为两个固定 tab) -->
       <nav class="source-tabs">
         <button
           v-for="s in sources"
           :key="s.id"
           :class="['source-tab', { active: s.id === activeSourceId }]"
-          @click="onSelectSource(s.id)"
+          @click="selectSource(s.id)"
         >
           <IconPark icon="mdi:radio-tower" width="14" height="14" />
           {{ s.name }}
-          <span class="source-type">{{ s.type }}</span>
         </button>
-        <span v-if="!sources.length && !loading" class="source-empty">{{ t('market.noSources') }}</span>
-      </nav>
-
-      <!-- 中部可滚动主体:网格/空态/加载态;
-           内部 overflow-y:auto 让卡片多时只滚这一段,分页栏固定在下方 -->
-      <div class="market-body">
-        <!-- 错误提示 -->
-        <div v-if="error" class="message message-error">
-          <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
-          {{ error }}
-        </div>
-
-        <!-- 2026-07-01 改:列表用卡片网格(原表格) -->
-        <div v-if="items.length > 0" class="market-grid">
-          <article
-            v-for="it in items"
-            :key="it.remote_id"
-            class="market-card"
-            :class="{ 'is-installed': installed[it.name] }"
-          >
-            <header class="market-card-top">
-              <div class="market-card-icon">
-                <IconPark icon="mdi:puzzle-outline" width="22" height="22" />
-              </div>
-              <div class="market-card-titles">
-                <h3 class="market-card-name" :title="it.name">{{ it.name }}</h3>
-                <code class="market-card-id">{{ it.remote_id }}</code>
-              </div>
-              <span v-if="installed[it.name]" class="badge badge-installed">
-                <IconPark icon="mdi:check-circle" width="10" height="10" />
-                {{ t('market.installedChip') }}
-              </span>
-              <span v-else class="badge badge-not-installed">
-                <IconPark icon="mdi:circle-outline" width="10" height="10" />
-                {{ t('market.notInstalledChip') }}
-              </span>
-            </header>
-
-            <div class="market-card-meta">
-              <span class="meta-item">
-                <IconPark icon="mdi:tag-outline" width="12" height="12" />
-                {{ it.version || t('common.dash') }}
-              </span>
-              <span class="meta-item">
-                <IconPark icon="mdi:account-outline" width="12" height="12" />
-                {{ it.author || t('common.dash') }}
-              </span>
-            </div>
-
-            <p class="market-card-desc" :title="it.description">{{ it.description || t('common.dash') }}</p>
-
-            <div v-if="it.tags" class="market-card-tags">
-              <span v-for="tg in String(it.tags).split(',').filter(Boolean)" :key="tg" class="tag">{{ tg }}</span>
-            </div>
-
-            <footer class="market-card-bottom">
-              <!-- 眼睛按钮:靠左,独立子项配合 space-between -->
-              <div class="market-card-detail-icons">
-                <IconPark
-                  icon="mdi:eye-outline"
-                  :title="t('market.btnViewSkill')"
-                  class="action-icon action-icon-view"
-                  @click="openDetail(it)"
-                />
-                <!-- 2026-07-04 增:「前往技能详情」打开 item.detail_url(三方原始详情页)。
-                     detail_url 由 adapter 映射填充(skillhub/skillssh 都有),空时隐藏按钮降级
-                     而非禁用,避免无意义 disabled 占位。 -->
-                <IconPark
-                  v-if="it.detail_url"
-                  icon="mdi:open-in-new"
-                  :title="t('market.btnGoDetail')"
-                  class="action-icon action-icon-go-detail"
-                  @click="goDetail(it)"
-                />
-              </div>
-              <!-- spacer:占满中间,把右侧推到底 -->
-              <span class="market-card-bottom-spacer"></span>
-              <!-- 右侧 actions:跳转(可选)+ 拉取按钮 -->
-              <div class="market-card-actions">
-                <IconPark
-                  v-if="installed[it.name]"
-                  icon="mdi:open-in-new"
-                  :title="t('market.btnViewSkill')"
-                  class="action-icon action-icon-jump"
-                  @click="viewSkill(it.name)"
-                />
-                <button class="market-card-pull" :disabled="market.pulling" @click="openInstall(it)">
-                  <IconPark icon="mdi:download" width="13" height="13" />
-                  {{ installed[it.name] ? t('market.btnRepull') : t('market.btnPull') }}
-                </button>
-              </div>
-            </footer>
-          </article>
-        </div>
-
-        <div v-else-if="refreshing || loading" class="loading-state">
-          <!-- 2026-07-01 改:用 mdi:loading icon(36px)+ spin 动画,
-               替代原来 12px 小 spinner,视觉更明显 + 用 source 名字给用户上下文。
-               iconify 自带 icon 但不带动画,这里 CSS 加 spin。 -->
-          <IconPark icon="mdi:loading" width="36" height="36" class="loading-icon" />
-          <p class="loading-text">{{ t('market.btnRemoteLoading') }}</p>
-          <p v-if="market.activeSource" class="loading-hint">
-            {{ t('market.loadingFromSource', { source: market.activeSource.name }) }}
-          </p>
-        </div>
-
-        <div v-else class="empty-state">
-          <IconPark icon="mdi:radio-tower" width="48" height="48" />
-          <p class="empty-title">{{ t('market.emptyAfter') }}</p>
-          <p class="empty-hint">{{ t('market.emptyAfterHint') }}</p>
-        </div>
-      </div>
-
-      <!-- 分页 - 固定在卡片容器底部,不随内容滚动 -->
-      <footer v-if="totalPages > 1" class="pager">
-        <button :disabled="page <= 1" @click="market.page--; market.loadSkills()">
-          <IconPark icon="mdi:chevron-left" width="14" height="14" />
-          {{ t('common.prev') }}
-        </button>
-        <span class="pager-info">{{ t('common.pageOfNoCount', { page, total: totalPages }) }}</span>
-        <button :disabled="page >= totalPages" @click="market.page++; market.loadSkills()">
-          {{ t('common.next') }}
-          <IconPark icon="mdi:chevron-right" width="14" height="14" />
-        </button>
-      </footer>
-    </div>
-
-    <!-- 详情弹窗 -->
-    <Modal
-      v-model="detailOpen"
-      size="lg"
-      :title="detailItem?.name || ''"
-    >
-      <template #title-icon>
-        <IconPark icon="mdi:information-outline" width="18" height="18" />
-      </template>
-      <div v-if="detailItem" class="detail-grid">
-        <div class="detail-row">
-          <span class="detail-label">{{ t('market.colVersion') }}</span>
-          <code>{{ detailItem.version || t('common.dash') }}</code>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('market.colAuthor') }}</span>
-          <span>{{ detailItem.author || t('common.dash') }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">ID</span>
-          <code class="detail-id">{{ detailItem.remote_id }}</code>
-        </div>
-        <div class="detail-row detail-row-full">
-          <span class="detail-label">{{ t('market.colDescription') }}</span>
-          <p class="detail-desc">{{ detailItem.description || t('common.dash') }}</p>
-        </div>
-        <div v-if="detailItem.tags" class="detail-row detail-row-full">
-          <span class="detail-label">{{ t('market.colTags') }}</span>
-          <div class="detail-tags">
-            <span v-for="tg in String(detailItem.tags).split(',').filter(Boolean)" :key="tg" class="tag">
-              {{ tg }}
-            </span>
-          </div>
-        </div>
-        <div class="detail-row detail-row-full">
-          <span class="detail-label">{{ t('market.colStatus') }}</span>
-          <span v-if="installed[detailItem.name]" class="installed-chip">
-            <IconPark icon="mdi:check-circle" width="12" height="12" />
-            {{ t('market.installedChip') }}
-          </span>
-          <span v-else class="not-installed-chip">
-            <IconPark icon="mdi:circle-outline" width="12" height="12" />
-            {{ t('market.notInstalledChip') }}
-          </span>
-        </div>
-      </div>
-      <template #footer>
-        <button type="button" class="ghost" @click="detailOpen = false">
-          <IconPark icon="mdi:close" width="14" height="14" />
-          {{ t('common.close') }}
+        <span class="source-tabs-spacer" />
+        <button
+          v-if="!error"
+          class="ghost source-reload"
+          :title="t('market.btnReload')"
+          @click="reload"
+        >
+          <IconPark icon="mdi:refresh" width="14" height="14" />
         </button>
         <button
-          type="button"
-          class="primary"
-          :disabled="market.pulling"
-          @click="detailOpen = false; openInstall(detailItem)"
+          class="ghost source-open"
+          :title="t('market.btnOpenInBrowser')"
+          @click="openInExternal(activeSource.originUrl)"
         >
-          <IconPark icon="mdi:download" width="14" height="14" />
-          {{ t('market.btnPull') }}
+          <IconPark icon="mdi:open-in-new" width="14" height="14" />
+          {{ t('market.btnOpenInBrowser') }}
         </button>
-      </template>
-    </Modal>
+      </nav>
 
-    <!-- 拉取弹窗 -->
-    <MarketPullConfirm
-      v-model="installOpen"
-      :item="installItem"
-      :installed="installed"
-      :projects="market.projects"
-      @confirm="onInstallConfirm"
-      @cancel="installOpen = false"
-    />
+      <!-- iframe 主体 — key 用 activeSourceId 强制重建,切换源时 src 重新加载 -->
+      <div class="market-frame-wrap">
+        <iframe
+          v-if="activeSourceId !== '__none__'"
+          :key="activeSourceId"
+          :src="activeSource.url"
+          class="market-frame"
+          :title="activeSource.name"
+          referrerpolicy="no-referrer"
+          allow="clipboard-read; clipboard-write"
+          @load="onIframeLoad"
+          @error="onIframeError"
+        />
 
-    <!-- 源设置弹窗 -->
-    <MarketSourceSettings v-model="settingsOpen" />
+        <!-- 加载占位 -->
+        <div v-if="loading && !error" class="frame-state frame-state-loading">
+          <IconPark icon="mdi:loading" width="36" height="36" class="loading-icon" />
+          <p class="frame-state-text">{{ t('market.iframe.loading', { source: activeSource.name }) }}</p>
+        </div>
+
+        <!-- 失败占位(2026-07-09 增:第三方站点 X-Frame-Options 限制时降级) -->
+        <div v-if="error" class="frame-state frame-state-error">
+          <IconPark icon="mdi:cloud-off-outline" width="48" height="48" class="error-icon" />
+          <p class="frame-state-title">{{ t('market.iframe.blockedTitle') }}</p>
+          <p class="frame-state-hint">{{ t('market.iframe.blockedHint', { source: activeSource.name }) }}</p>
+          <div class="frame-state-actions">
+            <button type="button" class="primary" @click="openInExternal(activeSource.originUrl)">
+              <IconPark icon="mdi:open-in-new" width="14" height="14" />
+              {{ t('market.btnOpenInBrowser') }}
+            </button>
+            <button type="button" class="ghost" @click="reload">
+              <IconPark icon="mdi:refresh" width="14" height="14" />
+              {{ t('market.btnReload') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 /* ============================================
-   市场主题色 - Ocean Teal Market
-   只在 .market 作用域内生效,不影响其他 view
-   亮色: sky-500 主色 / cyan-500 渐变收尾
-   暗色: sky-400 提亮,cyan-400 收尾
+   市场主题色 - Ocean Teal Market(2026-07-09 沿用)
+   亮色: sky-500 / cyan-500
+   暗色: sky-400 / cyan-400
    ============================================ */
 .market {
-  --mkt-primary: #0ea5e9;       /* sky-500 主色(信任蓝) */
-  --mkt-primary-hover: #0284c7; /* sky-600 hover */
-  --mkt-accent: #06b6d4;        /* cyan-500 渐变收尾 */
-  --mkt-bg: #f0f9ff;            /* sky-50 浅底 */
-  --mkt-bg-strong: #e0f2fe;     /* sky-100 */
-  --mkt-border: #bae6fd;        /* sky-200 */
-  --mkt-text: #0369a1;          /* sky-700 深字 */
+  --mkt-primary: #0ea5e9;
+  --mkt-primary-hover: #0284c7;
+  --mkt-accent: #06b6d4;
+  --mkt-bg: #f0f9ff;
+  --mkt-bg-strong: #e0f2fe;
+  --mkt-border: #bae6fd;
+  --mkt-text: #0369a1;
 
   display: flex;
   flex-direction: column;
-  height: 100%;                  /* 占满 content-area(已被 app-container 锁为视口高度) */
+  height: 100%;
   width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
 }
 
-/* 暗黑模式:用更亮的 sky-400 提亮,cyan-400 收尾 */
 :global(html.dark) .market {
-  --mkt-primary: #38bdf8;       /* sky-400 */
-  --mkt-primary-hover: #7dd3fc; /* sky-300 */
-  --mkt-accent: #22d3ee;        /* cyan-400 */
-  --mkt-bg: #082f49;            /* sky-950 */
-  --mkt-bg-strong: #0c4a6e;     /* sky-900 */
-  --mkt-border: #0369a1;        /* sky-700 */
-  --mkt-text: #bae6fd;          /* sky-200 浅字 */
+  --mkt-primary: #38bdf8;
+  --mkt-primary-hover: #7dd3fc;
+  --mkt-accent: #22d3ee;
+  --mkt-bg: #082f49;
+  --mkt-bg-strong: #0c4a6e;
+  --mkt-border: #0369a1;
+  --mkt-text: #bae6fd;
 }
 
-/* 页面头部 - flex 子项,不收缩不滚动 */
+/* 页面头部 */
 .view-header {
   margin-bottom: 24px;
   flex-shrink: 0;
 }
-
 .view-title {
   display: flex;
   align-items: flex-start;
   gap: 16px;
 }
-
 .view-icon {
   width: 40px;
   height: 40px;
@@ -524,13 +278,11 @@ onMounted(async () => {
   color: var(--bg-card);
   flex-shrink: 0;
 }
-
 .view-icon-market {
   background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
   color: #ffffff;
   box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--mkt-primary) 40%, transparent);
 }
-
 .view-title h1 {
   font-size: 24px;
   font-weight: 700;
@@ -538,7 +290,6 @@ onMounted(async () => {
   margin: 0 0 4px;
   transition: color 0.3s ease;
 }
-
 .view-title p {
   font-size: 14px;
   color: var(--text-dim);
@@ -546,14 +297,12 @@ onMounted(async () => {
   transition: color 0.3s ease;
 }
 
-/* 卡片 - flex 列占满 .market 剩余高度,内部三段各自负责;
-   顶部工具栏/源标签 flex-shrink:0 不滚,.market-body flex:1 接管滚动,
-   .pager flex-shrink:0 始终在 .card 底部 = 视口内可见 */
+/* 卡片容器 */
 .card {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;                /* 关键:允许子项收缩到内容以下,触发内部 overflow */
+  min-height: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -562,122 +311,10 @@ onMounted(async () => {
   transition: all 0.3s ease;
 }
 
-/* 2026-07-03 增:三方源不可达 banner。
-   主题色沿用市场海蓝,但降低饱和度 + 浅底 + 警示色 icon,
-   不抢主搜索区焦点。 */
-.market-remote-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-  background: var(--mkt-bg);
-  border: 1px solid var(--mkt-border);
-  border-left: 3px solid var(--mkt-primary);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-.market-remote-banner .banner-icon {
-  color: var(--mkt-primary);
-  flex-shrink: 0;
-}
-.market-remote-banner .banner-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.market-remote-banner .banner-text strong {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--mkt-text);
-}
-.market-remote-banner .banner-text span {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.4;
-}
-.market-remote-banner .banner-retry {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--bg-card);
-  border-color: var(--mkt-border);
-  color: var(--mkt-text);
-}
-.market-remote-banner .banner-retry:hover:not(:disabled) {
-  background: var(--mkt-bg-strong);
-  border-color: var(--mkt-primary);
-  color: var(--mkt-text);
-}
-
-/* 工具栏 */
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.toolbar-left, .toolbar-center, .toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* 工具栏内 ghost 按钮:常驻可见背景+对齐图标文字(覆盖全局 ghost 透明) */
-.toolbar .ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-card);
-  border-color: var(--border);
-}
-.toolbar .ghost:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--text-faint);
-}
-
-.toolbar-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-dim);
-}
-
-.scope-select {
-  padding: 8px 12px;
-  min-width: 120px;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  color: var(--text-faint);
-  pointer-events: none;
-}
-
-.search-input {
-  padding-left: 36px;
-  width: 280px;
-}
-
-/* 源标签 */
+/* 顶部源 tab(2026-07-09 改:右侧新增 reload + open 按钮) */
 .source-tabs {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-bottom: 16px;
   padding-bottom: 12px;
@@ -685,7 +322,9 @@ onMounted(async () => {
   flex-wrap: wrap;
   flex-shrink: 0;
 }
-
+.source-tabs-spacer {
+  flex: 1;
+}
 .source-tab {
   display: inline-flex;
   align-items: center;
@@ -700,13 +339,11 @@ onMounted(async () => {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-
 .source-tab:hover:not(.active) {
   background: var(--mkt-bg);
   border-color: var(--mkt-border);
   color: var(--mkt-text);
 }
-
 .source-tab.active {
   background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
   border-color: transparent;
@@ -714,444 +351,100 @@ onMounted(async () => {
   box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
 }
 
-.source-type {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.95);
-  text-transform: uppercase;
-}
-
-.source-tab:not(.active) .source-type {
-  background: var(--mkt-bg);
-  color: var(--mkt-text);
-}
-
-.source-empty {
-  padding: 8px 12px;
-  color: var(--text-faint);
-  font-size: 13px;
-}
-
-/* 消息提示 */
-.message {
-  display: flex;
+/* 右侧 reload / open 按钮(覆盖全局 ghost 透明底,常驻可见) */
+.source-reload,
+.source-open {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  margin-bottom: 16px;
+  gap: 6px;
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+.source-reload:hover:not(:disabled),
+.source-open:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
 }
 
-.message-success {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.message-error {
-  background: var(--danger-dim);
-  color: var(--danger);
-}
-
-.muted {
-  color: var(--text-faint);
-  font-size: 11px;
-  margin-left: 4px;
-}
-
-/* 卡片网格 - 中部可滚动容器,卡片多时只滚这一段;
-   flex:1 占 .card 剩余高度,min-height:0 允许收缩触发内部 overflow。
-   配合 .market height:100% + .card flex:1 链路,自适应任何屏幕,
-   保证顶部工具栏/分页栏始终在 .card 上下两端 = 视口上下两端。 */
-.market-body {
+/* iframe 主体区:flex:1 接管 .card 剩余高度,内部 iframe 100% 撑满;
+   position:relative 让加载/失败占位可以 absolute 居中覆盖 */
+.market-frame-wrap {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding-right: 4px;       /* 给滚动条留位置,避免遮住卡片 */
-  margin-right: -4px;       /* 抵消 padding-right,保持外边距不变 */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-subtle);
 }
-
-/* 卡片网格 - auto-fill 让卡片随容器宽度自动列数,260px 最小宽
-   在 1920px 屏可铺 ~6 列(原来 max-width:1100 限制下只铺 3 列) */
-.market-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-}
-
-.market-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 14px 12px 18px; /* 左侧 18px 给 box-shadow 留位,避开 border-radius 切割 */
+.market-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: inset 4px 0 0 transparent; /* 默认透明占位,避免布局抖动 */
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.market-card:hover {
-  border-color: color-mix(in srgb, var(--mkt-primary) 35%, var(--border));
-  box-shadow: inset 4px 0 0 transparent, var(--shadow-card);
-}
-
-/* 已安装卡片 - 翠绿左侧条带(成功语义保留) */
-.market-card.is-installed {
-  box-shadow: inset 4px 0 0 var(--success);
-}
-
-/* 已安装卡片 hover - 保留翠绿条带 + 增强阴影 */
-.market-card.is-installed:hover {
-  box-shadow: inset 4px 0 0 var(--success), var(--shadow-card);
-  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
-}
-
-/* 未安装卡片 - 靛蓝灰细条带,与市场主题呼应,不再单调纯透明 */
-.market-card:not(.is-installed) {
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--mkt-primary) 25%, transparent);
-}
-
-.market-card:not(.is-installed):hover {
-  box-shadow:
-    inset 4px 0 0 var(--mkt-primary),
-    var(--shadow-card);
-  border-color: var(--mkt-border);
-}
-
-.market-card-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.market-card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--mkt-bg);
-  color: var(--mkt-primary);
-  border: 1px solid var(--mkt-border);
-  flex-shrink: 0;
-}
-
-.market-card-titles {
-  flex: 1;
-  min-width: 0;
+/* 加载 / 失败占位 — 覆盖在 iframe 上方,absolute 居中 */
+.frame-state {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.market-card-name {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.market-card-id {
-  font-size: 11px;
-  font-family: 'JetBrains Mono', monospace;
-  background: var(--mkt-bg);
-  color: var(--mkt-text);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  align-self: flex-start;
-  max-width: fit-content;
-}
-
-.badge {
-  display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.badge-installed {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.badge-not-installed {
-  background: var(--bg-subtle);
-  color: var(--text-faint);
-}
-
-.market-card-meta {
-  display: flex;
+  justify-content: center;
   gap: 10px;
-  flex-wrap: wrap;
-}
-
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-.market-card-desc {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.market-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-/* 卡片底部 - flex-shrink:0 保持自然高度不被压,
-   margin-top:auto 在 .market-card flex 列里把自身推到卡片底部,
-   保证内容长度不一时 actions 仍统一贴底 */
-.market-card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-/* spacer 恢复 flex:1 占满左侧空间,把 actions 推到卡片底部右侧;
-   spacer 是空 <span>,无视觉内容,不会在卡片底部留空白块 */
-.market-card-bottom-spacer {
-  flex: 1;
-}
-
-/* 卡片底部 actions 始终显示。
-   之前 opacity:0 + hover 显示的方案会让 actions 区域在网格里
-   留出一大块空白(占位但不渲染),且行高不一致显得别扭。 */
-.market-card-actions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  opacity: 1;
-}
-
-.action-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--text-dim);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.action-icon:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.action-icon-view:hover {
-  background: var(--mkt-bg);
-  color: var(--mkt-primary);
-}
-
-/* 2026-07-04 增:卡片底部「前往技能详情」悬浮色,走 mkt 主题蓝,与其它 action
-   视觉区分但不抢拉取按钮的渐变主色。 */
-.action-icon-go-detail:hover {
-  background: var(--mkt-bg);
-  color: var(--mkt-primary);
-}
-
-/* 2026-07-04 增:卡片底部 detail icons 容器,把眼睛 + 前往详情两颗 icon 并排。
-   gap 让两颗 icon 之间留 4px,避免视觉粘连。 */
-.market-card-detail-icons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.action-icon-jump:hover {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.market-card-pull {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  background: linear-gradient(135deg, var(--mkt-primary) 0%, var(--mkt-accent) 100%);
-  border: 1px solid transparent;
-  color: #ffffff;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--mkt-primary) 30%, transparent);
-  transition: all 0.15s ease;
-}
-
-.market-card-pull:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--mkt-primary-hover) 0%, var(--mkt-accent) 100%);
-  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
-  transform: translateY(-1px);
-}
-
-/* 标签 chips(卡片里也用) */
-.tag {
-  display: inline-block;
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-}
-
-/* 详情弹窗 */
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-.detail-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.detail-row-full {
-  grid-column: 1 / -1;
-}
-
-.detail-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.detail-id {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-faint);
-  word-break: break-all;
-}
-
-.detail-desc {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-line;
-}
-
-.detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* 分页器 - flex-shrink:0 在 .card flex 列里保持自然高度,不被压掉 */
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  flex-shrink: 0;
-  margin: 16px auto 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.pager button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-}
-
-.pager-info {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-/* 空状态 */
-.empty-state {
-  padding: 48px 24px;
   text-align: center;
-  color: var(--text-faint);
+  padding: 24px;
   background: var(--bg-subtle);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
+  pointer-events: auto;
+  z-index: 1;
 }
-
-.empty-title {
+.frame-state-text,
+.frame-state-title,
+.frame-state-hint {
+  margin: 0;
+}
+.frame-state-title {
   font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 6px;
+}
+.frame-state-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  max-width: 420px;
+  line-height: 1.6;
+}
+.frame-state-text {
+  font-size: 14px;
   font-weight: 500;
   color: var(--text);
-  margin: 12px 0 0;
 }
-
-.empty-hint {
-  font-size: 13px;
-  color: var(--text-faint);
-  margin: 6px 0 0;
-}
-
-.loading-state {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--text-faint);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-/* 2026-07-01 改:用 iconify mdi:loading 替代自绘 12px spinner。
-   icon 36px + spin 1s linear infinite,视觉上明显是一个"正在加载"的图标。
-   颜色用 mkt-primary(海蓝)与市场主题呼应,而不是默认灰。 */
-.loading-state .loading-icon {
+.frame-state-loading .loading-icon {
   color: var(--mkt-primary);
   animation: spin 1s linear infinite;
 }
-
-.loading-state .loading-text {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.loading-state .loading-hint {
-  margin: 0;
-  font-size: 12px;
+.frame-state-error .error-icon {
   color: var(--text-faint);
+}
+.frame-state-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.frame-state-actions .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.frame-state-actions .ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 @keyframes spin {
@@ -1160,26 +453,16 @@ onMounted(async () => {
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .toolbar-left, .toolbar-center, .toolbar-right {
-    justify-content: center;
+  .source-tabs {
     flex-wrap: wrap;
   }
-
-  .search-input {
-    width: 100%;
+  .source-tabs-spacer {
+    display: none;
   }
-
-  .market-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .market-card-actions {
-    opacity: 1;
+  .source-reload,
+  .source-open {
+    flex: 1;
+    justify-content: center;
   }
 }
 </style>
