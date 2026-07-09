@@ -30,6 +30,10 @@ func main() {
 		*configPath = env
 	}
 
+	// 2026-07-09 调试:打印进程内 HTTPS_PROXY(看 init() 是否真设了)
+	fmt.Printf("[DEBUG web main] HTTPS_PROXY=%q HTTP_PROXY=%q https_proxy=%q\n",
+		os.Getenv("HTTPS_PROXY"), os.Getenv("HTTP_PROXY"), os.Getenv("https_proxy"))
+
 	// embed 路径 "frontend/dist" 在 fs 里保留了目录前缀,先 Sub 出 dist 子 FS,
 	// 让 server 拿到的 FrontRootFS/StaticFS 已经是 dist 根。
 	distFS, err := fs.Sub(frontendFS, "frontend/dist")

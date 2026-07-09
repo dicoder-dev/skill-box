@@ -22,9 +22,89 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
+
+// 2026-07-09 增:macOS 系统级 HTTP 代理自动检测。
+//
+// 背景:Mac GUI 应用(浏览器 / 系统 git / npm)能自动读 scutil --proxy 配的
+// 系统代理,但 Go 进程默认只读 HTTPS_PROXY / HTTP_PROXY 环境变量。
+// 用户的 Mac 配了 127.0.0.1:7897 (ClashX / Surge / 类似) 系统代理,
+// shell 启动 skill-box 进程时通常不继承这个配置,导致 skill-box 后端
+// 直连 GitHub 失败,但他浏览器装同样的 skill 却能下。
+//
+// 这个 init() 在程序启动时一次性检查 + 注入到 env,让 http.ProxyFromEnvironment
+// 自动选到系统代理。
+func init() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	// 已有显式代理配置就不动(用户可能走自己的代理)
+	if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" ||
+		os.Getenv("https_proxy") != "" || os.Getenv("http_proxy") != "" {
+		return
+	}
+	host, port := macSystemProxy()
+	if host == "" {
+		return
+	}
+	proxy := "http://" + host + ":" + port
+	_ = os.Setenv("HTTPS_PROXY", proxy)
+	_ = os.Setenv("HTTP_PROXY", proxy)
+}
+
+// macSystemProxy 通过 scutil --proxy 读 macOS 系统代理。
+// 返回 ("127.0.0.1", "7897") 这种,失败返 ("", "")。
+func macSystemProxy() (string, string) {
+	// 2026-07-09 改:scutil 输出是 plist 风格,直接 string match "HTTPSProxy :"
+// 跟 "HTTPSPort :"(简单且 0 依赖)。失败返空让上层 fallback 到直连。
+	out, err := exec.Command("scutil", "--proxy").Output()
+	if err != nil {
+		return "", ""
+	}
+	text := string(out)
+	host := parseScutilField(text, "HTTPSProxy")
+	port := parseScutilField(text, "HTTPSPort")
+	if host == "" || port == "" {
+		// 2026-07-09 改:HTTPS 没配就试 HTTP 字段(用户可能只配 HTTP)
+		host = parseScutilField(text, "HTTPProxy")
+		port = parseScutilField(text, "HTTPPort")
+	}
+	// HTTPSEnable / HTTPEnable 必须是 1 才用,否则用户禁用了系统代理
+	enable := parseScutilField(text, "HTTPSEnable")
+	if enable != "1" {
+		enable = parseScutilField(text, "HTTPEnable")
+	}
+	if enable != "1" {
+		return "", ""
+	}
+	return host, port
+}
+
+// parseScutilField 从 scutil --proxy 输出里抓 "Key : value" 格式的 value。
+func parseScutilField(text, key string) string {
+	for _, line := range strings.Split(text, "\n") {
+		// 格式:"  Key : value" 或 "  Key : "
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:idx])
+		if k == key {
+			v := strings.TrimSpace(line[idx+1:])
+			// 2026-07-09 兜底:scutil 偶尔会输出 "<null>" 字面量当空值
+			if v == "<null>" {
+				return ""
+			}
+			return v
+		}
+	}
+	return ""
+}
 
 // DefaultTransport 返回针对"高频小请求到同一 host"调优的 http.Transport。
 //

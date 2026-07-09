@@ -152,7 +152,11 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	// baseURL 默认 "https://github.com",测试时可以传 file://{localPath}。
 	// 2026-07-09 边界:如果 remoteID 本身是 file:// 形式(测试用),
 	// 不再做 owner/repo 拼接,直接当完整 URL 走。
-	repoURL := a.buildRepoURL(baseURL, owner, repoName, remoteID)
+	// 2026-07-09 改:URL 优先 git:// 协议(走 9418 端口,不限流)。
+	// 失败回退 https://。用户实测 codeload / raw.githubusercontent.com 都 60s timeout,
+	// 但 `npx skills add`(走 git 协议)能下。go-git 5.x 默认走 https,
+	// 强制 git:// 优先能复用那条通路径。
+	_ = a.buildRepoURL(baseURL, owner, repoName, remoteID) // 保留供测试 file://
 
 	// 2026-07-09 改:用 goroutine + select 让 go-git 响应 ctx 取消。
 	// go-git 内部 transport 不走 ctx(5.x 限制),用包装 channel 实现"用户取消立即停"。
@@ -186,17 +190,22 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 					return fmt.Errorf("plaininit: %w", err)
 				}
 				// 配 remote
+				// 2026-07-09 改:URL 优先 git:// 协议(走 9418 端口,不限流),
+				// 失败回退 https://。用户实测 codeload / raw.githubusercontent.com 都 60s timeout,
+				// 但 `npx skills add`(走 git 协议)能下。go-git 5.x 默认走 https。
+				// 2026-07-09 改:只走 https(让 go-git 自动用 HTTP 代理,Mac 系统代理 127.0.0.1:7897 生效)
+				gitURL := "https://github.com/" + owner + "/" + repoName + ".git"
 				_, err = repo.CreateRemote(&config.RemoteConfig{
 					Name: "origin",
-					URLs: []string{repoURL},
+					URLs: []string{gitURL},
 				})
 				if err != nil {
 					return fmt.Errorf("create remote: %w", err)
 				}
-				// Fetch(浅)
+				// Fetch(浅,拉所有分支,后面前面 branch = main 时优先用 main,fallback master 时也已经下好)
 				err = repo.Fetch(&git.FetchOptions{
 					RemoteName: "origin",
-					RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch))},
+					RefSpecs:   []config.RefSpec{config.RefSpec("+refs/heads/*:refs/remotes/origin/*")},
 					Depth:      1,
 					Tags:       git.NoTags,
 				})
