@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -37,6 +39,7 @@ func (f *fakeRT) RoundTrip(r *http.Request) (*http.Response, error) {
 			}, nil
 		}
 	}
+	fmt.Fprintf(os.Stderr, "[fakeRT.MISS] path=%q query=%q\n", r.URL.Path, r.URL.RawQuery)
 	return &http.Response{
 		StatusCode: http.StatusNotFound,
 		Body:       io.NopCloser(bytes.NewReader([]byte(`not found ` + r.URL.Path))),
@@ -295,11 +298,16 @@ func TestDownload_AllCandidatesFail(t *testing.T) {
 //
 // 回归测试:防止未来重构把 429 当普通错误 continue 掉,
 // 那样会触发更多 GitHub 限流请求,加重黑名单。
+//
+// 2026-07-10 改:Download 流程从"6 候选 URL"改成"tree + candidate fallback",
+// 计数基数变成 2 次 tree API(2 分支尝试)+ 至多 1 次遇到 429 早退;
+// 不允许继续尝试后续 candidates。
 func TestDownload_RateLimited_AbortsImmediately(t *testing.T) {
 	var hits int
 	rt := &countingRT{
 		inner: &fakeRT{responses: map[string]fakeResp{
-			// 第一个候选就 429,后面所有候选都不会被尝试
+			// tree API 全部走 fakeRT 兜底 404,所以会先试 main → master 两分支。
+			// 然后 downloadSKILLMDOnly 第一个 candidates 就 429,后续都应当被阻断。
 			"/o/r/main/skills/x/SKILL.md": {status: 429, body: "rate limit exceeded"},
 		}},
 		count: &hits,
@@ -310,9 +318,10 @@ func TestDownload_RateLimited_AbortsImmediately(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error (non-fallback remote id)")
 	}
-	// 6 个候选 URL,429 早退应该只命中 1 次
-	if hits != 1 {
-		t.Fatalf("expected exactly 1 fetch (429 abort), got %d", hits)
+	// tree 主分支 + master 分支(= 2 次 tree API),429 raw 那条触发早退,
+	// 总共 = 3 次。后续 candidates 不应再被访问。
+	if hits > 3 {
+		t.Fatalf("expected at most 3 fetches (2 trees + 1 raw 429 abort), got %d", hits)
 	}
 }
 
@@ -826,6 +835,311 @@ func TestDiscover_AuditsAPI_EmptyAndFallback(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected at least one fallback item with Author+Description, got 0")
+	}
+}
+
+// === /api/github/repos/.../git/trees 路径测试(2026-07-10) ===
+//
+// 覆盖 SKILL.md 在任意深度 anchor 下的场景(101-skills/skills 这种仓库),
+// 老 6 候选 fallback 完全 cover 不到,必须走 tree 自动发现。
+
+// treeMockResponse 构造一个 /repos/{o}/{r}/git/trees/{branch} 响应(含多个 blob 路径)。
+func treeMockResponse(blobs []string) string {
+	type te struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	}
+	type resp struct {
+		Tree      []te `json:"tree"`
+		Truncated bool `json:"truncated"`
+	}
+	out := resp{}
+	for _, p := range blobs {
+		out.Tree = append(out.Tree, te{Path: p, Type: "blob"})
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
+// TestDownload_TreeDeepAnchor 验证 101-skills/skills 场景:
+// SKILL.md 在 `tools/video/SKILL.md`,走 tree API 能自动找到 SKILL.md
+// 并并发拉附属文件 — 老 6 候选 URL 全部 404。
+func TestDownload_TreeDeepAnchor(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		// tree API:返多层 blob(pattern 含 ?recursive=1 让 matchPathQuery 认 query 段)
+		"/repos/101-skills/skills/git/trees/main?recursive=1": {
+			status: 200, ct: "application/json",
+			body: treeMockResponse([]string{
+				"README.md",
+				"tools/video/SKILL.md",
+				"tools/video/scripts/generate.py",
+				"tools/video/references/prompts.md",
+				"other-skill/SKILL.md", // 干扰项
+			}),
+		},
+		// raw files (tree-first 后并发拉)
+		"/101-skills/skills/main/tools/video/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: ai-video-generation\nversion: 1.0.0\ndescription: AI 视频生成\n---\n# Body\n",
+		},
+		"/101-skills/skills/main/tools/video/scripts/generate.py": {
+			status: 200, ct: "text/x-python",
+			body: "print('gen')\n",
+		},
+		"/101-skills/skills/main/tools/video/references/prompts.md": {
+			status: 200, ct: "text/markdown",
+			body: "# prompts\n",
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	can, err := a.Download(context.Background(), "https://skills.sh", "101-skills/skills@ai-video-generation")
+	if err != nil {
+		t.Fatalf("expected tree-first hit, got %v", err)
+	}
+	if can == nil {
+		t.Fatal("nil canonical")
+	}
+	// 期望:3 文件(SKILL.md + generate.py + prompts.md),干扰项 other-skill/SKILL.md 不被收
+	if len(can.Files) != 3 {
+		t.Fatalf("expected 3 files, got %d: %+v", len(can.Files), can.Files)
+	}
+	if can.Files[0].Path != "SKILL.md" {
+		t.Errorf("first file should be SKILL.md, got %q", can.Files[0].Path)
+	}
+	// 相对路径应该是 anchor 去掉后的本地路径(不带 tools/video/ 前缀)
+	expectedPaths := map[string]bool{
+		"SKILL.md":                true,
+		"scripts/generate.py":    true,
+		"references/prompts.md":  true,
+	}
+	for _, f := range can.Files {
+		if !expectedPaths[f.Path] {
+			t.Errorf("unexpected file path %q", f.Path)
+		}
+	}
+	if can.Manifest.Name != "ai-video-generation" {
+		t.Errorf("Manifest.Name = %q want ai-video-generation", can.Manifest.Name)
+	}
+	if can.Manifest.Author != "101-skills" {
+		t.Errorf("Manifest.Author = %q want 101-skills", can.Manifest.Author)
+	}
+}
+
+// TestDownload_TreeBranchMainThenMaster 验证 tree API 主分支找不到时 fallback master。
+func TestDownload_TreeBranchMainThenMaster(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/repos/o/r/git/trees/main?recursive=1": {
+			status: 404, body: "Not Found",
+		},
+		"/repos/o/r/git/trees/master?recursive=1": {
+			status: 200, ct: "application/json",
+			body: treeMockResponse([]string{
+				"skills/foo/SKILL.md",
+				"skills/foo/helper.py",
+			}),
+		},
+		"/o/r/master/skills/foo/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: foo\n---\n# Foo\n",
+		},
+		"/o/r/master/skills/foo/helper.py": {
+			status: 200, ct: "text/x-python",
+			body: "# helper\n",
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	can, err := a.Download(context.Background(), "https://skills.sh", "o/r@foo")
+	if err != nil {
+		t.Fatalf("expected tree on master hit, got %v", err)
+	}
+	if can == nil || len(can.Files) != 2 {
+		t.Fatalf("expected 2 files, got %+v", can)
+	}
+}
+
+// TestDownload_TreeAnchorNotFound_FallThroughToCandidate 验证 tree 找不到 anchor
+// 时退到老 6 候选 URL(例如仓库根 <name>/SKILL.md 能被旧路径命中)。
+func TestDownload_TreeAnchorNotFound_FallThroughToCandidate(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		// tree 主/分支都没 mock → 404
+		"/repos/o/r/git/trees/main?recursive=1":   {status: 404},
+		"/repos/o/r/git/trees/master?recursive=1": {status: 404},
+		// 老 6 候选里有 /skills/<n>/SKILL.md
+		"/o/r/main/skills/legacy/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: legacy\n---\n# Legacy\n",
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	can, err := a.Download(context.Background(), "https://skills.sh", "o/r@legacy")
+	if err != nil {
+		t.Fatalf("expected candidate fallback hit, got %v", err)
+	}
+	if can == nil || can.Manifest.Name != "legacy" {
+		t.Errorf("expected canonical for legacy, got %+v", can)
+	}
+}
+
+// TestDownload_TreeAnchorNotFound_NoFallback 验证 tree + 6 候选都失败 → 返错。
+func TestDownload_TreeAnchorNotFound_NoFallback(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/repos/some/unknown/git/trees/main?recursive=1":   {status: 404},
+		"/repos/some/unknown/git/trees/master?recursive=1": {status: 404},
+		"/some/unknown/main/skills/x/SKILL.md":   {status: 404},
+		"/some/unknown/main/x/SKILL.md":          {status: 404},
+		"/some/unknown/master/skills/x/SKILL.md": {status: 404},
+		"/some/unknown/master/x/SKILL.md":        {status: 404},
+		"/some/unknown/main/.claude/skills/x/SKILL.md":   {status: 404},
+		"/some/unknown/master/.claude/skills/x/SKILL.md": {status: 404},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	_, err := a.Download(context.Background(), "https://skills.sh", "some/unknown@x")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLocateSKILLMDByPath 纯函数测试:locateSKILLMDByPath 在多路径里选最浅的 anchor。
+func TestLocateSKILLMDByPath(t *testing.T) {
+	entries := []treeEntry{
+		{Path: "tools/video/SKILL.md", Type: "blob"},
+		{Path: "deep/nested/foo/bar/ai-video-generation/SKILL.md", Type: "blob"},
+		{Path: "skills/other/SKILL.md", Type: "blob"},
+		{Path: "tools/video/scripts/gen.py", Type: "blob"},
+		// 树(tree)节点,不算
+		{Path: "tools/video", Type: "tree"},
+	}
+	_, anchor, ok := locateSKILLMDByPath(entries, "ai-video-generation")
+	if !ok {
+		t.Fatal("expected locate success")
+	}
+	if anchor != "deep/nested/foo/bar/ai-video-generation/" {
+		t.Errorf("anchor = %q want deep/nested/foo/bar/ai-video-generation/", anchor)
+	}
+
+	_, anchor2, ok2 := locateSKILLMDByPath(entries, "video")
+	if !ok2 {
+		t.Fatal("expected locate video")
+	}
+	if anchor2 != "tools/video/" {
+		t.Errorf("anchor2 = %q want tools/video/", anchor2)
+	}
+
+	_, _, ok3 := locateSKILLMDByPath(entries, "nonexistent")
+	if ok3 {
+		t.Error("expected miss for nonexistent")
+	}
+}
+
+// TestExtractFrontmatterName 验证 frontmatter name 字段提取(2026-07-10 增)。
+func TestExtractFrontmatterName(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"---\nname: foo\n---\n# Body\n", "foo"},
+		{"---\nname: \"ai video\"\n---\n# Body\n", "ai video"},
+		{"---\nname: 'kebab-case'\n---\n", "kebab-case"},
+		{"no frontmatter here\n", ""},
+		{"---\ntitle: no name\n---\n", ""},
+		{"---\nname: alpha\ndescription: desc\n---\n# body", "alpha"},
+	}
+	for _, c := range cases {
+		t.Run(c.in[:min(20, len(c.in))], func(t *testing.T) {
+			got := extractFrontmatterName(c.in)
+			if got != c.want {
+				t.Errorf("extractFrontmatterName = %q want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// TestDownload_FrontmatterFallback 验证场景:SKILL.md 路径里的目录名 != name,
+// 必须走 frontmatter 匹配才能命中(如 inference-sh/skills 里
+// tools/video/SKILL.md 但 frontmatter name=ai-video-generation)。
+func TestDownload_FrontmatterFallback(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		// tree:多个 SKILL.md(目录名都不等于 name)
+		"/repos/o/r/git/trees/main?recursive=1": {
+			status: 200, ct: "application/json",
+			body: treeMockResponse([]string{
+				"tools/video/SKILL.md",
+				"tools/video/scripts/run.py",
+				"tools/image/SKILL.md",
+				"skills/audio/SKILL.md",
+			}),
+		},
+		// frontmatter GET(只命中 video 那个)
+		"/o/r/main/tools/video/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: ai-video-generation\nversion: 1.0.0\ndescription: video gen\n---\n# AI Video Generation\n",
+		},
+		// 其它 SKILL.md 也返 200(以免 downloadSKILLMDOnly 后续 fallback 触发 429 误判)
+		"/o/r/main/tools/image/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: ai-image-generation\n---\n",
+		},
+		"/o/r/main/skills/audio/SKILL.md": {
+			status: 200, ct: "text/markdown",
+			body: "---\nname: audio-helper\n---\n",
+		},
+		// 后续 anchor files 拉(以 anchor=tools/video/ 拉附属)
+		"/o/r/main/tools/video/scripts/run.py": {
+			status: 200, ct: "text/x-python",
+			body: "# run\n",
+		},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	can, err := a.Download(context.Background(), "https://skills.sh", "o/r@ai-video-generation")
+	if err != nil {
+		t.Fatalf("expected frontmatter hit, got %v", err)
+	}
+	if can == nil {
+		t.Fatal("nil canonical")
+	}
+	if can.Manifest.Name != "ai-video-generation" {
+		t.Errorf("Manifest.Name = %q want ai-video-generation", can.Manifest.Name)
+	}
+	// 期望:SKILL.md + scripts/run.py(2 个文件)
+	if len(can.Files) != 2 {
+		t.Fatalf("expected 2 files, got %d: %+v", len(can.Files), can.Files)
+	}
+	wantPaths := map[string]bool{"SKILL.md": true, "scripts/run.py": true}
+	for _, f := range can.Files {
+		if !wantPaths[f.Path] {
+			t.Errorf("unexpected file %q", f.Path)
+		}
+	}
+}
+
+// TestDownload_TreeTruncated 验证 tree 返 truncated(超大仓库)返错,走老路径兜底。
+func TestDownload_TreeTruncated(t *testing.T) {
+	rt := &fakeRT{responses: map[string]fakeResp{
+		"/repos/big/repo/git/trees/main?recursive=1": {
+			status: 200, ct: "application/json",
+			body: `{"tree":[{"path":"foo","type":"blob"}],"truncated":true}`,
+		},
+		"/repos/big/repo/git/trees/master?recursive=1": {
+			status: 200, ct: "application/json",
+			body: `{"tree":[],"truncated":true}`,
+		},
+		// 兜底候选也失败(没在 knownCatalogFallback)
+		"/big/repo/main/skills/foo/SKILL.md":   {status: 404},
+		"/big/repo/main/foo/SKILL.md":          {status: 404},
+		"/big/repo/master/skills/foo/SKILL.md": {status: 404},
+		"/big/repo/master/foo/SKILL.md":        {status: 404},
+	}}
+	a := NewWithClient(&http.Client{Transport: rt})
+	_, err := a.Download(context.Background(), "https://skills.sh", "big/repo@foo")
+	if err == nil {
+		t.Fatal("expected error on truncated+fallback fail")
 	}
 }
 

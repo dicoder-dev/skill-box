@@ -19,9 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -104,11 +107,18 @@ func New() *Adapter {
 }
 
 // NewWithClient 构造 Adapter(测试用,允许注入 http.RoundTripper mock)。
+//
+// 2026-07-10 改:NewWithClient 默认就把 raw base override 设为 "https://stub",
+// 跟测试里 fakeRT 常见的 base host 对齐;老测试代码不用单独调 SetRawBaseOverride
+// 也能让 raw URL 命中 fakeRT(URL 形如 https://stub/{o}/{r}/.../{path})。
+// 若测试需要其它 raw base,后续 SetRawBaseOverride 覆盖即可。
 func NewWithClient(c *http.Client) *Adapter {
 	if c == nil {
 		return New()
 	}
-	return &Adapter{httpClient: c}
+	a := &Adapter{httpClient: c}
+	a.SetRawBaseOverride("https://stub")
+	return a
 }
 
 // SetRawBaseOverride 替换 GitHub raw base(测试用);空 = 用 default。
@@ -508,13 +518,24 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 	return detail, nil
 }
 
-// Download 拉 SKILL.md(从 GitHub raw)转 canonical。
+// Download 拉 SKILL.md(从 GitHub raw)+ 附属文件转 canonical。
 //
-// 2026-07-09 改:三段式 fallback,跟 skillhub adapter 对齐
-//   1) 6 候选 URL 串行尝试(main/master × skills/.claude/skills/根)
-//   2) 任何一条遇到 GitHub 429 立即终止所有后续候选(避免继续触发限流加重黑名单)
-//   3) 全部失败 → knownCatalogFallback 命中 → 内存构建最小 SKILL.md,
-//      用户至少能拿到一个能 install 的骨架;否则返 ErrRemoteFetchFail
+// 2026-07-10 重写(关键):从"硬编码 6 候选 URL"切换到"tree 自动发现"。
+//
+// 背景:用户场景 `https://www.skills.sh/101-skills/skills/ai-video-generation`
+// 直接 404。101-skills/skills 仓库把所有 skill 放在 `tools/<name>/SKILL.md`(路径不固定),
+// 老逻辑硬编码 `dirs ∈ {skills, .claude/skills, ""}` 三种前缀完全 cover 不到,
+// 6 候选全失败 → 兜底骨架 → 用户根本装不上。
+//
+// 新方案(镜像 github adapter):
+//   1) GET /api/github/repos/{owner}/{repo}/git/trees/{branch}?recursive=1
+//      → 扫整个仓库的 blob 路径元数据(~1.2s)
+//   2) 在 tree 里找**以 "<name>/SKILL.md" 结尾**的 blob(允许任意深度前缀)
+//      → 例: <name>=ai-video-generation 命中 `tools/video/SKILL.md` 也行
+//   3) 找到 → anchor prefix = 命中路径去掉 "/SKILL.md" 前缀,然后并发 raw 拉所有
+//      blob(类似 github adapter.downloadFromTree)。
+//   4) 找不到 / tree 拉不到 → 退回老 6 候选 URL,只为兜底拿 SKILL.md。
+//   5) 都失败 → knownCatalogFallback 命中 → 内存骨架。
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	if remoteID == "" {
 		return nil, skillmarket.ErrEmptyRemoteID
@@ -523,52 +544,466 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	if !ok {
 		return nil, fmt.Errorf("%w: invalid remote id %q", skillmarket.ErrRemoteNotFound, remoteID)
 	}
-	// 常见路径尝试顺序(2026-06-30 改造:笛卡尔积 main/master × 3 个目录 = 6 条)。
-	rawBase := a.rawBase()
+	slash := strings.Index(repo, "/")
+	if slash <= 0 || slash >= len(repo)-1 {
+		return nil, fmt.Errorf("%w: invalid repo %q", skillmarket.ErrRemoteNotFound, repo)
+	}
+	owner := repo[:slash]
+	repoName := repo[slash+1:]
+
+	// 主路径:tree API 自动发现 SKILL.md 路径,锚点目录并发拉所有附属文件。
+	if can, ok := a.downloadFromTree(ctx, owner, repoName, name, remoteID); ok {
+		return can, nil
+	}
+
+	// tree 失败 / 找不到 anchor → 老 6 候选 URL fallback(只下 SKILL.md)
+	if can, lastErr := a.downloadSKILLMDOnly(ctx, repo, name); can != nil {
+		return can, nil
+	} else if isRateLimited(lastErr) {
+		// 限流早退:继续 fallback 只会触发更多请求
+		logger.Warn("skillssh download: GitHub rate limited, abort")
+	} else if can := buildFallbackCanonical(remoteID, repo, name); can != nil {
+		logger.Warn("skillssh download: %v; using fallback canonical for %s", lastErr, remoteID)
+		return can, nil
+	}
+	return nil, fmt.Errorf("%w: no SKILL.md found for %s under %s (tried tree API + 6 candidate URLs)", skillmarket.ErrRemoteFetchFail, name, repo)
+}
+
+// downloadFromTree 走 GitHub Trees API + raw 并发下载,完整流程。
+//
+// 两阶段 locate(2026-07-10 增):
+//   1) 路径匹配:树里找以 "<name>/SKILL.md" 结尾的 blob
+//      → 命中走 anchor-files 并发拉(代价小,典型 5-10 个文件)
+//   2) frontmatter 匹配(回退):扫描树里所有 SKILL.md,并发 GET 内容,parse frontmatter
+//      找 `name: <name>` 精确匹配
+//      → 解决 skills.sh detail 页 name ≠ GitHub 目录名的问题(如
+//         "ai-video-generation" 在 `inference-sh/skills` 是 `tools/video/SKILL.md`)
+//
+// 返回 (canonical, true) 命中;(nil, false) 表示树抓不到 / 两阶段都没找到,
+// 由调用方继续走老 6 候选 URL 兜底。
+func (a *Adapter) downloadFromTree(ctx context.Context, owner, repoName, name, remoteID string) (*skilladapter.Canonical, bool) {
+	// 1. 拿 tree(支持 main / master fallback)
+	branches := []string{"main", "master"}
+	var lastErr error
+	for _, branch := range branches {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, false
+		}
+		entries, pathsByAnchor, err := a.fetchTreeEntries(ctx, owner, repoName, branch)
+		if err != nil {
+			lastErr = err
+			if isRateLimited(err) || isAuthRequired(err) {
+				return nil, false
+			}
+			continue
+		}
+
+		// 2. 路径匹配
+		skillMDP, anchorPrefix, ok := locateSKILLMDByPath(entries, name)
+		if ok && containsEntry(pathsByAnchor, anchorPrefix) && contains(pathsByAnchor[anchorPrefix], skillMDP) {
+			can := a.fetchAnchorFiles(ctx, owner, repoName, branch, anchorPrefix, skillMDP, name, owner, remoteID)
+			if can != nil {
+				return can, true
+			}
+		}
+
+		// 3. frontmatter 匹配(回退)
+		skillMDByFM, fmAnchor, ok := a.locateSKILLMDByFrontmatter(ctx, owner, repoName, branch, entries, name)
+		if ok {
+			// 用命中路径的目录作为 anchor,这样附属文件(scripts/、references/)跟着收
+			if can := a.fetchAnchorFiles(ctx, owner, repoName, branch, fmAnchor, skillMDByFM, name, owner, remoteID); can != nil {
+				return can, true
+			}
+		}
+	}
+	if lastErr != nil {
+		logger.Debug("skillssh downloadFromTree: %v", lastErr)
+	}
+	return nil, false
+}
+
+// locateSKILLMDByFrontmatter 扫 tree 里所有 SKILL.md,并发拉内容找 frontmatter `name: <name>`。
+//
+// 2026-07-10 增:解决 skills.sh detail 页 name 与 GitHub 路径不一致的问题。
+// 例:inference-sh/skills 详情页 name="ai-video-generation",但 SKILL.md 在 tools/video/
+// ——路径匹配失败,要靠 frontmatter 精确匹配挽救。
+//
+// 并发上限 6,跟 fetchAnchorFiles 共用信号量写法(独立 max)。
+func (a *Adapter) locateSKILLMDByFrontmatter(ctx context.Context, owner, repoName, branch string, entries []treeEntry, name string) (string, string, bool) {
+	var candidates []string
+	for _, e := range entries {
+		if e.Type == "blob" && strings.HasSuffix(e.Path, "/SKILL.md") {
+			candidates = append(candidates, e.Path)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", "", false
+	}
+
+	type fmHit struct {
+		path    string
+		anchor  string
+		content string
+	}
+	results := make([]fmHit, len(candidates))
+	sem := make(chan struct{}, 6)
+	var wg sync.WaitGroup
+	for i, p := range candidates {
+		wg.Add(1)
+		go func(i int, p string) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			body, err := a.fetchRawFile(ctx, owner, repoName, branch, p)
+			if err != nil {
+				return
+			}
+			results[i] = fmHit{path: p, anchor: strings.TrimSuffix(p, "SKILL.md"), content: body}
+		}(i, p)
+	}
+	wg.Wait()
+
+	for _, r := range results {
+		if r.content == "" {
+			continue
+		}
+		// 切 frontmatter 行,避免 skilladapter.ParseSkillMD 因 body 不合规返错
+		fmName := extractFrontmatterName(r.content)
+		if fmName == name {
+			return r.path, r.anchor, true
+		}
+	}
+	return "", "", false
+}
+
+// extractFrontmatterName 从 raw markdown 抽出 frontmatter `name:` 值。
+//
+// 2026-07-10 增:轻量解析 frontmatter,跳过 skilladapter.ParseSkillMD 严格校验
+// (我们的目的是快速筛 candidate,大文件 <250KB OK;校验留给最终选定的 SKILL.md)。
+// 只支持 `name: foo` / `name: "foo bar"` 这两种最短表达。
+func extractFrontmatterName(content string) string {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "---") {
+		return ""
+	}
+	// 找第二个 --- 块结束位置
+	rest := strings.TrimPrefix(content, "---")
+	idx := strings.Index(rest, "\n---")
+	if idx < 0 {
+		return ""
+	}
+	fmBlock := rest[:idx]
+	for _, line := range strings.Split(fmBlock, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "name:") {
+			continue
+		}
+		v := strings.TrimSpace(strings.TrimPrefix(line, "name:"))
+		v = strings.Trim(v, "\"'`")
+		return v
+	}
+	return ""
+}
+
+// containsEntry 判断 map 里是否存在 prefix 结尾带 "/" 的聚合 key(让 caller
+// 收 anchor 下的 blob)。
+func containsEntry(m map[string][]string, anchorPrefix string) bool {
+	_, ok := m[anchorPrefix]
+	return ok
+}
+
+// treeEntry 镜像 github adapter 的 tree 解析(本地复用,避免跨包依赖)。
+type treeEntry struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+// fetchTreeEntries 调 GitHub Trees API,返回所有 blob 路径 + 按 anchor prefix 分组的 map。
+//
+// anchor 概念:每个 SKILL.md 决定一个 anchor 目录(SKILL.md 的父目录);其它 blob
+// 按"最浅的祖先 anchor"分桶(blob 没有更浅的 anchor 时归 own root)。
+// 例如 trees 是:
+//
+//	tools/video/SKILL.md           → anchor = tools/video/
+//	tools/video/helper.py          → tools/video/
+//	tools/video/scripts/run.py     → tools/video/  (scripts/ 下没 SKILL.md,用 parent anchor)
+//	other-skill/SKILL.md           → anchor = other-skill/
+//
+// 这样按 anchor 收附属文件时,scripts/ 这种深嵌套也能带回来。
+//
+// 返回的 map key 是 anchor prefix(以 "/" 结尾),value 是该 anchor 下所有 blob。
+// 顶层没 anchor 的 blob 会被丢弃。
+func (a *Adapter) fetchTreeEntries(ctx context.Context, owner, repoName, branch string) ([]treeEntry, map[string][]string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1", owner, repoName, branch)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("User-Agent", httpx.UserAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tree api: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil, fmt.Errorf("status 404: branch %s not found", branch)
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, nil, fmt.Errorf("status 403: GitHub API rate limited")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, nil, fmt.Errorf("status %d: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read tree: %w", err)
+	}
+
+	var treeResp struct {
+		Tree      []treeEntry `json:"tree"`
+		Truncated bool        `json:"truncated"`
+	}
+	if err := json.Unmarshal(body, &treeResp); err != nil {
+		return nil, nil, fmt.Errorf("parse tree: %w", err)
+	}
+	if treeResp.Truncated {
+		return nil, nil, fmt.Errorf("tree truncated (repo too large)")
+	}
+
+	// 按 anchor 分组:先收集所有 SKILL.md 的目录当 anchors,再把每个 blob 归到
+	// "最深的祖先 anchor"(深度优先命中),用于后续按 anchor 取附属文件。
+	anchors := make([]string, 0, 4) // 按长度降序排
+	byAnchor := map[string][]string{}
+	for _, e := range treeResp.Tree {
+		if e.Type != "blob" || !strings.HasSuffix(e.Path, "/SKILL.md") {
+			continue
+		}
+		dir := strings.TrimSuffix(e.Path, "SKILL.md")
+		if !strings.HasSuffix(dir, "/") {
+			dir += "/"
+		}
+		anchors = append(anchors, dir)
+	}
+	// 按 path 长度**降序**排(深的 anchor 优先)
+	sort.Slice(anchors, func(i, j int) bool { return len(anchors[i]) > len(anchors[j]) })
+
+	for _, e := range treeResp.Tree {
+		if e.Type != "blob" {
+			continue
+		}
+		// 找最深祖先 anchor(prefix 必须以 "/" 结尾,且等于 blob path 前缀或等于某层)
+		var hit string
+		for _, anc := range anchors {
+			if strings.HasPrefix(e.Path, anc) {
+				hit = anc
+				break
+			}
+		}
+		if hit == "" {
+			continue
+		}
+		byAnchor[hit] = append(byAnchor[hit], e.Path)
+	}
+	return treeResp.Tree, byAnchor, nil
+}
+
+// locateSKILLMDByPath 在 entry 列表里找路径以 "<name>/SKILL.md" 结尾的 blob。
+//
+// 策略:扫所有 blob,凡是 path 末两段是 "<name>/SKILL.md" 即视为候选;
+// 若同一 name 命中多个(例如 skills/foo/SKILL.md 和 tools/foo/SKILL.md),取最短路径
+// (顶层最浅);仍冲突则取字典序最小的(确保稳定)。
+//
+// 返回 (skillMDPath, anchorPrefix, ok):anchorPrefix = "<name>" 这层目录(不含 SKILL.md)。
+func locateSKILLMDByPath(entries []treeEntry, name string) (string, string, bool) {
+	const mdName = "SKILL.md"
+	suffix := name + "/" + mdName
+	var hit string
+	hitDepth := -1
+	for _, e := range entries {
+		if e.Type != "blob" {
+			continue
+		}
+		if !strings.HasSuffix(e.Path, suffix) {
+			continue
+		}
+		// 注意:可能 name 本身含子路径(如 "foo/bar"),按 name 整段匹配后缀
+		// 此时 path 至少长 len(suffix);顶层 name 时 path 长度 == len("name")+len("/SKILL.md")
+		// 深度 = '/' 出现次数
+		depth := strings.Count(e.Path, "/")
+		if hit == "" || depth < hitDepth {
+			hit = e.Path
+			hitDepth = depth
+		}
+	}
+	if hit == "" {
+		return "", "", false
+	}
+	anchor := strings.TrimSuffix(hit, suffix)
+	anchorPrefix := anchor + name + "/"
+	return hit, anchorPrefix, true
+}
+
+// fetchAnchorFiles 并发拉 anchor 目录下所有 blob,组装 canonical。
+func (a *Adapter) fetchAnchorFiles(ctx context.Context, owner, repoName, branch, anchorPrefix, skillMDP, name, authorOwner, remoteID string) *skilladapter.Canonical {
+	paths, _ := collectAnchorPaths(ctx, a, owner, repoName, branch, anchorPrefix)
+	type fileResult struct {
+		path    string
+		content string
+		err     error
+	}
+	results := make([]fileResult, len(paths))
+	sem := make(chan struct{}, 6)
+	var wg sync.WaitGroup
+	for i, p := range paths {
+		wg.Add(1)
+		go func(i int, p string) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				results[i] = fileResult{path: p, err: ctx.Err()}
+				return
+			}
+			content, err := a.fetchRawFile(ctx, owner, repoName, branch, p)
+			results[i] = fileResult{path: p, content: content, err: err}
+		}(i, p)
+	}
+	wg.Wait()
+
+	var skillMD string
+	files := make([]skilladapter.File, 0, len(paths))
+	for _, r := range results {
+		if r.err != nil {
+			continue
+		}
+		if r.path == skillMDP {
+			skillMD = r.content
+			continue
+		}
+		rel := strings.TrimPrefix(r.path, anchorPrefix)
+		files = append(files, skilladapter.File{Path: filepath.ToSlash(rel), Content: r.content})
+	}
+	if skillMD == "" {
+		return nil
+	}
+	can, perr := skilladapter.ParseSkillMD(skillMD)
+	if perr != nil {
+		return nil
+	}
+	if can.Manifest.Name == "" {
+		can.Manifest.Name = name
+	}
+	if can.Manifest.Author == "" {
+		can.Manifest.Author = authorOwner
+	}
+	allFiles := make([]skilladapter.File, 0, len(files)+1)
+	allFiles = append(allFiles, skilladapter.File{Path: "SKILL.md", Content: skillMD})
+	allFiles = append(allFiles, files...)
+	can.Files = allFiles
+	_ = remoteID // 暂未使用,保留参数便于将来日志关联
+	return can
+}
+
+// collectAnchorPaths 重新调 tree api,按 anchor prefix 取该 anchor 下所有 blob。
+//
+// 2026-07-10 改:byAnchor 的 key 现在以 "/" 结尾(anchor prefix 形态),这里直接
+// 拿 anchor prefix 当 key 查。返回值是 anchor 目录(含 SKILL.md)和子目录下所有 blob。
+func collectAnchorPaths(ctx context.Context, a *Adapter, owner, repoName, branch, anchorPrefix string) ([]string, error) {
+	_, byAnchor, err := a.fetchTreeEntries(ctx, owner, repoName, branch)
+	if err != nil {
+		return nil, err
+	}
+	// anchorPrefix 已经以 "/" 结尾,byAnchor key 也是 "tools/video/" 形态
+	return byAnchor[anchorPrefix], nil
+}
+
+// fetchRawFile 单 GET 拉 raw.githubusercontent.com 文件内容。
+func (a *Adapter) fetchRawFile(ctx context.Context, owner, repoName, branch, path string) (string, error) {
+	url := fmt.Sprintf("%s/%s/%s/%s/%s", a.rawBase(), owner, repoName, branch, path)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", httpx.UserAgent)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch raw: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, path)
+	}
+	const cap = 4 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, cap))
+	if err != nil {
+		return "", fmt.Errorf("read raw: %w", err)
+	}
+	return string(b), nil
+}
+
+// contains 简单判断。
+func contains(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// isAuthRequired 2026-07-10 增:识别 GitHub tree API 401(私有仓库 / token 失效)。
+//
+// 与 isRateLimited 不完全等同 — rate limited 也常返 403,但 401 通常意味着
+// 资源不可见(私有 / 鉴权配置错),继续试下一个分支没意义。
+func isAuthRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "status 401") || strings.Contains(msg, "Bad credentials")
+}
+
+// downloadSKILLMDOnly 老路径:6 候选 URL × main/master,只下 SKILL.md,用于 tree 失败时兜底。
+//
+// 返回 (canonical, nil) 成功;(nil, err) 全失败,err 是最后一个错误。
+func (a *Adapter) downloadSKILLMDOnly(ctx context.Context, repo, name string) (*skilladapter.Canonical, error) {
 	branches := []string{"main", "master"}
 	dirs := []string{"skills", ".claude/skills", ""}
-	candidates := make([]string, 0, len(branches)*len(dirs))
 	for _, b := range branches {
 		for _, d := range dirs {
 			prefix := d
 			if prefix != "" {
 				prefix = prefix + "/"
 			}
-			candidates = append(candidates, fmt.Sprintf("%s/%s/%s/%s%s/SKILL.md", rawBase, repo, b, prefix, name))
-		}
-	}
-	var lastErr error
-	for _, u := range candidates {
-		body, err := a.fetchBody(ctx, u)
-		if err == nil {
-			can, perr := skilladapter.ParseSkillMD(body)
-			if perr != nil {
-				lastErr = perr
-				continue
+			url := fmt.Sprintf("%s/%s/%s/%s%s/SKILL.md", a.rawBase(), repo, b, prefix, name)
+			body, err := a.fetchBody(ctx, url)
+			if err == nil {
+				can, perr := skilladapter.ParseSkillMD(body)
+				if perr != nil {
+					continue
+				}
+				if can.Manifest.Name == "" {
+					can.Manifest.Name = name
+				}
+				return can, nil
 			}
-			if can.Manifest.Name == "" {
-				can.Manifest.Name = name
+			if isRateLimited(err) {
+				return nil, err
 			}
-			return can, nil
-		}
-		lastErr = err
-		// 2026-07-09 增:GitHub 429 立即终止所有后续候选
-		// 触发限流时继续试只会加重黑名单,毫无意义;直接让上层走 fallback。
-		// 用 errors.Is 匹配 http.StatusTooManyRequests,避免字符串拼接误判。
-		if isRateLimited(err) {
-			logger.Warn("skillssh download: GitHub rate limited on %s, abort remaining candidates", u)
-			break
 		}
 	}
-	// 6 候选全失败(或被 429 早退)→ 兜底:命中 knownCatalogFallback 给个内存骨架。
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no candidate URL matched")
-	}
-	if can := buildFallbackCanonical(remoteID, repo, name); can != nil {
-		logger.Warn("skillssh download: %v; using fallback canonical for %s", lastErr, remoteID)
-		return can, nil
-	}
-	return nil, fmt.Errorf("%w: %v", skillmarket.ErrRemoteFetchFail, lastErr)
+	return nil, fmt.Errorf("no candidate matched for %s/%s", repo, name)
 }
 
 // isRateLimited 2026-07-09 增:识别 GitHub raw 返回的 429 / "rate limit exceeded"。
