@@ -1,6 +1,7 @@
 package github
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
 	"os"
@@ -102,9 +103,17 @@ func setupSkillRepoDir(t *testing.T) string {
 
 // 2026-07-09 改:parseClonedSkill 单测 — 直接喂已 checkout 的目录,
 // 验证 SKILL.md + 附属文件 + 锚点过滤全部正确。
-func TestParseClonedSkill_IncludesAllFiles(t *testing.T) {
+//
+// 2026-07-10 改:Download 流程换成 Trees API + 并发 raw 下载,不再走
+// PlainClone,parseClonedSkill 也跟着删了。这个测试改成测 parseZipball
+// (file:// 测试入口仍用),用真实 zipball 验证 SKILL.md + 附属文件 + 锚点过滤。
+func TestParseZipball_IncludesAllFiles(t *testing.T) {
 	repoDir := setupSkillRepoDir(t)
-	can, err := parseClonedSkill(repoDir, "anthropics", "skills", "main", "skills/pdf", "anthropics/skills@skills/pdf")
+	zipPath := filepath.Join(t.TempDir(), "test.zip")
+	if err := buildTestZip(repoDir, zipPath, "anthropics-skills-abc123"); err != nil {
+		t.Fatalf("build zip: %v", err)
+	}
+	can, err := parseZipball(zipPath, "anthropics", "skills", "skills/pdf", "anthropics/skills@skills/pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,14 +137,18 @@ func TestParseClonedSkill_IncludesAllFiles(t *testing.T) {
 }
 
 // 2026-07-09 增:锚点目录不存在 → 报错。
-func TestParseClonedSkill_AnchorNotFound(t *testing.T) {
+func TestParseZipball_AnchorNotFound(t *testing.T) {
 	repoDir := setupSkillRepoDir(t)
-	_, err := parseClonedSkill(repoDir, "x", "y", "main", "no/such/dir", "x/y@no/such/dir")
+	zipPath := filepath.Join(t.TempDir(), "test.zip")
+	if err := buildTestZip(repoDir, zipPath, "anthropics-skills-abc123"); err != nil {
+		t.Fatalf("build zip: %v", err)
+	}
+	_, err := parseZipball(zipPath, "x", "y", "no/such/dir", "x/y@no/such/dir")
 	if err == nil {
 		t.Fatal("expected error when anchor dir missing")
 	}
-	if !strings.Contains(err.Error(), "anchor dir") {
-		t.Errorf("error should mention anchor dir, got %v", err)
+	if !strings.Contains(err.Error(), "SKILL.md") {
+		t.Errorf("error should mention SKILL.md, got %v", err)
 	}
 }
 
@@ -275,18 +288,48 @@ func TestLastSegment(t *testing.T) {
 	}
 }
 
-// 2026-07-09 增:cleanupOldCloneDirs 不报错(无目录 / 空目录 / 有过期目录都应 OK)。
-func TestCleanupOldCloneDirs(t *testing.T) {
-	// 临时改 cloneBaseDir 不实际(/tmp 改不了),只测函数不 panic
+// 2026-07-10 增:cleanupOldZipFiles 不报错(无目录 / 空目录 / 有过期 zip 都应 OK)。
+func TestCleanupOldZipFiles(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("cleanupOldCloneDirs panicked: %v", r)
+			t.Errorf("cleanupOldZipFiles panicked: %v", r)
 		}
 	}()
-	cleanupOldCloneDirs()
+	cleanupOldZipFiles()
 }
 
 // --- helpers ---
+
+// buildTestZip 2026-07-10 增:把 srcDir 打成 zipball,所有文件挂在
+// topDir/ 之下(模拟 codeload 的 "{owner}-{repo}-{sha}/" 顶层)。
+func buildTestZip(srcDir, dstZip, topDir string) error {
+	f, err := os.Create(dstZip)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+	return filepath.Walk(srcDir, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(srcDir, p)
+		w, err := zw.Create(topDir + "/" + filepath.ToSlash(rel))
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(body)
+		return err
+	})
+}
 
 type fakeErr struct{ msg string }
 

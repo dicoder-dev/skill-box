@@ -56,7 +56,7 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 		c.JSON(400, gin.H{"error": "input 必填"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	out, err := newServiceV2().InstallFromInput(ctx, &smarket.InstallFromInputInput{
 		SourceHint:   req.SourceHint,

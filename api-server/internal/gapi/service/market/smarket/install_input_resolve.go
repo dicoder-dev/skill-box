@@ -228,19 +228,21 @@ func resolveGitHubTreeURL(u *url.URL, raw string) (*ResolvedInput, error) {
 	var skill string
 	switch {
 	case strings.EqualFold(last, "SKILL.md"):
-		// 文件层,取父目录
+		// 文件层:取完整目录路径(github adapter 需要全路径,不止末段)
+		// 例 blob/main/skills/pdf/SKILL.md → skill = "skills/pdf"
 		if len(rest) < 2 {
-			// 根目录的 SKILL.md,skill = repo
+			// 根目录的 SKILL.md,skill = repo(单文件仓库)
 			skill = repo
 		} else {
-			skill = rest[len(rest)-2]
+			// 拼接 rest 中除了末段 SKILL.md 之外的所有段
+			skill = strings.Join(rest[:len(rest)-1], "/")
 		}
 	case strings.EqualFold(last, "README.md"):
 		// README 不算 skill 入口,报错
 		return nil, fmt.Errorf("%w: GitHub URL 指向 README.md,不是 SKILL.md %q", ErrInvalidInput, raw)
 	default:
-		// 末段是目录(tree URL 常见),用末段作 skill
-		skill = last
+		// 末段是目录(tree URL 常见),用完整 path 作 skill(去掉末段斜杠)
+		skill = strings.Join(rest, "/")
 	}
 	if sanitizeSlug(skill) == "" {
 		return nil, fmt.Errorf("%w: GitHub skill 名称非法 %q", ErrInvalidInput, raw)
@@ -293,10 +295,14 @@ func splitPathParts(p string) []string {
 	return out
 }
 
-// sanitizeSlug 简单 slug 校验(2026-07-09 增)。
+// sanitizeSlug 简单 slug 校验(2026-07-09 增;2026-07-10 放宽允许 /)。
 //
-// 允许字母/数字/-/_;空 → 返空。
+// 允许字母/数字/-/_/.//;空 → 返空。
 // 不做完整 RFC 校验,只防呆(空 / 含空格 / 含 : 等明显异常)。
+//
+// 2026-07-10 改:允许 / + 用于 GitHub 嵌套 skill path(如 "skills/pdf")。
+// GitHub 仓库 SKILL.md 通常在子目录(skills/pdf/SKILL.md),resolver 现在
+// 返回完整路径而不是末段,这样 adapter 才能定位 tree 锚点。
 func sanitizeSlug(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -307,7 +313,7 @@ func sanitizeSlug(s string) string {
 		case r >= 'a' && r <= 'z':
 		case r >= 'A' && r <= 'Z':
 		case r >= '0' && r <= '9':
-		case r == '-' || r == '_' || r == '.':
+		case r == '-' || r == '_' || r == '.' || r == '/':
 		default:
 			return ""
 		}

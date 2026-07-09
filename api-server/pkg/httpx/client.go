@@ -41,18 +41,34 @@ import (
 // 自动选到系统代理。
 func init() {
 	if runtime.GOOS != "darwin" {
+		fmt.Fprintln(os.Stderr, "[httpx.init] non-darwin, skip")
 		return
 	}
 	// 已有显式代理配置就不动(用户可能走自己的代理)
-	if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" ||
-		os.Getenv("https_proxy") != "" || os.Getenv("http_proxy") != "" {
+	v1 := os.Getenv("HTTPS_PROXY")
+	v2 := os.Getenv("HTTP_PROXY")
+	v3 := os.Getenv("https_proxy")
+	v4 := os.Getenv("http_proxy")
+	fmt.Fprintf(os.Stderr, "[httpx.init] env HTTPS_PROXY=%q HTTP_PROXY=%q https_proxy=%q http_proxy=%q\n", v1, v2, v3, v4)
+	if v1 != "" || v2 != "" || v3 != "" || v4 != "" {
+		fmt.Fprintln(os.Stderr, "[httpx.init] user-set proxy detected, skip macOS detect")
+		return
+	}
+	// 2026-07-10 增:用户 opt-out 开关。诊断"代理本身是不是问题"时显式禁掉。
+	// 例如 SKILLBOX_DISABLE_PROXY=1 时即使 macOS 配了系统代理,也不接管,
+	// 直接走 http.ProxyFromEnvironment(此时返回 nil = 直连)。
+	if os.Getenv("SKILLBOX_DISABLE_PROXY") != "" {
+		fmt.Fprintln(os.Stderr, "[httpx.init] SKILLBOX_DISABLE_PROXY set, skip macOS detect")
 		return
 	}
 	host, port := macSystemProxy()
+	fmt.Fprintf(os.Stderr, "[httpx.init] macSystemProxy host=%q port=%q\n", host, port)
 	if host == "" {
+		fmt.Fprintln(os.Stderr, "[httpx.init] no system proxy, skip")
 		return
 	}
 	proxy := "http://" + host + ":" + port
+	fmt.Fprintf(os.Stderr, "[httpx.init] set %s\n", proxy)
 	_ = os.Setenv("HTTPS_PROXY", proxy)
 	_ = os.Setenv("HTTP_PROXY", proxy)
 }

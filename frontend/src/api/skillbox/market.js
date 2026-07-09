@@ -30,12 +30,12 @@ import { http } from '@/core/utils/requests'
  *   404 - 源未注册
  *   409 - 同名 skill 冲突(响应体里 err 含 conflict 字段)
  *
- * 2026-07-09 改:timeout 默认 60s(后端 controller ctx 90s,留余地)。
- * 原默认 15s 太短,zipball 3.6MB+ 慢下载 + 解压经常 >15s 触发 client timeout。
+ * 2026-07-10 改:timeout 提到 130s。后端 controller ctx 120s,留 10s 余量;
+ * codeload zipball 实测 3.8MB 下载慢网络下 40s+,极端情况更久。
  */
 export function installFromInput(payload, options = {}) {
   return http.post('/api/skillbox/market/install-from-input', payload, {
-    timeout: 60000,
+    timeout: 130000,
     ...options,
   })
 }
