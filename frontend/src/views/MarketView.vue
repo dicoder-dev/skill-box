@@ -222,29 +222,18 @@ function goToHome() {
     </header>
 
     <div class="card">
-      <!-- 顶部栏:左侧 source tabs + 右侧「在浏览器中打开」按钮(2026-07-09 改:从卡片底部上移到顶栏) -->
-      <div class="top-row">
-        <nav class="source-tabs">
-          <button
-            v-for="s in sources"
-            :key="s.id"
-            :class="['source-tab', { active: s.id === activeSourceId }]"
-            @click="selectSource(s.id)"
-          >
-            <IconPark icon="mdi:radio-tower" width="14" height="14" />
-            {{ s.name }}
-          </button>
-        </nav>
+      <!-- 2026-07-09 改:去掉顶栏整行(open-browser-btn 搬到 source-card-head 右侧) -->
+      <nav class="source-tabs">
         <button
-          type="button"
-          class="open-browser-btn"
-          :title="t('market.btnOpenInBrowserTip', { name: activeSource.name })"
-          @click="openInExternal(activeSource.url)"
+          v-for="s in sources"
+          :key="s.id"
+          :class="['source-tab', { active: s.id === activeSourceId }]"
+          @click="selectSource(s.id)"
         >
-          <IconPark icon="mdi:external-link" width="14" height="14" />
-          <span>{{ t('market.btnOpenInBrowser') }}</span>
+          <IconPark icon="mdi:radio-tower" width="14" height="14" />
+          {{ s.name }}
         </button>
-      </div>
+      </nav>
 
       <!-- 主体:当前 tab 对应的站点介绍卡 + 安装指南 + 输入框 -->
       <div class="market-body">
@@ -253,7 +242,7 @@ function goToHome() {
           class="source-card"
           :style="{ '--accent': activeSource.accent }"
         >
-          <!-- 卡片 head:图标 + 名称 + URL -->
+          <!-- 卡片 head:图标 + 名称 + URL + 「在浏览器中打开」按钮(2026-07-09 改:按钮从顶栏搬到 head 右侧) -->
           <div class="source-card-head">
             <div class="source-card-icon">
               <IconPark icon="mdi:open-in-new" width="28" height="28" />
@@ -262,6 +251,16 @@ function goToHome() {
               <h2 class="source-card-name">{{ activeSource.name }}</h2>
               <p class="source-card-url">{{ activeSource.url }}</p>
             </div>
+            <!-- 在浏览器中打开按钮:2026-07-09 改:从顶栏搬到 head 右侧 -->
+            <button
+              type="button"
+              class="open-browser-btn"
+              :title="t('market.btnOpenInBrowserTip', { name: activeSource.name })"
+              @click="openInExternal(activeSource.url)"
+            >
+              <IconPark icon="mdi:earth" width="14" height="14" />
+              <span>{{ t('market.btnOpenInBrowser') }}</span>
+            </button>
           </div>
 
           <!-- 2026-07-09 增:站点描述 -->
@@ -454,26 +453,17 @@ function goToHome() {
 }
 
 /* ============================================
-   2026-07-09 改:顶栏(tabs + 在浏览器中打开按钮)布局
+   2026-07-09 改:source-tabs 顶栏(去掉 .top-row,按钮搬到 source-card-head)
    ============================================ */
-.top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-/* 顶部源 tab(继续保留 tab 样式) */
 .source-tabs {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  /* 删掉原本的 margin-bottom / padding-bottom / border-bottom,这些都搬到 .top-row */
+  /* 2026-07-09 改:这些样式原本在 .top-row,现在还回 .source-tabs */
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .source-tab {
   display: inline-flex;
@@ -501,10 +491,11 @@ function goToHome() {
   box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
 }
 
-/* 2026-07-09 改:在浏览器中打开按钮(从底部 ghost 提升为顶栏精致按钮)
-   - 蓝色 outline 风,与左侧 tab 视觉风格统一
+/* 2026-07-09 改:在浏览器中打开按钮(搬到 source-card-head 右侧)
+   - 蓝色 outline 风,与左侧 title 视觉协调
    - hover 加深 + 上抬
-   - active 模拟按下状态 */
+   - active 模拟按下状态
+   - 药丸形更精致 */
 .open-browser-btn {
   display: inline-flex;
   align-items: center;
@@ -512,7 +503,7 @@ function goToHome() {
   padding: 7px 14px;
   border: 1px solid var(--mkt-border);
   background: var(--bg-card);
-  border-radius: 999px; /* 药丸状,比方角精致 */
+  border-radius: 999px; /* 药丸状 */
   font-size: 12px;
   font-weight: 500;
   color: var(--mkt-text);
@@ -520,6 +511,7 @@ function goToHome() {
   transition: all 0.18s ease;
   flex-shrink: 0;
   white-space: nowrap;
+  margin-left: auto; /* 2026-07-09 改:推到 head 右侧 */
 }
 .open-browser-btn:hover {
   background: var(--mkt-bg-strong);

@@ -111,6 +111,9 @@ export const MDI_TO_ICONPARK = {
   'link-variant-off':             'LinkBreak',
   'open-in-new':                  'OpenOne',
   'external-link':                'LinkOut',
+  // 2026-07-09 增:地球图标,用于「在浏览器中打开」按钮
+  // 比 external-link 箭头更柔和,语义"跳到外部站点"更准
+  'earth':                        'Earth',
 
   // 视图 / 复制 / 眼睛
   'eye-outline':                  'View',
