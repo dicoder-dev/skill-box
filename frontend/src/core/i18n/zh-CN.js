@@ -383,20 +383,17 @@ const messages = {
     skillRevealFailed: '跳转失败:{msg}',
   },
 
-  // 2026-07-09 改:MarketView 改 iframe 嵌入,卡片 / 拉取 / 源设置全部移除。
-  // 保留 iframe 加载/失败 + 浏览器外跳 + 重载所需 key。
+  // 2026-07-09 改:MarketView 改回「卡片 + 在浏览器中打开」方案。
+  // iframe 嵌入被 skillhub 站点 CORS 拒(同源策略,代理解决不了),放弃。
+  // 保留:title / subtitle / btnOpenInBrowser / cards.* 两张站点卡的描述
   market: {
     title: '三方市场',
-    subtitle: '内嵌浏览 skillhub.cn / skills.sh 等三方站点的技能目录。',
-    // 顶部源 tab 按钮文案(随 .source-tab 模板渲染)
-    btnReload: '重新加载',
+    subtitle: '浏览 skillhub.cn / skills.sh 等三方站点的技能目录,点击卡片在系统浏览器中打开。',
     btnOpenInBrowser: '在浏览器中打开',
-    // iframe 加载占位
-    iframe: {
-      loading: '正在加载 {source}…',
-      // 第三方站点 X-Frame-Options 拒绝嵌入 / 网络层错误 / 15s 兜底超时 — 都进 error 态
-      blockedTitle: '该站点拒绝被内嵌',
-      blockedHint: '{source} 设置了 X-Frame-Options / CSP 限制,无法直接嵌入到本应用。可以点下方按钮在系统浏览器中打开。',
+    // 站点卡片描述(在卡片里展示)
+    cards: {
+      skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
+      skillsshDesc: 'Vercel 托管的 AI 技能排行榜,按热度(1H / change)实时排序。',
     },
   },
 

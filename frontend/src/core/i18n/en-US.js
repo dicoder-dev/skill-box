@@ -374,17 +374,14 @@ const messages = {
     skillRevealFailed: 'Reveal failed: {msg}',
   },
 
-  // 2026-07-09 改:MarketView 改 iframe 嵌入,卡片 / 拉取 / 源设置全部移除。
-  // 保留 iframe 加载/失败 + 浏览器外跳 + 重载所需 key。
+  // 2026-07-09 改:MarketView 改回「卡片 + open in browser」方案。iframe 被 skillhub CORS 拒。
   market: {
     title: 'Marketplace',
-    subtitle: 'Browse third-party skill catalogs like skillhub.cn / skills.sh via embedded web view.',
-    btnReload: 'Reload',
+    subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh) and open them in your system browser.',
     btnOpenInBrowser: 'Open in browser',
-    iframe: {
-      loading: 'Loading {source}…',
-      blockedTitle: 'Site refuses embedding',
-      blockedHint: '{source} sets X-Frame-Options / CSP that blocks embedding. Use the button below to open it in your system browser.',
+    cards: {
+      skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
+      skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
     },
   },
 
