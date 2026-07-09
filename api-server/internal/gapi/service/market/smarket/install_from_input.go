@@ -194,8 +194,9 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 
 	// 9) 2026-07-09 增:按 source_type 自动写 GroupPath(用户要求"按来源放入对应分组")。
 	//    - skillhub → 分组 "skillhub"
-	//    - skillssh → 分组 "skills.sh"
-	//    - github   → 分组 "github"
+	//    - skillssh → 分组 "skills-sh"(走 NormalizeGroupName,跟 sskill.CreateGroup 对齐)
+	//    - github   → 分组按 owner 划分(anthropics/skills → 分组 "anthropics"),
+	//      同一个 owner 的多个 skill 归到同一组下,便于浏览
 	//    分组目录不存在时自动 CreateGroup(走 store 建物理目录),
 	//    跟 PullV2 一样,前端不需要先建组再装。
 	//
@@ -205,7 +206,7 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 	// StoreRoot/skills.sh/pdf.lock 的父目录 StoreRoot/skills.sh/ 不存在 → ENOENT。
 	// 修法:groupPath 走 NormalizeGroupName 规范化,CreateGroup 跟 Manifest.GroupPath
 	// 用同一个规范化值,保证物理目录跟 GroupPath 字段对齐。
-	groupPath := normalizeGroupPathForMarket(defaultGroupPathFor(resolved.SourceType))
+	groupPath := normalizeGroupPathForMarket(deriveGroupPath(resolved.SourceType, resolved.RemoteID))
 	can.Manifest.GroupPath = groupPath
 	if ssvc != nil && groupPath != "" {
 		if gerr := ssvc.CreateGroup(groupPath); gerr != nil {
@@ -250,8 +251,8 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 //
 // 用户要求"按来源放入对应分组":
 //   - skillhub → "skillhub"
-//   - skillssh → "skills.sh"(跟源 DisplayName 对齐)
-//   - github   → "github"
+//   - skillssh → "skills-sh"(跟源 DisplayName 对齐,经 NormalizeGroupName 规范化)
+//   - github   → ""(由 deriveGroupPath 按 owner 动态生成,不在这里写死)
 //
 // 未知 source 返空字符串(不强制分组,让 skill 落到 store 根)。
 //
@@ -264,11 +265,53 @@ func defaultGroupPathFor(sourceType string) string {
 		return "skillhub"
 	case skillmarket.SourceSkillsSH:
 		return "skills.sh"
-	case skillmarket.SourceGitHub:
-		return "github"
 	default:
 		return ""
 	}
+}
+
+// deriveGroupPath 2026-07-09 增:根据 source_type + remoteID 动态推导分组。
+//
+//   - skillhub:返 "skillhub"(固定,跟旧版兼容)
+//   - skillssh:返 "skills.sh"(固定)
+//   - github:从 remoteID="owner/repo@skill-path" 拆出 owner 当分组,
+//     同一个 owner 多个 skill 归到同组(anthropics/skills@pdf + anthropics/skills@pdf
+//     都进 "anthropics" 组),便于浏览;owner 不在远程 ID 里时回退到 "github"
+func deriveGroupPath(sourceType, remoteID string) string {
+	switch sourceType {
+	case skillmarket.SourceSkillhub:
+		return "skillhub"
+	case skillmarket.SourceSkillsSH:
+		return "skills.sh"
+	case skillmarket.SourceGitHub:
+		owner, _ := splitOwnerFromRemote(remoteID)
+		if owner == "" {
+			return "github"
+		}
+		return owner
+	default:
+		return ""
+	}
+}
+
+// splitOwnerFromRemote 2026-07-09 增:从各种 remoteID 格式里拆 owner:
+//
+//   - github:   "owner/repo@skill-path" → "owner"
+//   - skillssh: "owner/repo@skill"     → "owner"
+//   - skillhub: "slug"                 → ""(固定分组,无 owner)
+//
+// 拆失败返空字符串,调用方决定 fallback。
+func splitOwnerFromRemote(remoteID string) (string, bool) {
+	at := strings.LastIndex(remoteID, "@")
+	head := remoteID
+	if at > 0 {
+		head = remoteID[:at]
+	}
+	slash := strings.Index(head, "/")
+	if slash <= 0 || slash >= len(head)-1 {
+		return "", false
+	}
+	return head[:slash], true
 }
 
 // normalizeGroupPathForMarket 2026-07-09 增:把 defaultGroupPathFor 返回的字面量
