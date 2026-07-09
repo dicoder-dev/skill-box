@@ -19,9 +19,15 @@ import (
 )
 
 // SourceType 三方源类型。
+//
+// 2026-07-09 改:GitHub 从 skillssh 拆出来成独立源(github),原因:
+//   - skills.sh 跟 GitHub raw 是两套不同体系(catalog vs 仓库浏览器)
+//   - 用户视角:从 skills.sh 装的 skill 跟从 GitHub 装的 skill 应该归不同分组
+//   - URL 形态不同:skills.sh 走 /{owner}/{repo}/{skill},github 走 github.com/blob/...
 const (
 	SourceSkillhub = "skillhub" // skillhub.cn
 	SourceSkillsSH = "skillssh" // skills.sh
+	SourceGitHub   = "github"   // github.com / raw.githubusercontent.com(2026-07-09 增)
 	SourceCustom   = "custom"   // 用户自定义 HTTP+JSON(预留)
 )
 

@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -710,53 +711,105 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 	if err != nil {
 		return nil, fmt.Errorf("read zip body: %w", err)
 	}
-	// 4) 解压找 SKILL.md
+	// 4) 解压所有文件,不只是 SKILL.md
+	//
+	// 2026-07-09 修(关键 bug):之前 `if base != "SKILL.md" { continue }`
+	// 跳过了所有非 SKILL.md 文件,zip 里的附属 scripts/templates/references
+	// 等全部丢失,canonical.Files 只剩一个 SKILL.md。用户实际跑这个 skill
+	// 时会缺资源报错。这里改成先全部收,SKILL.md 单独标记留作 manifest 解析。
+	//
+	// 路径规范化:strip zip 里的前缀目录(常见 layout: skills/{slug}/...),
+	// 用 *filepath.Rel 相对 SKILL.md 所在目录做锚点,得到的相对路径
+	// 才是用户视角下的文件路径(避免落盘后多一层 skillhub 私有目录)。
 	r, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return nil, fmt.Errorf("open zip: %w", err)
 	}
+	type zipEntry struct {
+		path string // 用户视角相对路径
+		data []byte
+	}
+	var entries []zipEntry
+	skillMDPath := "" // 第一个 SKILL.md 在 zip 里的原路径,用来定位锚点
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		// 兼容:根 SKILL.md 或嵌套路径里的 SKILL.md
 		name := strings.TrimPrefix(f.Name, "./")
 		base := name
 		if idx := strings.LastIndex(name, "/"); idx >= 0 {
 			base = name[idx+1:]
 		}
-		if base != "SKILL.md" {
-			continue
+		if base == "SKILL.md" && skillMDPath == "" {
+			skillMDPath = name
 		}
 		rc, oerr := f.Open()
 		if oerr != nil {
+			logger.Warn("skillhub download: open %q: %v", name, oerr)
 			continue
 		}
-		md, rerr := io.ReadAll(io.LimitReader(rc, 1<<20))
+		data, rerr := io.ReadAll(io.LimitReader(rc, 1<<20)) // 单文件 1MB cap
 		rc.Close()
 		if rerr != nil {
+			logger.Warn("skillhub download: read %q: %v", name, rerr)
 			continue
 		}
-		can, perr := skilladapter.ParseSkillMD(string(md))
-		if perr != nil {
-			logger.Warn("skillhub download: parse SKILL.md from %q: %v", name, perr)
-			continue
-		}
-		// 从 zip 路径推断 version(常见布局: skills/{slug}/{version}/SKILL.md)。
-		// 2026-07-01 改:优先级上调 — zip 路径里的 version 比 frontmatter 里的
-		// 默认 "0.1.0" 更可靠;frontmatter 经常没写 version 字段。
-		if parts := strings.Split(name, "/"); len(parts) >= 3 {
-			if v := parts[len(parts)-2]; v != "" && v != can.Manifest.Version {
-				can.Manifest.Version = v
+		entries = append(entries, zipEntry{path: name, data: data})
+	}
+	if skillMDPath == "" {
+		return nil, fmt.Errorf("download: SKILL.md not found in zip")
+	}
+
+	// 锚点 = SKILL.md 所在目录(去掉末尾的 "SKILL.md")
+	anchorDir := path.Dir(skillMDPath)
+	if anchorDir == "." {
+		anchorDir = ""
+	}
+
+	files := make([]skilladapter.File, 0, len(entries))
+	var skillMDContent string
+	for _, e := range entries {
+		rel := e.path
+		if anchorDir != "" {
+			stripped := strings.TrimPrefix(e.path, anchorDir+"/")
+			// 兜底:stripped 跟原路径一样,说明不在 anchor 下(目录里散落的其它文件),原样保留
+			if stripped != e.path {
+				rel = stripped
 			}
 		}
-		// name 兜底
-		if can.Manifest.Name == "" {
-			can.Manifest.Name = remoteID
+		// 跳过 zip 顶层目录条目(像 "./" / "__MACOSX/" 资源分叉等)
+		if rel == "" || strings.HasPrefix(rel, "__MACOSX/") || strings.HasSuffix(rel, "/") {
+			continue
 		}
-		return can, nil
+		// 记录 SKILL.md 内容(等会儿 parse Manifest 用),不要写两次
+		if e.path == skillMDPath {
+			skillMDContent = string(e.data)
+			continue
+		}
+		files = append(files, skilladapter.File{Path: rel, Content: string(e.data)})
 	}
-	return nil, fmt.Errorf("download: SKILL.md not found in zip")
+	if skillMDContent == "" {
+		return nil, fmt.Errorf("download: SKILL.md content empty")
+	}
+	can, perr := skilladapter.ParseSkillMD(skillMDContent)
+	if perr != nil {
+		return nil, fmt.Errorf("%w: parse SKILL.md: %v", skillmarket.ErrRemoteFetchFail, perr)
+	}
+	// 从 zip 路径推断 version(常见布局: skills/{slug}/{version}/SKILL.md)。
+	if parts := strings.Split(skillMDPath, "/"); len(parts) >= 3 {
+		if v := parts[len(parts)-2]; v != "" && v != can.Manifest.Version {
+			can.Manifest.Version = v
+		}
+	}
+	if can.Manifest.Name == "" {
+		can.Manifest.Name = remoteID
+	}
+	// SKILL.md 放 files 第一个(惯例),其它附属文件按 zip 顺序追加
+	finalFiles := make([]skilladapter.File, 0, len(files)+1)
+	finalFiles = append(finalFiles, skilladapter.File{Path: "SKILL.md", Content: skillMDContent})
+	finalFiles = append(finalFiles, files...)
+	can.Files = finalFiles
+	return can, nil
 }
 
 // downloadSingleFile 备用路径:直接拉单文件 SKILL.md(应对 zip 接口变更)。

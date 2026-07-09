@@ -49,11 +49,17 @@ type ResolvedInput struct {
 
 // ResolveInstallInput 把用户原文解析成 (source_type, remote_id)(2026-07-09 增)。
 //
+// 2026-07-09 改:各 source 仅支持自己的 URL 形态(用户要求「统一仅支持一个来源」)
+//   - skillhub:仅 https://skillhub.cn/skills/{slug} 详情页 URL
+//   - skills.sh:仅 https://skills.sh/{owner}/{repo}/{skill} 详情页 URL
+//   - github:仅 https://github.com/.../blob/.../SKILL.md 详情页 URL
+//   - 不再支持 raw.githubusercontent.com(那是 zipball 的事,不是 skill 入口)
+//   - 不再支持纯 slug(用户要求"必须粘 URL")
+//
 // 参数:
-//   - input      用户原文(已 TrimSpace)
-//   - sourceHint 前端传下来的当前 tab source_id("skillhub" / "skillssh" / ""),
-//     空字符串表示由解析器自动从 URL 域名推断;非空时对纯 slug / owner/repo@skill
-//     格式按此 source 解释。
+//   - input      用户原文(已 TrimSpace,必须含 URL scheme)
+//   - sourceHint 前端传下来的当前 tab source_id("skillhub" / "skillssh" / "github");
+//     缺省 = auto(由 URL 域名推断);非空时只接受该 source 的 URL。
 //
 // 失败:返 ErrInvalidInput 的 wrap 错误,UI 上展示 err.Error() 即可。
 func ResolveInstallInput(input, sourceHint string) (*ResolvedInput, error) {
@@ -64,42 +70,12 @@ func ResolveInstallInput(input, sourceHint string) (*ResolvedInput, error) {
 
 	hint := strings.ToLower(strings.TrimSpace(sourceHint))
 
-	// 1) 包含 "://" → 走 URL 解析
-	if strings.Contains(raw, "://") {
-		return resolveFromURL(raw, hint)
+	// 2026-07-09 改:不再支持非 URL 输入。所有 source 都要求用户粘详情页 URL。
+	if !strings.Contains(raw, "://") {
+		return nil, fmt.Errorf("%w: 必须粘贴详情页 URL(以 https:// 开头),得到 %q", ErrInvalidInput, raw)
 	}
 
-	// 2) 不含 "://" → 按 sourceHint 解释
-	switch hint {
-	case skillmarket.SourceSkillhub:
-		slug := sanitizeSlug(raw)
-		if slug == "" {
-			return nil, fmt.Errorf("%w: skillhub 输入必须是 slug(字母/数字/-/_),得到 %q", ErrInvalidInput, raw)
-		}
-		return &ResolvedInput{
-			SourceType: skillmarket.SourceSkillhub,
-			SourceName: "SkillHub",
-			RemoteID:   slug,
-		}, nil
-
-	case skillmarket.SourceSkillsSH:
-		if _, _, ok := splitOwnerRepoAt(raw); !ok {
-			return nil, fmt.Errorf("%w: skills.sh 输入必须是 owner/repo@skill 格式,得到 %q", ErrInvalidInput, raw)
-		}
-		return &ResolvedInput{
-			SourceType: skillmarket.SourceSkillsSH,
-			SourceName: "skills.sh",
-			RemoteID:   raw,
-		}, nil
-
-	default:
-		// 没有 sourceHint 也没有 URL:无法识别
-		return nil, fmt.Errorf("%w: 非 URL 输入必须配合市场选择(SkillHub / Skills.sh),得到 %q", ErrInvalidInput, raw)
-	}
-}
-
-// resolveFromURL 处理 URL 输入(2026-07-09 增)。
-func resolveFromURL(raw, hint string) (*ResolvedInput, error) {
+	// 解析 URL
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%w: URL 解析失败 %q: %v", ErrInvalidInput, raw, err)
@@ -109,26 +85,47 @@ func resolveFromURL(raw, hint string) (*ResolvedInput, error) {
 	}
 
 	host := strings.ToLower(u.Host)
-	// 去掉 www. 前缀,统一匹配
 	host = strings.TrimPrefix(host, "www.")
-	// api.skillhub.cn 与 skillhub.cn 同源
 	hostNoAPIPrefix := strings.TrimPrefix(host, "api.")
 
-	switch {
-	case host == "skillhub.cn" || hostNoAPIPrefix == "skillhub.cn":
+	// 2026-07-09 改:按 hint 收窄域名(用户要求"统一仅支持一个来源")
+	switch hint {
+	case skillmarket.SourceSkillhub:
+		// skillhub tab:只接受 skillhub 域名
+		if host != "skillhub.cn" && hostNoAPIPrefix != "skillhub.cn" {
+			return nil, fmt.Errorf("%w: 当前是 SkillHub tab,只支持 https://skillhub.cn/skills/{{slug}} URL,得到 %q", ErrInvalidInput, raw)
+		}
 		return resolveSkillhubURL(u, raw)
 
-	case host == "skills.sh":
+	case skillmarket.SourceSkillsSH:
+		// skills.sh tab:只接受 skills.sh 域名
+		if host != "skills.sh" {
+			return nil, fmt.Errorf("%w: 当前是 Skills.sh tab,只支持 https://skills.sh/{{owner}}/{{repo}}/{{skill}} URL,得到 %q", ErrInvalidInput, raw)
+		}
 		return resolveSkillsSHURL(u, raw)
 
-	case host == "github.com":
+	case skillmarket.SourceGitHub:
+		// github tab:只接受 github.com 域名
+		if host != "github.com" {
+			return nil, fmt.Errorf("%w: 当前是 GitHub tab,只支持 https://github.com/{{owner}}/{{repo}}/blob/{{branch}}/{{path}}/SKILL.md URL,得到 %q", ErrInvalidInput, raw)
+		}
 		return resolveGitHubTreeURL(u, raw)
 
-	case host == "raw.githubusercontent.com":
-		return resolveGitHubRawURL(u, raw)
+	case "":
+		// auto:按域名分发(URL 必须带明确域名)
+		switch {
+		case host == "skillhub.cn" || hostNoAPIPrefix == "skillhub.cn":
+			return resolveSkillhubURL(u, raw)
+		case host == "skills.sh":
+			return resolveSkillsSHURL(u, raw)
+		case host == "github.com":
+			return resolveGitHubTreeURL(u, raw)
+		default:
+			return nil, fmt.Errorf("%w: 不支持的 URL 域名 %q(目前支持 skillhub.cn / skills.sh / github.com 详情页 URL)", ErrInvalidInput, host)
+		}
 
 	default:
-		return nil, fmt.Errorf("%w: 不支持的 URL 域名 %q(目前支持 skillhub.cn / skills.sh / github.com / raw.githubusercontent.com)", ErrInvalidInput, host)
+		return nil, fmt.Errorf("%w: 未知 source_hint %q", ErrInvalidInput, hint)
 	}
 }
 
@@ -249,53 +246,6 @@ func resolveGitHubTreeURL(u *url.URL, raw string) (*ResolvedInput, error) {
 		return nil, fmt.Errorf("%w: GitHub skill 名称非法 %q", ErrInvalidInput, raw)
 	}
 	// 原始 URL 当 ResolvedURL,前端展示/日志用。
-	return &ResolvedInput{
-		SourceType:  skillmarket.SourceSkillsSH,
-		SourceName:  "skills.sh",
-		RemoteID:    owner + "/" + repo + "@" + skill,
-		ResolvedURL: raw,
-	}, nil
-}
-
-// resolveGitHubRawURL 从 raw.githubusercontent.com URL 推断 (owner/repo, skill)(2026-07-09 增)。
-//
-// 支持:
-//   - raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}/SKILL.md
-//
-// skill 取 path 的父目录名;若 path 自身是 SKILL.md,skill = repo。
-func resolveGitHubRawURL(u *url.URL, raw string) (*ResolvedInput, error) {
-	parts := splitPathParts(u.Path)
-	// 期望:[owner, repo, branch, ...path...]
-	if len(parts) < 4 {
-		return nil, fmt.Errorf("%w: raw URL 路径过短,得到 %q", ErrInvalidInput, raw)
-	}
-	owner := parts[0]
-	repo := parts[1]
-	_ = parts[2] // branch,保留解析但不直接使用(skillssh adapter 走笛卡尔积 main/master)
-	rest := parts[3:]
-	if len(rest) == 0 {
-		return nil, fmt.Errorf("%w: raw URL 路径缺少 SKILL.md,得到 %q", ErrInvalidInput, raw)
-	}
-	if !validOwnerRepo(owner) || !validOwnerRepo(repo) {
-		return nil, fmt.Errorf("%w: raw URL owner/repo 非法 %q", ErrInvalidInput, raw)
-	}
-	last := rest[len(rest)-1]
-	var skill string
-	switch {
-	case strings.EqualFold(last, "SKILL.md"):
-		if len(rest) < 2 {
-			skill = repo
-		} else {
-			skill = rest[len(rest)-2]
-		}
-	case strings.EqualFold(last, "README.md"):
-		return nil, fmt.Errorf("%w: raw URL 指向 README.md,不是 SKILL.md %q", ErrInvalidInput, raw)
-	default:
-		skill = last
-	}
-	if sanitizeSlug(skill) == "" {
-		return nil, fmt.Errorf("%w: raw URL skill 名称非法 %q", ErrInvalidInput, raw)
-	}
 	return &ResolvedInput{
 		SourceType:  skillmarket.SourceSkillsSH,
 		SourceName:  "skills.sh",

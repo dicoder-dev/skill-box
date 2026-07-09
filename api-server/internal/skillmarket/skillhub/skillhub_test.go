@@ -742,6 +742,73 @@ func TestDownload_NoFallback_UnknownID(t *testing.T) {
 	}
 }
 
+// 2026-07-09 增:多文件 zip 回归测试 — 验证 SKILL.md 之外的附属文件
+// (scripts/、templates/、references/、assets/ 等)不会被旧代码的
+// `if base != "SKILL.md" { continue }` 跳掉,canonical.Files 应收齐。
+func TestDownload_ZipFlow_IncludesAllFiles(t *testing.T) {
+	zipServer := newZipMockServerFiles(t, map[string]string{
+		"skills/pdf-helper/1.2.0/SKILL.md":             "---\nname: pdf-helper\ndescription: PDF helper\n---\n# PDF Helper\n",
+		"skills/pdf-helper/1.2.0/scripts/extract.py":   "#!/usr/bin/env python3\nprint('extract')\n",
+		"skills/pdf-helper/1.2.0/references/schemas.md": "# Schemas\n",
+		"skills/pdf-helper/1.2.0/assets/template.html":  "<html>template</html>\n",
+	})
+	defer zipServer.Close()
+
+	noRedir := &http.Client{
+		Transport: &fakeRT{responses: map[string]fakeResp{
+			"/api/v1/download": {
+				status:     302,
+				redirectTo: zipServer.URL + "/pdf-helper-1.2.0.zip",
+			},
+		}},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	a := NewWithClients(noRedir, nil)
+	can, err := a.Download(context.Background(), "https://api.skillhub.cn", "pdf-helper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if can == nil {
+		t.Fatal("nil canonical")
+	}
+	// canonical.Files 应该至少 4 个:SKILL.md + 3 附属文件
+	if len(can.Files) < 4 {
+		t.Fatalf("expected ≥4 files (SKILL.md + 3 附属), got %d: %+v", len(can.Files), can.Files)
+	}
+	// 验证 SKILL.md 是第一个(惯例)
+	if can.Files[0].Path != "SKILL.md" {
+		t.Errorf("first file should be SKILL.md, got %q", can.Files[0].Path)
+	}
+	// 验证相对路径(锚点 = SKILL.md 所在目录 = skills/pdf-helper/1.2.0)
+	// 期望的相对路径应该是 scripts/extract.py 等,不包含 skillhub 私有前缀
+	wantRelPaths := map[string]bool{
+		"SKILL.md":                  true,
+		"scripts/extract.py":        true,
+		"references/schemas.md":     true,
+		"assets/template.html":      true,
+	}
+	gotPaths := map[string]bool{}
+	for _, f := range can.Files {
+		gotPaths[f.Path] = true
+	}
+	for p := range wantRelPaths {
+		if !gotPaths[p] {
+			t.Errorf("missing relative path %q in canonical.Files (got: %v)", p, gotPaths)
+		}
+	}
+}
+
+// newZipMockServerFiles 2026-07-09 增:多文件 zip mock server。
+func newZipMockServerFiles(t *testing.T, files map[string]string) *zipMockServer {
+	t.Helper()
+	z := &zipMockServer{buf: buildZipFiles(t, files)}
+	z.Server = http.Server{Handler: z}
+	ts := httptest.NewServer(z)
+	z.URL = ts.URL
+	t.Cleanup(ts.Close)
+	return z
+}
+
 // --- Fallback / Constructor ---
 
 func TestBuildFallbackCanonical_Minimum(t *testing.T) {
@@ -812,14 +879,23 @@ func (z *zipMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func buildZip(t *testing.T, innerPath, content string) []byte {
 	t.Helper()
+	return buildZipFiles(t, map[string]string{innerPath: content})
+}
+
+// buildZipFiles 2026-07-09 增:多文件 zip(回归测试用,验证附属文件不丢)。
+// files 形如 {"skills/foo/1.0.0/SKILL.md": "...", "skills/foo/1.0.0/scripts/build.sh": "..."}。
+func buildZipFiles(t *testing.T, files map[string]string) []byte {
+	t.Helper()
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
-	f, err := w.Create(innerPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.Write([]byte(content)); err != nil {
-		t.Fatal(err)
+	for path, content := range files {
+		f, err := w.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)

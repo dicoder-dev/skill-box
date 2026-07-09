@@ -195,106 +195,63 @@ func TestResolveInstallInput_GitHubTreeURL(t *testing.T) {
 	}
 }
 
-func TestResolveInstallInput_RawURL(t *testing.T) {
+// 2026-07-09 改:raw.githubusercontent.com 不再支持(skillssh 跟 github 拆开后,raw 不是 skill 入口),
+// 整个 raw 测试删除。
+
+func TestResolveInstallInput_NonURLInputsRejected(t *testing.T) {
+	// 2026-07-09 改:所有 source 都要求粘详情页 URL,纯 slug / owner/repo@skill 全部拒绝
 	cases := []struct {
-		name      string
-		input     string
-		wantRemID string
-		wantErr   bool
+		name  string
+		input string
+		hint  string
 	}{
-		{
-			"raw 子目录 SKILL.md",
-			"https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/SKILL.md",
-			"anthropics/skills@pdf",
-			false,
-		},
-		{
-			"raw 根目录 SKILL.md",
-			"https://raw.githubusercontent.com/owner/repo/main/SKILL.md",
-			"owner/repo@repo",
-			false,
-		},
-		{
-			"raw 路径过短",
-			"https://raw.githubusercontent.com/owner/repo/main",
-			"",
-			true,
-		},
-		{
-			"raw 指向 README",
-			"https://raw.githubusercontent.com/owner/repo/main/README.md",
-			"",
-			true,
-		},
+		{"纯 slug + skillhub hint", "code-review", "skillhub"},
+		{"owner/repo@skill + skillssh hint", "anthropics/skills@pdf", "skillssh"},
+		{"纯 slug + skillssh hint", "code-review", "skillssh"},
+		{"owner/repo@skill + skillhub hint", "anthropics/skills@pdf", "skillhub"},
+		{"纯 slug + 无 hint", "code-review", ""},
+		{"非法 slug + skillhub hint", "code review with space", "skillhub"},
+		{"空输入", "   ", ""},
+		{"空输入 + hint", "", "skillhub"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := ResolveInstallInput(c.input, "")
-			if c.wantErr {
-				if err == nil {
-					t.Fatalf("期望报错,得到 nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("不期望报错,得到 %v", err)
-			}
-			if got.RemoteID != c.wantRemID {
-				t.Fatalf("RemoteID=%q, want %q", got.RemoteID, c.wantRemID)
+			_, err := ResolveInstallInput(c.input, c.hint)
+			if err == nil {
+				t.Fatalf("期望 %q 报错(非 URL 输入)", c.input)
 			}
 		})
 	}
 }
 
-func TestResolveInstallInput_PlainWithHint(t *testing.T) {
-	t.Run("纯 slug + skillhub hint", func(t *testing.T) {
-		got, err := ResolveInstallInput("code-review", "skillhub")
-		if err != nil {
-			t.Fatalf("不期望报错: %v", err)
-		}
-		if got.SourceType != skillmarket.SourceSkillhub || got.RemoteID != "code-review" {
-			t.Fatalf("got=%+v", got)
-		}
-	})
-	t.Run("owner/repo@skill + skillssh hint", func(t *testing.T) {
-		got, err := ResolveInstallInput("anthropics/skills@pdf", "skillssh")
-		if err != nil {
-			t.Fatalf("不期望报错: %v", err)
-		}
-		if got.SourceType != skillmarket.SourceSkillsSH || got.RemoteID != "anthropics/skills@pdf" {
-			t.Fatalf("got=%+v", got)
-		}
-	})
-	t.Run("纯 slug + skillssh hint → 报错", func(t *testing.T) {
-		_, err := ResolveInstallInput("code-review", "skillssh")
-		if err == nil {
-			t.Fatalf("期望报错(必须 owner/repo@skill 格式)")
-		}
-	})
-	t.Run("owner/repo@skill + skillhub hint → 报错", func(t *testing.T) {
-		_, err := ResolveInstallInput("anthropics/skills@pdf", "skillhub")
-		if err == nil {
-			t.Fatalf("期望报错(skillhub 不接受 @ 格式)")
-		}
-	})
-	t.Run("无 hint 也无 URL → 报错", func(t *testing.T) {
-		_, err := ResolveInstallInput("code-review", "")
-		if err == nil {
-			t.Fatalf("期望报错")
-		}
-	})
-	t.Run("非法 slug → 报错", func(t *testing.T) {
-		_, err := ResolveInstallInput("code review with space", "skillhub")
-		if err == nil {
-			t.Fatalf("期望报错")
-		}
-	})
-	t.Run("空输入", func(t *testing.T) {
-		_, err := ResolveInstallInput("   ", "")
-		if err == nil {
-			t.Fatalf("期望报错")
-		}
-	})
+func TestResolveInstallInput_HintNarrowsDomain(t *testing.T) {
+	// 2026-07-09 改:hint 强制限定域名,跨域 URL 必须报错
+	cases := []struct {
+		name  string
+		input string
+		hint  string
+	}{
+		// skillhub tab 不接受 skills.sh URL
+		{"skillhub tab + skills.sh URL", "https://skills.sh/anthropics/skills/pdf", "skillhub"},
+		// skillhub tab 不接受 github URL
+		{"skillhub tab + github URL", "https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md", "skillhub"},
+		// skills.sh tab 不接受 skillhub URL
+		{"skills.sh tab + skillhub URL", "https://skillhub.cn/skills/code-review", "skillssh"},
+		// skills.sh tab 不接受 github URL
+		{"skills.sh tab + github URL", "https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md", "skillssh"},
+		// github tab 不接受 skillhub URL
+		{"github tab + skillhub URL", "https://skillhub.cn/skills/code-review", "github"},
+		// github tab 不接受 skills.sh URL
+		{"github tab + skills.sh URL", "https://skills.sh/anthropics/skills/pdf", "github"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := ResolveInstallInput(c.input, c.hint)
+			if err == nil {
+				t.Fatalf("期望跨域 URL 报错,得到 nil")
+			}
+		})
+	}
 }
 
 func TestResolveInstallInput_UnsupportedURL(t *testing.T) {

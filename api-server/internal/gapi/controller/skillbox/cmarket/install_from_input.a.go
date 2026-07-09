@@ -14,20 +14,27 @@ import (
 // RequestInstallFromInput 用户输入框下载入参(2026-07-09 增)。
 //
 // 与 RequestPullMarketSkillV2 的差别:不要求 caller 提前知道 source_id / remote_id;
-// 把"用户原文"(slug / 详情页 URL / owner/repo@skill / GitHub URL)交给 service 解析。
+// 把"用户原文"(详情页 URL)交给 service 解析。
 //
 // SourceHint:
-//   - 空字符串 = auto(由后端解析 input 推断;URL 输入由域名决定,纯 slug 必须配合非空 hint)
-//   - "skillhub" / "skillssh" = 强制指定 source(只对非 URL 输入生效)
+//   - 空字符串 = auto(由后端解析 input 推断;URL 输入由域名决定)
+//   - "skillhub" / "skillssh" / "github" = 强制指定 source(只接受该 source 的 URL)
 //
 // Scope:
 //   - 空 / "global" = 全局,默认
 //   - "project" = 项目级,需填 ProjectID
+//
+// ConflictMode(2026-07-09 增):
+//   - 空 / "prompt" = 同名已存在 → 返 409(响应体含 conflict_existing_* 字段,前端弹确认)
+//   - "overwrite" = 覆盖同名 skill
+//   - "rename" = 自动加 -2/-3 后缀(或用 RenameTo 字段)
 type RequestInstallFromInput struct {
-	SourceHint string `json:"source_hint"`
-	Input      string `json:"input"`
-	Scope      string `json:"scope"`
-	ProjectID  uint   `json:"project_id"`
+	SourceHint   string `json:"source_hint"`
+	Input        string `json:"input"`
+	Scope        string `json:"scope"`
+	ProjectID    uint   `json:"project_id"`
+	ConflictMode string `json:"conflict_mode"`
+	RenameTo     string `json:"rename_to"`
 }
 
 // RespondInstallFromInput 落盘结果(2026-07-09 增)。
@@ -52,10 +59,12 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	out, err := newServiceV2().InstallFromInput(ctx, &smarket.InstallFromInputInput{
-		SourceHint: req.SourceHint,
-		Input:      req.Input,
-		Scope:      req.Scope,
-		ProjectID:  req.ProjectID,
+		SourceHint:   req.SourceHint,
+		Input:        req.Input,
+		Scope:        req.Scope,
+		ProjectID:    req.ProjectID,
+		ConflictMode: req.ConflictMode,
+		RenameTo:     req.RenameTo,
 	})
 	if err != nil {
 		switch {
@@ -63,6 +72,18 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 			c.JSON(400, gin.H{"error": err.Error()})
 		case errors.Is(err, smarket.ErrSourceNotFound):
 			c.JSON(404, gin.H{"error": err.Error()})
+		case errors.Is(err, smarket.ErrSkillAlreadyExists):
+			// 2026-07-09 增:同名冲突,返 409 + 现有 skill 信息(让前端弹覆盖确认)。
+			// 即使 err != nil 也要把 out 返回(里面含 conflict_existing_* 字段),
+			// gin.H 兜底空 result。
+			result := gin.H{"error": err.Error()}
+			if out != nil {
+				result["conflict_existing_version"] = out.ConflictExistingVersion
+				result["conflict_existing_path"] = out.ConflictExistingPath
+				result["skill_name"] = out.SkillName
+				result["source_type"] = out.SourceType
+			}
+			c.JSON(409, result)
 		default:
 			logger.Error("market install from input: %v", err)
 			c.JSON(500, gin.H{"error": err.Error()})
