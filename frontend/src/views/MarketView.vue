@@ -180,13 +180,38 @@ function advanceProgress(stage) {
   }, 30)
 }
 
-// 2026-07-09 增:报错时把 stage 改成 fail 并记下之前最后阶段
+// 2026-07-09 增:报错保留进度条文字,只把 stage 改成 'fail' + 红色 hint。
+// 用户反馈:报错时进度文字全不见,不知道卡哪步。
+// 现在保留 stage + percent,加 fail 红色 hint 告诉用户"在 X 阶段出错"。
 function markFailed() {
   if (progressStage.value && progressStage.value !== 'done' && progressStage.value !== 'fail') {
     lastFailedStage.value = progressStage.value
   }
   progressStage.value = 'fail'
 }
+
+// 2026-07-09 增:retryInstall — fail 状态下「重试」按钮,直接用上次 input 重发。
+// 不重置 input(用户可能要改),只清 progress + 重新 doInstall。
+async function retryInstall() {
+  if (installing.value) return
+  const input = userInput.value.trim()
+  if (!input) return
+  installError.value = ''
+  conflict.value = null
+  progressStage.value = ''
+  progressPercent.value = 0
+  lastFailedStage.value = ''
+  await doInstall(input, '')
+}
+
+// 2026-07-09 增:判断是否疑似 GitHub 限流,用于错误条下方显示额外提示 + 重试按钮
+// 条件:download 阶段失败 + 错误信息含 timeout / deadline / 60s(就是前端超时)
+const isLikelyRateLimit = computed(() => {
+  if (progressStage.value !== 'fail') return false
+  if (lastFailedStage.value !== 'download') return false
+  const msg = installError.value || ''
+  return /timeout|deadline|60s|请求超时/i.test(msg)
+})
 
 // 「装到 skill-box」按钮 — 走 4 阶段模拟 → 后端一次性 HTTP → 收尾
 //
@@ -422,7 +447,23 @@ const lastInstalledName = ref('')
             <!-- 错误条(只在失败时显示) -->
             <div v-if="installError" class="install-error">
               <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
-              {{ installError }}
+              <div class="install-error-content">
+                <div class="install-error-msg">{{ installError }}</div>
+                <!-- 2026-07-09 增:失败时给「重试」按钮 + 限流场景特殊提示 -->
+                <div v-if="isLikelyRateLimit" class="install-error-hint">
+                  <IconPark icon="mdi:timer-sand" width="12" height="12" />
+                  疑似 GitHub 限流(未鉴权 IP 每小时约 60 次)。等几分钟再点「重试」,或去浏览器手动下好后从「首页 → 本地导入」装入。
+                </div>
+                <button
+                  v-if="progressStage === 'fail'"
+                  type="button"
+                  class="install-retry-btn"
+                  @click="retryInstall"
+                >
+                  <IconPark icon="mdi:refresh" width="12" height="12" />
+                  重试
+                </button>
+              </div>
             </div>
           </div>
 
@@ -952,7 +993,7 @@ const lastInstalledName = ref('')
 /* 错误条 */
 .install-error {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   padding: 8px 12px;
   background: color-mix(in srgb, #ef4444 10%, var(--bg-card));
@@ -964,6 +1005,59 @@ const lastInstalledName = ref('')
 }
 :global(html.dark) .install-error {
   color: #fca5a5;
+}
+.install-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.install-error-msg {
+  word-break: break-word;
+}
+.install-error-hint {
+  /* 2026-07-09 增:限流场景额外提示(灰底 + timer-sand icon) */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #b45309; /* amber-700 跟红色错开 */
+  background: #fef3c7;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+:global(html.dark) .install-error-hint {
+  color: #fbbf24;
+  background: color-mix(in srgb, #b45309 20%, transparent);
+}
+.install-retry-btn {
+  /* 2026-07-09 增:失败时「重试」按钮(小号,跟错误条一起) */
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, #ef4444 50%, var(--border));
+  background: var(--bg-card);
+  color: #b91c1c;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.install-retry-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+:global(html.dark) .install-retry-btn {
+  color: #fca5a5;
+  border-color: color-mix(in srgb, #ef4444 60%, var(--border));
+}
+:global(html.dark) .install-retry-btn:hover {
+  background: color-mix(in srgb, #ef4444 15%, var(--bg-card));
 }
 
 /* ============================================
