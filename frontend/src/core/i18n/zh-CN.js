@@ -435,6 +435,8 @@ const messages = {
       errInvalidInput: '输入格式无法识别:每个 tab 只接受对应市场的详情页 URL',
       errSource: '找不到对应的市场源',
       errPull: '下载失败:{msg}',
+      // 2026-07-09 增:前端 timeout 单独提示
+      errTimeout: '请求超时(后端下载慢):{msg}。可以重试,或去浏览器手动下好后从「本地导入」装入。',
       errGeneric: '安装失败:{msg}',
     },
     progress: {
@@ -443,12 +445,20 @@ const messages = {
       extract: '解压并校验…',
       write: '写入 skill-box store…',
       done: '安装完成',
+      // 2026-07-09 增:'fail' 阶段(报错时保留进度条,告诉用户卡哪步)
+      fail: '安装失败',
       // 2026-07-09 增:子步骤文字(进度条下方展示当前在干什么)
       hintResolve: '正在解析 URL,匹配源类型…',
       hintDownload: '正在下载 zip 包(从 GitHub codeload)…',
       hintExtract: '正在解压并校验 SKILL.md…',
       hintWrite: '正在写入本地 skill-box store…',
       hintDone: '已装入,准备跳转',
+      // fail 阶段 hint(显示具体卡哪步 + 错误码,便于排查)
+      hintFailResolve: '解析阶段失败,未真正发请求',
+      hintFailDownload: '下载阶段失败(可能 zipball 404 / 网络 / 限流)',
+      hintFailExtract: '解压阶段失败(SKILL.md 解析异常)',
+      hintFailWrite: '写入 store 阶段失败(磁盘 / 权限)',
+      hintFailUnknown: '未知阶段失败,看下方错误条',
     },
     success: {
       msg: '✅ 已装入 {name} v{version}',

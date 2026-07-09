@@ -423,6 +423,8 @@ const messages = {
       errInvalidInput: 'Unrecognized input. Each tab only accepts its own market\'s detail URL.',
       errSource: 'Market source not found',
       errPull: 'Download failed: {msg}',
+      // 2026-07-09: separate timeout message
+      errTimeout: 'Request timeout (slow backend download): {msg}. Try again, or download manually and import locally.',
       errGeneric: 'Install failed: {msg}',
     },
     progress: {
@@ -431,12 +433,19 @@ const messages = {
       extract: 'Extracting & validating…',
       write: 'Writing to skill-box store…',
       done: 'Installation complete',
+      // 2026-07-09: 'fail' stage (keep progress on error, tell user which step failed)
+      fail: 'Install failed',
       // 2026-07-09: sub-step hints under the progress bar
       hintResolve: 'Parsing URL, matching source type…',
       hintDownload: 'Downloading zip from GitHub codeload…',
       hintExtract: 'Extracting and validating SKILL.md…',
       hintWrite: 'Writing to local skill-box store…',
       hintDone: 'Installed, ready to jump',
+      hintFailResolve: 'Failed during resolve, no request sent',
+      hintFailDownload: 'Failed during download (zipball 404 / network / rate limit)',
+      hintFailExtract: 'Failed during extract (SKILL.md parse error)',
+      hintFailWrite: 'Failed during write to store (disk / permission)',
+      hintFailUnknown: 'Unknown stage failure, see error below',
     },
     success: {
       msg: '✅ Installed {name} v{version}',

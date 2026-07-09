@@ -133,8 +133,10 @@ const installError = ref('')
 const conflict = ref(null) // null = 无冲突;object = 有冲突,待用户决策
 
 // 进度条 4 阶段;每阶段一个独立 ref,确保切换时旧 ref 残留不会乱跳
-const progressStage = ref('')        // 当前阶段 key(resolve/download/extract/write/done/'')
+const progressStage = ref('')        // 当前阶段 key(resolve/download/extract/write/done/fail/'')
 const progressPercent = ref(0)       // 0-100
+const lastFailedStage = ref('')      // 2026-07-09 增:失败前最后阶段(resolve/download/extract/write),
+                                    // 用于 fail 阶段 hint 精确定位"卡哪步"
 let progressTimer = null
 
 // 进度目标:每阶段到达的百分比。模拟真实节奏:解析 15% → 下载 60% → 解压 85% → 写盘 100%。
@@ -154,6 +156,7 @@ function resetProgress() {
   progressPercent.value = 0
   installError.value = ''
   conflict.value = null
+  lastFailedStage.value = ''
 }
 
 // 平滑推进进度到目标值。固定时长 600ms 让用户看到阶段切换。
@@ -175,6 +178,14 @@ function advanceProgress(stage) {
     const k = elapsed / dur
     progressPercent.value = Math.round(start + (target - start) * k)
   }, 30)
+}
+
+// 2026-07-09 增:报错时把 stage 改成 fail 并记下之前最后阶段
+function markFailed() {
+  if (progressStage.value && progressStage.value !== 'done' && progressStage.value !== 'fail') {
+    lastFailedStage.value = progressStage.value
+  }
+  progressStage.value = 'fail'
 }
 
 // 「装到 skill-box」按钮 — 走 4 阶段模拟 → 后端一次性 HTTP → 收尾
@@ -217,8 +228,9 @@ async function doInstall(input, conflictMode) {
     const data = e?.response?.data || e?.data || {}
     if (status === 409) {
       // 2026-07-09 增:同名冲突,弹 Modal
+      // 进度不重置,留给用户看到「装到一半发现冲突」体感
+      // (之后选覆盖/另存为时 doInstall 会 resetProgress)
       installing.value = false
-      resetProgress()
       conflict.value = {
         name: data.skill_name || userInput.value,
         existingVersion: data.conflict_existing_version || '?',
@@ -228,13 +240,19 @@ async function doInstall(input, conflictMode) {
       return
     }
     installing.value = false
-    resetProgress()
+    // 2026-07-09 改:报错保留进度条文字,只把 stage 改成 'fail' + 红色 hint。
+    // 用户反馈:报错时进度文字全不见,不知道卡在哪步。
+    // 现在保留 stage + percent,加 fail 红色 hint 告诉用户"在 X 阶段出错"。
+    markFailed()
     const msg = e?.message || String(e)
     if (status === 400) {
       installError.value = t('market.input.errInvalidInput')
     } else if (status === 404) {
       installError.value = t('market.input.errSource')
-    } else if (/download|fetch/i.test(msg)) {
+    } else if (/timeout/i.test(msg)) {
+      // 前端 15s/60s timeout 触发
+      installError.value = t('market.input.errTimeout', { msg })
+    } else if (/download|fetch|zipball|context deadline/i.test(msg)) {
       installError.value = t('market.input.errPull', { msg })
     } else {
       installError.value = t('market.input.errGeneric', { msg })
@@ -413,10 +431,12 @@ const lastInstalledName = ref('')
             <div class="progress-row">
               <span class="progress-label">
                 <IconPark
-                  :icon="progressStage === 'done' ? 'mdi:check-circle' : 'mdi:loading'"
+                  :icon="progressStage === 'done'
+                    ? 'mdi:check-circle'
+                    : (progressStage === 'fail' ? 'mdi:alert-circle' : 'mdi:loading')"
                   width="14"
                   height="14"
-                  :spin="progressStage !== 'done'"
+                  :spin="progressStage !== 'done' && progressStage !== 'fail'"
                 />
                 {{ t(`market.progress.${progressStage}`) }}
               </span>
@@ -426,14 +446,21 @@ const lastInstalledName = ref('')
               <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
             </div>
             <!-- 2026-07-09 增:具体子步骤文字(类似 npm install 那种「已下载 x MB / y MB」体感) -->
-            <p v-if="progressStage !== 'done'" class="progress-hint">
+            <p v-if="progressStage !== 'done' && progressStage !== 'fail'" class="progress-hint">
               <IconPark icon="mdi:chevron-right" width="12" height="12" />
               {{ t(`market.progress.hint${progressStage.charAt(0).toUpperCase() + progressStage.slice(1)}`) }}
             </p>
             <!-- done 阶段显示最终结果 -->
-            <p v-else class="progress-hint progress-hint-done">
+            <p v-else-if="progressStage === 'done'" class="progress-hint progress-hint-done">
               <IconPark icon="mdi:check-circle" width="12" height="12" />
               {{ t(`market.progress.hintDone`) }}
+            </p>
+            <!-- fail 阶段:精确定位"卡哪步" + 看下方错误条 -->
+            <p v-else class="progress-hint progress-hint-fail">
+              <IconPark icon="mdi:alert-circle" width="12" height="12" />
+              {{ t(`market.progress.hintFail${lastFailedStage
+                ? lastFailedStage.charAt(0).toUpperCase() + lastFailedStage.slice(1)
+                : 'Unknown'}`) }}
             </p>
             <!-- 成功后跳首页按钮 -->
             <button
@@ -998,6 +1025,14 @@ const lastInstalledName = ref('')
 .progress-hint-done {
   color: var(--accent);
   font-weight: 500;
+}
+.progress-hint-fail {
+  /* 2026-07-09 增:fail 阶段红色,跟下方 install-error 红条区分(安装中 vs 安装失败) */
+  color: #b91c1c;
+  font-weight: 500;
+}
+:global(html.dark) .progress-hint-fail {
+  color: #fca5a5;
 }
 .progress-go-home {
   align-self: flex-start;

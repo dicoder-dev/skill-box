@@ -26,12 +26,18 @@ import { http } from '@/core/utils/requests'
  * }>}
  *
  * 错误:
-//   400 - 输入格式不识别
-//   404 - 源未注册
-//   409 - 同名 skill 冲突(响应体里 err 含 conflict 字段)
+ *   400 - 输入格式不识别
+ *   404 - 源未注册
+ *   409 - 同名 skill 冲突(响应体里 err 含 conflict 字段)
+ *
+ * 2026-07-09 改:timeout 默认 60s(后端 controller ctx 90s,留余地)。
+ * 原默认 15s 太短,zipball 3.6MB+ 慢下载 + 解压经常 >15s 触发 client timeout。
  */
-export function installFromInput(payload) {
-  return http.post('/api/skillbox/market/install-from-input', payload)
+export function installFromInput(payload, options = {}) {
+  return http.post('/api/skillbox/market/install-from-input', payload, {
+    timeout: 60000,
+    ...options,
+  })
 }
 
 /**
