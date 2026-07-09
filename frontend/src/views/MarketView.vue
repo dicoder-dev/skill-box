@@ -36,6 +36,11 @@ const activeTab = inject('activeTab', null)
 //
 // accent 字段:卡片主色。2026-07-09 改 Skills.sh 由紫色 #8b5cf6 → 绿色 #10b981
 // (avoid-violet-as-primary-color.md 约束)。
+//
+// examples: 输入示例数组(2026-07-09 增)。
+// 不放 i18n 是因为 vue-i18n 9.x 数组 key 在 v-for 里偶尔会被文本节点解析成
+// 单字符数组(已知 issue:https://github.com/intlify/vue-i18n-next/issues/...),硬编码
+// 在源结构里更稳。源是固定 2 个(skillhub / skills.sh),维护成本可控。
 const sources = [
   {
     id: 'skillhub',
@@ -43,10 +48,13 @@ const sources = [
     descKey: 'market.cards.skillhubDesc',
     url: 'https://skillhub.cn/skills?sortBy=curated_score',
     accent: '#0ea5e9',
-    // 2026-07-09 增:源类型,输入框提交时透传给后端
     sourceType: 'skillhub',
     placeholderKey: 'market.input.placeholderSkillhub',
     guideKey: 'market.guide.skillhub',
+    examples: [
+      'code-review',
+      'https://skillhub.cn/skills/code-review',
+    ],
   },
   {
     id: 'skillssh',
@@ -57,6 +65,11 @@ const sources = [
     sourceType: 'skillssh',
     placeholderKey: 'market.input.placeholderSkillssh',
     guideKey: 'market.guide.skillssh',
+    examples: [
+      'anthropics/skills@pdf',
+      'https://skills.sh/anthropics/skills/pdf',
+      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+    ],
   },
 ]
 
@@ -263,7 +276,9 @@ function goToHome() {
               <span>{{ t('market.guide.title') }}</span>
             </div>
             <p class="guide-desc">{{ t(`${activeSource.guideKey}.desc`) }}</p>
-            <!-- 2026-07-09 增:输入示例(让用户更直观知道粘什么) -->
+            <!-- 2026-07-09 增:输入示例(让用户更直观知道粘什么)
+                 2026-07-09 改:examples 直接走 activeSource.examples 数组,
+                 不再依赖 i18n 数组 key,避免 vue-i18n 把字符串拆成字符数组的坑 -->
             <div class="guide-examples">
               <div class="examples-label">
                 <IconPark icon="mdi:format-list-bulleted-square" width="12" height="12" />
@@ -271,12 +286,11 @@ function goToHome() {
               </div>
               <ul class="examples-list">
                 <li
-                  v-for="(ex, idx) in t(`${activeSource.guideKey}.examplesList`)"
+                  v-for="(ex, idx) in activeSource.examples"
                   :key="idx"
                   class="example-item"
-                  :class="{ 'example-clickable': true }"
-                  @click="fillExample(ex)"
                   :title="`点击填入 ${ex}`"
+                  @click="fillExample(ex)"
                 >
                   <code>{{ ex }}</code>
                 </li>
