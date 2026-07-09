@@ -388,43 +388,51 @@ const messages = {
   // 保留:title / subtitle / btnOpenInBrowser / cards.* 两张站点卡的描述
   market: {
     title: '三方市场',
-    subtitle: '浏览 skillhub.cn / skills.sh 等三方站点的技能目录,点击卡片在系统浏览器中打开。',
+    subtitle: '浏览 skillhub.cn / skills.sh / GitHub 等三方源,粘详情页 URL 一键装到 skill-box。',
     btnOpenInBrowser: '在浏览器中打开',
     btnOpenInBrowserTip: '在系统浏览器打开 {name} 站点',
     // 站点卡片描述(在卡片里展示)
     cards: {
       skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
       skillsshDesc: 'Vercel 托管的 AI 技能排行榜,按热度(1H / change)实时排序。',
+      githubDesc: 'GitHub 上的 agent skill 仓库,直接走 raw 内容 URL 装到本地。',
     },
     // 2026-07-09 增:输入框一键安装
     guide: {
       title: '如何安装到 skill-box',
       skillhub: {
-        desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL(或纯 slug)→ 粘贴到下方输入框。',
+        desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL → 粘贴到下方输入框。',
         examples: '输入示例',
         examplesList: [
-          'code-review',
           'https://skillhub.cn/skills/code-review',
+          'https://skillhub.cn/skills/commit-msg',
         ],
       },
       skillssh: {
-        desc: '在 skills.sh 浏览(或在 GitHub 搜 agent skill)→ 复制详情页 URL 或 owner/repo@skill 标识 → 粘贴到下方输入框。',
+        desc: '在 skills.sh 浏览找到 skill → 复制详情页 URL(或 GitHub blob URL)→ 粘贴到下方输入框。',
         examples: '输入示例',
         examplesList: [
-          'anthropics/skills@pdf',
           'https://skills.sh/anthropics/skills/pdf',
           'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
         ],
       },
+      github: {
+        desc: '在 GitHub 浏览 agent skill 仓库 → 找到 SKILL.md → 复制 blob URL → 粘贴到下方输入框。',
+        examples: '输入示例',
+        examplesList: [
+          'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+          'https://github.com/anthropics/skills/blob/main/skills/code-review/SKILL.md',
+        ],
+      },
     },
     input: {
-      label: '粘贴 skill 名称 / 详情页 URL',
-      placeholderSkillhub: '输入 skill slug 或 https://skillhub.cn/skills/{slug}',
-      placeholderSkillssh: '输入 owner/repo@skill 或 https://skills.sh/{owner}/{repo}/{skill} 或 GitHub URL',
+      label: '粘贴详情页 URL',
+      placeholderSkillhub: 'https://skillhub.cn/skills/{slug}',
+      placeholderSkillssh: 'https://skills.sh/{owner}/{repo}/{skill} 或 GitHub blob URL',
+      placeholderGithub: 'https://github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md',
       btnInstall: '装到 skill-box',
       btnInstalling: '安装中…',
-      // 错误条(input 下方红条)
-      errInvalidInput: '输入格式无法识别:支持 skillhub.cn / skills.sh / github.com 详情页 URL,或 owner/repo@skill',
+      errInvalidInput: '输入格式无法识别:每个 tab 只接受对应市场的详情页 URL',
       errSource: '找不到对应的市场源',
       errPull: '下载失败:{msg}',
       errGeneric: '安装失败:{msg}',
@@ -435,10 +443,26 @@ const messages = {
       extract: '解压并校验…',
       write: '写入 skill-box store…',
       done: '安装完成',
+      // 2026-07-09 增:子步骤文字(进度条下方展示当前在干什么)
+      hintResolve: '正在解析 URL,匹配源类型…',
+      hintDownload: '正在下载 zip 包(从 GitHub codeload)…',
+      hintExtract: '正在解压并校验 SKILL.md…',
+      hintWrite: '正在写入本地 skill-box store…',
+      hintDone: '已装入,准备跳转',
     },
     success: {
       msg: '✅ 已装入 {name} v{version}',
       goHome: '去首页查看',
+    },
+    // 2026-07-09 增:同名 skill 冲突确认
+    conflict: {
+      title: 'skill 已存在',
+      desc: '本地已有同名 skill「{name}」(v{existingVersion}@{existingPath}),要怎么处理?',
+      overwrite: '覆盖',
+      overwriteTip: '删除旧版本,装新版本(同名文件会被替换)',
+      rename: '另存为',
+      renameTip: '自动加 -2 / -3 后缀,跟旧版本并存',
+      cancel: '取消',
     },
   },
 

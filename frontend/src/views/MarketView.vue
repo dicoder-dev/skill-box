@@ -40,39 +40,53 @@ const activeTab = inject('activeTab', null)
 // examples: 输入示例数组(2026-07-09 增)。
 // 不放 i18n 是因为 vue-i18n 9.x 数组 key 在 v-for 里偶尔会被文本节点解析成
 // 单字符数组(已知 issue:https://github.com/intlify/vue-i18n-next/issues/...),硬编码
-// 在源结构里更稳。源是固定 2 个(skillhub / skills.sh),维护成本可控。
+// 在源结构里更稳。源是固定 3 个(skillhub / skills.sh / github),维护成本可控。
 const sources = [
   {
     id: 'skillhub',
     name: 'SkillHub',
     descKey: 'market.cards.skillhubDesc',
-    url: 'https://skillhub.cn/skills?sortBy=curated_score',
+    url: 'https://skillhub.cn/skills',
     accent: '#0ea5e9',
     sourceType: 'skillhub',
     placeholderKey: 'market.input.placeholderSkillhub',
     guideKey: 'market.guide.skillhub',
+    // 2026-07-09 改:skillhub 示例只放详情页 URL,跟用户要求"统一仅支持一个来源"对齐
     examples: [
-      'code-review',
       'https://skillhub.cn/skills/code-review',
+      'https://skillhub.cn/skills/commit-msg',
     ],
   },
   {
     id: 'skillssh',
     name: 'Skills.sh',
     descKey: 'market.cards.skillsshDesc',
-    url: 'https://www.skills.sh/hot',
+    url: 'https://www.skills.sh',
     accent: '#10b981',
     sourceType: 'skillssh',
     placeholderKey: 'market.input.placeholderSkillssh',
     guideKey: 'market.guide.skillssh',
+    // 2026-07-09 改:按"用户友好度"排序
+    // 1. skills.sh 详情 URL(用户最常从此复制)
+    // 2. GitHub blob URL(用户从 GitHub 复制也行)
     examples: [
-      // 2026-07-09 改:按"用户友好度"排序
-      // 1. GitHub 详情 URL(最具体,用户从 GitHub 复制最常见)
-      // 2. skills.sh 详情 URL
-      // 3. owner/repo@skill 短标识
-      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
       'https://skills.sh/anthropics/skills/pdf',
-      'anthropics/skills@pdf',
+      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+    ],
+  },
+  // 2026-07-09 增:GitHub 独立来源(从 skills.sh 拆出来)
+  {
+    id: 'github',
+    name: 'GitHub',
+    descKey: 'market.cards.githubDesc',
+    url: 'https://github.com',
+    accent: '#6b7280', // 灰色,与蓝色 skillhub / 绿色 skills.sh 区分
+    sourceType: 'github',
+    placeholderKey: 'market.input.placeholderGithub',
+    guideKey: 'market.guide.github',
+    examples: [
+      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+      'https://github.com/anthropics/skills/blob/main/skills/code-review/SKILL.md',
     ],
   },
 ]
@@ -113,6 +127,11 @@ const userInput = ref('')
 const installing = ref(false)
 const installError = ref('')
 
+// 2026-07-09 增:同名 skill 冲突确认
+// 弹 Modal 之前,先把 409 响应里的 conflict_existing_version / conflict_existing_path
+// 暂存到这里,Modal 用这些字段渲染。
+const conflict = ref(null) // null = 无冲突;object = 有冲突,待用户决策
+
 // 进度条 4 阶段;每阶段一个独立 ref,确保切换时旧 ref 残留不会乱跳
 const progressStage = ref('')        // 当前阶段 key(resolve/download/extract/write/done/'')
 const progressPercent = ref(0)       // 0-100
@@ -134,6 +153,7 @@ function resetProgress() {
   progressStage.value = ''
   progressPercent.value = 0
   installError.value = ''
+  conflict.value = null
 }
 
 // 平滑推进进度到目标值。固定时长 600ms 让用户看到阶段切换。
@@ -158,6 +178,9 @@ function advanceProgress(stage) {
 }
 
 // 「装到 skill-box」按钮 — 走 4 阶段模拟 → 后端一次性 HTTP → 收尾
+//
+// 2026-07-09 改:加 conflict_mode 参数,默认 prompt(后端遇同名返 409 弹 Modal);
+// Modal 三选一(overwrite / rename / cancel)走 retryInstall 二次提交。
 async function handleInstall() {
   if (installing.value) return
   const input = userInput.value.trim()
@@ -165,10 +188,13 @@ async function handleInstall() {
     installError.value = t('market.input.errInvalidInput')
     return
   }
+  await doInstall(input, '')
+}
+
+async function doInstall(input, conflictMode) {
   installing.value = true
   resetProgress()
   advanceProgress('resolve')
-  // 给解析阶段至少 300ms 视觉反馈,避免快网络下进度跳 0→60 看不到 resolve
   await new Promise((r) => setTimeout(r, 350))
   advanceProgress('download')
   try {
@@ -176,6 +202,7 @@ async function handleInstall() {
       source_hint: activeSource.value.sourceType,
       input,
       scope: 'global',
+      conflict_mode: conflictMode,
     })
     advanceProgress('extract')
     await new Promise((r) => setTimeout(r, 350))
@@ -183,15 +210,26 @@ async function handleInstall() {
     await new Promise((r) => setTimeout(r, 250))
     progressStage.value = 'done'
     installing.value = false
-    // 2026-07-09 增:记住刚装好的 skill name,goToHome 时给 SkillsView 用来自动选中
     lastInstalledName.value = out.skill_name
     toast.success(t('market.success.msg', { name: out.skill_name, version: out.skill_version || '0.1.0' }))
   } catch (e) {
+    const status = e?.response?.status || e?.status
+    const data = e?.response?.data || e?.data || {}
+    if (status === 409) {
+      // 2026-07-09 增:同名冲突,弹 Modal
+      installing.value = false
+      resetProgress()
+      conflict.value = {
+        name: data.skill_name || userInput.value,
+        existingVersion: data.conflict_existing_version || '?',
+        existingPath: data.conflict_existing_path || '',
+        input, // 保留 input 以便 retry
+      }
+      return
+    }
     installing.value = false
     resetProgress()
     const msg = e?.message || String(e)
-    // 错误分类:后端 400 → 输入格式 / 404 → 源找不到 / 其它 → 通用
-    const status = e?.response?.status || e?.status
     if (status === 400) {
       installError.value = t('market.input.errInvalidInput')
     } else if (status === 404) {
@@ -201,6 +239,24 @@ async function handleInstall() {
     } else {
       installError.value = t('market.input.errGeneric', { msg })
     }
+  }
+}
+
+// 2026-07-09 增:Modal 三选一回调
+async function resolveConflict(mode) {
+  // mode: 'overwrite' | 'rename' | 'cancel'
+  if (mode === 'cancel' || !conflict.value) {
+    conflict.value = null
+    return
+  }
+  const c = conflict.value
+  conflict.value = null // 立刻关掉 Modal
+  if (mode === 'rename') {
+    // 让后端自动找空闲名(-2 / -3 后缀)
+    await doInstall(c.input, 'rename')
+  } else {
+    // overwrite
+    await doInstall(c.input, 'overwrite')
   }
 }
 
@@ -369,6 +425,16 @@ const lastInstalledName = ref('')
             <div class="progress-track">
               <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
             </div>
+            <!-- 2026-07-09 增:具体子步骤文字(类似 npm install 那种「已下载 x MB / y MB」体感) -->
+            <p v-if="progressStage !== 'done'" class="progress-hint">
+              <IconPark icon="mdi:chevron-right" width="12" height="12" />
+              {{ t(`market.progress.hint${progressStage.charAt(0).toUpperCase() + progressStage.slice(1)}`) }}
+            </p>
+            <!-- done 阶段显示最终结果 -->
+            <p v-else class="progress-hint progress-hint-done">
+              <IconPark icon="mdi:check-circle" width="12" height="12" />
+              {{ t(`market.progress.hintDone`) }}
+            </p>
             <!-- 成功后跳首页按钮 -->
             <button
               v-if="progressStage === 'done'"
@@ -383,6 +449,43 @@ const lastInstalledName = ref('')
 
           <!-- 原「在浏览器中打开」按钮已上移到顶部栏(2026-07-09 改) -->
           <div v-if="false" class="source-card-actions"></div>
+        </div>
+      </div>
+
+      <!-- 2026-07-09 增:同名 skill 冲突确认 Modal -->
+      <div v-if="conflict" class="conflict-overlay" @click.self="resolveConflict('cancel')">
+        <div class="conflict-modal" :style="{ '--accent': activeSource.accent }">
+          <div class="conflict-head">
+            <IconPark icon="mdi:alert-circle-outline" width="20" height="20" />
+            <span class="conflict-title">{{ t('market.conflict.title') }}</span>
+          </div>
+          <p class="conflict-desc">
+            {{ t('market.conflict.desc', {
+              name: conflict.name,
+              existingVersion: conflict.existingVersion,
+              existingPath: conflict.existingPath,
+            }) }}
+          </p>
+          <div class="conflict-actions">
+            <button type="button" class="conflict-btn conflict-overwrite" @click="resolveConflict('overwrite')">
+              <IconPark icon="mdi:content-save-outline" width="14" height="14" />
+              <div>
+                <div class="conflict-btn-title">{{ t('market.conflict.overwrite') }}</div>
+                <div class="conflict-btn-tip">{{ t('market.conflict.overwriteTip') }}</div>
+              </div>
+            </button>
+            <button type="button" class="conflict-btn conflict-rename" @click="resolveConflict('rename')">
+              <IconPark icon="mdi:content-copy" width="14" height="14" />
+              <div>
+                <div class="conflict-btn-title">{{ t('market.conflict.rename') }}</div>
+                <div class="conflict-btn-tip">{{ t('market.conflict.renameTip') }}</div>
+              </div>
+            </button>
+            <button type="button" class="conflict-btn conflict-cancel" @click="resolveConflict('cancel')">
+              <IconPark icon="mdi:close" width="14" height="14" />
+              <span>{{ t('market.conflict.cancel') }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -880,6 +983,22 @@ const lastInstalledName = ref('')
   transition: width 0.15s linear;
   border-radius: 3px;
 }
+
+/* 2026-07-09 增:子步骤文字(类似 npm install 那种"正在 xxx"体感) */
+.progress-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  font-family: 'JetBrains Mono', monospace;
+}
+.progress-hint-done {
+  color: var(--accent);
+  font-weight: 500;
+}
 .progress-go-home {
   align-self: flex-start;
   margin-top: 4px;
@@ -912,5 +1031,98 @@ const lastInstalledName = ref('')
   .install-form-row {
     flex-direction: column;
   }
+}
+
+/* ============================================
+   2026-07-09 增:同名 skill 冲突确认 Modal
+   ============================================ */
+.conflict-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+.conflict-modal {
+  --accent: #0ea5e9;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.3);
+  padding: 20px 22px;
+  width: min(440px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.conflict-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 14px;
+}
+.conflict-title {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.conflict-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.conflict-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.conflict-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+.conflict-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+.conflict-btn-title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.conflict-btn-tip {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.conflict-cancel {
+  justify-content: center;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.conflict-cancel:hover {
+  background: color-mix(in srgb, #ef4444 6%, var(--bg-card));
+  border-color: color-mix(in srgb, #ef4444 40%, var(--border));
+  color: #b91c1c;
+}
+:global(html.dark) .conflict-cancel:hover {
+  color: #fca5a5;
 }
 </style>

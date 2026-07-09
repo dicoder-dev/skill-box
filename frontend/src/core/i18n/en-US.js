@@ -377,41 +377,50 @@ const messages = {
   // 2026-07-09 改:MarketView 改回「卡片 + open in browser」方案。iframe 被 skillhub CORS 拒。
   market: {
     title: 'Marketplace',
-    subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh) and open them in your system browser.',
+    subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh / GitHub) and paste a detail page URL to install into skill-box.',
     btnOpenInBrowser: 'Open in browser',
     btnOpenInBrowserTip: 'Open {name} in system browser',
     cards: {
       skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
       skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
+      githubDesc: 'Agent skill repos on GitHub, install directly via raw content URL.',
     },
     // 2026-07-09: input box one-click install
     guide: {
       title: 'How to install into skill-box',
       skillhub: {
-        desc: 'Browse skillhub.cn and find a skill → copy the browser address bar URL (or just the slug) → paste it below.',
+        desc: 'Browse skillhub.cn and find a skill → copy the browser address bar URL → paste below.',
         examples: 'Examples',
         examplesList: [
-          'code-review',
           'https://skillhub.cn/skills/code-review',
+          'https://skillhub.cn/skills/commit-msg',
         ],
       },
       skillssh: {
-        desc: 'Browse skills.sh (or search "agent skill" on GitHub) → copy the detail page URL or owner/repo@skill identifier → paste below.',
+        desc: 'Browse skills.sh and find a skill → copy the detail page URL (or GitHub blob URL) → paste below.',
         examples: 'Examples',
         examplesList: [
-          'anthropics/skills@pdf',
           'https://skills.sh/anthropics/skills/pdf',
           'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
         ],
       },
+      github: {
+        desc: 'Browse an agent skill repo on GitHub → find SKILL.md → copy the blob URL → paste below.',
+        examples: 'Examples',
+        examplesList: [
+          'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+          'https://github.com/anthropics/skills/blob/main/skills/code-review/SKILL.md',
+        ],
+      },
     },
     input: {
-      label: 'Paste skill name or detail page URL',
-      placeholderSkillhub: 'Enter skill slug or https://skillhub.cn/skills/{slug}',
-      placeholderSkillssh: 'Enter owner/repo@skill or https://skills.sh/{owner}/{repo}/{skill} or GitHub URL',
+      label: 'Paste detail page URL',
+      placeholderSkillhub: 'https://skillhub.cn/skills/{slug}',
+      placeholderSkillssh: 'https://skills.sh/{owner}/{repo}/{skill} or GitHub blob URL',
+      placeholderGithub: 'https://github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md',
       btnInstall: 'Install to skill-box',
       btnInstalling: 'Installing…',
-      errInvalidInput: 'Unrecognized input. Supports skillhub.cn / skills.sh / github.com detail URLs, or owner/repo@skill',
+      errInvalidInput: 'Unrecognized input. Each tab only accepts its own market\'s detail URL.',
       errSource: 'Market source not found',
       errPull: 'Download failed: {msg}',
       errGeneric: 'Install failed: {msg}',
@@ -422,10 +431,25 @@ const messages = {
       extract: 'Extracting & validating…',
       write: 'Writing to skill-box store…',
       done: 'Installation complete',
+      // 2026-07-09: sub-step hints under the progress bar
+      hintResolve: 'Parsing URL, matching source type…',
+      hintDownload: 'Downloading zip from GitHub codeload…',
+      hintExtract: 'Extracting and validating SKILL.md…',
+      hintWrite: 'Writing to local skill-box store…',
+      hintDone: 'Installed, ready to jump',
     },
     success: {
       msg: '✅ Installed {name} v{version}',
       goHome: 'View on home',
+    },
+    conflict: {
+      title: 'Skill already exists',
+      desc: 'A local skill named "{name}" already exists (v{existingVersion} @ {existingPath}). What would you like to do?',
+      overwrite: 'Overwrite',
+      overwriteTip: 'Replace the existing version with the new one',
+      rename: 'Save as',
+      renameTip: 'Append -2 / -3 suffix to keep both versions',
+      cancel: 'Cancel',
     },
   },
 
