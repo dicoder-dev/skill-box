@@ -182,8 +182,9 @@ func TestResolveInstallInput_GitHubTreeURL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("不期望报错,得到 %v", err)
 			}
-			if got.SourceType != skillmarket.SourceSkillsSH {
-				t.Fatalf("SourceType=%q, want %q", got.SourceType, skillmarket.SourceSkillsSH)
+			// 2026-07-09 改:GitHub 拆出来成独立 source,不再走 skillssh
+			if got.SourceType != skillmarket.SourceGitHub {
+				t.Fatalf("SourceType=%q, want %q", got.SourceType, skillmarket.SourceGitHub)
 			}
 			if got.RemoteID != c.wantRemID {
 				t.Fatalf("RemoteID=%q, want %q", got.RemoteID, c.wantRemID)

@@ -246,9 +246,15 @@ func resolveGitHubTreeURL(u *url.URL, raw string) (*ResolvedInput, error) {
 		return nil, fmt.Errorf("%w: GitHub skill 名称非法 %q", ErrInvalidInput, raw)
 	}
 	// 原始 URL 当 ResolvedURL,前端展示/日志用。
+	//
+	// 2026-07-09 修(关键 bug):早期 SourceType / SourceName 都写成 skillssh,
+	// 导致 controller 拿 resolved.SourceType="skillssh" 走老 adapter,新 github
+	// adapter 完全被绕过;同时 groupPath 走 "skills-sh" 而非 "anthropics"。
+	// 改成 source=github 后,findOrCreateSourceByType 会注册/用 github 源,
+	// deriveGroupPath 走按 owner 分组。
 	return &ResolvedInput{
-		SourceType:  skillmarket.SourceSkillsSH,
-		SourceName:  "skills.sh",
+		SourceType:  skillmarket.SourceGitHub,
+		SourceName:  "GitHub",
 		RemoteID:    owner + "/" + repo + "@" + skill,
 		ResolvedURL: raw,
 	}, nil
