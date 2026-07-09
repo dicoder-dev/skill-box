@@ -30,6 +30,10 @@ import (
 	"ginp-api/internal/skillmarket"
 	_ "ginp-api/internal/skillmarket/skillhub"
 	_ "ginp-api/internal/skillmarket/skillssh"
+	// 2026-07-09 增:github 独立 source(从 skillssh 拆出来);
+	// 匿名 import 触发 init() 执行 skillmarket.Register(New()),
+	// 把 github adapter 注册到 defaultRegistry,不然 orchestrator 找不到。
+	_ "ginp-api/internal/skillmarket/github"
 	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
 	"ginp-api/pkg/where"
