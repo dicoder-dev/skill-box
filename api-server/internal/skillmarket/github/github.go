@@ -40,8 +40,15 @@ const (
 	zipballMaxBytes = 50 << 20
 )
 
-// 2026-07-09:GitHub codeload.zipball host(用户公开 API,无需鉴权)。
-// zipball 返回的 zip 顶层目录是 "{owner}-{repo}-{commit_sha}/...",不是仓库根,
+// 2026-07-09:GitHub codeload zip URL 模板(用户公开 API,无需鉴权)。
+//
+// 2026-07-09 修(关键 bug):早期用 /{owner}/{repo}/zipball/{branch},
+// 这个 URL 已被 GitHub 弃用,所有匿名请求都返 404,跟仓库是否存在无关。
+// 正确格式是 /{owner}/{repo}/zip/refs/heads/{branch} 或 /tar.gz/refs/heads/{branch}。
+// zipball 老路径(2023 年前用)在 2024 年后已统一改用 codeload.github.com 的
+// /zip/refs/heads/* 形式。
+//
+// zipball 返回的 zip 顶层目录是 "{repo}-{branch}/...",不是仓库根,
 // 解压时需要识别这层包裹目录并剥掉,只保留 user 视角的相对路径。
 // var 而非 const:单测用 httptest 替换 base URL,跑完恢复。
 var defaultZipballBase = "https://codeload.github.com"
@@ -116,11 +123,16 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 // 实际仓库里 skill 通常带 5-10 个附属文件(pdf 仓库有 9 个 .py + LICENSE + reference.md),
 // 只装 SKILL.md 用户根本跑不起来。改走 codeload.github.com zipball API。
 //
+// 2026-07-09 二次修:早期用 /zipball/{branch} 返 404(URL 已弃用),
+// 改成 /zip/refs/heads/{branch}(2024+ 正确格式)。
+//
 // 流程:
-//   1) 拼 zipball URL: codeload.github.com/{owner}/{repo}/zipball/{branch}
+//   1) 拼 zipball URL: codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}
 //   2) GET 拉 zip 字节流(50MB cap)
-//   3) archive/zip 解压;zip 顶层是 {owner}-{repo}-{commit_sha} 包裹目录,先识别后剥掉
-//   4) 在剥掉后的路径里找 SKILL.md 作为锚点(锚点目录 = SKILL.md 所在目录)
+//   3) archive/zip 解压;zip 顶层是 {repo}-{branch} 包裹目录(如 anthropics-skills-main),
+//      先识别后剥掉,只留仓库内路径
+//   4) 在剥掉后的路径里找 SKILL.md 作为锚点(锚点目录 = SKILL.md 所在目录,
+//      路径匹配 skillPath 防止 zip 里多个 skill 各自 SKILL.md 的歧义)
 //   5) 收锚点目录下所有 file,SKILL.md 走 ParseSkillMD 出 Manifest,其它作 files
 //   6) branch 默认 main,失败试 master
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
@@ -157,7 +169,8 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 
 // downloadViaZipball 走 codeload.github.com 拉 zip,解压取 SKILL.md 所在目录全部文件。
 func (a *Adapter) downloadViaZipball(ctx context.Context, owner, repo, branch, skillPath, remoteID string) (*skilladapter.Canonical, error) {
-	zipURL := fmt.Sprintf("%s/%s/%s/zipball/%s", defaultZipballBase, owner, repo, branch)
+	// 2026-07-09 修:URL 格式 /zip/refs/heads/{branch}(旧 /zipball/{branch} 已 404)
+	zipURL := fmt.Sprintf("%s/%s/%s/zip/refs/heads/%s", defaultZipballBase, owner, repo, branch)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, zipURL, nil)
 	if err != nil {
 		return nil, err

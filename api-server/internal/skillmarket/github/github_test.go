@@ -82,11 +82,11 @@ func TestDownload_Zipball_MainNotFound_FallbackMaster(t *testing.T) {
 		"skills/pdf/SKILL.md": "---\nname: pdf\n---\n# PDF\n",
 	})
 	mux := http.NewServeMux()
-	mux.HandleFunc("/anthropics/skills/zipball/main", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/anthropics/skills/zip/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
 		mainHit++
 		w.WriteHeader(http.StatusNotFound)
 	})
-	mux.HandleFunc("/anthropics/skills/zipball/master", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/anthropics/skills/zip/refs/heads/master", func(w http.ResponseWriter, r *http.Request) {
 		masterHit++
 		w.Header().Set("Content-Type", "application/zip")
 		w.WriteHeader(http.StatusOK)
