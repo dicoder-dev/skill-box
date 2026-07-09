@@ -383,6 +383,40 @@ const messages = {
       skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
       skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
     },
+    // 2026-07-09: input box one-click install
+    guide: {
+      title: 'How to install into skill-box',
+      skillhub: {
+        desc: 'Browse skillhub.cn and find a skill → copy the browser address bar URL (or just the slug) → paste it below.',
+        cli: 'npx skills-hub install {slug}',
+      },
+      skillssh: {
+        desc: 'Browse skills.sh (or search "agent skill" on GitHub) → copy the detail page URL or owner/repo@skill identifier → paste below.',
+        cli: 'npx skills add {owner}/{repo} --skill {name}',
+      },
+    },
+    input: {
+      label: 'Paste skill name or detail page URL',
+      placeholderSkillhub: 'Enter skill slug or https://skillhub.cn/skills/{slug}',
+      placeholderSkillssh: 'Enter owner/repo@skill or https://skills.sh/{owner}/{repo}/{skill} or GitHub URL',
+      btnInstall: 'Install to skill-box',
+      btnInstalling: 'Installing…',
+      errInvalidInput: 'Unrecognized input. Supports skillhub.cn / skills.sh / github.com detail URLs, or owner/repo@skill',
+      errSource: 'Market source not found',
+      errPull: 'Download failed: {msg}',
+      errGeneric: 'Install failed: {msg}',
+    },
+    progress: {
+      resolve: 'Resolving input…',
+      download: 'Downloading skill…',
+      extract: 'Extracting & validating…',
+      write: 'Writing to skill-box store…',
+      done: 'Installation complete',
+    },
+    success: {
+      msg: '✅ Installed {name} v{version}',
+      goHome: 'View on home',
+    },
   },
 
   onboarding: {

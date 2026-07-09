@@ -395,6 +395,41 @@ const messages = {
       skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
       skillsshDesc: 'Vercel 托管的 AI 技能排行榜,按热度(1H / change)实时排序。',
     },
+    // 2026-07-09 增:输入框一键安装
+    guide: {
+      title: '如何安装到 skill-box',
+      skillhub: {
+        desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL(或纯 slug) → 粘贴到下方输入框。',
+        cli: 'npx skills-hub install {slug}',
+      },
+      skillssh: {
+        desc: '在 skills.sh 浏览(或在 GitHub 搜 agent skill)→ 复制详情页 URL 或 owner/repo@skill 标识 → 粘贴到下方输入框。',
+        cli: 'npx skills add {owner}/{repo} --skill {name}',
+      },
+    },
+    input: {
+      label: '粘贴 skill 名称 / 详情页 URL',
+      placeholderSkillhub: '输入 skill slug 或 https://skillhub.cn/skills/{slug}',
+      placeholderSkillssh: '输入 owner/repo@skill 或 https://skills.sh/{owner}/{repo}/{skill} 或 GitHub URL',
+      btnInstall: '装到 skill-box',
+      btnInstalling: '安装中…',
+      // 错误条(input 下方红条)
+      errInvalidInput: '输入格式无法识别:支持 skillhub.cn / skills.sh / github.com 详情页 URL,或 owner/repo@skill',
+      errSource: '找不到对应的市场源',
+      errPull: '下载失败:{msg}',
+      errGeneric: '安装失败:{msg}',
+    },
+    progress: {
+      resolve: '解析输入…',
+      download: '下载 skill…',
+      extract: '解压并校验…',
+      write: '写入 skill-box store…',
+      done: '安装完成',
+    },
+    success: {
+      msg: '✅ 已装入 {name} v{version}',
+      goHome: '去首页查看',
+    },
   },
 
   onboarding: {

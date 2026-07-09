@@ -1,38 +1,41 @@
 <script setup>
-// MarketView.vue - 三方市场(2026-07-09 改:卡片 + 跳浏览器方案)。
+// MarketView.vue - 三方市场 v4(2026-07-09)。
 //
-// 历经三个方案:
+// 历经四个方案:
 //   v1(2026-06 ~ 2026-07):自建后端代理三方源(skillhub / skills.sh),前端
-//     卡片网格 + 拉取弹窗。已被 iframe 方案替代,前端 store/api/弹窗
-//     全部删除(后端 cmarket 模块保留为 dead code,后续按需清理)。
+//     卡片网格 + 拉取弹窗。
+//   v2(2026-07-09 上午):iframe + 后端 reverse proxy,失败(跨源 / cookie / API)。
+//   v3(2026-07-09 下午):纯前端卡片 + 跳浏览器(只有"在浏览器中打开"按钮)。
+//   v4(2026-07-09 晚):卡片 + 跳浏览器 + **输入框一键安装**(当前)。
 //
-//   v2(2026-07-09 上午):iframe + 后端 reverse proxy,抹掉 X-Frame-Options
-//     / CSP,让 iframe 能加载三方站。问题:
-//       - skillhub 站点本身不允许跨源嵌入(CORS 拒 iframe 内部 API 调用)
-//       - 桌面 webview 里 Vercel dpl cookie 验证不通过(已用 <base href> 注入修复)
-//       - 即使 HTML 渲染,API 调不通,内容始终空白
+// v4 新增能力:
+//   1. 各 tab 顶部展示「如何安装到 skill-box」指南:文字 + CLI 命令
+//      (给用户提供思路,即使不想用输入框也能手装)
+//   2. 输入框:用户粘贴 skill slug / 详情页 URL → 后端
+//      POST /api/skillbox/market/install-from-input → 自动下载到本地 store
+//   3. 实时进度条(4 阶段模拟:解析 → 下载 → 解压 → 写盘),失败红条提示
+//   4. 成功后 toast + 「去首页查看」按钮(通过 activeTab 跳转 skills 视图)
 //
-//   v3(2026-07-09 当前):纯前端卡片 + 跳浏览器。
-//     - 顶 tab 切换 SkillHub / Skills.sh
-//     - 主体显示当前 tab 对应的站点介绍卡片(名称 + 描述 + 「在浏览器中打开」)
-//     - 点按钮调 platform.platform.openExternal 跨平台打开外部 URL:
-//         Web:window.open / Desktop:wails BrowserOpenURL(系统默认浏览器)
-//     - 不依赖任何 iframe / 代理,稳如老狗
+// 配色:SkillHub 保留青色 #0ea5e9;Skills.sh 由原紫色 #8b5cf6 改为绿色 #10b981
+// (符合项目 memory:avoid-violet-as-primary-color.md,紫色 AI 感强,主色禁用)。
 
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
+import { installFromInput } from '@/api/skillbox/market'
+import { useToastStore } from '@/core/store/toast'
 
 const { t } = useI18n()
+const toast = useToastStore()
 
-// 固定源列表(顺序就是 tab 顺序)
-// 字段:
-//   id      - tab 唯一 key
-//   name    - tab 显示名 + 卡片标题
-//   desc    - 卡片描述(i18n key,运行时 t() 解析)
-//   url     - 「在浏览器中打开」按钮的目标 URL
-//   accent  - 卡片主色(亮色 hex),与市场海蓝主题色区分,让两个卡片有视觉差异
+// 2026-07-09 增:跳转首页用(App.vue provide 的 activeTab)
+const activeTab = inject('activeTab', null)
+
+// 固定源列表(顺序就是 tab 顺序)。
+//
+// accent 字段:卡片主色。2026-07-09 改 Skills.sh 由紫色 #8b5cf6 → 绿色 #10b981
+// (avoid-violet-as-primary-color.md 约束)。
 const sources = [
   {
     id: 'skillhub',
@@ -40,13 +43,20 @@ const sources = [
     descKey: 'market.cards.skillhubDesc',
     url: 'https://skillhub.cn/skills?sortBy=curated_score',
     accent: '#0ea5e9',
+    // 2026-07-09 增:源类型,输入框提交时透传给后端
+    sourceType: 'skillhub',
+    placeholderKey: 'market.input.placeholderSkillhub',
+    guideKey: 'market.guide.skillhub',
   },
   {
     id: 'skillssh',
     name: 'Skills.sh',
     descKey: 'market.cards.skillsshDesc',
     url: 'https://www.skills.sh/hot',
-    accent: '#8b5cf6',
+    accent: '#10b981',
+    sourceType: 'skillssh',
+    placeholderKey: 'market.input.placeholderSkillssh',
+    guideKey: 'market.guide.skillssh',
   },
 ]
 
@@ -58,16 +68,119 @@ const activeSource = computed(
 function selectSource(id) {
   if (id === activeSourceId.value) return
   activeSourceId.value = id
+  // 切 tab 时清掉之前残留的输入 / 进度 / 错误,避免污染新 tab
+  userInput.value = ''
+  resetProgress()
 }
 
-// 「在浏览器中打开」 — 跨平台
-//   Web:window.open
-//   Desktop:wails BrowserOpenURL(系统默认浏览器)
+// 「在浏览器中打开」 — 跨平台(Web → window.open / Desktop → wails BrowserOpenURL)。
 async function openInExternal(url) {
   try {
     await platform.platform.openExternal(url)
   } catch (e) {
     // web 端 window.open 被拦截也算异常,这里静默吞掉
+  }
+}
+
+// 2026-07-09 增:输入框 + 安装流程
+
+const userInput = ref('')
+const installing = ref(false)
+const installError = ref('')
+
+// 进度条 4 阶段;每阶段一个独立 ref,确保切换时旧 ref 残留不会乱跳
+const progressStage = ref('')        // 当前阶段 key(resolve/download/extract/write/done/'')
+const progressPercent = ref(0)       // 0-100
+let progressTimer = null
+
+// 进度目标:每阶段到达的百分比。模拟真实节奏:解析 15% → 下载 60% → 解压 85% → 写盘 100%。
+const STAGE_TARGETS = {
+  resolve: 15,
+  download: 60,
+  extract: 85,
+  write: 100,
+}
+
+function resetProgress() {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+  progressStage.value = ''
+  progressPercent.value = 0
+  installError.value = ''
+}
+
+// 平滑推进进度到目标值。固定时长 600ms 让用户看到阶段切换。
+function advanceProgress(stage) {
+  progressStage.value = stage
+  const target = STAGE_TARGETS[stage] || 0
+  const start = progressPercent.value
+  const dur = 600
+  const startedAt = Date.now()
+  if (progressTimer) clearInterval(progressTimer)
+  progressTimer = setInterval(() => {
+    const elapsed = Date.now() - startedAt
+    if (elapsed >= dur) {
+      progressPercent.value = target
+      clearInterval(progressTimer)
+      progressTimer = null
+      return
+    }
+    const k = elapsed / dur
+    progressPercent.value = Math.round(start + (target - start) * k)
+  }, 30)
+}
+
+// 「装到 skill-box」按钮 — 走 4 阶段模拟 → 后端一次性 HTTP → 收尾
+async function handleInstall() {
+  if (installing.value) return
+  const input = userInput.value.trim()
+  if (!input) {
+    installError.value = t('market.input.errInvalidInput')
+    return
+  }
+  installing.value = true
+  resetProgress()
+  advanceProgress('resolve')
+  // 给解析阶段至少 300ms 视觉反馈,避免快网络下进度跳 0→60 看不到 resolve
+  await new Promise((r) => setTimeout(r, 350))
+  advanceProgress('download')
+  try {
+    const out = await installFromInput({
+      source_hint: activeSource.value.sourceType,
+      input,
+      scope: 'global',
+    })
+    advanceProgress('extract')
+    await new Promise((r) => setTimeout(r, 350))
+    advanceProgress('write')
+    await new Promise((r) => setTimeout(r, 250))
+    progressStage.value = 'done'
+    installing.value = false
+    toast.success(t('market.success.msg', { name: out.skill_name, version: out.skill_version || '0.1.0' }))
+  } catch (e) {
+    installing.value = false
+    resetProgress()
+    const msg = e?.message || String(e)
+    // 错误分类:后端 400 → 输入格式 / 404 → 源找不到 / 其它 → 通用
+    const status = e?.response?.status || e?.status
+    if (status === 400) {
+      installError.value = t('market.input.errInvalidInput')
+    } else if (status === 404) {
+      installError.value = t('market.input.errSource')
+    } else if (/download|fetch/i.test(msg)) {
+      installError.value = t('market.input.errPull', { msg })
+    } else {
+      installError.value = t('market.input.errGeneric', { msg })
+    }
+  }
+}
+
+// 成功后「去首页查看」 — 改 activeTab.value = 'skills' (由 App.vue provide 出来)
+function goToHome() {
+  if (activeTab && typeof activeTab.value !== 'undefined') {
+    activeTab.value = 'skills'
   }
 }
 </script>
@@ -101,13 +214,14 @@ async function openInExternal(url) {
         </button>
       </nav>
 
-      <!-- 主体:当前 tab 对应的站点介绍卡片 -->
+      <!-- 主体:当前 tab 对应的站点介绍卡 + 安装指南 + 输入框 -->
       <div class="market-body">
         <div
           :key="activeSource.id"
           class="source-card"
           :style="{ '--accent': activeSource.accent }"
         >
+          <!-- 卡片 head:图标 + 名称 + URL -->
           <div class="source-card-head">
             <div class="source-card-icon">
               <IconPark icon="mdi:open-in-new" width="28" height="28" />
@@ -118,12 +232,87 @@ async function openInExternal(url) {
             </div>
           </div>
 
+          <!-- 2026-07-09 增:站点描述 -->
           <p class="source-card-desc">
             {{ t(activeSource.descKey) }}
           </p>
 
+          <!-- 2026-07-09 增:安装指南(给用户思路) -->
+          <div class="install-guide">
+            <div class="guide-title">
+              <IconPark icon="mdi:lightbulb-outline" width="14" height="14" />
+              <span>{{ t('market.guide.title') }}</span>
+            </div>
+            <p class="guide-desc">{{ t(`${activeSource.guideKey}.desc`) }}</p>
+            <div class="guide-cli">
+              <code>{{ t(`${activeSource.guideKey}.cli`) }}</code>
+            </div>
+          </div>
+
+          <!-- 2026-07-09 增:输入框 + 安装按钮 -->
+          <div class="install-form">
+            <label class="install-form-label">
+              <IconPark icon="mdi:link-variant" width="14" height="14" />
+              {{ t('market.input.label') }}
+            </label>
+            <div class="install-form-row">
+              <input
+                v-model="userInput"
+                type="text"
+                class="install-input"
+                :placeholder="t(activeSource.placeholderKey)"
+                :disabled="installing"
+                @keydown.enter="handleInstall"
+              />
+              <button
+                type="button"
+                class="primary"
+                :disabled="installing || !userInput.trim()"
+                @click="handleInstall"
+              >
+                <IconPark :icon="installing ? 'mdi:loading' : 'mdi:download'" width="14" height="14" />
+                {{ installing ? t('market.input.btnInstalling') : t('market.input.btnInstall') }}
+              </button>
+            </div>
+            <!-- 错误条(只在失败时显示) -->
+            <div v-if="installError" class="install-error">
+              <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
+              {{ installError }}
+            </div>
+          </div>
+
+          <!-- 2026-07-09 增:进度条(只在 installing 或 done 时显示) -->
+          <div v-if="progressStage" class="install-progress">
+            <div class="progress-row">
+              <span class="progress-label">
+                <IconPark
+                  :icon="progressStage === 'done' ? 'mdi:check-circle' : 'mdi:loading'"
+                  width="14"
+                  height="14"
+                  :spin="progressStage !== 'done'"
+                />
+                {{ t(`market.progress.${progressStage}`) }}
+              </span>
+              <span class="progress-percent">{{ progressPercent }}%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+            </div>
+            <!-- 成功后跳首页按钮 -->
+            <button
+              v-if="progressStage === 'done'"
+              type="button"
+              class="primary progress-go-home"
+              @click="goToHome"
+            >
+              <IconPark icon="mdi:home-outline" width="14" height="14" />
+              {{ t('market.success.goHome') }}
+            </button>
+          </div>
+
+          <!-- 原「在浏览器中打开」按钮保留 -->
           <div class="source-card-actions">
-            <button type="button" class="primary" @click="openInExternal(activeSource.url)">
+            <button type="button" class="ghost" @click="openInExternal(activeSource.url)">
               <IconPark icon="mdi:open-in-new" width="14" height="14" />
               {{ t('market.btnOpenInBrowser') }}
             </button>
@@ -217,6 +406,7 @@ async function openInExternal(url) {
   box-shadow: var(--shadow-card);
   padding: 20px;
   transition: all 0.3s ease;
+  overflow-y: auto;
 }
 
 /* 顶部源 tab */
@@ -255,29 +445,28 @@ async function openInExternal(url) {
   box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
 }
 
-/* 主体:flex:1 接管 .card 剩余高度,内部居中放站点卡片 */
+/* 主体 */
 .market-body {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 24px 0;
+  padding: 8px 0 0;
 }
 
-/* 站点介绍卡片(2026-07-09 改:替代 iframe) */
+/* 站点介绍卡片 */
 .source-card {
   --accent: #0ea5e9;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: min(520px, 100%);
+  width: min(640px, 100%);
   padding: 24px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
-  /* 顶部 4px accent 边条,跟原卡片 left bar 风格统一 */
   border-top: 4px solid var(--accent);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -331,23 +520,215 @@ async function openInExternal(url) {
   color: var(--text-dim);
   line-height: 1.6;
 }
+
+/* ============================================
+   2026-07-09 增:安装指南块
+   ============================================ */
+.install-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: var(--radius-sm);
+}
+.guide-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.guide-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.guide-cli {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--text) 6%, var(--bg-card));
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.guide-cli code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ============================================
+   2026-07-09 增:输入框 + 安装按钮
+   ============================================ */
+.install-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.install-form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.install-form-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.install-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.install-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.install-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 按钮:primary(主操作)+ ghost(次操作) */
+.source-card-actions .primary,
+.install-form-row .primary,
+.progress-go-home.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #ffffff;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.source-card-actions .primary:hover:not(:disabled),
+.install-form-row .primary:hover:not(:disabled),
+.progress-go-home.primary:hover:not(:disabled) {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+.source-card-actions .primary:disabled,
+.install-form-row .primary:disabled,
+.progress-go-home.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.source-card-actions .ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.source-card-actions .ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+
+/* 错误条 */
+.install-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #ef4444 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #ef4444 40%, var(--border));
+  border-radius: var(--radius-sm);
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+:global(html.dark) .install-error {
+  color: #fca5a5;
+}
+
+/* ============================================
+   2026-07-09 增:进度条
+   ============================================ */
+.install-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, var(--border));
+  border-radius: var(--radius-sm);
+}
+.progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.progress-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.progress-percent {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.progress-track {
+  width: 100%;
+  height: 6px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-card));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--mkt-accent)));
+  transition: width 0.15s linear;
+  border-radius: 3px;
+}
+.progress-go-home {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* 卡片底部 action 区 */
 .source-card-actions {
   display: flex;
   gap: 8px;
   margin-top: 4px;
-}
-.source-card-actions .primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  /* 用 inline style 注入的 --accent 作为按钮主色,跟卡片边条一致 */
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
-}
-.source-card-actions .primary:hover:not(:disabled) {
-  filter: brightness(0.92);
-  transform: translateY(-1px);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
 }
 
 /* 响应式 */
@@ -364,6 +745,9 @@ async function openInExternal(url) {
   }
   .source-card-name {
     font-size: 16px;
+  }
+  .install-form-row {
+    flex-direction: column;
   }
 }
 </style>
