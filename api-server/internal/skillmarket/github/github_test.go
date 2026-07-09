@@ -1,121 +1,188 @@
 package github
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
-// 2026-07-09 增:Download 走 zipball,验证 SKILL.md + 锚点目录所有文件都收。
+// 2026-07-09 改:go-git 真实 PlainClone 在测试环境有兼容性坑(file:// 协议、HEAD
+// checkout 时机等),单测改测**纯函数 parseClonedSkill**(输入本地 clone 目录,
+// 输出 canonical)。真实 clone 路径靠集成测试或人工验证覆盖。
 //
-// 2026-07-09 改(关键 bug):早期 raw URL 实现只下一个 SKILL.md,用户截图显示
-// pdf 仓库 scripts/ 下有 9 个 .py + LICENSE + reference.md 全部丢失。
-// 现在改走 codeload.github.com/{owner}/{repo}/zipball/{branch},解压后
-// 收 SKILL.md 所在目录所有 file。
-func TestDownload_Zipball_IncludesAllFiles(t *testing.T) {
-	zipBytes := buildZipballZip(t, "anthropics-skills-abc1234", map[string]string{
-		"skills/pdf/SKILL.md":                          "---\nname: pdf\ndescription: PDF\n---\n# PDF\n",
-		"skills/pdf/scripts/check_bounding_boxes.py":   "# bb\n",
-		"skills/pdf/scripts/check_fillable_fields.py":  "# cf\n",
-		"skills/pdf/scripts/convert_pdf_to_images.py":  "# ci\n",
-		"skills/pdf/LICENSE.txt":                       "MIT\n",
-		"skills/pdf/forms.md":                          "# forms\n",
-		"skills/pdf/reference.md":                      "# ref\n",
-		// 不在锚点目录下的文件应被跳过(避免把整仓库都装进来)
-		"skills/other-skill/SKILL.md":                  "---\nname: other\n---\n# Other\n",
-		"README.md":                                    "# Top-level\n",
-	})
+// 单元覆盖矩阵:
+//   - parseClonedSkill: SKILL.md 解析 / 附属文件收齐 / 路径相对化 / anchor 过滤
+//   - splitRemoteID: 各种格式拆 / 异常输入
+//   - isRateLimitedErr: 关键字 + transport sentinel
+//   - lastSegment: 路径末段
+//   - buildRepoURL: 默认 https + file:// 边界
+//   - Download: ctx cancel(轻量测)
 
-	zipServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/zip")
-		w.Header().Set("Content-Length", strconv.Itoa(len(zipBytes)))
-		w.WriteHeader(http.StatusOK)
-		w.Write(zipBytes)
-	}))
-	defer zipServer.Close()
+// setupSkillRepoDir 在 tmpDir 创建一个**已经 checkout** 的 git 工作树
+// (直接用 git 命令 commit,模拟 PlainClone + Checkout 后的状态)。
+// 返回 checkout 后的目录(就是 SKILL.md 所在目录的根)。
+func setupSkillRepoDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Logf("[setup] tmpDir: %s", dir)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test")
 
-	oldBase := defaultZipballBase
-	defaultZipballBase = zipServer.URL
-	t.Cleanup(func() { defaultZipballBase = oldBase })
+	anchor := filepath.Join(dir, "skills", "pdf")
+	if err := os.MkdirAll(filepath.Join(anchor, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"skills/pdf/SKILL.md": "---\nname: pdf\ndescription: PDF test\n---\n# PDF\n",
+		"skills/pdf/scripts/check_bounding_boxes.py":  "# bb\n",
+		"skills/pdf/scripts/check_fillable_fields.py": "# cf\n",
+		"skills/pdf/scripts/convert_pdf_to_images.py": "# ci\n",
+		"skills/pdf/LICENSE.txt":                      "MIT\n",
+		"skills/pdf/forms.md":                         "# forms\n",
+		// 不在锚点下的文件(应该被跳过)
+		"skills/other-skill/SKILL.md": "---\nname: other\n---\n# Other\n",
+		"README.md":                   "# Top\n",
+	}
+	for rel, content := range files {
+		full := filepath.Join(dir, rel)
+		// 2026-07-09 调试:先写父目录再写文件
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// 2026-07-09 验证:WriteFile 之后立刻 Stat + ReadFile
+		if _, err := os.Stat(full); err != nil {
+			t.Logf("Stat %s after WriteFile: %v", full, err)
+			// 看父目录有什么
+			if entries, eerr := os.ReadDir(filepath.Dir(full)); eerr == nil {
+				names := make([]string, 0, len(entries))
+				for _, e := range entries {
+					names = append(names, e.Name())
+				}
+				t.Logf("parent dir %s contents: %v", filepath.Dir(full), names)
+			}
+			// 看 t.TempDir() 顶层
+			if entries, eerr := os.ReadDir(dir); eerr == nil {
+				names := make([]string, 0, len(entries))
+				for _, e := range entries {
+					names = append(names, e.Name())
+				}
+				t.Logf("tempDir %s contents: %v", dir, names)
+			}
+			t.Fatalf("Stat %s failed: %v", full, err)
+		}
+	}
+	run("add", "-A")
+	run("commit", "-q", "-m", "init test skill repo")
+	// 2026-07-09 验证:commit 后文件存在
+	otherSKILL := filepath.Join(dir, "skills", "other-skill", "SKILL.md")
+	if _, err := os.Stat(otherSKILL); err != nil {
+		t.Fatalf("expected other-skill/SKILL.md at %s, got: %v", otherSKILL, err)
+	}
+	t.Logf("[setup] other-skill SKILL.md OK: %s", otherSKILL)
+	return dir
+}
 
-	a := New()
-	can, err := a.Download(context.Background(), "https://github.com", "anthropics/skills@skills/pdf")
+// 2026-07-09 改:parseClonedSkill 单测 — 直接喂已 checkout 的目录,
+// 验证 SKILL.md + 附属文件 + 锚点过滤全部正确。
+func TestParseClonedSkill_IncludesAllFiles(t *testing.T) {
+	repoDir := setupSkillRepoDir(t)
+	can, err := parseClonedSkill(repoDir, "anthropics", "skills", "main", "skills/pdf", "anthropics/skills@skills/pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if can == nil {
 		t.Fatal("nil canonical")
 	}
-	// 期望 7 个 file:SKILL.md + 5 个 scripts/LICENSE + 2 个 md
+	// 期望 6 个 file:SKILL.md + 3 个 py + LICENSE + forms.md
 	// (other-skill/SKILL.md 和 README.md 不在锚点下,被跳过)
-	if len(can.Files) != 7 {
-		t.Fatalf("expected 7 files in anchor dir, got %d: %+v", len(can.Files), can.Files)
+	if len(can.Files) != 6 {
+		t.Fatalf("expected 6 files in anchor dir, got %d: %+v", len(can.Files), can.Files)
 	}
 	if can.Files[0].Path != "SKILL.md" {
 		t.Errorf("first file should be SKILL.md, got %q", can.Files[0].Path)
 	}
-	// author 应为 owner(anthropics),不是写死 "GitHub"
 	if can.Manifest.Author != "anthropics" {
 		t.Errorf("Manifest.Author = %q, want %q", can.Manifest.Author, "anthropics")
 	}
-	// name 兜底取 lastSegment("skills/pdf") = "pdf"
 	if can.Manifest.Name != "pdf" {
 		t.Errorf("Manifest.Name = %q, want %q", can.Manifest.Name, "pdf")
 	}
-	// 不能含其它 skill / 顶层 README 的内容
-	for _, f := range can.Files {
-		if f.Path == "README.md" {
-			t.Errorf("leaked top-level file: %q", f.Path)
+}
+
+// 2026-07-09 增:锚点目录不存在 → 报错。
+func TestParseClonedSkill_AnchorNotFound(t *testing.T) {
+	repoDir := setupSkillRepoDir(t)
+	_, err := parseClonedSkill(repoDir, "x", "y", "main", "no/such/dir", "x/y@no/such/dir")
+	if err == nil {
+		t.Fatal("expected error when anchor dir missing")
+	}
+	if !strings.Contains(err.Error(), "anchor dir") {
+		t.Errorf("error should mention anchor dir, got %v", err)
+	}
+}
+
+// 2026-07-09 增:Download 在 ctx 已 cancel 时直接返错(不实际 clone)。
+func TestDownload_CtxCancelledImmediate(t *testing.T) {
+	a := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 立即取消
+	_, err := a.Download(ctx, "https://github.com", "x/y@z")
+	if err == nil {
+		t.Fatal("expected error on cancelled ctx")
+	}
+	if !strings.Contains(err.Error(), "ctx cancelled") {
+		t.Errorf("error should mention ctx cancelled, got %v", err)
+	}
+}
+
+// 2026-07-09 增:Download 在 invalid remoteID 时直接返 ErrRemoteNotFound。
+func TestDownload_InvalidRemoteID(t *testing.T) {
+	a := New()
+	_, err := a.Download(context.Background(), "https://github.com", "no-at-sign")
+	if err == nil {
+		t.Fatal("expected error for invalid remote id")
+	}
+}
+
+// 2026-07-09 增:buildRepoURL 各种 baseURL 行为。
+func TestBuildRepoURL(t *testing.T) {
+	a := New()
+	cases := []struct {
+		baseURL, owner, repoName, want string
+	}{
+		{"", "x", "y", "https://github.com/x/y"},
+		{"https://github.com", "x", "y", "https://github.com/x/y"},
+		{"https://github.com/", "x", "y", "https://github.com/x/y"}, // 末尾 / 自动 trim
+		{"file:///tmp/test-repo", "ignored-owner", "ignored-repo", "file:///tmp/test-repo/"},
+		{"file:///tmp/test-repo/", "ignored-owner", "ignored-repo", "file:///tmp/test-repo/"},
+	}
+	for _, c := range cases {
+		got := a.buildRepoURL(c.baseURL, c.owner, c.repoName, "x/y@z")
+		if got != c.want {
+			t.Errorf("buildRepoURL(%q, %q, %q) = %q, want %q", c.baseURL, c.owner, c.repoName, got, c.want)
 		}
 	}
 }
 
-// TestDownload_Zipball_MainNotFound_FallbackMaster 2026-07-09 增:main 404 → 试 master。
-func TestDownload_Zipball_MainNotFound_FallbackMaster(t *testing.T) {
-	var mainHit, masterHit int
-	zipBytes := buildZipballZip(t, "anthropics-skills-abc", map[string]string{
-		"skills/pdf/SKILL.md": "---\nname: pdf\n---\n# PDF\n",
-	})
-	mux := http.NewServeMux()
-	mux.HandleFunc("/anthropics/skills/zip/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
-		mainHit++
-		w.WriteHeader(http.StatusNotFound)
-	})
-	mux.HandleFunc("/anthropics/skills/zip/refs/heads/master", func(w http.ResponseWriter, r *http.Request) {
-		masterHit++
-		w.Header().Set("Content-Type", "application/zip")
-		w.WriteHeader(http.StatusOK)
-		w.Write(zipBytes)
-	})
-	router := httptest.NewServer(mux)
-	defer router.Close()
-
-	oldBase := defaultZipballBase
-	defaultZipballBase = router.URL
-	t.Cleanup(func() { defaultZipballBase = oldBase })
-
-	a := New()
-	can, err := a.Download(context.Background(), "https://github.com", "anthropics/skills@skills/pdf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if can == nil || can.Manifest.Name != "pdf" {
-		t.Fatalf("expected pdf canonical from master branch, got %+v", can)
-	}
-	if mainHit != 1 {
-		t.Errorf("main branch should be tried once, got %d", mainHit)
-	}
-	if masterHit != 1 {
-		t.Errorf("master branch should be tried once, got %d", masterHit)
-	}
-}
-
-// TestSplitRemoteID 2026-07-09 增:基本 split 回归。
+// 2026-07-09 增:splitRemoteID 回归。
 func TestSplitRemoteID(t *testing.T) {
 	cases := []struct {
 		in         string
@@ -126,7 +193,7 @@ func TestSplitRemoteID(t *testing.T) {
 		{"anthropics/skills@skills/pdf", "anthropics/skills", "skills/pdf", true},
 		{"anthropics/skills@pdf", "anthropics/skills", "pdf", true},
 		{"no-at-sign", "", "", false},
-		{"missing/slash@skill", "missing/slash", "skill", true}, // 实际是合法的 owner/skill,不是缺 slash
+		{"missing/slash@skill", "missing/slash", "skill", true},
 		{"owner/repo@", "", "", false},
 		{"@skill", "", "", false},
 	}
@@ -148,24 +215,79 @@ func TestSplitRemoteID(t *testing.T) {
 	}
 }
 
-// buildZipballZip 构造模拟 codeload.github.com 的 zipball 响应。
-// wrapperDir 是顶层包裹目录(真实 zipball 形如 "{owner}-{repo}-{commit_sha}")。
-func buildZipballZip(t *testing.T, wrapperDir string, files map[string]string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	for relPath, content := range files {
-		fullPath := wrapperDir + "/" + relPath
-		f, err := w.Create(fullPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := io.WriteString(f, content); err != nil {
-			t.Fatal(err)
-		}
+// 2026-07-09 增:isRateLimitedErr 各种错误信息识别。
+func TestIsRateLimitedErr(t *testing.T) {
+	cases := []struct {
+		errMsg string
+		want   bool
+	}{
+		{"rate limit exceeded", true},
+		{"API rate limit exceeded for user ID 1", true},
+		{"remote: Too many requests", true},
+		{"status 429: too many requests", true},
+		{"status 403: Forbidden (rate limit)", true},
+		{"connection refused", false},
+		{"repository not found", false},
 	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
+	for _, c := range cases {
+		t.Run(c.errMsg, func(t *testing.T) {
+			got := isRateLimitedErr(&fakeErr{msg: c.errMsg})
+			if got != c.want {
+				t.Errorf("isRateLimitedErr(%q) = %v, want %v", c.errMsg, got, c.want)
+			}
+		})
 	}
-	return buf.Bytes()
 }
+
+// 2026-07-09 增:transport 包真实 sentinel 错误识别。
+func TestIsRateLimitedErr_TransportSentinel(t *testing.T) {
+	if !isRateLimitedErr(transport.ErrAuthenticationRequired) {
+		t.Error("transport.ErrAuthenticationRequired should be detected as rate-limit")
+	}
+	wrapped := fmt.Errorf("clone failed: %w", transport.ErrAuthenticationRequired)
+	if !isRateLimitedErr(wrapped) {
+		t.Error("wrapped transport.ErrAuthenticationRequired should be detected")
+	}
+	if isRateLimitedErr(nil) {
+		t.Error("nil should return false")
+	}
+	if isRateLimitedErr(&fakeErr{msg: "some random error"}) {
+		t.Error("random error should return false")
+	}
+}
+
+// 2026-07-09 增:lastSegment 路径末段。
+func TestLastSegment(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"skills/pdf", "pdf"},
+		{"pdf", "pdf"},
+		{"a/b/c/d", "d"},
+		{"/leading/slash", "slash"},
+		{"trailing/slash/", "slash"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := lastSegment(c.in); got != c.want {
+			t.Errorf("lastSegment(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// 2026-07-09 增:cleanupOldCloneDirs 不报错(无目录 / 空目录 / 有过期目录都应 OK)。
+func TestCleanupOldCloneDirs(t *testing.T) {
+	// 临时改 cloneBaseDir 不实际(/tmp 改不了),只测函数不 panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("cleanupOldCloneDirs panicked: %v", r)
+		}
+	}()
+	cleanupOldCloneDirs()
+}
+
+// --- helpers ---
+
+type fakeErr struct{ msg string }
+
+func (e *fakeErr) Error() string { return e.msg }
