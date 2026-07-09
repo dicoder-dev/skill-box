@@ -379,6 +379,7 @@ const messages = {
     title: 'Marketplace',
     subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh) and open them in your system browser.',
     btnOpenInBrowser: 'Open in browser',
+    btnOpenInBrowserTip: 'Open {name} in system browser',
     cards: {
       skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
       skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
@@ -388,10 +389,21 @@ const messages = {
       title: 'How to install into skill-box',
       skillhub: {
         desc: 'Browse skillhub.cn and find a skill → copy the browser address bar URL (or just the slug) → paste it below.',
+        examples: 'Examples',
+        examplesList: [
+          'code-review',
+          'https://skillhub.cn/skills/code-review',
+        ],
         cli: 'npx skills-hub install {slug}',
       },
       skillssh: {
         desc: 'Browse skills.sh (or search "agent skill" on GitHub) → copy the detail page URL or owner/repo@skill identifier → paste below.',
+        examples: 'Examples',
+        examplesList: [
+          'anthropics/skills@pdf',
+          'https://skills.sh/anthropics/skills/pdf',
+          'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+        ],
         cli: 'npx skills add {owner}/{repo} --skill {name}',
       },
     },

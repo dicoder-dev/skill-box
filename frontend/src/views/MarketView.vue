@@ -73,13 +73,21 @@ function selectSource(id) {
   resetProgress()
 }
 
-// 「在浏览器中打开」 — 跨平台(Web → window.open / Desktop → wails BrowserOpenURL)。
+// 「在浏览器中打开」按钮(2026-07-09 改:从卡片底部上移到顶栏) — 跨平台(Web → window.open / Desktop → wails BrowserOpenURL)。
 async function openInExternal(url) {
   try {
     await platform.platform.openExternal(url)
   } catch (e) {
     // web 端 window.open 被拦截也算异常,这里静默吞掉
   }
+}
+
+// 2026-07-09 增:点击示例条目 → 自动填入输入框,避免用户复制粘贴。
+// 注意:不自动提交,只填内容,让用户点「装到 skill-box」才走安装流程。
+function fillExample(text) {
+  if (installing.value) return
+  userInput.value = String(text)
+  installError.value = ''
 }
 
 // 2026-07-09 增:输入框 + 安装流程
@@ -201,18 +209,29 @@ function goToHome() {
     </header>
 
     <div class="card">
-      <!-- 顶部源 tab(顺序:SkillHub / Skills.sh) -->
-      <nav class="source-tabs">
+      <!-- 顶部栏:左侧 source tabs + 右侧「在浏览器中打开」按钮(2026-07-09 改:从卡片底部上移到顶栏) -->
+      <div class="top-row">
+        <nav class="source-tabs">
+          <button
+            v-for="s in sources"
+            :key="s.id"
+            :class="['source-tab', { active: s.id === activeSourceId }]"
+            @click="selectSource(s.id)"
+          >
+            <IconPark icon="mdi:radio-tower" width="14" height="14" />
+            {{ s.name }}
+          </button>
+        </nav>
         <button
-          v-for="s in sources"
-          :key="s.id"
-          :class="['source-tab', { active: s.id === activeSourceId }]"
-          @click="selectSource(s.id)"
+          type="button"
+          class="open-browser-btn"
+          :title="t('market.btnOpenInBrowserTip', { name: activeSource.name })"
+          @click="openInExternal(activeSource.url)"
         >
-          <IconPark icon="mdi:radio-tower" width="14" height="14" />
-          {{ s.name }}
+          <IconPark icon="mdi:external-link" width="14" height="14" />
+          <span>{{ t('market.btnOpenInBrowser') }}</span>
         </button>
-      </nav>
+      </div>
 
       <!-- 主体:当前 tab 对应的站点介绍卡 + 安装指南 + 输入框 -->
       <div class="market-body">
@@ -244,6 +263,25 @@ function goToHome() {
               <span>{{ t('market.guide.title') }}</span>
             </div>
             <p class="guide-desc">{{ t(`${activeSource.guideKey}.desc`) }}</p>
+            <!-- 2026-07-09 增:输入示例(让用户更直观知道粘什么) -->
+            <div class="guide-examples">
+              <div class="examples-label">
+                <IconPark icon="mdi:format-list-bulleted-square" width="12" height="12" />
+                <span>{{ t(`${activeSource.guideKey}.examples`) }}</span>
+              </div>
+              <ul class="examples-list">
+                <li
+                  v-for="(ex, idx) in t(`${activeSource.guideKey}.examplesList`)"
+                  :key="idx"
+                  class="example-item"
+                  :class="{ 'example-clickable': true }"
+                  @click="fillExample(ex)"
+                  :title="`点击填入 ${ex}`"
+                >
+                  <code>{{ ex }}</code>
+                </li>
+              </ul>
+            </div>
             <div class="guide-cli">
               <code>{{ t(`${activeSource.guideKey}.cli`) }}</code>
             </div>
@@ -310,13 +348,8 @@ function goToHome() {
             </button>
           </div>
 
-          <!-- 原「在浏览器中打开」按钮保留 -->
-          <div class="source-card-actions">
-            <button type="button" class="ghost" @click="openInExternal(activeSource.url)">
-              <IconPark icon="mdi:open-in-new" width="14" height="14" />
-              {{ t('market.btnOpenInBrowser') }}
-            </button>
-          </div>
+          <!-- 原「在浏览器中打开」按钮已上移到顶部栏(2026-07-09 改) -->
+          <div v-if="false" class="source-card-actions"></div>
         </div>
       </div>
     </div>
@@ -409,15 +442,27 @@ function goToHome() {
   overflow-y: auto;
 }
 
-/* 顶部源 tab */
-.source-tabs {
+/* ============================================
+   2026-07-09 改:顶栏(tabs + 在浏览器中打开按钮)布局
+   ============================================ */
+.top-row {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* 顶部源 tab(继续保留 tab 样式) */
+.source-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  /* 删掉原本的 margin-bottom / padding-bottom / border-bottom,这些都搬到 .top-row */
 }
 .source-tab {
   display: inline-flex;
@@ -443,6 +488,39 @@ function goToHome() {
   border-color: transparent;
   color: #ffffff;
   box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--mkt-primary) 50%, transparent);
+}
+
+/* 2026-07-09 改:在浏览器中打开按钮(从底部 ghost 提升为顶栏精致按钮)
+   - 蓝色 outline 风,与左侧 tab 视觉风格统一
+   - hover 加深 + 上抬
+   - active 模拟按下状态 */
+.open-browser-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--mkt-border);
+  background: var(--bg-card);
+  border-radius: 999px; /* 药丸状,比方角精致 */
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mkt-text);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.open-browser-btn:hover {
+  background: var(--mkt-bg-strong);
+  border-color: var(--mkt-primary);
+  color: var(--mkt-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -4px color-mix(in srgb, var(--mkt-primary) 35%, transparent);
+}
+.open-browser-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+  background: var(--mkt-bg);
 }
 
 /* 主体 */
@@ -562,6 +640,56 @@ function goToHome() {
   font-size: 12px;
   color: var(--text);
   white-space: nowrap;
+}
+
+/* 2026-07-09 增:输入示例块 — 每个示例可点击,一键填入输入框 */
+.guide-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.examples-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.examples-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.example-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: var(--bg-card);
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  overflow-x: auto;
+}
+.example-item code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.example-item:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.example-item:hover code {
+  color: var(--accent);
 }
 
 /* ============================================

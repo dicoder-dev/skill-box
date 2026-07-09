@@ -390,6 +390,7 @@ const messages = {
     title: '三方市场',
     subtitle: '浏览 skillhub.cn / skills.sh 等三方站点的技能目录,点击卡片在系统浏览器中打开。',
     btnOpenInBrowser: '在浏览器中打开',
+    btnOpenInBrowserTip: '在系统浏览器打开 {name} 站点',
     // 站点卡片描述(在卡片里展示)
     cards: {
       skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
@@ -400,10 +401,21 @@ const messages = {
       title: '如何安装到 skill-box',
       skillhub: {
         desc: '在 skillhub.cn 浏览找到想要的 skill → 复制浏览器地址栏 URL(或纯 slug) → 粘贴到下方输入框。',
+        examples: '输入示例',
+        examplesList: [
+          'code-review',
+          'https://skillhub.cn/skills/code-review',
+        ],
         cli: 'npx skills-hub install {slug}',
       },
       skillssh: {
         desc: '在 skills.sh 浏览(或在 GitHub 搜 agent skill)→ 复制详情页 URL 或 owner/repo@skill 标识 → 粘贴到下方输入框。',
+        examples: '输入示例',
+        examplesList: [
+          'anthropics/skills@pdf',
+          'https://skills.sh/anthropics/skills/pdf',
+          'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
+        ],
         cli: 'npx skills add {owner}/{repo} --skill {name}',
       },
     },
