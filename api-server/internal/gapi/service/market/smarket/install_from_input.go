@@ -198,9 +198,16 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 	//    - github   → 分组 "github"
 	//    分组目录不存在时自动 CreateGroup(走 store 建物理目录),
 	//    跟 PullV2 一样,前端不需要先建组再装。
-	groupPath := defaultGroupPathFor(resolved.SourceType)
+	//
+	// 2026-07-09 修(关键 bug):早期用 "skills.sh" 字面量,CreateGroup → NormalizeGroupName
+	// 把 "." 折叠成 "-",实际建的是 StoreRoot/skills-sh/,但 Manifest.GroupPath 仍是
+	// "skills.sh",resolveSkillDir 拼出 StoreRoot/skills.sh/pdf/,lock 路径
+	// StoreRoot/skills.sh/pdf.lock 的父目录 StoreRoot/skills.sh/ 不存在 → ENOENT。
+	// 修法:groupPath 走 NormalizeGroupName 规范化,CreateGroup 跟 Manifest.GroupPath
+	// 用同一个规范化值,保证物理目录跟 GroupPath 字段对齐。
+	groupPath := normalizeGroupPathForMarket(defaultGroupPathFor(resolved.SourceType))
 	can.Manifest.GroupPath = groupPath
-	if ssvc != nil {
+	if ssvc != nil && groupPath != "" {
 		if gerr := ssvc.CreateGroup(groupPath); gerr != nil {
 			return nil, fmt.Errorf("%w: create group %q: %v", ErrPullFailed, groupPath, gerr)
 		}
@@ -247,6 +254,10 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 //   - github   → "github"
 //
 // 未知 source 返空字符串(不强制分组,让 skill 落到 store 根)。
+//
+// 注意:返回值会经过 normalizeGroupPathForMarket 二次规范化,
+// 把 "." 折叠成 "-" 等(跟 sskill.CreateGroup 走 NormalizeGroupName 一致),
+// 避免物理目录跟 Manifest.GroupPath 不一致导致 lock 路径 ENOENT。
 func defaultGroupPathFor(sourceType string) string {
 	switch sourceType {
 	case skillmarket.SourceSkillhub:
@@ -258,6 +269,20 @@ func defaultGroupPathFor(sourceType string) string {
 	default:
 		return ""
 	}
+}
+
+// normalizeGroupPathForMarket 2026-07-09 增:把 defaultGroupPathFor 返回的字面量
+// 走 skilladapter.NormalizeGroupName,跟 sskill.CreateGroup 内部保持一致。
+//
+// 历史上没规范化时,groupPath="skills.sh" CreateGroup 实际建 "skills-sh" 目录,
+// 但 Manifest.GroupPath 仍是 "skills.sh",resolveSkillDir 拼出 StoreRoot/skills.sh/{name}
+// lock 路径 StoreRoot/skills.sh/{name}.lock 的父目录 StoreRoot/skills.sh/ 不存在
+// → O_CREATE 失败,返 ENOENT。
+func normalizeGroupPathForMarket(p string) string {
+	if p == "" {
+		return ""
+	}
+	return skilladapter.NormalizeGroupName(p)
 }
 
 // findOrCreateSourceByType 按 source_type 找已有 source,没有就 seed 一条(2026-07-09 增)。
@@ -303,3 +328,4 @@ func (s *Service) findOrCreateSourceByType(sourceType string) (*entity.MarketSou
 //
 // 本文件其它地方使用 firstNonEmpty 时仍走 package-level 函数。
 var _ = errors.Is
+var _ = normalizeGroupPathForMarket // 2026-07-09 增:导出前小写函数,测试用占位(避免编译器报 unused)
