@@ -60,7 +60,11 @@ type Adapter struct {
 
 // New 构造 Adapter。
 func New() *Adapter {
-	return &Adapter{httpClient: httpx.NewClient(15 * time.Second)}
+	// 2026-07-09 改:60s 而非 15s。zipball 实测下载 3.6MB 在 codeload 慢时 >15s,
+	// 旧 15s timeout 触发 client 自己的 ctx deadline,导致 fallthrough 试 master,
+	// 30s 累计 + 后续 controller ctx 也容易挂。60s 既给 zipball 充足时间,又比
+	// controller ctx 90s 短,触发时上层能正确识别为"client timeout"重试。
+	return &Adapter{httpClient: httpx.NewClient(60 * time.Second)}
 }
 
 // NewWithClient 测试用,注入 http.RoundTripper。
@@ -151,12 +155,20 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	branches := []string{"main", "master"}
 	var lastErr error
 	for _, branch := range branches {
+		// 2026-07-09 增:ctx 已 cancel 立即退出(上层 controller ctx 90s 触发时
+		// 不要继续试其它分支,省时间也避免无意义重试)
+		if cerr := ctx.Err(); cerr != nil {
+			if lastErr != nil {
+				return nil, fmt.Errorf("%w: %v (ctx cancelled: %v)", skillmarket.ErrRemoteFetchFail, lastErr, cerr)
+			}
+			return nil, fmt.Errorf("%w: ctx cancelled before trying %s: %v", skillmarket.ErrRemoteFetchFail, branch, cerr)
+		}
 		can, err := a.downloadViaZipball(ctx, owner, repoName, branch, skillPath, remoteID)
 		if err == nil && can != nil {
 			return can, nil
 		}
 		lastErr = err
-		// 命中 429 立即终止,跟 skillhub / skillssh 一致
+		// 命中 429 / rate-limit 立即终止,跟 skillhub / skillssh 一致
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: GitHub rate limited on branch %s", skillmarket.ErrRemoteFetchFail, branch)
 		}
