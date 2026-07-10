@@ -560,14 +560,9 @@ async function saveFrontmatterForm() {
       if (k === 'author' || k === 'license') continue
       fmDict[k] = oldFm[k]
     }
-    // 重写 SKILL.md(沿用现有 rebuildSkillMd 的序列化策略 — 用 yaml-like 风格)
-    const fmLines = []
-    for (const k of Object.keys(fmDict)) {
-      const v = fmDict[k]
-      if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
-      else fmLines.push(`${k}: ${JSON.stringify(v)}`)
-    }
-    // 新建模式下 body 为空字符串,编辑模式用当前 localFiles['SKILL.md'] 或 props.files
+    // 2026-07-10 改:SKILL.md 不再拼 frontmatter 围栏。frontmatter 走 manifest 字段
+    // 给后端,后端 RenderSkillMD 会按 manifest 重渲一份完整 SKILL.md。
+    // 这里只取 body(编辑模式 = 当前 localFiles['SKILL.md'];新建模式 = 空)。
     let body = ''
     if (!newSkillInitial.value) {
       const path = selectedFile.value?.path
@@ -575,7 +570,7 @@ async function saveFrontmatterForm() {
         ? (localFiles.get('SKILL.md') || splitSkillMd(props.files.find((f) => f.path === 'SKILL.md')?.content || '').body)
         : ''
     }
-    const newMd = `---\n${fmLines.join('\n')}\n---\n\n${body || ''}\n`
+    const newMd = body || ''
 
     if (newSkillInitial.value) {
       // ===== 新建模式 =====
@@ -763,45 +758,19 @@ async function saveCurrent() {
   }
 }
 
-// 2026-07-08 增:跟 rebuildSkillMd 配套的"从 body 反推完整 SKILL.md"的工具。
-// 复用已有 frontmatter(不从 localFiles 拿 frontmatter,因为 editor 只编辑 body),
-// 拼上 body 得到完整字符串。原 rebuildSkillMd() 默认从 props.files 取 SKILL.md 的
-// frontmatter;这里签名保持一致,通过参数显式传入 body。
+// 2026-07-10 改:跟 rebuildSkillMd 配套的"从 body 反推完整 SKILL.md"的工具。
+// 原本职责:复用已有 frontmatter + 拼 body 得完整字符串。
+// 现状:SKILL.md 不再携带 frontmatter 围栏(完全交给 manifest 字段 + 后端
+// RenderSkillMD 重渲),这里只返回 body,frontmatter 透传给调用方走 manifest。
 function rebuildSkillMdFromBody(body) {
-  const fmLines = []
-  for (const k of FM_KEY_ORDER) {
-    if (!(k in frontmatter.value)) continue
-    const v = frontmatter.value[k]
-    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
-    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
-  }
-  for (const k of Object.keys(frontmatter.value)) {
-    if (FM_KEY_ORDER.includes(k)) continue
-    const v = frontmatter.value[k]
-    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
-    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
-  }
-  return `---\n${fmLines.join('\n')}\n---\n\n${body || ''}\n`
+  return body || ''
 }
 
+// 2026-07-10 改:SKILL.md 只返 body。frontmatter 走 manifest 字段给后端,
+// 后端 RenderSkillMD 会按 manifest 重渲一份完整 SKILL.md(含干净的 frontmatter)。
 function rebuildSkillMd() {
   const path = selectedFile.value?.path
-  const body = path === 'SKILL.md' ? (localFiles.get('SKILL.md') || '') : ''
-  const fm = frontmatter.value
-  const fmLines = []
-  for (const k of FM_KEY_ORDER) {
-    if (!(k in fm)) continue
-    const v = fm[k]
-    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
-    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
-  }
-  for (const k of Object.keys(fm)) {
-    if (FM_KEY_ORDER.includes(k)) continue
-    const v = fm[k]
-    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
-    else fmLines.push(`${k}: ${JSON.stringify(v)}`)
-  }
-  return `---\n${fmLines.join('\n')}\n---\n\n${body}\n`
+  return path === 'SKILL.md' ? (localFiles.get('SKILL.md') || '') : ''
 }
 
 function resetCurrent() {

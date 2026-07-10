@@ -169,23 +169,16 @@ async function saveInlineEdit() {
   }
 }
 
-// 用现有 frontmatter 重新拼一份 SKILL.md
-// newBody: 必填,新正文
-// newTriggers: 可选,不传则保留 currentMeta.triggers
-// newDescription: 可选,不传则保留 currentMeta.description
+// 2026-07-10 改:SKILL.md 只写 markdown body,不再拼 frontmatter 围栏。
+// 原因:后端 store.Save 走 RenderSkillMD(c.Manifest) 重渲 SKILL.md,
+// payload.files[0].content 里的 frontmatter 会被覆盖;前端若再拼 yaml 进去
+// 会导致"前端编辑态视图"被旧的 splitSkillMd 剥掉,但磁盘上的 SKILL.md
+// 仍由后端按 manifest 重新生成,前后链路不一致。把 frontmatter 完全交给
+// manifest 字段,SKILL.md 文件只剩纯 markdown body,符合"唯一来源 = manifest"。
 function rebuildSkillMd(newBody, newTriggers, newDescription) {
-  const fm = {
-    name: current.value?.name || '',
-    version: current.value?.version || '',
-    description: newDescription !== undefined ? newDescription : (currentMeta.description || ''),
-    triggers: newTriggers !== undefined ? newTriggers : (currentMeta.triggers || []),
-  }
-  const yaml = Object.entries(fm)
-    .map(([k, v]) => Array.isArray(v)
-      ? `${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`
-      : `${k}: ${JSON.stringify(v)}`)
-    .join('\n')
-  return `---\n${yaml}\n---\n\n${newBody || ''}\n`
+  // newTriggers / newDescription 仅用于同步 currentMeta 视图(在调用方),
+  // 这里只返回 body。
+  return newBody || ''
 }
 
 // 全局 toast
@@ -744,20 +737,12 @@ function isApplyToolChecked(toolID) {
   return draft.applyTools.includes(toolID)
 }
 
+// 2026-07-10 改:触发词用 draft.triggers(数组)直接生成 manifest,
+// SKILL.md 不再拼 frontmatter 围栏,只返纯 body(后端 RenderSkillMD 会按
+// manifest 重新生成 SKILL.md)。这里保留 draft 字段的取值校验以便早返回。
 function buildSkillMd() {
-  // 2026-07-10 改:触发词用 draft.triggers(数组)直接生成 yaml,
-  // 弹窗里已是动态列表,这里只做空值过滤 + trim。
-  const triggers = (draft.triggers || [])
-    .map((s) => String(s || '').trim())
-    .filter(Boolean)
-  const m = {
-    name: draft.name, version: draft.version,
-    description: draft.description, triggers,
-  }
-  const yaml = Object.entries(m)
-    .map(([k, v]) => Array.isArray(v) ? `${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]` : `${k}: ${JSON.stringify(v)}`)
-    .join('\n')
-  return `---\n${yaml}\n---\n\n${draft.body || ''}\n`
+  // 仅校验 draft 字段是否合法,不再拼 yaml。校验失败由 submit() 早返回拦截。
+  return draft.body || ''
 }
 async function submit() {
   error.value = ''
