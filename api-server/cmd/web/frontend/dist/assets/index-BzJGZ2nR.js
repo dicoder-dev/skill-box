@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-Dj6vl4I_.js","assets/vue.runtime.esm-bundler-BuU_83bC.js","assets/vendor-iconpark-DT7NY3ha.js","assets/index-BiuGAkMc.js","assets/index-nVAibWfF.js","assets/index-DxiaDHvd.js","assets/editor.main-B4QpPWwN.js","assets/editor-n9JP5zlo.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-CtwbhYRo.js","assets/vue.runtime.esm-bundler-BX-II49v.js","assets/vendor-iconpark-DT7NY3ha.js","assets/index-BTKsfAXG.js","assets/index-CFktk4A4.js","assets/index-o6oy623j.js","assets/editor.main-CflAN4S5.js","assets/editor-n9JP5zlo.css"])))=>i.map(i=>d[i]);
 import { B as BaseTransition, a as BaseTransitionPropsValidators, C as Comment, D as DeprecationTypes, E as EffectScope, b as ErrorCodes, c as ErrorTypeStrings, F as Fragment$2, K as KeepAlive, R as ReactiveEffect, S as Static, d as Suspense, T as Teleport, e as Text$2, f as TrackOpTypes, g as Transition, h as TransitionGroup, i as TriggerOpTypes, v as vue_runtime_esmBundler, V as VueElement, j as assertNumber, k as callWithAsyncErrorHandling, l as callWithErrorHandling, m as camelize, n as capitalize$1, o as cloneVNode, p as compatUtils, q as compile$2, r as computed, s as createApp, t as createBlock, u as createCommentVNode, w as createElementBlock, x as createBaseVNode, y as createHydrationRenderer, z as createPropsRestProxy, A as createRenderer, G as createSSRApp, H as createSlots, I as createStaticVNode, J as createTextVNode, L as createVNode, M as customRef, N as defineAsyncComponent, O as defineComponent, P as defineCustomElement, Q as defineEmits, U as defineExpose, W as defineModel, X as defineOptions, Y as defineProps, Z as defineSSRCustomElement, _ as defineSlots, $ as devtools$1, a0 as effect, a1 as effectScope, a2 as getCurrentInstance, a3 as getCurrentScope, a4 as getCurrentWatcher, a5 as getTransitionRawChildren, a6 as guardReactiveProps, a7 as h$1, a8 as handleError, a9 as hasInjectionContext, aa as hydrate, ab as hydrateOnIdle, ac as hydrateOnInteraction, ad as hydrateOnMediaQuery, ae as hydrateOnVisible, af as initCustomFormatter, ag as initDirectivesForSSR, ah as inject, ai as isMemoSame, aj as isProxy, ak as isReactive, al as isReadonly, am as isRef, an as isRuntimeOnly, ao as isShallow, ap as isVNode$1, aq as markRaw, ar as mergeDefaults, as as mergeModels, at as mergeProps, au as nextTick, av as nodeOps, aw as normalizeClass, ax as normalizeProps, ay as normalizeStyle, az as onActivated, aA as onBeforeMount, aB as onBeforeUnmount, aC as onBeforeUpdate, aD as onDeactivated, aE as onErrorCaptured, aF as onMounted, aG as onRenderTracked, aH as onRenderTriggered, aI as onScopeDispose, aJ as onServerPrefetch, aK as onUnmounted, aL as onUpdated, aM as onWatcherCleanup, aN as openBlock, aO as patchProp, aP as popScopeId, aQ as provide, aR as proxyRefs, aS as pushScopeId, aT as queuePostFlushCb, aU as reactive, aV as readonly, aW as ref, aX as registerRuntimeCompiler, aY as render, aZ as renderList, a_ as renderSlot, a$ as resolveComponent, b0 as resolveDirective, b1 as resolveDynamicComponent, b2 as resolveFilter, b3 as resolveTransitionHooks, b4 as setBlockTracking, b5 as setDevtoolsHook, b6 as setTransitionHooks, b7 as shallowReactive, b8 as shallowReadonly, b9 as shallowRef, ba as ssrContextKey, bb as ssrUtils, bc as stop, bd as toDisplayString$1, be as toHandlerKey, bf as toHandlers, bg as toRaw, bh as toRef, bi as toRefs, bj as toValue, bk as transformVNodeArgs, bl as triggerRef, bm as unref, bn as useAttrs, bo as useCssModule, bp as useCssVars, bq as useHost, br as useId, bs as useModel, bt as useSSRContext, bu as useShadowRoot, bv as useSlots, bw as useTemplateRef, bx as useTransitionState, by as vModelCheckbox, bz as vModelDynamic, bA as vModelRadio, bB as vModelSelect, bC as vModelText, bD as vShow, bE as version$1, bF as warn$3, bG as watch, bH as watchEffect, bI as watchPostEffect, bJ as watchSyncEffect, bK as withAsyncContext, bL as withCtx, bM as withDefaults, bN as withDirectives, bO as withKeys, bP as withMemo, bQ as withModifiers, bR as withScopeId, bS as IconParkAll } from "./vendor-iconpark-DT7NY3ha.js";
 (function polyfill() {
   const relList = document.createElement("link").relList;
@@ -5837,8 +5837,8 @@ const __vite_import_meta_env__$1 = {};
 let cached = null;
 function readRunMode() {
   var _a2;
-  if (typeof import.meta !== "undefined" && __vite_import_meta_env__$1 && "web") {
-    return "web";
+  if (typeof import.meta !== "undefined" && __vite_import_meta_env__$1 && "desktop") {
+    return "desktop";
   }
   if (typeof window !== "undefined" && ((_a2 = window.__APP_RUNTIME__) == null ? void 0 : _a2.runMode)) {
     return window.__APP_RUNTIME__.runMode;
@@ -6293,8 +6293,8 @@ function scanProject(projectId) {
 const __vite_import_meta_env__ = {};
 function resolveRunMode() {
   var _a2;
-  if (typeof import.meta !== "undefined" && __vite_import_meta_env__ && "web") {
-    return "web";
+  if (typeof import.meta !== "undefined" && __vite_import_meta_env__ && "desktop") {
+    return "desktop";
   }
   if (typeof window !== "undefined" && ((_a2 = window.__APP_RUNTIME__) == null ? void 0 : _a2.runMode)) {
     return window.__APP_RUNTIME__.runMode;
@@ -34940,10 +34940,10 @@ const _sfc_main$g = {
     // 文件内容 string(后端返回)
   },
   setup(__props) {
-    const VueOfficeDocx = defineAsyncComponent(() => __vitePreload(() => import("./index-Dj6vl4I_.js").then((n) => n.i), true ? __vite__mapDeps([0,1,2]) : void 0));
-    const VueOfficeExcel = defineAsyncComponent(() => __vitePreload(() => import("./index-BiuGAkMc.js").then((n) => n.i), true ? __vite__mapDeps([3,1,2]) : void 0));
-    const VueOfficePdf = defineAsyncComponent(() => __vitePreload(() => import("./index-nVAibWfF.js").then((n) => n.i), true ? __vite__mapDeps([4,1,2]) : void 0));
-    const VueOfficePptx = defineAsyncComponent(() => __vitePreload(() => import("./index-DxiaDHvd.js").then((n) => n.i), true ? __vite__mapDeps([5,1,2]) : void 0));
+    const VueOfficeDocx = defineAsyncComponent(() => __vitePreload(() => import("./index-CtwbhYRo.js").then((n) => n.i), true ? __vite__mapDeps([0,1,2]) : void 0));
+    const VueOfficeExcel = defineAsyncComponent(() => __vitePreload(() => import("./index-BTKsfAXG.js").then((n) => n.i), true ? __vite__mapDeps([3,1,2]) : void 0));
+    const VueOfficePdf = defineAsyncComponent(() => __vitePreload(() => import("./index-CFktk4A4.js").then((n) => n.i), true ? __vite__mapDeps([4,1,2]) : void 0));
+    const VueOfficePptx = defineAsyncComponent(() => __vitePreload(() => import("./index-o6oy623j.js").then((n) => n.i), true ? __vite__mapDeps([5,1,2]) : void 0));
     const props = __props;
     const arrayBuffer = shallowRef(null);
     const parseError = ref("");
@@ -93155,7 +93155,7 @@ async function loadMonaco() {
   if (monacoRef) return monacoRef;
   if (loadingPromise) return loadingPromise;
   loadingPromise = (async () => {
-    const monaco = await __vitePreload(() => import("./editor.main-B4QpPWwN.js").then((n) => n.e), true ? __vite__mapDeps([6,7]) : void 0);
+    const monaco = await __vitePreload(() => import("./editor.main-CflAN4S5.js").then((n) => n.e), true ? __vite__mapDeps([6,7]) : void 0);
     if (typeof self !== "undefined") {
       let workerBlobUrl = null;
       self.MonacoEnvironment = {

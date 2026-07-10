@@ -1,5 +1,5 @@
-import { m as monaco_editor_core_star } from "./editor.main-B4QpPWwN.js";
-import "./index-D0wUQsDs.js";
+import { m as monaco_editor_core_star } from "./editor.main-CflAN4S5.js";
+import "./index-BzJGZ2nR.js";
 import "./vendor-iconpark-DT7NY3ha.js";
 /*!-----------------------------------------------------------------------------
  * Copyright (c) Microsoft Corporation. All rights reserved.
@@ -57,14 +57,14 @@ var WorkerManager = class {
     this._lastUsedTime = Date.now();
     if (!this._client) {
       this._worker = monaco_editor_core_exports.editor.createWebWorker({
-        // module that exports the create() method and returns a `CSSWorker` instance
-        moduleId: "vs/language/css/cssWorker",
-        label: this._defaults.languageId,
+        // module that exports the create() method and returns a `HTMLWorker` instance
+        moduleId: "vs/language/html/htmlWorker",
         // passed in to the create() method
         createData: {
-          options: this._defaults.options,
+          languageSettings: this._defaults.options,
           languageId: this._defaults.languageId
-        }
+        },
+        label: this._defaults.languageId
       });
       this._client = this._worker.getProxy();
     }
@@ -1901,6 +1901,48 @@ var SelectionRangeAdapter = class {
     });
   }
 };
+var HTMLCompletionAdapter = class extends CompletionAdapter {
+  constructor(worker) {
+    super(worker, [".", ":", "<", '"', "=", "/"]);
+  }
+};
+function setupMode1(defaults) {
+  const client = new WorkerManager(defaults);
+  const worker = (...uris) => {
+    return client.getLanguageServiceWorker(...uris);
+  };
+  let languageId = defaults.languageId;
+  monaco_editor_core_exports.languages.registerCompletionItemProvider(languageId, new HTMLCompletionAdapter(worker));
+  monaco_editor_core_exports.languages.registerHoverProvider(languageId, new HoverAdapter(worker));
+  monaco_editor_core_exports.languages.registerDocumentHighlightProvider(
+    languageId,
+    new DocumentHighlightAdapter(worker)
+  );
+  monaco_editor_core_exports.languages.registerLinkProvider(languageId, new DocumentLinkAdapter(worker));
+  monaco_editor_core_exports.languages.registerFoldingRangeProvider(
+    languageId,
+    new FoldingRangeAdapter(worker)
+  );
+  monaco_editor_core_exports.languages.registerDocumentSymbolProvider(
+    languageId,
+    new DocumentSymbolAdapter(worker)
+  );
+  monaco_editor_core_exports.languages.registerSelectionRangeProvider(
+    languageId,
+    new SelectionRangeAdapter(worker)
+  );
+  monaco_editor_core_exports.languages.registerRenameProvider(languageId, new RenameAdapter(worker));
+  if (languageId === "html") {
+    monaco_editor_core_exports.languages.registerDocumentFormattingEditProvider(
+      languageId,
+      new DocumentFormattingEditProvider(worker)
+    );
+    monaco_editor_core_exports.languages.registerDocumentRangeFormattingEditProvider(
+      languageId,
+      new DocumentRangeFormattingEditProvider(worker)
+    );
+  }
+}
 function setupMode(defaults) {
   const disposables = [];
   const providers = [];
@@ -1914,10 +1956,7 @@ function setupMode(defaults) {
     disposeAll(providers);
     if (modeConfiguration.completionItems) {
       providers.push(
-        monaco_editor_core_exports.languages.registerCompletionItemProvider(
-          languageId,
-          new CompletionAdapter(worker, ["/", "-", ":"])
-        )
+        monaco_editor_core_exports.languages.registerCompletionItemProvider(languageId, new HTMLCompletionAdapter(worker))
       );
     }
     if (modeConfiguration.hovers) {
@@ -1933,20 +1972,9 @@ function setupMode(defaults) {
         )
       );
     }
-    if (modeConfiguration.definitions) {
+    if (modeConfiguration.links) {
       providers.push(
-        monaco_editor_core_exports.languages.registerDefinitionProvider(
-          languageId,
-          new DefinitionAdapter(worker)
-        )
-      );
-    }
-    if (modeConfiguration.references) {
-      providers.push(
-        monaco_editor_core_exports.languages.registerReferenceProvider(
-          languageId,
-          new ReferenceAdapter(worker)
-        )
+        monaco_editor_core_exports.languages.registerLinkProvider(languageId, new DocumentLinkAdapter(worker))
       );
     }
     if (modeConfiguration.documentSymbols) {
@@ -1962,25 +1990,12 @@ function setupMode(defaults) {
         monaco_editor_core_exports.languages.registerRenameProvider(languageId, new RenameAdapter(worker))
       );
     }
-    if (modeConfiguration.colors) {
-      providers.push(
-        monaco_editor_core_exports.languages.registerColorProvider(
-          languageId,
-          new DocumentColorAdapter(worker)
-        )
-      );
-    }
     if (modeConfiguration.foldingRanges) {
       providers.push(
         monaco_editor_core_exports.languages.registerFoldingRangeProvider(
           languageId,
           new FoldingRangeAdapter(worker)
         )
-      );
-    }
-    if (modeConfiguration.diagnostics) {
-      providers.push(
-        new DiagnosticsAdapter(languageId, worker, defaults.onDidChange)
       );
     }
     if (modeConfiguration.selectionRanges) {
@@ -2039,6 +2054,7 @@ export {
   fromPosition,
   fromRange,
   setupMode,
+  setupMode1,
   toRange,
   toTextEdit
 };

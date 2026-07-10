@@ -757,12 +757,16 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 	// 等全部丢失,canonical.Files 只剩一个 SKILL.md。用户实际跑这个 skill
 	// 时会缺资源报错。这里改成先全部收,SKILL.md 单独标记留作 manifest 解析。
 	//
-	// 路径规范化:strip zip 里的前缀目录(常见 layout: skills/{slug}/...),
-	// 用 *filepath.Rel 相对 SKILL.md 所在目录做锚点,得到的相对路径
-	// 才是用户视角下的文件路径(避免落盘后多一层 skillhub 私有目录)。
+	// 2026-07-10 增(用户反馈 topnews 持续报「下载失败」):上游对部分 slug 返
+	// 200 + 非 zip body(典型:JSON 错误码包装、HTML 错误页、空 body 等),
+	// zip.NewReader 会抛「not a valid zip file」。这种情况下 30x/404 都没命中
+	// 但 body 确实不合法,语义上也是「这个 skill 找不到资源」,wrap 成
+	// ErrRemoteNotFound 让用户得到友好的 errSkillNotFound 文案,
+	// 而不是被误报成「下载失败」。
 	r, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
-		return nil, fmt.Errorf("open zip: %w", err)
+		return nil, fmt.Errorf("%w: %s (zip parse failed: %v)",
+			skillmarket.ErrRemoteNotFound, remoteID, err)
 	}
 	type zipEntry struct {
 		path string // 用户视角相对路径
@@ -852,11 +856,19 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 }
 
 // downloadSingleFile 备用路径:直接拉单文件 SKILL.md(应对 zip 接口变更)。
+//
+// 2026-07-10 改:404 命中 wrap ErrRemoteNotFound(httpx.GetJSONWithUA 返
+// plain error "status 404: ..." 不走 errors.Is 链路),跟 downloadViaZip
+// 路径在 404 时同样语义 — 累计到 Download 主函数的 firstNotFound,
+// 让 controller 走 404 + 前端 errSkillNotFound 文案。
 func (a *Adapter) downloadSingleFile(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	u := fmt.Sprintf("%s/api/v1/skills/%s/skill.md",
 		strings.TrimRight(baseURL, "/"), url.PathEscape(remoteID))
 	body, err := a.fetchBody(ctx, u)
 	if err != nil {
+		if strings.Contains(err.Error(), "status 404") {
+			return nil, fmt.Errorf("%w: %s", skillmarket.ErrRemoteNotFound, remoteID)
+		}
 		return nil, err
 	}
 	can, perr := skilladapter.ParseSkillMD(body)

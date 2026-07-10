@@ -778,6 +778,64 @@ func TestDownload_COSNotFound(t *testing.T) {
 	}
 }
 
+// TestDownload_NonZipBody 2026-07-10 增:用户反馈 topnews 报「下载失败」,
+// 真实根因可能是上游对部分 slug 返 200 + 非 zip body(HTML 错误页 / JSON
+// 错误码包装 / 空 body)。这情况下 zip.NewReader 抛「not a valid zip file」,
+// 必须 map 成 ErrRemoteNotFound 走 404 + 友好文案,而不是被误报成
+// 「下载失败」。
+//
+// 模拟:download API 返 302 → COS 返 200 + HTML 错误页(不是 zip)。
+// mockSingleFileResp:download 路径直接 200,body 是 HTML 错误页;
+// downloadSingleFile 路径返 200 同一个 body 但会被 ParseSkillMD 拒绝
+// (frontmatter 缺失),lastly 走到 knownFallback 不命中,
+// 整体必须 wrap ErrRemoteNotFound(从 downloadViaZip 阶段抛出)。
+func TestDownload_NonZipBody(t *testing.T) {
+	htmlBody := "<!doctype html><html><body>404 Not Found</body></html>"
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/v1/download": {
+			status:     302,
+			redirectTo: "/api/v1/download/cos-bad",
+			ct:         "application/json",
+		},
+		// COS 路径:200 + HTML body,模拟「资源不存在但上游不返 404」的常见场景
+		"/api/v1/download/cos-bad": {
+			status: 200,
+			body:   htmlBody,
+			ct:     "text/html",
+		},
+	})
+	a := NewWithClient(rt)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "ghost-skill")
+	if err == nil {
+		t.Fatal("expected error for non-zip body")
+	}
+	if !errors.Is(err, skillmarket.ErrRemoteNotFound) {
+		t.Fatalf("expected ErrRemoteNotFound (user-facing: skill 找不到), got %v", err)
+	}
+}
+
+// TestDownload_SingleFileNotFound 2026-07-10 增:single-file fallback 路径
+// 也得把 404 wrap 成 ErrRemoteNotFound,跟 downloadViaZip 路径在 firstNotFound
+// 累计器里合并。
+func TestDownload_SingleFileNotFound(t *testing.T) {
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/v1/download": {status: 404, body: "no"},
+		// downloadViaZip 第一段 404 → ErrRemoteNotFound;
+		// downloadSingleFile 也兜底再试一次(都 404),最终 firstNotFound 不为空,
+		// 主函数返 ErrRemoteNotFound。
+		"/api/v1/skills/ghost-skill/skill.md": {status: 404, body: "no"},
+	})
+	a := NewWithClient(rt)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "ghost-skill")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, skillmarket.ErrRemoteNotFound) {
+		t.Fatalf("expected ErrRemoteNotFound, got %v", err)
+	}
+}
+
+
 // 2026-07-09 增:多文件 zip 回归测试 — 验证 SKILL.md 之外的附属文件
 // (scripts/、templates/、references/、assets/ 等)不会被旧代码的
 // `if base != "SKILL.md" { continue }` 跳掉,canonical.Files 应收齐。

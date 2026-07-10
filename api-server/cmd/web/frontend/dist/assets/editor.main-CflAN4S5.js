@@ -1,9 +1,9 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/freemarker2-D9OLnyJk.js","assets/index-D0wUQsDs.js","assets/vendor-iconpark-DT7NY3ha.js","assets/index-CfjBmphI.css","assets/handlebars-BVKtsVY1.js","assets/html-CKSfwUKT.js","assets/javascript-DUC5xCTt.js","assets/typescript-DBnNjxba.js","assets/liquid-ehWmzOdQ.js","assets/mdx-BtG2FPW_.js","assets/python-DIrdru4D.js","assets/razor-CPDMgrPd.js","assets/xml-kQ57fMfE.js","assets/yaml-DhjRBSQm.js","assets/cssMode-B77ooBJW.js","assets/htmlMode-BlPo2QRQ.js","assets/jsonMode-DcagaAEc.js","assets/tsMode-BManDzE-.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/freemarker2-BEKw8uL6.js","assets/index-BzJGZ2nR.js","assets/vendor-iconpark-DT7NY3ha.js","assets/index-CfjBmphI.css","assets/handlebars-B71vxThG.js","assets/html-6LD5U1Dj.js","assets/javascript-CPTqoLmZ.js","assets/typescript-CdnO9dzO.js","assets/liquid-D5ZjiPv9.js","assets/mdx-LkF5SICV.js","assets/python-BaqhNb5O.js","assets/razor-DTmyBNVo.js","assets/xml-BtX8GIYi.js","assets/yaml-CnS49FcX.js","assets/cssMode-WdmKBZdT.js","assets/htmlMode-BPLmNK-5.js","assets/jsonMode-B8VpVUbr.js","assets/tsMode-C9EqKvt3.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$2, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja, _ka, _la, _ma, _na, _oa, _pa, _qa, _ra, _sa, _ta, _ua, _va, _wa, _xa, _ya, _za, _Aa, _Ba, _Ca, _Da, _Ea, _Fa, _Ga, _Ha, _Ia, _Ja, _Ka, _La, _Ma, _Na, _Oa, _Pa, _Qa;
-import { _ as __vitePreload } from "./index-D0wUQsDs.js";
+import { _ as __vitePreload } from "./index-BzJGZ2nR.js";
 function tail(array2, n = 0) {
   return array2[array2.length - (1 + n)];
 }
@@ -116739,7 +116739,7 @@ registerLanguage({
   aliases: ["FreeMarker2", "Apache FreeMarker2"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationDollar);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationDollar);
     }
   }
 });
@@ -116748,7 +116748,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Angle/Dollar)", "Apache FreeMarker2 (Angle/Dollar)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAngleInterpolationDollar);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAngleInterpolationDollar);
     }
   }
 });
@@ -116757,7 +116757,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Bracket/Dollar)", "Apache FreeMarker2 (Bracket/Dollar)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagBracketInterpolationDollar);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagBracketInterpolationDollar);
     }
   }
 });
@@ -116766,7 +116766,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Angle/Bracket)", "Apache FreeMarker2 (Angle/Bracket)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAngleInterpolationBracket);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAngleInterpolationBracket);
     }
   }
 });
@@ -116775,7 +116775,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Bracket/Bracket)", "Apache FreeMarker2 (Bracket/Bracket)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagBracketInterpolationBracket);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagBracketInterpolationBracket);
     }
   }
 });
@@ -116784,7 +116784,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Auto/Dollar)", "Apache FreeMarker2 (Auto/Dollar)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationDollar);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationDollar);
     }
   }
 });
@@ -116793,7 +116793,7 @@ registerLanguage({
   aliases: ["FreeMarker2 (Auto/Bracket)", "Apache FreeMarker2 (Auto/Bracket)"],
   loader: () => {
     {
-      return __vitePreload(() => import("./freemarker2-D9OLnyJk.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationBracket);
+      return __vitePreload(() => import("./freemarker2-BEKw8uL6.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => m.TagAutoInterpolationBracket);
     }
   }
 });
@@ -116825,7 +116825,7 @@ registerLanguage({
   mimetypes: ["text/x-handlebars-template"],
   loader: () => {
     {
-      return __vitePreload(() => import("./handlebars-BVKtsVY1.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0);
+      return __vitePreload(() => import("./handlebars-B71vxThG.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0);
     }
   }
 });
@@ -116846,7 +116846,7 @@ registerLanguage({
   mimetypes: ["text/html", "text/x-jshtm", "text/template", "text/ng-template"],
   loader: () => {
     {
-      return __vitePreload(() => import("./html-CKSfwUKT.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0);
+      return __vitePreload(() => import("./html-6LD5U1Dj.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0);
     }
   }
 });
@@ -116881,7 +116881,7 @@ registerLanguage({
   mimetypes: ["text/javascript"],
   loader: () => {
     {
-      return __vitePreload(() => import("./javascript-DUC5xCTt.js"), true ? __vite__mapDeps([6,7,1,2,3]) : void 0);
+      return __vitePreload(() => import("./javascript-CPTqoLmZ.js"), true ? __vite__mapDeps([6,7,1,2,3]) : void 0);
     }
   }
 });
@@ -116944,7 +116944,7 @@ registerLanguage({
   mimetypes: ["application/liquid"],
   loader: () => {
     {
-      return __vitePreload(() => import("./liquid-ehWmzOdQ.js"), true ? __vite__mapDeps([8,1,2,3]) : void 0);
+      return __vitePreload(() => import("./liquid-D5ZjiPv9.js"), true ? __vite__mapDeps([8,1,2,3]) : void 0);
     }
   }
 });
@@ -116974,7 +116974,7 @@ registerLanguage({
   aliases: ["MDX", "mdx"],
   loader: () => {
     {
-      return __vitePreload(() => import("./mdx-BtG2FPW_.js"), true ? __vite__mapDeps([9,1,2,3]) : void 0);
+      return __vitePreload(() => import("./mdx-LkF5SICV.js"), true ? __vite__mapDeps([9,1,2,3]) : void 0);
     }
   }
 });
@@ -117137,7 +117137,7 @@ registerLanguage({
   firstLine: "^#!/.*\\bpython[0-9.-]*\\b",
   loader: () => {
     {
-      return __vitePreload(() => import("./python-DIrdru4D.js"), true ? __vite__mapDeps([10,1,2,3]) : void 0);
+      return __vitePreload(() => import("./python-BaqhNb5O.js"), true ? __vite__mapDeps([10,1,2,3]) : void 0);
     }
   }
 });
@@ -117168,7 +117168,7 @@ registerLanguage({
   mimetypes: ["text/x-cshtml"],
   loader: () => {
     {
-      return __vitePreload(() => import("./razor-CPDMgrPd.js"), true ? __vite__mapDeps([11,1,2,3]) : void 0);
+      return __vitePreload(() => import("./razor-DTmyBNVo.js"), true ? __vite__mapDeps([11,1,2,3]) : void 0);
     }
   }
 });
@@ -117384,7 +117384,7 @@ registerLanguage({
   mimetypes: ["text/typescript"],
   loader: () => {
     {
-      return __vitePreload(() => import("./typescript-DBnNjxba.js"), true ? __vite__mapDeps([7,1,2,3]) : void 0);
+      return __vitePreload(() => import("./typescript-CdnO9dzO.js"), true ? __vite__mapDeps([7,1,2,3]) : void 0);
     }
   }
 });
@@ -117444,7 +117444,7 @@ registerLanguage({
   mimetypes: ["text/xml", "application/xml", "application/xaml+xml", "application/xml-dtd"],
   loader: () => {
     {
-      return __vitePreload(() => import("./xml-kQ57fMfE.js"), true ? __vite__mapDeps([12,1,2,3]) : void 0);
+      return __vitePreload(() => import("./xml-BtX8GIYi.js"), true ? __vite__mapDeps([12,1,2,3]) : void 0);
     }
   }
 });
@@ -117455,7 +117455,7 @@ registerLanguage({
   mimetypes: ["application/x-yaml", "text/x-yaml"],
   loader: () => {
     {
-      return __vitePreload(() => import("./yaml-DhjRBSQm.js"), true ? __vite__mapDeps([13,1,2,3]) : void 0);
+      return __vitePreload(() => import("./yaml-CnS49FcX.js"), true ? __vite__mapDeps([13,1,2,3]) : void 0);
     }
   }
 });
@@ -117579,7 +117579,7 @@ var lessDefaults = new LanguageServiceDefaultsImpl$3(
 monaco_editor_core_exports$3.languages.css = { cssDefaults, lessDefaults, scssDefaults };
 function getMode$3() {
   {
-    return __vitePreload(() => import("./cssMode-B77ooBJW.js"), true ? __vite__mapDeps([14,1,2,3]) : void 0);
+    return __vitePreload(() => import("./cssMode-WdmKBZdT.js"), true ? __vite__mapDeps([14,1,2,3]) : void 0);
   }
 }
 monaco_editor_core_exports$3.languages.onLanguage("less", () => {
@@ -117710,7 +117710,7 @@ monaco_editor_core_exports$2.languages.html = {
 };
 function getMode$2() {
   {
-    return __vitePreload(() => import("./htmlMode-BlPo2QRQ.js"), true ? __vite__mapDeps([15,1,2,3]) : void 0);
+    return __vitePreload(() => import("./htmlMode-BPLmNK-5.js"), true ? __vite__mapDeps([15,1,2,3]) : void 0);
   }
 }
 function registerHTMLLanguageService(languageId, options = optionsDefault, modeConfiguration = getConfigurationDefault(languageId)) {
@@ -117808,7 +117808,7 @@ var getWorker = () => getMode$1().then((mode) => mode.getWorker());
 monaco_editor_core_exports$1.languages.json = { jsonDefaults, getWorker };
 function getMode$1() {
   {
-    return __vitePreload(() => import("./jsonMode-DcagaAEc.js"), true ? __vite__mapDeps([16,1,2,3]) : void 0);
+    return __vitePreload(() => import("./jsonMode-B8VpVUbr.js"), true ? __vite__mapDeps([16,1,2,3]) : void 0);
   }
 }
 monaco_editor_core_exports$1.languages.register({
@@ -118084,7 +118084,7 @@ monaco_editor_core_exports.languages.typescript = {
 };
 function getMode() {
   {
-    return __vitePreload(() => import("./tsMode-BManDzE-.js"), true ? __vite__mapDeps([17,1,2,3]) : void 0);
+    return __vitePreload(() => import("./tsMode-C9EqKvt3.js"), true ? __vite__mapDeps([17,1,2,3]) : void 0);
   }
 }
 monaco_editor_core_exports.languages.onLanguage("typescript", () => {

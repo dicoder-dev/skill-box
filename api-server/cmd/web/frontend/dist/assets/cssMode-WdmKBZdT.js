@@ -1,5 +1,5 @@
-import { m as monaco_editor_core_star } from "./editor.main-B4QpPWwN.js";
-import "./index-D0wUQsDs.js";
+import { m as monaco_editor_core_star } from "./editor.main-CflAN4S5.js";
+import "./index-BzJGZ2nR.js";
 import "./vendor-iconpark-DT7NY3ha.js";
 /*!-----------------------------------------------------------------------------
  * Copyright (c) Microsoft Corporation. All rights reserved.
@@ -57,14 +57,13 @@ var WorkerManager = class {
     this._lastUsedTime = Date.now();
     if (!this._client) {
       this._worker = monaco_editor_core_exports.editor.createWebWorker({
-        // module that exports the create() method and returns a `JSONWorker` instance
-        moduleId: "vs/language/json/jsonWorker",
+        // module that exports the create() method and returns a `CSSWorker` instance
+        moduleId: "vs/language/css/cssWorker",
         label: this._defaults.languageId,
         // passed in to the create() method
         createData: {
-          languageSettings: this._defaults.diagnosticsOptions,
-          languageId: this._defaults.languageId,
-          enableSchemaRequest: this._defaults.diagnosticsOptions.enableSchemaRequest
+          options: this._defaults.options,
+          languageId: this._defaults.languageId
         }
       });
       this._client = this._worker.getProxy();
@@ -1323,8 +1322,8 @@ var DiagnosticsAdapter = class {
     this._disposables.length = 0;
   }
   _doValidate(resource, languageId) {
-    this._worker(resource).then((worker2) => {
-      return worker2.doValidation(resource.toString());
+    this._worker(resource).then((worker) => {
+      return worker.doValidation(resource.toString());
     }).then((diagnostics) => {
       const markers = diagnostics.map((d) => toDiagnostics(resource, d));
       let model = monaco_editor_core_exports.editor.getModel(resource);
@@ -1373,8 +1372,8 @@ var CompletionAdapter = class {
   }
   provideCompletionItems(model, position, context, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.doComplete(resource.toString(), fromPosition(position));
+    return this._worker(resource).then((worker) => {
+      return worker.doComplete(resource.toString(), fromPosition(position));
     }).then((info) => {
       if (!info) {
         return;
@@ -1516,8 +1515,8 @@ var HoverAdapter = class {
   }
   provideHover(model, position, token) {
     let resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.doHover(resource.toString(), fromPosition(position));
+    return this._worker(resource).then((worker) => {
+      return worker.doHover(resource.toString(), fromPosition(position));
     }).then((info) => {
       if (!info) {
         return;
@@ -1565,7 +1564,7 @@ var DocumentHighlightAdapter = class {
   }
   provideDocumentHighlights(model, position, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => worker2.findDocumentHighlights(resource.toString(), fromPosition(position))).then((entries) => {
+    return this._worker(resource).then((worker) => worker.findDocumentHighlights(resource.toString(), fromPosition(position))).then((entries) => {
       if (!entries) {
         return;
       }
@@ -1595,8 +1594,8 @@ var DefinitionAdapter = class {
   }
   provideDefinition(model, position, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.findDefinition(resource.toString(), fromPosition(position));
+    return this._worker(resource).then((worker) => {
+      return worker.findDefinition(resource.toString(), fromPosition(position));
     }).then((definition) => {
       if (!definition) {
         return;
@@ -1617,8 +1616,8 @@ var ReferenceAdapter = class {
   }
   provideReferences(model, position, context, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.findReferences(resource.toString(), fromPosition(position));
+    return this._worker(resource).then((worker) => {
+      return worker.findReferences(resource.toString(), fromPosition(position));
     }).then((entries) => {
       if (!entries) {
         return;
@@ -1633,8 +1632,8 @@ var RenameAdapter = class {
   }
   provideRenameEdits(model, position, newName, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.doRename(resource.toString(), fromPosition(position), newName);
+    return this._worker(resource).then((worker) => {
+      return worker.doRename(resource.toString(), fromPosition(position), newName);
     }).then((edit) => {
       return toWorkspaceEdit(edit);
     });
@@ -1668,7 +1667,7 @@ var DocumentSymbolAdapter = class {
   }
   provideDocumentSymbols(model, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => worker2.findDocumentSymbols(resource.toString())).then((items) => {
+    return this._worker(resource).then((worker) => worker.findDocumentSymbols(resource.toString())).then((items) => {
       if (!items) {
         return;
       }
@@ -1751,7 +1750,7 @@ var DocumentLinkAdapter = class {
   }
   provideLinks(model, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => worker2.findDocumentLinks(resource.toString())).then((items) => {
+    return this._worker(resource).then((worker) => worker.findDocumentLinks(resource.toString())).then((items) => {
       if (!items) {
         return;
       }
@@ -1770,8 +1769,8 @@ var DocumentFormattingEditProvider = class {
   }
   provideDocumentFormattingEdits(model, options, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.format(resource.toString(), null, fromFormattingOptions(options)).then((edits) => {
+    return this._worker(resource).then((worker) => {
+      return worker.format(resource.toString(), null, fromFormattingOptions(options)).then((edits) => {
         if (!edits || edits.length === 0) {
           return;
         }
@@ -1787,8 +1786,8 @@ var DocumentRangeFormattingEditProvider = class {
   }
   provideDocumentRangeFormattingEdits(model, range, options, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => {
-      return worker2.format(resource.toString(), fromRange(range), fromFormattingOptions(options)).then((edits) => {
+    return this._worker(resource).then((worker) => {
+      return worker.format(resource.toString(), fromRange(range), fromFormattingOptions(options)).then((edits) => {
         if (!edits || edits.length === 0) {
           return;
         }
@@ -1809,7 +1808,7 @@ var DocumentColorAdapter = class {
   }
   provideDocumentColors(model, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => worker2.findDocumentColors(resource.toString())).then((infos) => {
+    return this._worker(resource).then((worker) => worker.findDocumentColors(resource.toString())).then((infos) => {
       if (!infos) {
         return;
       }
@@ -1822,7 +1821,7 @@ var DocumentColorAdapter = class {
   provideColorPresentations(model, info, token) {
     const resource = model.uri;
     return this._worker(resource).then(
-      (worker2) => worker2.getColorPresentations(resource.toString(), info.color, fromRange(info.range))
+      (worker) => worker.getColorPresentations(resource.toString(), info.color, fromRange(info.range))
     ).then((presentations) => {
       if (!presentations) {
         return;
@@ -1848,7 +1847,7 @@ var FoldingRangeAdapter = class {
   }
   provideFoldingRanges(model, context, token) {
     const resource = model.uri;
-    return this._worker(resource).then((worker2) => worker2.getFoldingRanges(resource.toString(), context)).then((ranges) => {
+    return this._worker(resource).then((worker) => worker.getFoldingRanges(resource.toString(), context)).then((ranges) => {
       if (!ranges) {
         return;
       }
@@ -1883,7 +1882,7 @@ var SelectionRangeAdapter = class {
   provideSelectionRanges(model, positions, token) {
     const resource = model.uri;
     return this._worker(resource).then(
-      (worker2) => worker2.getSelectionRanges(
+      (worker) => worker.getSelectionRanges(
         resource.toString(),
         positions.map(fromPosition)
       )
@@ -1902,764 +1901,55 @@ var SelectionRangeAdapter = class {
     });
   }
 };
-function createScanner(text, ignoreTrivia = false) {
-  const len = text.length;
-  let pos = 0, value = "", tokenOffset = 0, token = 16, lineNumber = 0, lineStartOffset = 0, tokenLineStartOffset = 0, prevTokenLineStartOffset = 0, scanError = 0;
-  function scanHexDigits(count, exact) {
-    let digits = 0;
-    let value2 = 0;
-    while (digits < count || false) {
-      let ch = text.charCodeAt(pos);
-      if (ch >= 48 && ch <= 57) {
-        value2 = value2 * 16 + ch - 48;
-      } else if (ch >= 65 && ch <= 70) {
-        value2 = value2 * 16 + ch - 65 + 10;
-      } else if (ch >= 97 && ch <= 102) {
-        value2 = value2 * 16 + ch - 97 + 10;
-      } else {
-        break;
-      }
-      pos++;
-      digits++;
-    }
-    if (digits < count) {
-      value2 = -1;
-    }
-    return value2;
-  }
-  function setPosition(newPosition) {
-    pos = newPosition;
-    value = "";
-    tokenOffset = 0;
-    token = 16;
-    scanError = 0;
-  }
-  function scanNumber() {
-    let start = pos;
-    if (text.charCodeAt(pos) === 48) {
-      pos++;
-    } else {
-      pos++;
-      while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-        pos++;
-      }
-    }
-    if (pos < text.length && text.charCodeAt(pos) === 46) {
-      pos++;
-      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
-        pos++;
-        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-          pos++;
-        }
-      } else {
-        scanError = 3;
-        return text.substring(start, pos);
-      }
-    }
-    let end = pos;
-    if (pos < text.length && (text.charCodeAt(pos) === 69 || text.charCodeAt(pos) === 101)) {
-      pos++;
-      if (pos < text.length && text.charCodeAt(pos) === 43 || text.charCodeAt(pos) === 45) {
-        pos++;
-      }
-      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
-        pos++;
-        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
-          pos++;
-        }
-        end = pos;
-      } else {
-        scanError = 3;
-      }
-    }
-    return text.substring(start, end);
-  }
-  function scanString() {
-    let result = "", start = pos;
-    while (true) {
-      if (pos >= len) {
-        result += text.substring(start, pos);
-        scanError = 2;
-        break;
-      }
-      const ch = text.charCodeAt(pos);
-      if (ch === 34) {
-        result += text.substring(start, pos);
-        pos++;
-        break;
-      }
-      if (ch === 92) {
-        result += text.substring(start, pos);
-        pos++;
-        if (pos >= len) {
-          scanError = 2;
-          break;
-        }
-        const ch2 = text.charCodeAt(pos++);
-        switch (ch2) {
-          case 34:
-            result += '"';
-            break;
-          case 92:
-            result += "\\";
-            break;
-          case 47:
-            result += "/";
-            break;
-          case 98:
-            result += "\b";
-            break;
-          case 102:
-            result += "\f";
-            break;
-          case 110:
-            result += "\n";
-            break;
-          case 114:
-            result += "\r";
-            break;
-          case 116:
-            result += "	";
-            break;
-          case 117:
-            const ch3 = scanHexDigits(4);
-            if (ch3 >= 0) {
-              result += String.fromCharCode(ch3);
-            } else {
-              scanError = 4;
-            }
-            break;
-          default:
-            scanError = 5;
-        }
-        start = pos;
-        continue;
-      }
-      if (ch >= 0 && ch <= 31) {
-        if (isLineBreak(ch)) {
-          result += text.substring(start, pos);
-          scanError = 2;
-          break;
-        } else {
-          scanError = 6;
-        }
-      }
-      pos++;
-    }
-    return result;
-  }
-  function scanNext() {
-    value = "";
-    scanError = 0;
-    tokenOffset = pos;
-    lineStartOffset = lineNumber;
-    prevTokenLineStartOffset = tokenLineStartOffset;
-    if (pos >= len) {
-      tokenOffset = len;
-      return token = 17;
-    }
-    let code = text.charCodeAt(pos);
-    if (isWhiteSpace(code)) {
-      do {
-        pos++;
-        value += String.fromCharCode(code);
-        code = text.charCodeAt(pos);
-      } while (isWhiteSpace(code));
-      return token = 15;
-    }
-    if (isLineBreak(code)) {
-      pos++;
-      value += String.fromCharCode(code);
-      if (code === 13 && text.charCodeAt(pos) === 10) {
-        pos++;
-        value += "\n";
-      }
-      lineNumber++;
-      tokenLineStartOffset = pos;
-      return token = 14;
-    }
-    switch (code) {
-      case 123:
-        pos++;
-        return token = 1;
-      case 125:
-        pos++;
-        return token = 2;
-      case 91:
-        pos++;
-        return token = 3;
-      case 93:
-        pos++;
-        return token = 4;
-      case 58:
-        pos++;
-        return token = 6;
-      case 44:
-        pos++;
-        return token = 5;
-      case 34:
-        pos++;
-        value = scanString();
-        return token = 10;
-      case 47:
-        const start = pos - 1;
-        if (text.charCodeAt(pos + 1) === 47) {
-          pos += 2;
-          while (pos < len) {
-            if (isLineBreak(text.charCodeAt(pos))) {
-              break;
-            }
-            pos++;
-          }
-          value = text.substring(start, pos);
-          return token = 12;
-        }
-        if (text.charCodeAt(pos + 1) === 42) {
-          pos += 2;
-          const safeLength = len - 1;
-          let commentClosed = false;
-          while (pos < safeLength) {
-            const ch = text.charCodeAt(pos);
-            if (ch === 42 && text.charCodeAt(pos + 1) === 47) {
-              pos += 2;
-              commentClosed = true;
-              break;
-            }
-            pos++;
-            if (isLineBreak(ch)) {
-              if (ch === 13 && text.charCodeAt(pos) === 10) {
-                pos++;
-              }
-              lineNumber++;
-              tokenLineStartOffset = pos;
-            }
-          }
-          if (!commentClosed) {
-            pos++;
-            scanError = 1;
-          }
-          value = text.substring(start, pos);
-          return token = 13;
-        }
-        value += String.fromCharCode(code);
-        pos++;
-        return token = 16;
-      case 45:
-        value += String.fromCharCode(code);
-        pos++;
-        if (pos === len || !isDigit(text.charCodeAt(pos))) {
-          return token = 16;
-        }
-      case 48:
-      case 49:
-      case 50:
-      case 51:
-      case 52:
-      case 53:
-      case 54:
-      case 55:
-      case 56:
-      case 57:
-        value += scanNumber();
-        return token = 11;
-      default:
-        while (pos < len && isUnknownContentCharacter(code)) {
-          pos++;
-          code = text.charCodeAt(pos);
-        }
-        if (tokenOffset !== pos) {
-          value = text.substring(tokenOffset, pos);
-          switch (value) {
-            case "true":
-              return token = 8;
-            case "false":
-              return token = 9;
-            case "null":
-              return token = 7;
-          }
-          return token = 16;
-        }
-        value += String.fromCharCode(code);
-        pos++;
-        return token = 16;
-    }
-  }
-  function isUnknownContentCharacter(code) {
-    if (isWhiteSpace(code) || isLineBreak(code)) {
-      return false;
-    }
-    switch (code) {
-      case 125:
-      case 93:
-      case 123:
-      case 91:
-      case 34:
-      case 58:
-      case 44:
-      case 47:
-        return false;
-    }
-    return true;
-  }
-  function scanNextNonTrivia() {
-    let result;
-    do {
-      result = scanNext();
-    } while (result >= 12 && result <= 15);
-    return result;
-  }
-  return {
-    setPosition,
-    getPosition: () => pos,
-    scan: ignoreTrivia ? scanNextNonTrivia : scanNext,
-    getToken: () => token,
-    getTokenValue: () => value,
-    getTokenOffset: () => tokenOffset,
-    getTokenLength: () => pos - tokenOffset,
-    getTokenStartLine: () => lineStartOffset,
-    getTokenStartCharacter: () => tokenOffset - prevTokenLineStartOffset,
-    getTokenError: () => scanError
-  };
-}
-function isWhiteSpace(ch) {
-  return ch === 32 || ch === 9;
-}
-function isLineBreak(ch) {
-  return ch === 10 || ch === 13;
-}
-function isDigit(ch) {
-  return ch >= 48 && ch <= 57;
-}
-var CharacterCodes;
-(function(CharacterCodes2) {
-  CharacterCodes2[CharacterCodes2["lineFeed"] = 10] = "lineFeed";
-  CharacterCodes2[CharacterCodes2["carriageReturn"] = 13] = "carriageReturn";
-  CharacterCodes2[CharacterCodes2["space"] = 32] = "space";
-  CharacterCodes2[CharacterCodes2["_0"] = 48] = "_0";
-  CharacterCodes2[CharacterCodes2["_1"] = 49] = "_1";
-  CharacterCodes2[CharacterCodes2["_2"] = 50] = "_2";
-  CharacterCodes2[CharacterCodes2["_3"] = 51] = "_3";
-  CharacterCodes2[CharacterCodes2["_4"] = 52] = "_4";
-  CharacterCodes2[CharacterCodes2["_5"] = 53] = "_5";
-  CharacterCodes2[CharacterCodes2["_6"] = 54] = "_6";
-  CharacterCodes2[CharacterCodes2["_7"] = 55] = "_7";
-  CharacterCodes2[CharacterCodes2["_8"] = 56] = "_8";
-  CharacterCodes2[CharacterCodes2["_9"] = 57] = "_9";
-  CharacterCodes2[CharacterCodes2["a"] = 97] = "a";
-  CharacterCodes2[CharacterCodes2["b"] = 98] = "b";
-  CharacterCodes2[CharacterCodes2["c"] = 99] = "c";
-  CharacterCodes2[CharacterCodes2["d"] = 100] = "d";
-  CharacterCodes2[CharacterCodes2["e"] = 101] = "e";
-  CharacterCodes2[CharacterCodes2["f"] = 102] = "f";
-  CharacterCodes2[CharacterCodes2["g"] = 103] = "g";
-  CharacterCodes2[CharacterCodes2["h"] = 104] = "h";
-  CharacterCodes2[CharacterCodes2["i"] = 105] = "i";
-  CharacterCodes2[CharacterCodes2["j"] = 106] = "j";
-  CharacterCodes2[CharacterCodes2["k"] = 107] = "k";
-  CharacterCodes2[CharacterCodes2["l"] = 108] = "l";
-  CharacterCodes2[CharacterCodes2["m"] = 109] = "m";
-  CharacterCodes2[CharacterCodes2["n"] = 110] = "n";
-  CharacterCodes2[CharacterCodes2["o"] = 111] = "o";
-  CharacterCodes2[CharacterCodes2["p"] = 112] = "p";
-  CharacterCodes2[CharacterCodes2["q"] = 113] = "q";
-  CharacterCodes2[CharacterCodes2["r"] = 114] = "r";
-  CharacterCodes2[CharacterCodes2["s"] = 115] = "s";
-  CharacterCodes2[CharacterCodes2["t"] = 116] = "t";
-  CharacterCodes2[CharacterCodes2["u"] = 117] = "u";
-  CharacterCodes2[CharacterCodes2["v"] = 118] = "v";
-  CharacterCodes2[CharacterCodes2["w"] = 119] = "w";
-  CharacterCodes2[CharacterCodes2["x"] = 120] = "x";
-  CharacterCodes2[CharacterCodes2["y"] = 121] = "y";
-  CharacterCodes2[CharacterCodes2["z"] = 122] = "z";
-  CharacterCodes2[CharacterCodes2["A"] = 65] = "A";
-  CharacterCodes2[CharacterCodes2["B"] = 66] = "B";
-  CharacterCodes2[CharacterCodes2["C"] = 67] = "C";
-  CharacterCodes2[CharacterCodes2["D"] = 68] = "D";
-  CharacterCodes2[CharacterCodes2["E"] = 69] = "E";
-  CharacterCodes2[CharacterCodes2["F"] = 70] = "F";
-  CharacterCodes2[CharacterCodes2["G"] = 71] = "G";
-  CharacterCodes2[CharacterCodes2["H"] = 72] = "H";
-  CharacterCodes2[CharacterCodes2["I"] = 73] = "I";
-  CharacterCodes2[CharacterCodes2["J"] = 74] = "J";
-  CharacterCodes2[CharacterCodes2["K"] = 75] = "K";
-  CharacterCodes2[CharacterCodes2["L"] = 76] = "L";
-  CharacterCodes2[CharacterCodes2["M"] = 77] = "M";
-  CharacterCodes2[CharacterCodes2["N"] = 78] = "N";
-  CharacterCodes2[CharacterCodes2["O"] = 79] = "O";
-  CharacterCodes2[CharacterCodes2["P"] = 80] = "P";
-  CharacterCodes2[CharacterCodes2["Q"] = 81] = "Q";
-  CharacterCodes2[CharacterCodes2["R"] = 82] = "R";
-  CharacterCodes2[CharacterCodes2["S"] = 83] = "S";
-  CharacterCodes2[CharacterCodes2["T"] = 84] = "T";
-  CharacterCodes2[CharacterCodes2["U"] = 85] = "U";
-  CharacterCodes2[CharacterCodes2["V"] = 86] = "V";
-  CharacterCodes2[CharacterCodes2["W"] = 87] = "W";
-  CharacterCodes2[CharacterCodes2["X"] = 88] = "X";
-  CharacterCodes2[CharacterCodes2["Y"] = 89] = "Y";
-  CharacterCodes2[CharacterCodes2["Z"] = 90] = "Z";
-  CharacterCodes2[CharacterCodes2["asterisk"] = 42] = "asterisk";
-  CharacterCodes2[CharacterCodes2["backslash"] = 92] = "backslash";
-  CharacterCodes2[CharacterCodes2["closeBrace"] = 125] = "closeBrace";
-  CharacterCodes2[CharacterCodes2["closeBracket"] = 93] = "closeBracket";
-  CharacterCodes2[CharacterCodes2["colon"] = 58] = "colon";
-  CharacterCodes2[CharacterCodes2["comma"] = 44] = "comma";
-  CharacterCodes2[CharacterCodes2["dot"] = 46] = "dot";
-  CharacterCodes2[CharacterCodes2["doubleQuote"] = 34] = "doubleQuote";
-  CharacterCodes2[CharacterCodes2["minus"] = 45] = "minus";
-  CharacterCodes2[CharacterCodes2["openBrace"] = 123] = "openBrace";
-  CharacterCodes2[CharacterCodes2["openBracket"] = 91] = "openBracket";
-  CharacterCodes2[CharacterCodes2["plus"] = 43] = "plus";
-  CharacterCodes2[CharacterCodes2["slash"] = 47] = "slash";
-  CharacterCodes2[CharacterCodes2["formFeed"] = 12] = "formFeed";
-  CharacterCodes2[CharacterCodes2["tab"] = 9] = "tab";
-})(CharacterCodes || (CharacterCodes = {}));
-new Array(20).fill(0).map((_, index) => {
-  return " ".repeat(index);
-});
-var maxCachedValues = 200;
-({
-  " ": {
-    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\n" + " ".repeat(index);
-    }),
-    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\r" + " ".repeat(index);
-    }),
-    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\r\n" + " ".repeat(index);
-    })
-  },
-  "	": {
-    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\n" + "	".repeat(index);
-    }),
-    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\r" + "	".repeat(index);
-    }),
-    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
-      return "\r\n" + "	".repeat(index);
-    })
-  }
-});
-var ParseOptions;
-(function(ParseOptions2) {
-  ParseOptions2.DEFAULT = {
-    allowTrailingComma: false
-  };
-})(ParseOptions || (ParseOptions = {}));
-var createScanner2 = createScanner;
-var ScanError;
-(function(ScanError2) {
-  ScanError2[ScanError2["None"] = 0] = "None";
-  ScanError2[ScanError2["UnexpectedEndOfComment"] = 1] = "UnexpectedEndOfComment";
-  ScanError2[ScanError2["UnexpectedEndOfString"] = 2] = "UnexpectedEndOfString";
-  ScanError2[ScanError2["UnexpectedEndOfNumber"] = 3] = "UnexpectedEndOfNumber";
-  ScanError2[ScanError2["InvalidUnicode"] = 4] = "InvalidUnicode";
-  ScanError2[ScanError2["InvalidEscapeCharacter"] = 5] = "InvalidEscapeCharacter";
-  ScanError2[ScanError2["InvalidCharacter"] = 6] = "InvalidCharacter";
-})(ScanError || (ScanError = {}));
-var SyntaxKind;
-(function(SyntaxKind2) {
-  SyntaxKind2[SyntaxKind2["OpenBraceToken"] = 1] = "OpenBraceToken";
-  SyntaxKind2[SyntaxKind2["CloseBraceToken"] = 2] = "CloseBraceToken";
-  SyntaxKind2[SyntaxKind2["OpenBracketToken"] = 3] = "OpenBracketToken";
-  SyntaxKind2[SyntaxKind2["CloseBracketToken"] = 4] = "CloseBracketToken";
-  SyntaxKind2[SyntaxKind2["CommaToken"] = 5] = "CommaToken";
-  SyntaxKind2[SyntaxKind2["ColonToken"] = 6] = "ColonToken";
-  SyntaxKind2[SyntaxKind2["NullKeyword"] = 7] = "NullKeyword";
-  SyntaxKind2[SyntaxKind2["TrueKeyword"] = 8] = "TrueKeyword";
-  SyntaxKind2[SyntaxKind2["FalseKeyword"] = 9] = "FalseKeyword";
-  SyntaxKind2[SyntaxKind2["StringLiteral"] = 10] = "StringLiteral";
-  SyntaxKind2[SyntaxKind2["NumericLiteral"] = 11] = "NumericLiteral";
-  SyntaxKind2[SyntaxKind2["LineCommentTrivia"] = 12] = "LineCommentTrivia";
-  SyntaxKind2[SyntaxKind2["BlockCommentTrivia"] = 13] = "BlockCommentTrivia";
-  SyntaxKind2[SyntaxKind2["LineBreakTrivia"] = 14] = "LineBreakTrivia";
-  SyntaxKind2[SyntaxKind2["Trivia"] = 15] = "Trivia";
-  SyntaxKind2[SyntaxKind2["Unknown"] = 16] = "Unknown";
-  SyntaxKind2[SyntaxKind2["EOF"] = 17] = "EOF";
-})(SyntaxKind || (SyntaxKind = {}));
-var ParseErrorCode;
-(function(ParseErrorCode2) {
-  ParseErrorCode2[ParseErrorCode2["InvalidSymbol"] = 1] = "InvalidSymbol";
-  ParseErrorCode2[ParseErrorCode2["InvalidNumberFormat"] = 2] = "InvalidNumberFormat";
-  ParseErrorCode2[ParseErrorCode2["PropertyNameExpected"] = 3] = "PropertyNameExpected";
-  ParseErrorCode2[ParseErrorCode2["ValueExpected"] = 4] = "ValueExpected";
-  ParseErrorCode2[ParseErrorCode2["ColonExpected"] = 5] = "ColonExpected";
-  ParseErrorCode2[ParseErrorCode2["CommaExpected"] = 6] = "CommaExpected";
-  ParseErrorCode2[ParseErrorCode2["CloseBraceExpected"] = 7] = "CloseBraceExpected";
-  ParseErrorCode2[ParseErrorCode2["CloseBracketExpected"] = 8] = "CloseBracketExpected";
-  ParseErrorCode2[ParseErrorCode2["EndOfFileExpected"] = 9] = "EndOfFileExpected";
-  ParseErrorCode2[ParseErrorCode2["InvalidCommentToken"] = 10] = "InvalidCommentToken";
-  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfComment"] = 11] = "UnexpectedEndOfComment";
-  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfString"] = 12] = "UnexpectedEndOfString";
-  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfNumber"] = 13] = "UnexpectedEndOfNumber";
-  ParseErrorCode2[ParseErrorCode2["InvalidUnicode"] = 14] = "InvalidUnicode";
-  ParseErrorCode2[ParseErrorCode2["InvalidEscapeCharacter"] = 15] = "InvalidEscapeCharacter";
-  ParseErrorCode2[ParseErrorCode2["InvalidCharacter"] = 16] = "InvalidCharacter";
-})(ParseErrorCode || (ParseErrorCode = {}));
-function createTokenizationSupport(supportComments) {
-  return {
-    getInitialState: () => new JSONState(null, null, false, null),
-    tokenize: (line, state) => tokenize(supportComments, line, state)
-  };
-}
-var TOKEN_DELIM_OBJECT = "delimiter.bracket.json";
-var TOKEN_DELIM_ARRAY = "delimiter.array.json";
-var TOKEN_DELIM_COLON = "delimiter.colon.json";
-var TOKEN_DELIM_COMMA = "delimiter.comma.json";
-var TOKEN_VALUE_BOOLEAN = "keyword.json";
-var TOKEN_VALUE_NULL = "keyword.json";
-var TOKEN_VALUE_STRING = "string.value.json";
-var TOKEN_VALUE_NUMBER = "number.json";
-var TOKEN_PROPERTY_NAME = "string.key.json";
-var TOKEN_COMMENT_BLOCK = "comment.block.json";
-var TOKEN_COMMENT_LINE = "comment.line.json";
-var ParentsStack = class _ParentsStack {
-  constructor(parent, type) {
-    this.parent = parent;
-    this.type = type;
-  }
-  static pop(parents) {
-    if (parents) {
-      return parents.parent;
-    }
-    return null;
-  }
-  static push(parents, type) {
-    return new _ParentsStack(parents, type);
-  }
-  static equals(a, b) {
-    if (!a && !b) {
-      return true;
-    }
-    if (!a || !b) {
-      return false;
-    }
-    while (a && b) {
-      if (a === b) {
-        return true;
-      }
-      if (a.type !== b.type) {
-        return false;
-      }
-      a = a.parent;
-      b = b.parent;
-    }
-    return true;
-  }
-};
-var JSONState = class _JSONState {
-  constructor(state, scanError, lastWasColon, parents) {
-    this._state = state;
-    this.scanError = scanError;
-    this.lastWasColon = lastWasColon;
-    this.parents = parents;
-  }
-  clone() {
-    return new _JSONState(this._state, this.scanError, this.lastWasColon, this.parents);
-  }
-  equals(other) {
-    if (other === this) {
-      return true;
-    }
-    if (!other || !(other instanceof _JSONState)) {
-      return false;
-    }
-    return this.scanError === other.scanError && this.lastWasColon === other.lastWasColon && ParentsStack.equals(this.parents, other.parents);
-  }
-  getStateData() {
-    return this._state;
-  }
-  setStateData(state) {
-    this._state = state;
-  }
-};
-function tokenize(comments, line, state, offsetDelta = 0) {
-  let numberOfInsertedCharacters = 0;
-  let adjustOffset = false;
-  switch (state.scanError) {
-    case 2:
-      line = '"' + line;
-      numberOfInsertedCharacters = 1;
-      break;
-    case 1:
-      line = "/*" + line;
-      numberOfInsertedCharacters = 2;
-      break;
-  }
-  const scanner = createScanner2(line);
-  let lastWasColon = state.lastWasColon;
-  let parents = state.parents;
-  const ret = {
-    tokens: [],
-    endState: state.clone()
-  };
-  while (true) {
-    let offset = offsetDelta + scanner.getPosition();
-    let type = "";
-    const kind = scanner.scan();
-    if (kind === 17) {
-      break;
-    }
-    if (offset === offsetDelta + scanner.getPosition()) {
-      throw new Error(
-        "Scanner did not advance, next 3 characters are: " + line.substr(scanner.getPosition(), 3)
-      );
-    }
-    if (adjustOffset) {
-      offset -= numberOfInsertedCharacters;
-    }
-    adjustOffset = numberOfInsertedCharacters > 0;
-    switch (kind) {
-      case 1:
-        parents = ParentsStack.push(
-          parents,
-          0
-          /* Object */
-        );
-        type = TOKEN_DELIM_OBJECT;
-        lastWasColon = false;
-        break;
-      case 2:
-        parents = ParentsStack.pop(parents);
-        type = TOKEN_DELIM_OBJECT;
-        lastWasColon = false;
-        break;
-      case 3:
-        parents = ParentsStack.push(
-          parents,
-          1
-          /* Array */
-        );
-        type = TOKEN_DELIM_ARRAY;
-        lastWasColon = false;
-        break;
-      case 4:
-        parents = ParentsStack.pop(parents);
-        type = TOKEN_DELIM_ARRAY;
-        lastWasColon = false;
-        break;
-      case 6:
-        type = TOKEN_DELIM_COLON;
-        lastWasColon = true;
-        break;
-      case 5:
-        type = TOKEN_DELIM_COMMA;
-        lastWasColon = false;
-        break;
-      case 8:
-      case 9:
-        type = TOKEN_VALUE_BOOLEAN;
-        lastWasColon = false;
-        break;
-      case 7:
-        type = TOKEN_VALUE_NULL;
-        lastWasColon = false;
-        break;
-      case 10:
-        const currentParent = parents ? parents.type : 0;
-        const inArray = currentParent === 1;
-        type = lastWasColon || inArray ? TOKEN_VALUE_STRING : TOKEN_PROPERTY_NAME;
-        lastWasColon = false;
-        break;
-      case 11:
-        type = TOKEN_VALUE_NUMBER;
-        lastWasColon = false;
-        break;
-    }
-    {
-      switch (kind) {
-        case 12:
-          type = TOKEN_COMMENT_LINE;
-          break;
-        case 13:
-          type = TOKEN_COMMENT_BLOCK;
-          break;
-      }
-    }
-    ret.endState = new JSONState(
-      state.getStateData(),
-      scanner.getTokenError(),
-      lastWasColon,
-      parents
-    );
-    ret.tokens.push({
-      startIndex: offset,
-      scopes: type
-    });
-  }
-  return ret;
-}
-var worker;
-function getWorker() {
-  return new Promise((resolve, reject) => {
-    if (!worker) {
-      return reject("JSON not registered!");
-    }
-    resolve(worker);
-  });
-}
-var JSONDiagnosticsAdapter = class extends DiagnosticsAdapter {
-  constructor(languageId, worker2, defaults) {
-    super(languageId, worker2, defaults.onDidChange);
-    this._disposables.push(
-      monaco_editor_core_exports.editor.onWillDisposeModel((model) => {
-        this._resetSchema(model.uri);
-      })
-    );
-    this._disposables.push(
-      monaco_editor_core_exports.editor.onDidChangeModelLanguage((event) => {
-        this._resetSchema(event.model.uri);
-      })
-    );
-  }
-  _resetSchema(resource) {
-    this._worker().then((worker2) => {
-      worker2.resetSchema(resource.toString());
-    });
-  }
-};
 function setupMode(defaults) {
   const disposables = [];
   const providers = [];
   const client = new WorkerManager(defaults);
   disposables.push(client);
-  worker = (...uris) => {
+  const worker = (...uris) => {
     return client.getLanguageServiceWorker(...uris);
   };
   function registerProviders() {
-    const { languageId, modeConfiguration: modeConfiguration2 } = defaults;
+    const { languageId, modeConfiguration } = defaults;
     disposeAll(providers);
-    if (modeConfiguration2.documentFormattingEdits) {
-      providers.push(
-        monaco_editor_core_exports.languages.registerDocumentFormattingEditProvider(
-          languageId,
-          new DocumentFormattingEditProvider(worker)
-        )
-      );
-    }
-    if (modeConfiguration2.documentRangeFormattingEdits) {
-      providers.push(
-        monaco_editor_core_exports.languages.registerDocumentRangeFormattingEditProvider(
-          languageId,
-          new DocumentRangeFormattingEditProvider(worker)
-        )
-      );
-    }
-    if (modeConfiguration2.completionItems) {
+    if (modeConfiguration.completionItems) {
       providers.push(
         monaco_editor_core_exports.languages.registerCompletionItemProvider(
           languageId,
-          new CompletionAdapter(worker, [" ", ":", '"'])
+          new CompletionAdapter(worker, ["/", "-", ":"])
         )
       );
     }
-    if (modeConfiguration2.hovers) {
+    if (modeConfiguration.hovers) {
       providers.push(
         monaco_editor_core_exports.languages.registerHoverProvider(languageId, new HoverAdapter(worker))
       );
     }
-    if (modeConfiguration2.documentSymbols) {
+    if (modeConfiguration.documentHighlights) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerDocumentHighlightProvider(
+          languageId,
+          new DocumentHighlightAdapter(worker)
+        )
+      );
+    }
+    if (modeConfiguration.definitions) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerDefinitionProvider(
+          languageId,
+          new DefinitionAdapter(worker)
+        )
+      );
+    }
+    if (modeConfiguration.references) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerReferenceProvider(
+          languageId,
+          new ReferenceAdapter(worker)
+        )
+      );
+    }
+    if (modeConfiguration.documentSymbols) {
       providers.push(
         monaco_editor_core_exports.languages.registerDocumentSymbolProvider(
           languageId,
@@ -2667,10 +1957,12 @@ function setupMode(defaults) {
         )
       );
     }
-    if (modeConfiguration2.tokens) {
-      providers.push(monaco_editor_core_exports.languages.setTokensProvider(languageId, createTokenizationSupport(true)));
+    if (modeConfiguration.rename) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerRenameProvider(languageId, new RenameAdapter(worker))
+      );
     }
-    if (modeConfiguration2.colors) {
+    if (modeConfiguration.colors) {
       providers.push(
         monaco_editor_core_exports.languages.registerColorProvider(
           languageId,
@@ -2678,7 +1970,7 @@ function setupMode(defaults) {
         )
       );
     }
-    if (modeConfiguration2.foldingRanges) {
+    if (modeConfiguration.foldingRanges) {
       providers.push(
         monaco_editor_core_exports.languages.registerFoldingRangeProvider(
           languageId,
@@ -2686,10 +1978,12 @@ function setupMode(defaults) {
         )
       );
     }
-    if (modeConfiguration2.diagnostics) {
-      providers.push(new JSONDiagnosticsAdapter(languageId, worker, defaults));
+    if (modeConfiguration.diagnostics) {
+      providers.push(
+        new DiagnosticsAdapter(languageId, worker, defaults.onDidChange)
+      );
     }
-    if (modeConfiguration2.selectionRanges) {
+    if (modeConfiguration.selectionRanges) {
       providers.push(
         monaco_editor_core_exports.languages.registerSelectionRangeProvider(
           languageId,
@@ -2697,16 +1991,24 @@ function setupMode(defaults) {
         )
       );
     }
+    if (modeConfiguration.documentFormattingEdits) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerDocumentFormattingEditProvider(
+          languageId,
+          new DocumentFormattingEditProvider(worker)
+        )
+      );
+    }
+    if (modeConfiguration.documentRangeFormattingEdits) {
+      providers.push(
+        monaco_editor_core_exports.languages.registerDocumentRangeFormattingEditProvider(
+          languageId,
+          new DocumentRangeFormattingEditProvider(worker)
+        )
+      );
+    }
   }
   registerProviders();
-  disposables.push(monaco_editor_core_exports.languages.setLanguageConfiguration(defaults.languageId, richEditConfiguration));
-  let modeConfiguration = defaults.modeConfiguration;
-  defaults.onDidChange((newDefaults) => {
-    if (newDefaults.modeConfiguration !== modeConfiguration) {
-      modeConfiguration = newDefaults.modeConfiguration;
-      registerProviders();
-    }
-  });
   disposables.push(asDisposable(providers));
   return asDisposable(disposables);
 }
@@ -2718,22 +2020,6 @@ function disposeAll(disposables) {
     disposables.pop().dispose();
   }
 }
-var richEditConfiguration = {
-  wordPattern: /(-?\d*\.\d\w*)|([^\[\{\]\}\:\"\,\s]+)/g,
-  comments: {
-    lineComment: "//",
-    blockComment: ["/*", "*/"]
-  },
-  brackets: [
-    ["{", "}"],
-    ["[", "]"]
-  ],
-  autoClosingPairs: [
-    { open: "{", close: "}", notIn: ["string"] },
-    { open: "[", close: "]", notIn: ["string"] },
-    { open: '"', close: '"', notIn: ["string"] }
-  ]
-};
 export {
   CompletionAdapter,
   DefinitionAdapter,
@@ -2752,7 +2038,6 @@ export {
   WorkerManager,
   fromPosition,
   fromRange,
-  getWorker,
   setupMode,
   toRange,
   toTextEdit
