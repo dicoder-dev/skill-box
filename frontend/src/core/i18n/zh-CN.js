@@ -458,7 +458,9 @@ const messages = {
       // 2026-07-10 增:404 / 上游资源无效
       // (用户报告 topnews / ima-skills 报「下载失败」误导,根因是 SKILL.md 缺 frontmatter)
       // 文案覆盖 4 种上游语义:slug 真不存在 / slug 下架 / zip 缺 SKILL.md / zip 不合法
-      errSkillNotFound: '该 skill 拿不到({msg})。常见:slug 已下架、SKILL.md 缺 frontmatter、zip 包被截断,请确认 URL 后重试',
+      errSkillMalformed: '该 skill 文件格式有问题({msg})。可能:作者发布时漏了 frontmatter、上传 SKILL.md 内容为空、zip 包损坏。该 skill 暂时装不上',
+      // 2026-07-10 改:404 细分 — errSkillNotFound(slug 不存在 / 已下架) / errSkillMalformed(走 422,文案见上)
+      errSkillNotFound: '该 skill 不存在({msg})。可能:URL 里 slug 拼错、上游已下架,请确认 URL 后重试',
       errPull: '下载失败:{msg}',
       // 2026-07-09 增:前端 timeout 单独提示
       errTimeout: '请求超时(后端下载慢):{msg}。可以重试,或去浏览器手动下好后从「本地导入」装入。',

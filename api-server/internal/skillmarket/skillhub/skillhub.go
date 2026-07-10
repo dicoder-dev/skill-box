@@ -645,9 +645,14 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 		baseURL = defaultBaseURL
 	}
 
-	// 2026-07-10 增:firstNotFound 记录第一次 ErrRemoteNotFound;
-	// 当所有路径都失败时用它给 controller 一个明确的语义(404 ≠ 500)。
-	var firstNotFound error
+	// 2026-07-10 增:firstSemantic 记录第一次「有明确语义的错误」;
+	// 当所有路径都失败时用它给 controller 一个明确语义
+	// (NotFound=404 ≠ Malformed=422 ≠ FetchFail=500)。
+	//
+	// 优先级:Malformed > NotFound > FetchFail ——
+	// skill 存在但 SKILL.md 坏了 优先级高于「slug 不存在」,
+	// 因为后者在前者失败之后才单文件兜底去判断,提供更具体的诊断。
+	var firstSemantic error
 
 	// 主路径:302 → zip
 	can, err := a.downloadViaZip(ctx, baseURL, remoteID)
@@ -656,8 +661,9 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	}
 	if err != nil {
 		logger.Warn("skillhub download zip: %v; trying single-file fallback", err)
-		if firstNotFound == nil && errors.Is(err, skillmarket.ErrRemoteNotFound) {
-			firstNotFound = err
+		if firstSemantic == nil && (errors.Is(err, skillmarket.ErrRemoteNotFound) ||
+			errors.Is(err, skillmarket.ErrSkillMalformed)) {
+			firstSemantic = err
 		}
 	}
 
@@ -668,8 +674,8 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 	}
 	if err != nil {
 		logger.Warn("skillhub download single-file: %v; falling back to known list", err)
-		if firstNotFound == nil && errors.Is(err, skillmarket.ErrRemoteNotFound) {
-			firstNotFound = err
+		if firstSemantic == nil && errors.Is(err, skillmarket.ErrRemoteNotFound) {
+			firstSemantic = err
 		}
 	}
 
@@ -679,11 +685,10 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 			return buildFallbackCanonical(it), nil
 		}
 	}
-	// 2026-07-10 改:优先返 firstNotFound(404),让前端走 errSkillNotFound;
-	// 只有当 firstNotFound = nil(说明所有路径都是其它错误,例如网络挂)
-	// 才回退到 ErrRemoteFetchFail。
-	if firstNotFound != nil {
-		return nil, firstNotFound
+	// 2026-07-10 改:优先返 firstSemantic(404/422),让前端走对应文案;
+	// 只有所有路径都是其它错误时才回退到 ErrRemoteFetchFail。
+	if firstSemantic != nil {
+		return nil, firstSemantic
 	}
 	return nil, fmt.Errorf("%w: %s", skillmarket.ErrRemoteFetchFail, remoteID)
 }
@@ -776,7 +781,7 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 	r, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s (zip parse failed: %v)",
-			skillmarket.ErrRemoteNotFound, remoteID, err)
+			skillmarket.ErrSkillMalformed, remoteID, err)
 	}
 	type zipEntry struct {
 		path string // 用户视角相对路径
@@ -842,18 +847,19 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 		files = append(files, skilladapter.File{Path: rel, Content: string(e.data)})
 	}
 	if skillMDContent == "" {
-		// 2026-07-10 改:zip 里 SKILL.md 空内容,资源形态无效 — wrap NotFound
-		// (不是网络/拉取失败,而是资源真的没找到有效内容)。
-		return nil, fmt.Errorf("%w: %s (SKILL.md empty in zip)", skillmarket.ErrRemoteNotFound, remoteID)
+		// 2026-07-10 改:zip 里 SKILL.md 空内容,资源形态无效 — wrap Malformed
+		// (跟 ErrRemoteNotFound 区分:这里 zip 拿到了内容但内容无效,
+		// 走 422「文件格式有问题」而非 404「找不到资源」)。
+		return nil, fmt.Errorf("%w: %s (SKILL.md empty in zip)",
+			skillmarket.ErrSkillMalformed, remoteID)
 	}
 	can, perr := skilladapter.ParseSkillMD(skillMDContent)
 	if perr != nil {
-		// 2026-07-10 改(根因):SKILL.md 本地解析失败(典型:缺 frontmatter)不是
-		// 「远程 fetch」失败,而是资源形态无效,wrap ErrRemoteNotFound 走
-		// 404 + 前端 errSkillNotFound 文案。原代码 wrap 成 ErrRemoteFetchFail
-		// 让用户看到「下载失败」误导以为是网络问题。
+		// 2026-07-10 改:root cause — SKILL.md 本地解析失败(典型:缺 frontmatter)
+		// 是「资源存在但文件坏了」不是「远程 fetch 失败」,
+		// wrap ErrSkillMalformed 走 422 + 前端 errSkillMalformed 文案。
 		return nil, fmt.Errorf("%w: %s (parse SKILL.md: %v)",
-			skillmarket.ErrRemoteNotFound, remoteID, perr)
+			skillmarket.ErrSkillMalformed, remoteID, perr)
 	}
 	// 从 zip 路径推断 version(常见布局: skills/{slug}/{version}/SKILL.md)。
 	if parts := strings.Split(skillMDPath, "/"); len(parts) >= 3 {

@@ -41,13 +41,24 @@ type SourceConfigJSON struct {
 }
 
 // 业务错误。
+//
+// 2026-07-10 增:语义拆分。
+// ErrRemoteNotFound 是「资源真的不存在」(典型:上游 404 / cos 404 / zip parse 失败);
+// ErrSkillMalformed 是「资源存在但文件格式有问题」(典型:zip 解压 OK 但 SKILL.md 缺
+// frontmatter / 内容空 / yaml 解析失败)。两者之前都合并在 ErrRemoteNotFound,
+// 前端文案统一成「该 skill 不存在」对「文件坏了」是误报,应区分。
+//
+// HTTP status:
+//   - ErrRemoteNotFound → 404 「找不到」
+//   - ErrSkillMalformed → 422 「文件格式有问题」
 var (
-	ErrSourceNotFound  = errors.New("skillmarket: source not found")
-	ErrSourceDisabled  = errors.New("skillmarket: source disabled")
-	ErrSourceNotImpl   = errors.New("skillmarket: source not implemented")
-	ErrRemoteNotFound  = errors.New("skillmarket: remote skill not found")
-	ErrRemoteFetchFail = errors.New("skillmarket: remote fetch failed")
-	ErrEmptyRemoteID   = errors.New("skillmarket: empty remote id")
+	ErrSourceNotFound   = errors.New("skillmarket: source not found")
+	ErrSourceDisabled   = errors.New("skillmarket: source disabled")
+	ErrSourceNotImpl    = errors.New("skillmarket: source not implemented")
+	ErrRemoteNotFound   = errors.New("skillmarket: remote skill not found")
+	ErrSkillMalformed   = errors.New("skillmarket: skill malformed")
+	ErrRemoteFetchFail  = errors.New("skillmarket: remote fetch failed")
+	ErrEmptyRemoteID    = errors.New("skillmarket: empty remote id")
 )
 
 // MarketItem 列表里的一项(只列轻量字段;详情走 Detail)。

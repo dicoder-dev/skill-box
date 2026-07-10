@@ -388,25 +388,20 @@ async function doInstall(input, conflictMode) {
     if (status === 400) {
       installError.value = t('market.input.errInvalidInput')
     } else if (status === 404) {
-      // 2026-07-10 改:404 区分两种:
-      //  - 服务器 err 字符串含 "remote (skill )?not found" / "remote fetch not found"
-      //    → 走 errSkillNotFound(具体 skill/slug 找不到)
-      //  - 其它(典型 errSource:source 未注册 / source_id 解析失败等)
-      //
-      // 历史改动:后端 source 文案是 "skillmarket: source not found" 等,
-      // skill 文案是 "skillmarket: remote (skill )?not found: <slug>",
-      // 用更宽松的正则匹配避免跟前端文案不对齐。
+      // 2026-07-10 改:404 → errSkillNotFound(slug 真的找不到)
       const errTxt = String(data?.error || msg || '')
-      if (/remote (skill )?(fetch )?not found/i.test(errTxt)) {
-        installError.value = t('market.input.errSkillNotFound', { msg: errTxt })
-        // 2026-07-10 改:ErrRemoteNotFound 通常对应后端 zip parse 失败
-        // (下载成功但内容无效),把进度条 lastFailedStage 也改成 'extract',
-        // 让用户看到「解压并校验」阶段出错而不是「下载阶段」误导。
-        lastFailedStage.value = 'extract'
-        progressStage.value = 'extract'
-      } else {
-        installError.value = t('market.input.errSource')
-      }
+      installError.value = t('market.input.errSkillNotFound', { msg: errTxt })
+      lastFailedStage.value = 'extract'
+      progressStage.value = 'extract'
+    } else if (status === 422) {
+      // 2026-07-10 改:422 → errSkillMalformed(slug 存在但 SKILL.md 文件有问题)
+      // 跟 404 区分:422 = 文件坏了(找作者反馈),404 = 不存在(换别的 skill)
+      const errTxt = String(data?.error || msg || '')
+      installError.value = t('market.input.errSkillMalformed', { msg: errTxt })
+      lastFailedStage.value = 'extract'
+      progressStage.value = 'extract'
+    } else if (status === 400 && /source/i.test(String(data?.error || msg))) {
+      installError.value = t('market.input.errSource')
     } else if (/timeout/i.test(msg)) {
       // 前端 15s/60s timeout 触发
       installError.value = t('market.input.errTimeout', { msg })

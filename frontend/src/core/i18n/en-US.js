@@ -441,8 +441,13 @@ const messages = {
       btnInstalling: 'Installing…',
       errInvalidInput: 'Unrecognized input. Each tab only accepts its own market\'s detail URL.',
       errSource: 'Market source not found',
-      // 2026-07-10: slug not found (404) — surfaced distinctly from generic "download failed"
-      errSkillNotFound: 'Skill not found (slug typo or upstream removed). Verify the URL and retry: {msg}',
+      // 2026-07-10: 422 — skill exists in upstream but SKILL.md is malformed
+      // (典型:missing frontmatter / empty / zip not parseable).
+      errSkillMalformed: 'Skill file is malformed ({msg}). Likely: author skipped the frontmatter, uploaded empty SKILL.md, or the zip is corrupt. This skill cannot be installed right now.',
+      // 2026-07-10 改:404 细分 ——
+      // - errSkillNotFound(slug typo / upstream removed)
+      // - errSkillMalformed(走 422,文案见上)
+      errSkillNotFound: 'Skill not found ({msg}). Likely: slug typo or upstream removed. Verify the URL and retry.',
       errPull: 'Download failed: {msg}',
       // 2026-07-09: separate timeout message
       errTimeout: 'Request timeout (slow backend download): {msg}. Try again, or download manually and import locally.',

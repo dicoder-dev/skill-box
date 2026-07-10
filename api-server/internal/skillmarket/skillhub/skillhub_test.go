@@ -809,8 +809,72 @@ func TestDownload_NonZipBody(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-zip body")
 	}
-	if !errors.Is(err, skillmarket.ErrRemoteNotFound) {
-		t.Fatalf("expected ErrRemoteNotFound (user-facing: skill 找不到), got %v", err)
+	// 2026-07-10 改:200 + 非 zip body 在 downloadViaZip 第二段被
+	// zip.NewReader 拒绝,语义上「资源存在但文件坏了」→ ErrSkillMalformed。
+	// (前一轮这块走 ErrRemoteNotFound,但区分 NotFound vs Malformed 后归 Malformed)
+	if !errors.Is(err, skillmarket.ErrSkillMalformed) {
+		t.Fatalf("expected ErrSkillMalformed (file broken), got %v", err)
+	}
+}
+
+// TestDownload_ParseSkillMDFailure 2026-07-10 增:zip 能拉到但 SKILL.md
+// 缺 frontmatter(典型「作者发布时漏 metadata」场景),
+// 应该走 ErrSkillMalformed,跟 ErrRemoteNotFound(找不到)区分开。
+//
+// 同时这是用户反馈 ima-skills / topnews 报「下载失败」的真实根因,
+// 之前代码 wrap 成 ErrRemoteFetchFail 误导用户;现在 ErrSkillMalformed
+// + 422 + 前端 errSkillMalformed 文案「该 skill 文件格式有问题」。
+func TestDownload_ParseSkillMDFailure(t *testing.T) {
+	zipServer := newZipMockServerFiles(t, map[string]string{
+		// 没 frontmatter 的 SKILL.md — 是 ima-skills / topnews 等 skill
+		// 上游的实际形态:zip 里有 SKILL.md,但没 `---` 开头。
+		"skills/broken-skill/1.0.0/SKILL.md": "# broken-skill\n正文内容\n",
+	})
+	defer zipServer.Close()
+
+	noRedir := &http.Client{
+		Transport: &fakeRT{responses: map[string]fakeResp{
+			"/api/v1/download": {
+				status:     302,
+				redirectTo: zipServer.URL + "/broken-skill-1.0.0.zip",
+			},
+		}},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	a := NewWithClients(noRedir, nil)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "broken-skill")
+	if err == nil {
+		t.Fatal("expected error for SKILL.md missing frontmatter")
+	}
+	if !errors.Is(err, skillmarket.ErrSkillMalformed) {
+		t.Fatalf("expected ErrSkillMalformed (file broken), got %v", err)
+	}
+}
+
+// TestDownload_SkillMDEmpty 2026-07-10 增:zip 里 SKILL.md 内容为空
+// (典型:作者上传了空文件),同样走 ErrSkillMalformed。
+func TestDownload_SkillMDEmpty(t *testing.T) {
+	zipServer := newZipMockServerFiles(t, map[string]string{
+		"skills/empty-skill/1.0.0/SKILL.md": "",
+	})
+	defer zipServer.Close()
+
+	noRedir := &http.Client{
+		Transport: &fakeRT{responses: map[string]fakeResp{
+			"/api/v1/download": {
+				status:     302,
+				redirectTo: zipServer.URL + "/empty-skill-1.0.0.zip",
+			},
+		}},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	a := NewWithClients(noRedir, nil)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "empty-skill")
+	if err == nil {
+		t.Fatal("expected error for empty SKILL.md")
+	}
+	if !errors.Is(err, skillmarket.ErrSkillMalformed) {
+		t.Fatalf("expected ErrSkillMalformed, got %v", err)
 	}
 }
 

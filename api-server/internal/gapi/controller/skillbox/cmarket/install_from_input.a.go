@@ -79,6 +79,14 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 			// 2026-07-10 增:slug 不存在(典型如用户粘贴错 URL / slug 已下架),
 			// 返 404 + 错误信息精确。前端根据 404 + err 信息命中「errSkillNotFound」文案。
 			c.JSON(404, gin.H{"error": err.Error()})
+		case errors.Is(err, skillmarket.ErrSkillMalformed):
+			// 2026-07-10 增:skill 在上游存在(zip 能拉到),但 SKILL.md 文件格式
+			// 有问题(典型:缺 frontmatter / 内容空 / zip 不合法)。
+			// 跟 ErrRemoteNotFound 区分 ——
+			// - 404 「找不到」 → 换别的 skill 试试
+			// - 422 「文件坏了」 → 该 skill 作者发布时漏了 metadata,找作者反馈
+			// 前端在 422 状态码 + err 信息含 "malformed" 时走 errSkillMalformed 文案。
+			c.JSON(422, gin.H{"error": err.Error()})
 		case errors.Is(err, smarket.ErrSkillAlreadyExists):
 			// 2026-07-09 增:同名冲突,返 409 + 现有 skill 信息(让前端弹覆盖确认)。
 			// 即使 err != nil 也要把 out 返回(里面含 conflict_existing_* 字段),
