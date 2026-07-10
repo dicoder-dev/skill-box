@@ -191,6 +191,15 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
       }
       const resp = await apiListSkills({ keyword: keyword.value || undefined, page: 1, size: 1000 })
       tree.value = resp?.tree || []
+      // 2026-07-10 改:首页分组默认折叠。
+      // 原因:用户反馈首次进入首页时所有 group 处于展开状态,树又长又乱。
+      // 这里在 load 完成且非搜索模式下,把 tree 中所有 group path 收集到 collapsedPaths,
+      // 实现"默认全折叠"。Set 的 add 是幂等的,reload/手动展开过的 group 也会被覆盖折叠,
+      // 这是用户主动选择的产品策略(刷新即重置为折叠初始态),不算 bug。
+      // 搜索时走 autoExpandMatchedPaths 自动展开匹配路径,不受本逻辑影响。
+      if (!keyword.value) {
+        collapseAllGroups()
+      }
       // 搜索时:自动展开匹配路径(让结果可见)
       if (keyword.value) {
         autoExpandMatchedPaths()
@@ -200,6 +209,21 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // 2026-07-10 增:把 tree 中所有 group path 全部加入 collapsedPaths(默认折叠)。
+  // 跟 autoExpandMatchedPaths 互为反向操作 — 一个展开匹配组,一个折叠全部组。
+  // 抽出独立函数,便于未来 toggle 默认行为的开关(比如加个 "默认展开" 设置项)。
+  function collapseAllGroups() {
+    const paths = new Set()
+    const collectGroupPaths = (node, out) => {
+      if (!node.is_group) return
+      out.add(node.path)
+      for (const c of node.children || []) collectGroupPaths(c, out)
+    }
+    for (const n of tree.value || []) collectGroupPaths(n, paths)
+    // 整体替换(触发响应式),而不是逐个 add
+    collapsedPaths.value = new Set(paths)
   }
 
   // 自动展开所有包含匹配 skill 的分组(搜索时用)
@@ -452,6 +476,8 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     // actions
     load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup,
     toggleCollapse, setSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
+    // 2026-07-10 增:折叠/展开所有分组的批量操作
+    collapseAllGroups,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,
     // 2026-07-08 增:首页默认打开第一个技能 — 根下首个 skill 叶子,fallback 到首个 group 内的首个 skill
