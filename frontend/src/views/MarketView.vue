@@ -399,6 +399,11 @@ async function doInstall(input, conflictMode) {
       const errTxt = String(data?.error || msg || '')
       if (/remote (skill )?(fetch )?not found/i.test(errTxt)) {
         installError.value = t('market.input.errSkillNotFound', { msg: errTxt })
+        // 2026-07-10 改:ErrRemoteNotFound 通常对应后端 zip parse 失败
+        // (下载成功但内容无效),把进度条 lastFailedStage 也改成 'extract',
+        // 让用户看到「解压并校验」阶段出错而不是「下载阶段」误导。
+        lastFailedStage.value = 'extract'
+        progressStage.value = 'extract'
       } else {
         installError.value = t('market.input.errSource')
       }
