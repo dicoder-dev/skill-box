@@ -23,6 +23,7 @@ import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
 import { updateSkill, getStoreInfo } from '@/api/skillbox/skills'
+import { useMdOutlineVisible } from '@/core/composables/useMdOutlineVisible'
 import { useToastStore } from '@/core/store/toast'
 
 // 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
@@ -56,6 +57,13 @@ const LABEL_FILES = 'files'
 const LABEL_FRONTMATTER_TITLE = '查看 frontmatter'
 const LABEL_RENDER_ERROR_TITLE = '技能详情加载出错'
 const LABEL_RETRY = '重试'
+
+// 2026-07-10 增:大纲面板显隐(全局状态,localStorage 持久化,跨文件保留)。
+// CodeViewer 内部大纲渲染也读同一个 composable 状态,这里顶栏按钮和大纲
+// header 内的 toggle 是同一份状态,两边都能控制。
+const LABEL_OUTLINE_SHOW = '显示大纲'
+const LABEL_OUTLINE_HIDE = '隐藏大纲'
+const { outlineVisible, toggleOutline } = useMdOutlineVisible()
 
 const toast = useToastStore()
 
@@ -716,6 +724,24 @@ defineExpose({
             @click="setMode(props.skill?.name, selectedFile.path, 'edit')"
           >
             <IconPark icon="Edit" width="14" height="14" />
+          </button>
+          <!-- 2026-07-10 增:大纲面板显隐按钮,跟编辑按钮同组(右侧),用同样的 sfip-mode-btn
+               风格。状态走 useMdOutlineVisible,跟 CodeViewer 内大纲 header 共享。
+               图标根据当前状态切换:已展开 → 折叠图标(暗示"点我收起"),
+               已收起 → 展开图标(暗示"点我展开"),让用户一目了然。
+               data-tip 同步切换文案。 -->
+          <button
+            v-if="selectedFile?.path && currentMode === 'view'"
+            class="sfip-mode-btn"
+            :data-tip="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
+            :aria-label="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
+            @click="toggleOutline"
+          >
+            <IconPark
+              :icon="outlineVisible ? 'mdi:bookmark-minus-outline' : 'mdi:bookmark-plus-outline'"
+              width="14"
+              height="14"
+            />
           </button>
           <!-- 2026-07-08 改:删掉"返回预览"按钮(原 mode=edit 分支)。
                用户决定编辑后只能一直编辑,通过"放弃修改"或"保存"按钮离开编辑态。

@@ -25,6 +25,7 @@ import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
 import { loadMonaco, isDark } from '@/core/composables/useMonaco'
+import { useMdOutlineVisible } from '@/core/composables/useMdOutlineVisible'
 // highlight.js 用于只读视图高亮(全量包, 384 语言)。
 import hljs from 'highlight.js'
 
@@ -96,6 +97,10 @@ const minHeadingLevel = computed(() => {
   if (!mdHeadings.value.length) return 1
   return Math.min(...mdHeadings.value.map((h) => h.level))
 })
+
+// 2026-07-10 增:大纲面板全局显示状态(composable 内 localStorage 持久化,
+// 跨文件 + 跨刷新保留)。用户收起后,打开其他 md 文件默认也是隐藏的。
+const { outlineVisible, toggleOutline } = useMdOutlineVisible()
 
 function onMdClick(e) {
   handleExternalClick(e)
@@ -342,7 +347,9 @@ const lineNumbers = computed(() => {
     <!-- Markdown:可编辑用 Tiptap,只读用 v-html。
          2026-07-10 改:只读视图额外渲染右侧大纲导航(mdHeadings 提取的 h1-h6 列表),
          点击大纲项 scrollIntoView 跳转到对应标题。布局走两列:左侧 md 内容(占满),
-         右侧 220px 固定宽大纲(只在有标题时才显示),避免短 md 文件出现空 panel。
+         右侧 220px 固定宽大纲(只在有标题 + outlineVisible 时显示)。
+         2026-07-10 改 v2:大纲面板可收起(由 useMdOutlineVisible 全局状态控制,
+         localStorage 持久化),header 右上角加切换按钮。
          编辑模式不显示大纲(由 Tiptap 自己管 outline,避免冲突)。 -->
     <div v-else-if="isMarkdown" class="cv-md-wrap">
       <div class="cv-md-content">
@@ -362,18 +369,29 @@ const lineNumbers = computed(() => {
           @click="onMdClick"
         />
       </div>
-      <aside v-if="!editable && mdHeadings.length" class="cv-md-outline">
+      <aside
+        v-if="!editable && mdHeadings.length && outlineVisible"
+        class="cv-md-outline"
+      >
         <header class="cv-md-outline-header">
           <IconPark icon="mdi:format-list-bulleted" width="13" height="13" />
           <span>大纲</span>
           <span class="cv-md-outline-count">{{ mdHeadings.length }}</span>
+          <button
+            type="button"
+            class="cv-md-outline-toggle"
+            data-tip="收起大纲"
+            aria-label="收起大纲"
+            @click="toggleOutline"
+          >
+            <IconPark icon="mdi:chevron-right" width="14" height="14" />
+          </button>
         </header>
         <ul class="cv-md-outline-list">
           <li
             v-for="h in mdHeadings"
             :key="h.id"
             :class="['cv-md-outline-item', `cv-md-outline-l${h.level - minHeadingLevel + 1}`]"
-            :data-tip="h.text"
           >
             <button
               type="button"
@@ -498,12 +516,14 @@ const lineNumbers = computed(() => {
   flex-direction: column;
 }
 
-/* 2026-07-10 增:md 大纲导航(右侧固定列)。 */
+/* 2026-07-10 增:md 大纲导航(右侧固定列)。
+   2026-07-10 改 v2:背景改纯白(用户偏好简洁白底),左侧分隔线更明显,
+   整体视觉跟站点主色(--bg-card)统一。滚动条用自定义 webkit 样式做美化。 */
 .cv-md-outline {
   flex-shrink: 0;
   width: 220px;
   border-left: 1px solid var(--border);
-  background: var(--bg-subtle);
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -512,14 +532,14 @@ const lineNumbers = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px 10px 8px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
+  background: #ffffff;
   position: sticky;
   top: 0;
   z-index: 1;
@@ -533,17 +553,61 @@ const lineNumbers = computed(() => {
   text-transform: none;
   color: var(--text-faint);
   padding: 1px 6px;
-  background: var(--bg);
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: 999px;
+}
+/* 2026-07-10 增:header 内的收起按钮(小尺寸,跟 count 徽章风格统一,hover 变蓝) */
+.cv-md-outline-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.cv-md-outline-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent-blue);
+  border-color: var(--border);
 }
 .cv-md-outline-list {
   list-style: none;
   margin: 0;
   padding: 6px 0;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
+  /* 2026-07-10 增:自定义 webkit 滚动条(更细、更柔和的灰,鼠标 hover 时变深) */
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+.cv-md-outline-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.cv-md-outline-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cv-md-outline-list::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 999px;
+  border: 1px solid #ffffff;
+}
+.cv-md-outline-list::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+.cv-md-outline-list::-webkit-scrollbar-corner {
+  background: transparent;
 }
 .cv-md-outline-item {
   list-style: none;
@@ -596,8 +660,8 @@ const lineNumbers = computed(() => {
 .cv-md-outline-text {
   flex: 1;
   min-width: 0;
-  /* 2026-07-10 改:大纲标题单行截断 + tooltip 浮全名(用 :data-tip 模式靠 title 属性兜底,
-     CSS 部分用 white-space + text-overflow 控制视觉) */
+  /* 2026-07-10 改:大纲标题单行截断 + title 属性兜底浮全名,
+     CSS 部分用 -webkit-line-clamp 控制视觉 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
