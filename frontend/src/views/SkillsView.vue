@@ -95,14 +95,18 @@ const editError = ref('')             // 校验错误
 const editSaving = ref(false)         // 保存中
 
 function startInlineEdit() {
+  // 2026-07-10 改:点击详情区顶栏"编辑"按钮不再进入原来的内联编辑态
+  // (description + triggersText textarea + RichTextEditor body),改为打开
+  // InlinePanel 的 frontmatter 表单弹窗(openFrontmatterEditor)。表单里包含
+  // name/version/description/author/license/triggers,触发词是动态列表。
+  // body 编辑仍走 SkillFileInlinePanel 内的 CodeViewer / RichTextEditor —
+  // "放弃修改 / 保存"按钮还在,只是 frontmatter 元数据走单独的表单弹窗。
   if (!current.value) return
-  editBody.value = currentBody.value || ''
-  editDescription.value = currentMeta.description || ''
-  // 触发词编辑态:把数组转成"逗号分隔"的纯文本,用户改完再 split 回去
-  // 2026-06-26 改:默认用逗号作为分隔符(换行作为兜底也支持)
-  editTriggersText.value = (currentMeta.triggers || []).join(', ')
-  editError.value = ''
-  editing.value = true
+  if (inlinePanelRef.value && typeof inlinePanelRef.value.openFrontmatterEditor === 'function') {
+    inlinePanelRef.value.openFrontmatterEditor()
+  } else {
+    toast.error('编辑器尚未就绪,请稍候再试')
+  }
 }
 function cancelInlineEdit() {
   editing.value = false
@@ -254,6 +258,23 @@ async function onDrawerSaved({ path, content }) {
   // SkillFileInlinePanel,InlinePanel 内部自管 scope-status,这里只派发
   // skillbox:scope-refresh 事件通知它重拉(InlinePanel 在 onMounted 监听该事件)。
   window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
+}
+
+// 2026-07-10 增:InlinePanel 表单弹窗"新建"完成后 emit('created') 回调。
+// 流程:reload 列表(新建的 skill 在 home store 落了盘)→ 找到新 skill 的 row → 选中它
+// → 弹 toast 提示。
+async function onInlinePanelCreated({ payload, response, name, version }) {
+  try {
+    await reload()
+    // 用 path 匹配(支持多级分组下同名 skill)
+    const expectedPath = (payload.group_path ? payload.group_path + '/' : '') + name
+    const row = items.value.find((x) => x.path === expectedPath)
+      || items.value.find((x) => x.name === name && x.version === version)
+    if (row) await selectItem(row)
+    toast.success(`已创建 ${name}@${version}`)
+  } catch (e) {
+    toast.error(`新建完成但刷新失败: ${e?.message || String(e)}`)
+  }
 }
 
 // 2026-06-25 二改:skillKey 改为只取 name(后端 listSkills 不返回 scope/project_id,
@@ -663,17 +684,25 @@ const editorProjects = ref([])
 const editorProjectsLoading = ref(false)
 
 function startNew() {
-  Object.assign(draft, {
-    scope: 'global', project_id: 0, name: '', version: '0.1.0',
-    description: '', triggers: [],
-    body: '',
-    applyTools: [],
+  // 2026-07-10 改:点击左侧 + 新建 skill → 打开 InlinePanel 的 frontmatter 表单弹窗
+  // (openAsNew),不再走旧的 editorOpen 弹窗。InlinePanel 内部会清空 fmForm 字段,
+  // 用户在表单里填 name/version/description/triggers,保存走 createSkill。
+  if (!inlinePanelRef.value || typeof inlinePanelRef.value.openAsNew !== 'function') {
+    // 兜底:InlinePanel 还没 mount(刚进首页空状态),弹个 toast 提示
+    toast.error('编辑器尚未就绪,请稍候再试')
+    return
+  }
+  inlinePanelRef.value.openAsNew({
+    name: '',
+    version: '0.1.0',
+    description: '',
+    triggers: [],
+    author: '',
+    license: '',
+    scope: 'global',
+    project_id: 0,
+    source: 'local',
   })
-  editingKey.value = null
-  error.value = ''
-  editorOpen.value = true
-  // 弹窗打开时拉一次项目列表(scope=project 才需要,但提前拉好)
-  loadEditorProjects()
 }
 
 // 2026-07-10 增:触发词动态列表的操作函数(新建/编辑弹窗复用同一份数据)。
@@ -1639,7 +1668,12 @@ onUnmounted(() => {
 
     <!-- 右侧:技能详情 -->
     <section class="detail-pane">
-      <!-- 空状态 -->
+      <!-- 2026-07-10 改:InlinePanel 在 detail-body section 里永远 mount(见下)。
+           顶部 detail-pane 不再额外 mount 一份,避免重复组件实例 + ref 指向混乱。
+           详情区空状态由 detail-empty div 独立渲染(没 current 时),跟 InlinePanel
+           不冲突:InlinePanel 内部没 currentFiles 时显示 "请选择一个文件" 占位。 -->
+
+      <!-- 空状态(没 current 时显示) -->
       <div v-if="!current" class="detail-empty">
         <!-- 2026-07-08 改:空状态分两种 — 库里完全没技能时引导新建/导入;
              有技能但未选中时(用户主动取消选中)仍是原"从左侧选一个"提示。 -->
@@ -1664,171 +1698,120 @@ onUnmounted(() => {
         </template>
       </div>
 
-      <template v-else>
-
-
-        <!-- 2026-06-26 新增:编辑态的描述/触发词 编辑区移到 toolbar 外,
-             变成 detail-pane 下的独立 section,跟其他 detail-section 一样占满整页宽度
-             (放在 toolbar 内会被原来的 detail-actions(6 个图标按钮)挤掉 35% 宽度) -->
-        <section v-if="editing" class="detail-section detail-edit-fields">
-          <div class="editor-field-full">
-            <label>{{ t('skills.editor.description') }} <small>({{ t('skills.editor.descriptionHint') }})</small></label>
-            <textarea
-              v-model="editDescription"
-              class="desc-editor"
-              rows="2"
-              spellcheck="false"
-              :placeholder="t('skills.editor.descriptionHint')"
-              :disabled="editSaving"
-            ></textarea>
-          </div>
-          <div class="editor-field-full">
-            <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
-            <textarea
-              v-model="editTriggersText"
-              class="triggers-editor"
-              rows="1"
-              spellcheck="false"
-              :placeholder="t('skills.editor.triggersHintPlaceholder')"
-              :disabled="editSaving"
-            ></textarea>
-          </div>
-          <p v-if="editError" class="message message-error">
-            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-            {{ editError }}
-          </p>
-        </section>
-
-        <p v-if="openError" class="message message-error">
-          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-          {{ openError }}
-        </p>
-
-        <!-- 2026-07-07 改:scope 区整段删除,已搬到 SkillFileInlinePanel 左栏顶部。
-             旧版"工具行 + 作用域行"两行 chip 现在改为 InlinePanel 内部的
-             "以工具为父级分组,展开后竖向列出生效位置"折叠树。 -->
-
-
-        <!-- 标签 section:2026-06-25 改 — 不再展示 chip 列表,改为点击版本号弹出标签弹窗。
-             section 本身保留,只显示一行说明 + "管理"按钮占位也行,但用户只要求"不打 tag 部分显示"。
-             直接整段删掉,标签入口只剩顶栏的 tag-outline 按钮和 detail-version 点击。 -->
-
-        <!-- 2026-06-25 改:触发词已搬到 description 下方行内展示,触发词 + 更新时间 独立 section 删除。
-             更新时间挪到 detail-toolbar 标题行右侧,作为次要信息展示。 -->
-
-        <!-- 2026-07-04 改 v2:正文区直接换成 SkillFileInlinePanel(目录树 + 预览/编辑),
-             不再单独渲染 SKILL.md。SKILL.md 现在是文件树里的一个文件,
-             点开就在右侧预览/编辑。
-             2026-07-08 改 v3 加 :key="currentIdentity" — 每次切 skill 直接重建 InlinePanel,
-             setup 重跑 → currentEditingPath 默认空,根本进不去残留 edit 模式。
-             这是最暴力的"绝对兜底":不要在 setup 之外靠 cleanup 函数 / 检测清理
-             路径,直接让组件实例彻底重建,初始状态保证空。 -->
-        <section class="detail-section detail-body">
-          <SkillFileInlinePanel
-            v-if="current && currentFiles.length"
-            :key="currentIdentity"
-            ref="inlinePanelRef"
-            :files="currentFiles"
-            :skill="{
-              name: current.name,
-              version: current.version,
-              scope: current.scope,
-              project_id: current.project_id,
-              source: current.source,
-              group_path: current.group_path,
-              canonical: current._full?.canonical,
-            }"
-            @saved="onDrawerSaved"
-          >
-            <!-- 2026-07-07 改 v3:把"编辑 / 取消 / 保存"按钮搬到 InlinePanel 面包屑行内,
-                 跟 [i] 信息按钮同一栏、[i] 左侧依次排列(渲染顺序:name-actions → actions → [i])。
-                 这些按钮控制当前 skill 的内联编辑态,state 在 SkillsView 侧,slot 形式透传。 -->
-            <template #name-actions>
+      <!-- 2026-07-10 改:InlinePanel 永远 mount(v-show 控制可见性),
+           放 detail-pane 顶层(在 detail-empty 之上)。
+           原因:startNew / startInlineEdit 需要 inlinePanelRef 调 openAsNew /
+           openFrontmatterEditor,空状态下 inlinePanelRef 不可用就没法弹表单弹窗。
+           改成永远 mount,空状态时 v-show=false 隐藏,ref 仍可用。
+           :key="currentIdentity" 切 skill 时重建 InlinePanel 实例,
+           保证 currentEditingPath 不残留。 -->
+      <section class="detail-section detail-body" v-show="!!current">
+        <SkillFileInlinePanel
+          :key="currentIdentity"
+          ref="inlinePanelRef"
+          :files="currentFiles"
+          :skill="{
+            name: current?.name || '',
+            version: current?.version || '',
+            scope: current?.scope || 'global',
+            project_id: current?.project_id || 0,
+            source: current?.source || 'local',
+            group_path: current?.group_path || '',
+            canonical: current?._full?.canonical,
+          }"
+          @saved="onDrawerSaved"
+          @created="onInlinePanelCreated"
+        >
+          <!-- 2026-07-07 改 v3:把"编辑 / 取消 / 保存"按钮搬到 InlinePanel 面包屑行内,
+               跟 [i] 信息按钮同一栏、[i] 左侧依次排列(渲染顺序:name-actions → actions → [i])。
+               这些按钮控制当前 skill 的内联编辑态,state 在 SkillsView 侧,slot 形式透传。 -->
+          <template #name-actions>
+            <button
+              v-if="!editing"
+              class="ghost-link sfip-name-action-edit"
+              :title="t('common.edit')"
+              :data-tip="t('common.edit')"
+              @click="startInlineEdit"
+            >
+              <IconPark icon="mdi:pencil" width="12" height="12" />
+              {{ t('common.edit') }}
+            </button>
+            <template v-else>
               <button
-                v-if="!editing"
-                class="ghost-link sfip-name-action-edit"
-                :title="t('common.edit')"
-                :data-tip="t('common.edit')"
-                @click="startInlineEdit"
+                class="title-action-btn title-action-cancel"
+                :disabled="editSaving"
+                :title="t('common.cancel')"
+                :data-tip="t('common.cancel')"
+                @click="cancelInlineEdit"
               >
-                <IconPark icon="mdi:pencil" width="12" height="12" />
-                {{ t('common.edit') }}
-              </button>
-              <template v-else>
-                <button
-                  class="title-action-btn title-action-cancel"
-                  :disabled="editSaving"
-                  :title="t('common.cancel')"
-                  :data-tip="t('common.cancel')"
-                  @click="cancelInlineEdit"
-                >
-                  <IconPark icon="mdi:close" width="12" height="12" />
-                  {{ t('common.cancel') }}
-                </button>
-                <button
-                  class="title-action-btn title-action-save"
-                  :disabled="editSaving"
-                  :title="t('common.save')"
-                  :data-tip="editSaving ? t('common.processing') : t('common.save')"
-                  @click="saveInlineEdit"
-                >
-                  <span v-if="editSaving" class="spinner spinner-sm"></span>
-                  <IconPark v-else icon="mdi:content-save" width="12" height="12" />
-                  {{ editSaving ? t('common.processing') : t('common.save') }}
-                </button>
-              </template>
-            </template>
-            <!-- 2026-07-07 改:右上角 5 个图标操作搬到这里,跟 [i] 信息按钮同一栏,
-                 顺序 [测试 | 标签 | 在文件夹打开 | 删除 | AI] 在 [i] 左侧依次排列。
-                 数据流向不变,@click / :data-tip / :disabled 都保留原语义。 -->
-            <template #actions>
-              <button
-                class="icon-btn"
-                :data-tip="t('skills.list.tooltipTest')"
-                :aria-label="t('skills.list.tooltipTest')"
-                :disabled="testing"
-                @click="triggerTest"
-              >
-                <span v-if="testing" class="spinner spinner-sm"></span>
-                <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
+                <IconPark icon="mdi:close" width="12" height="12" />
+                {{ t('common.cancel') }}
               </button>
               <button
-                class="icon-btn"
-                :data-tip="t('skills.list.tooltipTag')"
-                :aria-label="t('skills.list.tooltipTag')"
-                @click="openTagDialog"
+                class="title-action-btn title-action-save"
+                :disabled="editSaving"
+                :title="t('common.save')"
+                :data-tip="editSaving ? t('common.processing') : t('common.save')"
+                @click="saveInlineEdit"
               >
-                <IconPark icon="mdi:tag-outline" width="15" height="15" />
-              </button>
-              <button
-                class="icon-btn"
-                :data-tip="t('skills.list.tooltipOpenFolder')"
-                :aria-label="t('skills.list.tooltipOpenFolder')"
-                @click="openInFolder"
-              >
-                <IconPark icon="mdi:folder-outline" width="15" height="15" />
-              </button>
-              <button
-                class="icon-btn"
-                :data-tip="t('skills.list.tooltipDelete')"
-                :aria-label="t('skills.list.tooltipDelete')"
-                @click="removeCurrent"
-              >
-                <IconPark icon="mdi:delete" width="15" height="15" />
-              </button>
-              <button
-                class="icon-btn ai-btn"
-                :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-                :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-                @click="toggleAI"
-              >
-                <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="15" height="15" />
+                <span v-if="editSaving" class="spinner spinner-sm"></span>
+                <IconPark v-else icon="mdi:content-save" width="12" height="12" />
+                {{ editSaving ? t('common.processing') : t('common.save') }}
               </button>
             </template>
-          </SkillFileInlinePanel>
-          <p v-else-if="!currentFiles.length && !currentLoading" class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
-        </section>
-      </template>
+          </template>
+          <!-- 2026-07-07 改:右上角 5 个图标操作搬到这里,跟 [i] 信息按钮同一栏,
+               顺序 [测试 | 标签 | 在文件夹打开 | 删除 | AI] 在 [i] 左侧依次排列。
+               数据流向不变,@click / :data-tip / :disabled 都保留原语义。 -->
+          <template #actions>
+            <button
+              class="icon-btn"
+              :data-tip="t('skills.list.tooltipTest')"
+              :aria-label="t('skills.list.tooltipTest')"
+              :disabled="testing"
+              @click="triggerTest"
+            >
+              <span v-if="testing" class="spinner spinner-sm"></span>
+              <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
+            </button>
+            <button
+              class="icon-btn"
+              :data-tip="t('skills.list.tooltipTag')"
+              :aria-label="t('skills.list.tooltipTag')"
+              @click="openTagDialog"
+            >
+              <IconPark icon="mdi:tag-outline" width="15" height="15" />
+            </button>
+            <button
+              class="icon-btn"
+              :data-tip="t('skills.list.tooltipOpenFolder')"
+              :aria-label="t('skills.list.tooltipOpenFolder')"
+              @click="openInFolder"
+            >
+              <IconPark icon="mdi:folder-outline" width="15" height="15" />
+            </button>
+            <button
+              class="icon-btn"
+              :data-tip="t('skills.list.tooltipDelete')"
+              :aria-label="t('skills.list.tooltipDelete')"
+              @click="removeCurrent"
+            >
+              <IconPark icon="mdi:delete" width="15" height="15" />
+            </button>
+            <button
+              class="icon-btn ai-btn"
+              :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
+              :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
+              @click="toggleAI"
+            >
+              <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="15" height="15" />
+            </button>
+          </template>
+        </SkillFileInlinePanel>
+        <p v-if="!currentFiles.length && !currentLoading" class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
+      </section>
+
+      <!-- 空状态(没 current 时显示) -->
     </section>
 
     <!-- AI 侧栏 -->

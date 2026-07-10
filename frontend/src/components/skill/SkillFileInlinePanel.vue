@@ -22,7 +22,7 @@ import Modal from '@/components/Modal.vue'
 import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
-import { updateSkill, getStoreInfo } from '@/api/skillbox/skills'
+import { updateSkill, createSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { useMdOutlineVisible } from '@/core/composables/useMdOutlineVisible'
 import { useToastStore } from '@/core/store/toast'
 
@@ -54,7 +54,7 @@ const LABEL_DISCARD = '放弃修改'
 const LABEL_SAVE = '保存'
 const LABEL_SAVING = '保存中...'
 const LABEL_FILES = 'files'
-const LABEL_FRONTMATTER_TITLE = '编辑 frontmatter'
+const LABEL_FRONTMATTER_TITLE = '查看 frontmatter'
 const LABEL_RENDER_ERROR_TITLE = '技能详情加载出错'
 const LABEL_RETRY = '重试'
 
@@ -445,10 +445,17 @@ function parseFrontmatter(text) {
 
 const hasFrontmatter = computed(() => Object.keys(frontmatter.value).length > 0)
 const fmOpen = ref(false)
-function openFrontmatter() {
-  // 2026-07-10 改:打开弹窗时把当前 frontmatter 的字段拷到 fmForm,
-  // 触发词转成数组(原 parseFrontmatter 已经把 [a,b,c] 解成数组)。
-  // 这样弹窗关闭再打开永远是最新值,用户改一半关掉也不会污染下次打开。
+// 2026-07-10 改:openFrontmatter 现在只读 — 弹窗是"信息"按钮(原"班级按钮"),只展示
+// frontmatter 内容(走回原只读表格)。"编辑"按钮(铅笔)改触发 editFmOpen 表单弹窗。
+function openFrontmatter() { fmOpen.value = true }
+function closeFrontmatter() { fmOpen.value = false }
+
+// 2026-07-10 增:frontmatter 表单编辑弹窗(独立开关,跟只读 fmOpen 共存但互斥)。
+// 由 SkillsView 传下来的 #name-actions 槽里的"编辑"按钮触发,复用 fmForm /
+// saveFrontmatterForm,写回走 updateSkill。
+const editFmOpen = ref(false)
+function openFrontmatterEditor() {
+  // 跟 openFrontmatter 一样的字段初始化逻辑
   fmFormError.value = ''
   fmFormSaving.value = false
   const fm = frontmatter.value
@@ -457,12 +464,34 @@ function openFrontmatter() {
   fmForm.description = typeof fm.description === 'string' ? fm.description : ''
   fmForm.author = typeof fm.author === 'string' ? fm.author : ''
   fmForm.license = typeof fm.license === 'string' ? fm.license : ''
-  // 触发词:把数组深拷一份(避免直接改 computed 出来的原数组,Vue 会报警)
   const trg = Array.isArray(fm.triggers) ? fm.triggers : []
   fmForm.triggers = trg.map((s) => String(s || '')).filter((s) => s !== '')
-  fmOpen.value = true
+  editFmOpen.value = true
 }
-function closeFrontmatter() { fmOpen.value = false }
+function closeFrontmatterEditor() { editFmOpen.value = false }
+
+// 2026-07-10 增:用表单弹窗做"新建 skill"时的字段初始化入口(由父级 startNew 调用)。
+// 跟 openFrontmatterEditor 区别:openAsNew 忽略当前 skill 的 frontmatter,
+// 用父级传进来的 initial 值(name/version/description/triggers 可选),让用户在
+// 表单弹窗里继续编辑。保存时走同一条 saveFrontmatterForm 链路,但因为
+// 走 createSkill 而不是 updateSkill,父级要传 isNew=true + 必要 scope 等参数。
+// 这里只是把弹窗字段填好,scope 等 createSkill 需要的元数据由父级在调用 saveNewSkill
+// 时组装 payload 传入。后端 payload 通过 emit('create-skill', payload) 传出去。
+const newSkillInitial = ref(null) // null = 编辑模式,非 null = 新建模式 {name,version,description,triggers}
+function openAsNew(initial = {}) {
+  fmFormError.value = ''
+  fmFormSaving.value = false
+  fmForm.name = initial.name || ''
+  fmForm.version = initial.version || '0.1.0'
+  fmForm.description = initial.description || ''
+  fmForm.author = initial.author || ''
+  fmForm.license = initial.license || ''
+  fmForm.triggers = Array.isArray(initial.triggers)
+    ? initial.triggers.map((s) => String(s || '')).filter(Boolean)
+    : []
+  newSkillInitial.value = initial
+  editFmOpen.value = true
+}
 
 // 2026-07-10 增:frontmatter 表单编辑态。
 // fmForm 跟原 frontmatter computed 是分离的(避免直接改 reactive 引用),
@@ -514,17 +543,6 @@ async function saveFrontmatterForm() {
 
   fmFormSaving.value = true
   try {
-    const sk = skill.value
-    if (!sk || !sk.name) {
-      fmFormError.value = '当前未选中 skill'
-      fmFormSaving.value = false
-      return
-    }
-    // 用现有的重建工具,先把 body 拿到(沿用当前选中文件的 body,SKILL.md 用 localFiles 同步态)
-    const path = selectedFile.value?.path
-    const body = path === 'SKILL.md'
-      ? (localFiles.get('SKILL.md') || splitSkillMd(props.files.find((f) => f.path === 'SKILL.md')?.content || '').body)
-      : ''
     // 拼新的 fm 字典(按 FM_KEY_ORDER 顺序保持稳定,空字段不写)
     const fmDict = {}
     if (name) fmDict.name = name
@@ -534,11 +552,11 @@ async function saveFrontmatterForm() {
     if (fmForm.license && String(fmForm.license).trim()) fmDict.license = String(fmForm.license).trim()
     if (triggers.length) fmDict.triggers = triggers
     // 保留原 frontmatter 里其他字段(group_path / source / source_ref / depends_on / target_tools 等)
-    const oldFm = frontmatter.value
+    // 新建模式没有 oldFm,跳过保留逻辑。
+    const oldFm = newSkillInitial.value ? {} : frontmatter.value
     for (const k of Object.keys(oldFm)) {
       if (k in fmDict) continue
       if (k === 'name' || k === 'version' || k === 'description' || k === 'triggers') continue
-      // 保留 author / license 用表单值,否则用原值
       if (k === 'author' || k === 'license') continue
       fmDict[k] = oldFm[k]
     }
@@ -549,39 +567,89 @@ async function saveFrontmatterForm() {
       if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
       else fmLines.push(`${k}: ${JSON.stringify(v)}`)
     }
+    // 新建模式下 body 为空字符串,编辑模式用当前 localFiles['SKILL.md'] 或 props.files
+    let body = ''
+    if (!newSkillInitial.value) {
+      const path = selectedFile.value?.path
+      body = path === 'SKILL.md'
+        ? (localFiles.get('SKILL.md') || splitSkillMd(props.files.find((f) => f.path === 'SKILL.md')?.content || '').body)
+        : ''
+    }
     const newMd = `---\n${fmLines.join('\n')}\n---\n\n${body || ''}\n`
 
-    // 调用 updateSkill 走标准链路(后端 store.Save 是原子全量覆盖,需要把完整 files 发过去)
-    const incomingFiles = (props.files || []).map((f) => {
-      if (!f || !f.path) return null
-      if (f.path === 'SKILL.md') return { path: 'SKILL.md', content: newMd }
-      return { path: f.path, content: f.content || '' }
-    }).filter(Boolean)
-    await updateSkill({
-      scope: sk.scope || 'global',
-      project_id: sk.project_id || 0,
-      name: sk.name,
-      version: sk.version,
-      source: sk.source || 'local',
-      manifest: {
+    if (newSkillInitial.value) {
+      // ===== 新建模式 =====
+      // 走 createSkill。scope / project_id / group_path 等元数据由父级
+      // 在 openAsNew 调用时塞到 newSkillInitial 里(后续如果用户改 scope 范围,
+      // 父级负责弹出 scope 选择面板 — 当前简化为只传 scope='global')。
+      const init = newSkillInitial.value
+      const payload = {
+        scope: init.scope || 'global',
+        project_id: init.project_id || 0,
         name,
         version,
-        description: desc,
-        triggers,
-        author: fmDict.author || '',
-        license: fmDict.license || '',
-      },
-      files: incomingFiles,
-    })
-    // 本地同步:localFiles['SKILL.md'] 设为新 body(去掉 frontmatter 的部分)
-    localFiles.set('SKILL.md', splitSkillMd(newMd).body)
-    // 清掉 dirty(刚保存)
-    const s = new Set(dirtyPaths.value)
-    s.delete('SKILL.md')
-    dirtyPaths.value = s
-    // 弹窗关掉,emit saved 让父级刷新 currentFiles / listSkills
-    fmOpen.value = false
-    emit('saved', { path: 'SKILL.md', content: newMd })
+        source: init.source || 'local',
+        group_path: init.group_path || '',
+        manifest: {
+          name,
+          version,
+          description: desc,
+          triggers,
+          author: fmDict.author || '',
+          license: fmDict.license || '',
+        },
+        files: [{ path: 'SKILL.md', content: newMd }],
+      }
+      const created = await createSkill(payload)
+      // 弹窗关闭 + 清掉新建态
+      editFmOpen.value = false
+      newSkillInitial.value = null
+      // 通知父级:新建完成 + 新 skill 的 path(后端会回填 path)
+      emit('created', {
+        payload,
+        response: created,
+        name,
+        version,
+      })
+    } else {
+      // ===== 编辑模式 =====
+      const sk = skill.value
+      if (!sk || !sk.name) {
+        fmFormError.value = '当前未选中 skill'
+        fmFormSaving.value = false
+        return
+      }
+      const incomingFiles = (props.files || []).map((f) => {
+        if (!f || !f.path) return null
+        if (f.path === 'SKILL.md') return { path: 'SKILL.md', content: newMd }
+        return { path: f.path, content: f.content || '' }
+      }).filter(Boolean)
+      await updateSkill({
+        scope: sk.scope || 'global',
+        project_id: sk.project_id || 0,
+        name: sk.name,
+        version: sk.version,
+        source: sk.source || 'local',
+        manifest: {
+          name,
+          version,
+          description: desc,
+          triggers,
+          author: fmDict.author || '',
+          license: fmDict.license || '',
+        },
+        files: incomingFiles,
+      })
+      // 本地同步:localFiles['SKILL.md'] 设为新 body(去掉 frontmatter 的部分)
+      localFiles.set('SKILL.md', splitSkillMd(newMd).body)
+      // 清掉 dirty(刚保存)
+      const s = new Set(dirtyPaths.value)
+      s.delete('SKILL.md')
+      dirtyPaths.value = s
+      // 弹窗关掉,emit saved 让父级刷新 currentFiles / listSkills
+      editFmOpen.value = false
+      emit('saved', { path: 'SKILL.md', content: newMd })
+    }
   } catch (e) {
     fmFormError.value = e?.message || String(e)
   } finally {
@@ -780,11 +848,18 @@ onUnmounted(() => {})
 // 父在切换 skill / 切换文件前调 ensureCleanBeforeSwitch(),有 dirty 时弹
 // 三选项弹窗,等用户决策返回 'proceed' / 'cancel' 后再决定是否继续。
 // resetDirtyNow 是父级强制清 dirty 的兜底(例如删除 skill 流程不需要询问)。
+// 2026-07-10 增:openFrontmatterEditor 暴露给父级,让父级的"编辑"按钮 /
+// "新建"按钮都能直接打开 InlinePanel 内部的 frontmatter 表单弹窗。
 defineExpose({
   ensureCleanBeforeSwitch,
   resetAllDirty,
   isAnyDirty: () => dirtyPaths.value.size > 0,
   clearEditingState,
+  openFrontmatterEditor,
+  // 2026-07-10 增:openAsNew 复用表单弹窗做"新建 skill"(空字段),
+  // 父级(SkillsView.startNew)传 (name, version, description, triggers)
+  // 进来,弹窗打开后用户继续填(触发词可编辑)。
+  openAsNew,
 })
 </script>
 
@@ -932,15 +1007,45 @@ defineExpose({
     <!-- 2026-07-07 修:Modal 必须用 v-model 绑 modelValue(组件内部 watch modelValue 控制渲染),
          旧版用 v-if="fmOpen" + @close="closeFrontmatter" 看似能调,但组件内部 <div v-if="modelValue">
          modelValue 始终是 undefined,所以 mask 永远不渲染 → 弹窗不出现。
-         2026-07-10 改:弹窗改为表单模式 — name/version/description/author/license 文本输入,
-         触发词作为列表动态增删(每个一行,删除按钮行内),保存走 updateSkill
-         链路整体重写 SKILL.md frontmatter。原只读表格整段替换。 -->
+         2026-07-10 改:Info 按钮(原"班级按钮")只读弹窗 — 展示 frontmatter 内容,
+         不允许编辑。编辑动作由顶栏铅笔按钮触发另一个 editFmOpen 表单弹窗。 -->
     <Modal
       v-model="fmOpen"
       size="md"
       :title="(skill?.name || '') + ' · frontmatter'"
-      :close-on-mask="!fmFormSaving"
       @close="closeFrontmatter"
+    >
+      <div class="sfip-fm-body">
+        <table v-if="frontmatterEntries.length" class="sfip-fm-table">
+          <tbody>
+            <tr v-for="[k, v] in frontmatterEntries" :key="k">
+              <th>{{ k }}</th>
+              <td>
+                <template v-if="Array.isArray(v)">
+                  <span v-for="(x, i) in v" :key="i" class="sfip-fm-chip">{{ x }}</span>
+                </template>
+                <template v-else>{{ v }}</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="sfip-fm-empty">无 frontmatter</p>
+      </div>
+      <template #footer>
+        <button class="primary" @click="closeFrontmatter">关闭</button>
+      </template>
+    </Modal>
+
+    <!-- 2026-07-10 增:frontmatter 编辑表单弹窗(独立 Modal,跟只读 fmOpen 互斥)。
+         由 InlinePanel 顶栏 #name-actions 槽里的"编辑"铅笔按钮触发。
+         字段:name/version/description/author/license + triggers 动态列表,
+         保存走 saveFrontmatterForm → updateSkill 链路。 -->
+    <Modal
+      v-model="editFmOpen"
+      size="md"
+      :title="'编辑 frontmatter — ' + (skill?.name || '')"
+      :close-on-mask="!fmFormSaving"
+      @close="closeFrontmatterEditor"
     >
       <div class="sfip-fm-body">
         <div class="sfip-fm-form">
@@ -1042,7 +1147,7 @@ defineExpose({
         </p>
       </div>
       <template #footer>
-        <button type="button" class="ghost" :disabled="fmFormSaving" @click="closeFrontmatter">
+        <button type="button" class="ghost" :disabled="fmFormSaving" @click="closeFrontmatterEditor">
           <IconPark icon="mdi:close" width="13" height="13" />
           取消
         </button>
