@@ -54,7 +54,7 @@ const LABEL_DISCARD = '放弃修改'
 const LABEL_SAVE = '保存'
 const LABEL_SAVING = '保存中...'
 const LABEL_FILES = 'files'
-const LABEL_FRONTMATTER_TITLE = '查看 frontmatter'
+const LABEL_FRONTMATTER_TITLE = '编辑 frontmatter'
 const LABEL_RENDER_ERROR_TITLE = '技能详情加载出错'
 const LABEL_RETRY = '重试'
 
@@ -445,8 +445,149 @@ function parseFrontmatter(text) {
 
 const hasFrontmatter = computed(() => Object.keys(frontmatter.value).length > 0)
 const fmOpen = ref(false)
-function openFrontmatter() { fmOpen.value = true }
+function openFrontmatter() {
+  // 2026-07-10 改:打开弹窗时把当前 frontmatter 的字段拷到 fmForm,
+  // 触发词转成数组(原 parseFrontmatter 已经把 [a,b,c] 解成数组)。
+  // 这样弹窗关闭再打开永远是最新值,用户改一半关掉也不会污染下次打开。
+  fmFormError.value = ''
+  fmFormSaving.value = false
+  const fm = frontmatter.value
+  fmForm.name = fm.name || skill.value?.name || ''
+  fmForm.version = fm.version || skill.value?.version || ''
+  fmForm.description = typeof fm.description === 'string' ? fm.description : ''
+  fmForm.author = typeof fm.author === 'string' ? fm.author : ''
+  fmForm.license = typeof fm.license === 'string' ? fm.license : ''
+  // 触发词:把数组深拷一份(避免直接改 computed 出来的原数组,Vue 会报警)
+  const trg = Array.isArray(fm.triggers) ? fm.triggers : []
+  fmForm.triggers = trg.map((s) => String(s || '')).filter((s) => s !== '')
+  fmOpen.value = true
+}
 function closeFrontmatter() { fmOpen.value = false }
+
+// 2026-07-10 增:frontmatter 表单编辑态。
+// fmForm 跟原 frontmatter computed 是分离的(避免直接改 reactive 引用),
+// 保存时调用 saveFrontmatterForm() 把 fmForm 序列化写回 SKILL.md,
+// 通过 updateSkill 走标准链路。
+const fmForm = reactive({
+  name: '',
+  version: '',
+  description: '',
+  author: '',
+  license: '',
+  triggers: [],
+})
+const fmFormError = ref('')
+const fmFormSaving = ref(false)
+
+function addTrigger() {
+  fmForm.triggers.push('')
+}
+function removeTrigger(idx) {
+  fmForm.triggers.splice(idx, 1)
+}
+
+function normalizeFmTriggers() {
+  // 去空 / 去重复 / trim,顺序保留(用户编辑顺序)
+  const seen = new Set()
+  const out = []
+  for (const raw of fmForm.triggers || []) {
+    const v = String(raw || '').trim()
+    if (!v) continue
+    if (seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out
+}
+
+async function saveFrontmatterForm() {
+  fmFormError.value = ''
+  // 校验:name 必填,version 必填,description 至少 1 字符
+  const name = String(fmForm.name || '').trim()
+  const version = String(fmForm.version || '').trim()
+  const desc = String(fmForm.description || '').trim()
+  if (!name) { fmFormError.value = 'name 不能为空'; return }
+  if (!version) { fmFormError.value = 'version 不能为空'; return }
+  if (!desc) { fmFormError.value = 'description 不能为空'; return }
+  const triggers = normalizeFmTriggers()
+  if (triggers.length === 0) { fmFormError.value = '至少需要 1 个触发词'; return }
+
+  fmFormSaving.value = true
+  try {
+    const sk = skill.value
+    if (!sk || !sk.name) {
+      fmFormError.value = '当前未选中 skill'
+      fmFormSaving.value = false
+      return
+    }
+    // 用现有的重建工具,先把 body 拿到(沿用当前选中文件的 body,SKILL.md 用 localFiles 同步态)
+    const path = selectedFile.value?.path
+    const body = path === 'SKILL.md'
+      ? (localFiles.get('SKILL.md') || splitSkillMd(props.files.find((f) => f.path === 'SKILL.md')?.content || '').body)
+      : ''
+    // 拼新的 fm 字典(按 FM_KEY_ORDER 顺序保持稳定,空字段不写)
+    const fmDict = {}
+    if (name) fmDict.name = name
+    if (version) fmDict.version = version
+    if (desc) fmDict.description = desc
+    if (fmForm.author && String(fmForm.author).trim()) fmDict.author = String(fmForm.author).trim()
+    if (fmForm.license && String(fmForm.license).trim()) fmDict.license = String(fmForm.license).trim()
+    if (triggers.length) fmDict.triggers = triggers
+    // 保留原 frontmatter 里其他字段(group_path / source / source_ref / depends_on / target_tools 等)
+    const oldFm = frontmatter.value
+    for (const k of Object.keys(oldFm)) {
+      if (k in fmDict) continue
+      if (k === 'name' || k === 'version' || k === 'description' || k === 'triggers') continue
+      // 保留 author / license 用表单值,否则用原值
+      if (k === 'author' || k === 'license') continue
+      fmDict[k] = oldFm[k]
+    }
+    // 重写 SKILL.md(沿用现有 rebuildSkillMd 的序列化策略 — 用 yaml-like 风格)
+    const fmLines = []
+    for (const k of Object.keys(fmDict)) {
+      const v = fmDict[k]
+      if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`)
+      else fmLines.push(`${k}: ${JSON.stringify(v)}`)
+    }
+    const newMd = `---\n${fmLines.join('\n')}\n---\n\n${body || ''}\n`
+
+    // 调用 updateSkill 走标准链路(后端 store.Save 是原子全量覆盖,需要把完整 files 发过去)
+    const incomingFiles = (props.files || []).map((f) => {
+      if (!f || !f.path) return null
+      if (f.path === 'SKILL.md') return { path: 'SKILL.md', content: newMd }
+      return { path: f.path, content: f.content || '' }
+    }).filter(Boolean)
+    await updateSkill({
+      scope: sk.scope || 'global',
+      project_id: sk.project_id || 0,
+      name: sk.name,
+      version: sk.version,
+      source: sk.source || 'local',
+      manifest: {
+        name,
+        version,
+        description: desc,
+        triggers,
+        author: fmDict.author || '',
+        license: fmDict.license || '',
+      },
+      files: incomingFiles,
+    })
+    // 本地同步:localFiles['SKILL.md'] 设为新 body(去掉 frontmatter 的部分)
+    localFiles.set('SKILL.md', splitSkillMd(newMd).body)
+    // 清掉 dirty(刚保存)
+    const s = new Set(dirtyPaths.value)
+    s.delete('SKILL.md')
+    dirtyPaths.value = s
+    // 弹窗关掉,emit saved 让父级刷新 currentFiles / listSkills
+    fmOpen.value = false
+    emit('saved', { path: 'SKILL.md', content: newMd })
+  } catch (e) {
+    fmFormError.value = e?.message || String(e)
+  } finally {
+    fmFormSaving.value = false
+  }
+}
 
 const FM_KEY_ORDER = [
   'name', 'version', 'description', 'triggers',
@@ -790,31 +931,131 @@ defineExpose({
 
     <!-- 2026-07-07 修:Modal 必须用 v-model 绑 modelValue(组件内部 watch modelValue 控制渲染),
          旧版用 v-if="fmOpen" + @close="closeFrontmatter" 看似能调,但组件内部 <div v-if="modelValue">
-         modelValue 始终是 undefined,所以 mask 永远不渲染 → 弹窗不出现。 -->
+         modelValue 始终是 undefined,所以 mask 永远不渲染 → 弹窗不出现。
+         2026-07-10 改:弹窗改为表单模式 — name/version/description/author/license 文本输入,
+         触发词作为列表动态增删(每个一行,删除按钮行内),保存走 updateSkill
+         链路整体重写 SKILL.md frontmatter。原只读表格整段替换。 -->
     <Modal
       v-model="fmOpen"
       size="md"
       :title="(skill?.name || '') + ' · frontmatter'"
+      :close-on-mask="!fmFormSaving"
       @close="closeFrontmatter"
     >
       <div class="sfip-fm-body">
-        <table v-if="frontmatterEntries.length" class="sfip-fm-table">
-          <tbody>
-            <tr v-for="[k, v] in frontmatterEntries" :key="k">
-              <th>{{ k }}</th>
-              <td>
-                <template v-if="Array.isArray(v)">
-                  <span v-for="(x, i) in v" :key="i" class="sfip-fm-chip">{{ x }}</span>
-                </template>
-                <template v-else>{{ v }}</template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="sfip-fm-empty">无 frontmatter</p>
+        <div class="sfip-fm-form">
+          <div class="sfip-fm-row">
+            <label class="sfip-fm-label">name</label>
+            <input
+              v-model="fmForm.name"
+              class="sfip-fm-input"
+              :disabled="fmFormSaving"
+              placeholder="review-pr"
+              spellcheck="false"
+            />
+          </div>
+          <div class="sfip-fm-row">
+            <label class="sfip-fm-label">version</label>
+            <input
+              v-model="fmForm.version"
+              class="sfip-fm-input"
+              :disabled="fmFormSaving"
+              placeholder="0.1.0"
+              spellcheck="false"
+            />
+          </div>
+          <div class="sfip-fm-row">
+            <label class="sfip-fm-label">description</label>
+            <textarea
+              v-model="fmForm.description"
+              class="sfip-fm-textarea"
+              :disabled="fmFormSaving"
+              rows="2"
+              spellcheck="false"
+              placeholder="技能说明(必填)"
+            />
+          </div>
+          <div class="sfip-fm-row sfip-fm-row-author">
+            <label class="sfip-fm-label">author</label>
+            <input
+              v-model="fmForm.author"
+              class="sfip-fm-input"
+              :disabled="fmFormSaving"
+              placeholder="(可选)"
+              spellcheck="false"
+            />
+          </div>
+          <div class="sfip-fm-row sfip-fm-row-license">
+            <label class="sfip-fm-label">license</label>
+            <input
+              v-model="fmForm.license"
+              class="sfip-fm-input"
+              :disabled="fmFormSaving"
+              placeholder="(可选,例如 MIT)"
+              spellcheck="false"
+            />
+          </div>
+          <div class="sfip-fm-row sfip-fm-row-triggers">
+            <label class="sfip-fm-label">
+              triggers
+              <span class="sfip-fm-label-hint">触发词(列表)</span>
+            </label>
+            <div class="sfip-fm-triggers-list">
+              <div
+                v-for="(_, idx) in fmForm.triggers"
+                :key="`trg-${idx}`"
+                class="sfip-fm-trigger-row"
+              >
+                <input
+                  v-model="fmForm.triggers[idx]"
+                  class="sfip-fm-input sfip-fm-trigger-input"
+                  :disabled="fmFormSaving"
+                  :placeholder="`触发词 #${idx + 1}`"
+                  spellcheck="false"
+                />
+                <button
+                  type="button"
+                  class="sfip-fm-trigger-del"
+                  :disabled="fmFormSaving"
+                  :title="`删除第 ${idx + 1} 个`"
+                  :aria-label="`删除第 ${idx + 1} 个`"
+                  @click="removeTrigger(idx)"
+                >
+                  <IconPark icon="mdi:close" width="13" height="13" />
+                </button>
+              </div>
+              <button
+                type="button"
+                class="sfip-fm-trigger-add"
+                :disabled="fmFormSaving"
+                @click="addTrigger"
+              >
+                <IconPark icon="mdi:plus" width="13" height="13" />
+                添加触发词
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-if="fmFormError" class="message message-error sfip-fm-err">
+          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+          {{ fmFormError }}
+        </p>
       </div>
       <template #footer>
-        <button class="primary" @click="closeFrontmatter">关闭</button>
+        <button type="button" class="ghost" :disabled="fmFormSaving" @click="closeFrontmatter">
+          <IconPark icon="mdi:close" width="13" height="13" />
+          取消
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="fmFormSaving"
+          @click="saveFrontmatterForm"
+        >
+          <span v-if="fmFormSaving" class="sfip-spinner"></span>
+          <IconPark v-else icon="mdi:content-save" width="13" height="13" />
+          {{ fmFormSaving ? '保存中...' : '保存' }}
+        </button>
       </template>
     </Modal>
 
@@ -1091,6 +1332,136 @@ defineExpose({
   font-size: 13px;
   color: var(--text);
 }
+
+/* 2026-07-10 改:frontmatter 弹窗表单模式 — 原只读表格替换为可编辑输入框。
+   name/version/description/author/license 为单行/多行输入,triggers 为列表
+   动态增删(每行一个 input + 删除按钮)。 */
+.sfip-fm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sfip-fm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sfip-fm-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sfip-fm-label-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-faint);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.sfip-fm-input,
+.sfip-fm-textarea {
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s;
+  box-sizing: border-box;
+  width: 100%;
+}
+.sfip-fm-textarea {
+  resize: vertical;
+  min-height: 48px;
+  line-height: 1.5;
+}
+.sfip-fm-input:hover,
+.sfip-fm-textarea:hover {
+  border-color: var(--text-faint);
+}
+.sfip-fm-input:focus,
+.sfip-fm-textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--accent-blue-bg);
+}
+.sfip-fm-input:disabled,
+.sfip-fm-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.sfip-fm-triggers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.sfip-fm-trigger-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sfip-fm-trigger-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sfip-fm-trigger-del {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: all 0.12s;
+  box-sizing: border-box;
+}
+.sfip-fm-trigger-del:hover:not(:disabled) {
+  border-color: var(--accent-red, #ef4444);
+  color: var(--accent-red, #ef4444);
+  background: var(--bg-hover);
+}
+.sfip-fm-trigger-del:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sfip-fm-trigger-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--accent-blue);
+  background: transparent;
+  border: 1px dashed var(--accent-blue-border, var(--border));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.sfip-fm-trigger-add:hover:not(:disabled) {
+  border-style: solid;
+  background: var(--accent-blue-bg);
+}
+.sfip-fm-trigger-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sfip-fm-err {
+  margin-top: 12px;
+}
+
 .sfip-fm-table {
   width: 100%;
   border-collapse: collapse;
