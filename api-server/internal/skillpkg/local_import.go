@@ -34,9 +34,11 @@ import (
 type SourceKind string
 
 const (
-	SourceFolder    SourceKind = "folder"
-	SourceZipPath   SourceKind = "zip_path"
-	SourceZipBytes  SourceKind = "zip_bytes"
+	SourceFolder     SourceKind = "folder"
+	SourceZipPath    SourceKind = "zip_path"
+	SourceZipBytes   SourceKind = "zip_bytes"
+	// SourceGlobalPaths 2026-07-10 增:全局目录批量导入(走 ImportFromPaths)。
+	SourceGlobalPaths SourceKind = "global_paths"
 )
 
 // ErrNoSkillMD 目录或 zip 内未找到任何 SKILL.md。

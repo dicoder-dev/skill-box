@@ -6,6 +6,8 @@
 //   POST /api/skillbox/onboarding/import        - 消费 scan 缓存导入
 //   POST /api/skillbox/onboarding/import-local   - 从本地文件夹/zip 路径导入(JSON,桌面端)
 //   POST /api/skillbox/onboarding/import-zip-bytes - 从 zip 字节流导入(octet-stream,Web 端)
+//   GET  /api/skillbox/onboarding/global-skills  - 列出 ~/.agents/skills 候选(2026-07-10 增)
+//   POST /api/skillbox/onboarding/import-global-paths - 按 source_path 批量导入(2026-07-10 增)
 
 import { http } from '@/core/utils/requests'
 
@@ -45,4 +47,18 @@ export async function runOnboardingImportZipBytes(arrayBuffer) {
     throw new Error(msg)
   }
   return await r.json()
+}
+
+// 2026-07-10 增:全局目录检索 — 列出 ~/.agents/skills 下所有候选 skill。
+// 响应 data 形如:{root: string, exists: bool, items: GlobalSkillCandidate[]}
+// - root: 实际扫描根(磁盘绝对路径),前端展示用
+// - exists: 目录是否存在;不存在时 items=[]
+export function getOnboardingGlobalSkills() {
+  return http.get('/api/skillbox/onboarding/global-skills')
+}
+
+// 2026-07-10 增:全局目录批量导入 — 把用户在候选列表里勾选的 source_path 批量落地。
+// 响应与 /import-local 同构(LocalImportResult),前端可共用结果渲染。
+export function runOnboardingImportGlobalPaths(paths = []) {
+  return http.post('/api/skillbox/onboarding/import-global-paths', { paths })
 }

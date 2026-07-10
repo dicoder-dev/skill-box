@@ -5,6 +5,11 @@
 //   - 「扫描工具」:走 OnboardingView(扫已装编程工具目录,勾选导入)
 //   - 「从本地导入」:走 LocalImportPanel(选本地文件夹/zip,直接落地)
 //
+// 2026-07-10 改:新增第三个 Tab「全局目录」
+//   - 「全局目录」:走 GlobalImportPanel(列出 ~/.agents/skills 下所有候选 skill,
+//     搜索 + 多选后批量导入),独立于 scan tab 的「按工具」语义,
+//     也不依赖用户手动选文件夹/zip。
+//
 // 事件:
 //   - update:modelValue:标准 v-model 开关
 //   - imported:任一路径导入完成(payload 是 importResult);父组件收到后
@@ -16,6 +21,8 @@ import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import OnboardingView from '@/views/OnboardingView.vue'
 import LocalImportPanel from '@/components/LocalImportPanel.vue'
+// 2026-07-10 增:全局目录导入面板(从 ~/.agents/skills 列出候选 + 多选批量导入)
+import GlobalImportPanel from '@/components/GlobalImportPanel.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -24,7 +31,7 @@ const emit = defineEmits(['update:modelValue', 'imported'])
 
 const { t } = useI18n()
 
-// 当前激活的 tab:'scan' | 'local'
+// 当前激活的 tab:'scan' | 'local' | 'global'
 const tab = ref('scan')
 
 function close() {
@@ -33,7 +40,7 @@ function close() {
 
 // 2026-07-07 改:不再只在用户点"完成"按钮时才走 imported,
 // 而是子面板完成导入即通知父组件,刷新首页。
-// 两条路径(扫工具 / 本地导入)都通过这个事件通知父组件。
+// 三条路径(扫工具 / 本地导入 / 全局目录)都通过这个事件通知父组件。
 // 父组件(SkillsView)一般用 importOpen=false 关闭弹窗,然后 reload() 列表。
 // 用 ref 缓存"上次已上报 result 的指纹",防止同一结果重复通知页面刷新。
 //   - 指纹 = JSON 字符串,简单可靠。
@@ -56,6 +63,7 @@ function resetEmittedSig() {
 }
 // 2026-07-07 增:把通知能力 provide 给子组件,让 OnboardingView / LocalImportPanel
 // 在得到后端响应那一刻就主动通知父组件,而不是依赖用户点"完成"按钮。
+// 2026-07-10 增:GlobalImportPanel 也复用这条 provide 路径。
 // 注意:SkillsView 的侧栏(用作导入入口) + 项目侧弹窗不同入口都共用这个组件,
 // provide 只对当前树生效,新建实例互不干扰。
 provide('notifyImportDone', tryEmitImported)
@@ -95,6 +103,16 @@ function onDone(result) {
       <button
         type="button"
         role="tab"
+        :aria-selected="tab === 'global'"
+        :class="['oid-tab', { active: tab === 'global' }]"
+        @click="tab = 'global'"
+      >
+        <IconPark icon="mdi:earth" width="14" height="14" />
+        {{ t('onboarding.tabs.global') }}
+      </button>
+      <button
+        type="button"
+        role="tab"
         :aria-selected="tab === 'local'"
         :class="['oid-tab', { active: tab === 'local' }]"
         @click="tab = 'local'"
@@ -106,6 +124,7 @@ function onDone(result) {
 
     <!-- tab 内容(单选渲染) -->
     <OnboardingView v-if="tab === 'scan'" @done="onDone" />
+    <GlobalImportPanel v-else-if="tab === 'global'" @done="onDone" />
     <LocalImportPanel v-else @done="onDone" />
   </Modal>
 </template>
