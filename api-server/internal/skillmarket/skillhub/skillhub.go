@@ -842,11 +842,18 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 		files = append(files, skilladapter.File{Path: rel, Content: string(e.data)})
 	}
 	if skillMDContent == "" {
-		return nil, fmt.Errorf("download: SKILL.md content empty")
+		// 2026-07-10 改:zip 里 SKILL.md 空内容,资源形态无效 — wrap NotFound
+		// (不是网络/拉取失败,而是资源真的没找到有效内容)。
+		return nil, fmt.Errorf("%w: %s (SKILL.md empty in zip)", skillmarket.ErrRemoteNotFound, remoteID)
 	}
 	can, perr := skilladapter.ParseSkillMD(skillMDContent)
 	if perr != nil {
-		return nil, fmt.Errorf("%w: parse SKILL.md: %v", skillmarket.ErrRemoteFetchFail, perr)
+		// 2026-07-10 改(根因):SKILL.md 本地解析失败(典型:缺 frontmatter)不是
+		// 「远程 fetch」失败,而是资源形态无效,wrap ErrRemoteNotFound 走
+		// 404 + 前端 errSkillNotFound 文案。原代码 wrap 成 ErrRemoteFetchFail
+		// 让用户看到「下载失败」误导以为是网络问题。
+		return nil, fmt.Errorf("%w: %s (parse SKILL.md: %v)",
+			skillmarket.ErrRemoteNotFound, remoteID, perr)
 	}
 	// 从 zip 路径推断 version(常见布局: skills/{slug}/{version}/SKILL.md)。
 	if parts := strings.Split(skillMDPath, "/"); len(parts) >= 3 {
