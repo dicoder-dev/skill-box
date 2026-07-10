@@ -725,23 +725,20 @@ defineExpose({
           >
             <IconPark icon="Edit" width="14" height="14" />
           </button>
-          <!-- 2026-07-10 增:大纲面板显隐按钮,跟编辑按钮同组(右侧),用同样的 sfip-mode-btn
-               风格。状态走 useMdOutlineVisible,跟 CodeViewer 内大纲 header 共享。
-               图标根据当前状态切换:已展开 → 折叠图标(暗示"点我收起"),
-               已收起 → 展开图标(暗示"点我展开"),让用户一目了然。
-               data-tip 同步切换文案。 -->
+          <!-- 2026-07-10 改 v3:图标用 iconpark 原生 ListView(目录/大纲语义),不用 mdi: 前缀
+               避免 mdi 映射兜底导致图标不可见(之前 mdi:bookmark-plus-outline 没在
+               MDI_TO_ICONPARK 里,fallback 到 NOT_FOUND_ICON='Help' 显示不出来)。
+               展开/收起用同一个图标 + data-tip 区分文案,展开时加 sfip-mode-btn-active
+               蓝色高亮让用户清楚知道大纲当前是显示的。 -->
           <button
             v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
             :data-tip="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
             :aria-label="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
+            :class="{ 'sfip-mode-btn-active': outlineVisible }"
             @click="toggleOutline"
           >
-            <IconPark
-              :icon="outlineVisible ? 'mdi:bookmark-minus-outline' : 'mdi:bookmark-plus-outline'"
-              width="14"
-              height="14"
-            />
+            <IconPark icon="ListView" width="14" height="14" />
           </button>
           <!-- 2026-07-08 改:删掉"返回预览"按钮(原 mode=edit 分支)。
                用户决定编辑后只能一直编辑,通过"放弃修改"或"保存"按钮离开编辑态。
