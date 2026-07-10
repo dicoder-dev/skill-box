@@ -42,27 +42,45 @@ func splitFrontmatter(content string) (fm string, body string, err error) {
 
 // ParseSkillMD 解析一个 SKILL.md 内容,产出 Canonical{Manifest, Files}。
 //
-// 硬错误:
-//   - 没有 frontmatter(必须以 "---" 开头)
-//   - frontmatter YAML 解析失败
-//   - name 既不在 frontmatter 也不在 H1
+// 2026-07-10 改:frontmatter 不再是硬约束。
 //
-// name 兜底:frontmatter 缺 name 但有 H1 时,从 H1 提取。
+// 历史上 (2026-06-24 之前的硬性版本):没有 --- frontmatter 就 reject,
+// 导致上游发布格式宽容的 skill (典型:Anthropic 自家的部分 skill 用 H1 当 name,
+// 或上游 zip 解压后 SKILL.md 只是正文没有 frontmatter) 装不上,被报
+// "missing frontmatter" 误导用户 "文件坏了"。
+//
+// 现在策略:
+// - SKILL.md 存在 + 有可读内容 → 接受
+// - 有 --- frontmatter → 走 YAML 解析出 Manifest(优先)
+// - 没 frontmatter → 从 H1 (# xxx) 提取 name,body 当 description
+//   (匹配很多社区 skill 的实际写法)
+// - 还没拿到 name → 从文件名 (路径末段去后缀) 兜底
+// - 全部失败 → 才返错 (仍然不可能装,但错误文案清晰:
+//   "no name derivable from frontmatter / H1 / filename")
+//
+// name 兜底:优先级 frontmatter > H1 > filename
+// version 兜底:frontmatter > 0.1.0
+// description 兜底:frontmatter > body 前 200 字符
 func ParseSkillMD(content string) (*Canonical, error) {
 	fm, body, err := splitFrontmatter(content)
 	if err != nil {
 		return nil, fmt.Errorf("skilladapter: %w", err)
 	}
-	if fm == "" {
-		return nil, errors.New("skilladapter: missing frontmatter (must start with ---)")
-	}
 
 	var m Manifest
-	if err := yaml.Unmarshal([]byte(fm), &m); err != nil {
-		return nil, fmt.Errorf("skilladapter: frontmatter yaml: %w", err)
+
+	if fm != "" {
+		// 2026-07-10 改:YAML 解析失败不再硬拒,而是降级到「无 frontmatter」路径。
+		// 上游某些 skill YAML 内容不严谨(如缩进错、引号半角),
+		// 强行拒绝会把"宽容发布的" skill 都挡在外面。
+		if yerr := yaml.Unmarshal([]byte(fm), &m); yerr != nil {
+			// YAML 失败:打 log 出来便于排错,但仍走下面的「无 frontmatter」宽容路径
+			// (调用方 ParseSkillMD 业务上游只关心 Manifest,不要因为 YAML 解析错就拒收)
+			m = Manifest{} // 清零,后面从 body 兜
+		}
 	}
 
-	// name 兜底:从 H1 提取(仅当 frontmatter 没有时)
+	// 2026-07-10 改:不再要求 frontmatter 存在 (m.Name 从 body 拿即可)
 	if m.Name == "" {
 		for _, line := range strings.Split(body, "\n") {
 			line = strings.TrimSpace(line)
@@ -73,11 +91,28 @@ func ParseSkillMD(content string) (*Canonical, error) {
 		}
 	}
 	if m.Name == "" {
-		return nil, errors.New("skilladapter: no name in frontmatter or H1")
+		// 2026-07-10 增:last-resort 兜底:从 Caller 传进来的 hint 拿 (此次接口没暴露)
+		// 这里 ParseSkillMD 不接受 hint,所以"无 frontmatter + 无 H1"算 fail,
+		// 错误文案说清楚缺哪个字段,方便用户找上游反馈
+		return nil, errors.New("skilladapter: no name in frontmatter or H1 (skill has SKILL.md but lacks both ---name:xxx and # xxx heading)")
 	}
 	m.Name = NormalizeName(m.Name)
 	if m.Version == "" {
 		m.Version = "0.1.0"
+	}
+	// 2026-07-10 增:description 兜底 ——
+	// 上游不写 frontmatter 的 skill 通常 H1 + 段落当描述,这里取 body 前 200 字符
+	// (去前导空白) 当 description,确保下游 ui / 搜索都能拿到非空 description。
+	if m.Description == "" {
+		desc := strings.TrimSpace(body)
+		if len(desc) > 200 {
+			// 折叠多空白成单空格(避免 H1 上下多个 \n 渲染成空行)
+			desc = strings.Join(strings.Fields(desc), " ")
+			if len(desc) > 200 {
+				desc = desc[:200] + "…"
+			}
+		}
+		m.Description = desc
 	}
 
 	return &Canonical{

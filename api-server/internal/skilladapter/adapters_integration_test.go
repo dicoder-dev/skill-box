@@ -102,17 +102,33 @@ func TestParseSkillMD_RealTraeFile(t *testing.T) {
 	}
 }
 
+// TestParseSkillMD_NoFrontmatter 2026-07-10 改:不再要求 frontmatter 硬约束。
+// SKILL.md 只要有内容 + H1,就接受:name 从 H1 提取,description 从 body 兜底。
+// 这是 ima-skills 等真实存在的 skill 容错策略 ——
+// 上游发布不严格时也能装,而不是被「missing frontmatter」拒收。
 func TestParseSkillMD_NoFrontmatter(t *testing.T) {
-	_, err := skilladapter.ParseSkillMD("# Just a body\nNo frontmatter here.\n")
-	if err == nil {
-		t.Error("expected error for content without frontmatter")
+	c, err := skilladapter.ParseSkillMD("# Just a body\nNo frontmatter here.\n")
+	if err != nil {
+		t.Fatalf("ParseSkillMD 应该从 H1 拿 name,err = %v", err)
+	}
+	if c.Manifest.Name == "" {
+		t.Error("name 应从 H1 提取「Just a body」")
+	}
+	if c.Manifest.Description == "" {
+		t.Error("description 应从 body 兜底拿非空值")
 	}
 }
 
+// TestParseSkillMD_BadYAML 2026-07-10 改:YAML 解析失败也不再硬拒,
+// 降级到「无 frontmatter」路径(body H1 拿 name)。否则上游不严谨的
+// YAML(缩进错、半角引号等)会把所有宽容发布的 skill 都挡掉。
 func TestParseSkillMD_BadYAML(t *testing.T) {
-	_, err := skilladapter.ParseSkillMD("---\nname: [bad\n---\n# body\n")
-	if err == nil {
-		t.Error("expected error for bad yaml")
+	c, err := skilladapter.ParseSkillMD("---\nname: [bad\n---\n# body fallback\n")
+	if err != nil {
+		t.Fatalf("ParseSkillMD 应该降级到 H1 取 name,err = %v", err)
+	}
+	if c.Manifest.Name == "" {
+		t.Error("YAML 坏掉时 name 应该从 H1 兜底")
 	}
 }
 
@@ -129,6 +145,18 @@ body
 	}
 	if c.Manifest.Name != "my-skill" {
 		t.Errorf("fallback name: got %q want my-skill", c.Manifest.Name)
+	}
+}
+
+// 2026-07-10 增:既无 frontmatter 又无 H1 的最坏情况应报清晰的错误文案
+// (而非老版本的「missing frontmatter」误导)。
+func TestParseSkillMD_NoFrontmatter_NoH1(t *testing.T) {
+	_, err := skilladapter.ParseSkillMD("body without frontmatter and no h1\nnot a markdown header\n")
+	if err == nil {
+		t.Error("应该 fail:既无 name frontmatter 也无 H1")
+	}
+	if !strings.Contains(err.Error(), "no name") {
+		t.Errorf("错误文案应提到「no name」,而不是「missing frontmatter」之类的误导: %v", err)
 	}
 }
 

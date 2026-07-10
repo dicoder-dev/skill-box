@@ -817,18 +817,15 @@ func TestDownload_NonZipBody(t *testing.T) {
 	}
 }
 
-// TestDownload_ParseSkillMDFailure 2026-07-10 增:zip 能拉到但 SKILL.md
-// 缺 frontmatter(典型「作者发布时漏 metadata」场景),
-// 应该走 ErrSkillMalformed,跟 ErrRemoteNotFound(找不到)区分开。
-//
-// 同时这是用户反馈 ima-skills / topnews 报「下载失败」的真实根因,
-// 之前代码 wrap 成 ErrRemoteFetchFail 误导用户;现在 ErrSkillMalformed
-// + 422 + 前端 errSkillMalformed 文案「该 skill 文件格式有问题」。
-func TestDownload_ParseSkillMDFailure(t *testing.T) {
+// TestDownload_ParseSkillMDFallbackFrontmatter 2026-07-10 改:之前测的是
+// "缺 frontmatter 必须报 Malformed",这个 case 现在换成「有 H1 没 frontmatter
+// 应该 fall through 到 ParseSkillMD 的宽容路径成功装入」。
+// 体现 2026-07-10 产品决策:SKILL.md 有内容即可,不再要求 --- frontmatter 硬约束。
+// (用户判断:「只要有 SKILL.md 就是标准 skill」)
+func TestDownload_ParseSkillMDFallbackFrontmatter(t *testing.T) {
 	zipServer := newZipMockServerFiles(t, map[string]string{
-		// 没 frontmatter 的 SKILL.md — 是 ima-skills / topnews 等 skill
-		// 上游的实际形态:zip 里有 SKILL.md,但没 `---` 开头。
-		"skills/broken-skill/1.0.0/SKILL.md": "# broken-skill\n正文内容\n",
+		// ima-skills 实际形态:有正文 + H1,无 frontmatter
+		"skills/ima-skills/1.1.7/SKILL.md": "# ima-skills\n正文内容\n",
 	})
 	defer zipServer.Close()
 
@@ -836,18 +833,46 @@ func TestDownload_ParseSkillMDFailure(t *testing.T) {
 		Transport: &fakeRT{responses: map[string]fakeResp{
 			"/api/v1/download": {
 				status:     302,
-				redirectTo: zipServer.URL + "/broken-skill-1.0.0.zip",
+				redirectTo: zipServer.URL + "/ima-skills-1.1.7.zip",
 			},
 		}},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	a := NewWithClients(noRedir, nil)
-	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "broken-skill")
+	c, err := a.Download(context.Background(), "https://api.skillhub.cn", "ima-skills")
+	if err != nil {
+		t.Fatalf("ParseSkillMD 应当从 H1 拿 name 成功,err = %v", err)
+	}
+	if c == nil || c.Manifest.Name == "" {
+		t.Fatalf("manifest.name 应非空,got %+v", c)
+	}
+}
+
+// TestDownload_SkillMDNoName 2026-07-10 增:zip 里 SKILL.md 完全无 frontmatter
+// 也无 H1(只有零散段落文本) — 这种才是真正的 Malformed 应该报错,跟
+// ima-skills(有 H1)的宽容路径形成对比。
+func TestDownload_SkillMDNoName(t *testing.T) {
+	zipServer := newZipMockServerFiles(t, map[string]string{
+		"skills/no-name/1.0.0/SKILL.md": "随意写一段文本\n不是 markdown\n也不像 frontmatter\n",
+	})
+	defer zipServer.Close()
+
+	noRedir := &http.Client{
+		Transport: &fakeRT{responses: map[string]fakeResp{
+			"/api/v1/download": {
+				status:     302,
+				redirectTo: zipServer.URL + "/no-name-1.0.0.zip",
+			},
+		}},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	a := NewWithClients(noRedir, nil)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "no-name-skill")
 	if err == nil {
-		t.Fatal("expected error for SKILL.md missing frontmatter")
+		t.Fatal("SKILL.md 无 H1 也无 frontmatter 时应该 Malformed 失败")
 	}
 	if !errors.Is(err, skillmarket.ErrSkillMalformed) {
-		t.Fatalf("expected ErrSkillMalformed (file broken), got %v", err)
+		t.Fatalf("expected ErrSkillMalformed, got %v", err)
 	}
 }
 
