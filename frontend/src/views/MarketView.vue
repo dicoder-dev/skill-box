@@ -1,30 +1,23 @@
 <script setup>
-// MarketView.vue - 三方市场 v4(2026-07-09)。
+// MarketView.vue - 三方市场 v5(2026-07-10)。
 //
-// 历经四个方案:
-//   v1(2026-06 ~ 2026-07):自建后端代理三方源(skillhub / skills.sh),前端
-//     卡片网格 + 拉取弹窗。
-//   v2(2026-07-09 上午):iframe + 后端 reverse proxy,失败(跨源 / cookie / API)。
-//   v3(2026-07-09 下午):纯前端卡片 + 跳浏览器(只有"在浏览器中打开"按钮)。
-//   v4(2026-07-09 晚):卡片 + 跳浏览器 + **输入框一键安装**(当前)。
+// 在 v4 基础上新增:
+//   1. 默认 tab 按系统语言自动选(中文→ skillhub-cn,英文→ skills.sh)
+//   2. skillhub → skillhub-cn 改名(source id / UI 名 / 后端 source_type / 分组名全链路)
+//   3. skills.sh 输入示例精简:删 GitHub 路径示例,只保留一条 skills.sh URL
+//   4. GitHub tab 增加「知名 skill 仓库」快捷按钮,点击在系统浏览器打开
+//   5. 装到 skill-box 按钮左侧加「粘贴」按钮,读剪贴板填入输入框
 //
-// v4 新增能力:
-//   1. 各 tab 顶部展示「如何安装到 skill-box」指南:文字 + CLI 命令
-//      (给用户提供思路,即使不想用输入框也能手装)
-//   2. 输入框:用户粘贴 skill slug / 详情页 URL → 后端
-//      POST /api/skillbox/market/install-from-input → 自动下载到本地 store
-//   3. 实时进度条(4 阶段模拟:解析 → 下载 → 解压 → 写盘),失败红条提示
-//   4. 成功后 toast + 「去首页查看」按钮(通过 activeTab 跳转 skills 视图)
-//
-// 配色:SkillHub 保留青色 #0ea5e9;Skills.sh 由原紫色 #8b5cf6 改为绿色 #10b981
+// 配色:SkillHub-CN 保留青色 #0ea5e9;Skills.sh 由原紫色 #8b5cf6 改为绿色 #10b981
 // (符合项目 memory:avoid-violet-as-primary-color.md,紫色 AI 感强,主色禁用)。
 
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
 import { installFromInput } from '@/api/skillbox/market'
 import { useToastStore } from '@/core/store/toast'
+import { getCurrentLocale } from '@/core/i18n'
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -40,18 +33,31 @@ const activeTab = inject('activeTab', null)
 // examples: 输入示例数组(2026-07-09 增)。
 // 不放 i18n 是因为 vue-i18n 9.x 数组 key 在 v-for 里偶尔会被文本节点解析成
 // 单字符数组(已知 issue:https://github.com/intlify/vue-i18n-next/issues/...),硬编码
-// 在源结构里更稳。源是固定 3 个(skillhub / skills.sh / github),维护成本可控。
+// 在源结构里更稳。源是固定 3 个(skillhub-cn / skills.sh / github),维护成本可控。
+//
+// 2026-07-10 改:skillhub → skillhub-cn(source id / UI 名 / 后端 source_type / 分组名全链路)
+// 后端 SourceSkillhub 常量同步改成 "skillhub-cn"。skillssh examples 精简:删 GitHub 路径
+// 示例,只保留一条 skills.sh URL。github 增加 famousRepos 块。
+//
+// 2026-07-10 增:GitHub 知名仓库列表(联网搜索整理):
+//   1. anthropics/skills         — Anthropic 官方 Agent Skills 仓库(权威,示例)
+//   2. vercel-labs/agent-skills   — Vercel Labs 出品,React 最佳实践等
+//   3. mattpocock/skills         — TypeScript 训练师 mattpocock 的 skills(榜单常驻)
+//   4. JackyST0/awesome-agent-skills — 中文社区 awesome 列表(1000+ skills)
+// 每个对象只暴露最小字段:display / owner / repo / url;
+// UI 渲染 display,点击调用 platform.platform.openExternal(url) 跳转。
 const sources = [
   {
-    id: 'skillhub',
-    name: 'SkillHub',
+    id: 'skillhub-cn',
+    name: 'SkillHub-CN',
     descKey: 'market.cards.skillhubDesc',
     url: 'https://skillhub.cn/skills',
     accent: '#0ea5e9',
-    sourceType: 'skillhub',
+    // 2026-07-10 改:跟后端 SourceSkillhub("skillhub-cn")对齐,
+    // POST /api/skillbox/market/install-from-input 的 source_hint 字段会直接透传这个值。
+    sourceType: 'skillhub-cn',
     placeholderKey: 'market.input.placeholderSkillhub',
     guideKey: 'market.guide.skillhub',
-    // 2026-07-09 改:skillhub 示例只放详情页 URL,跟用户要求"统一仅支持一个来源"对齐
     examples: [
       'https://skillhub.cn/skills/code-review',
       'https://skillhub.cn/skills/commit-msg',
@@ -66,12 +72,10 @@ const sources = [
     sourceType: 'skillssh',
     placeholderKey: 'market.input.placeholderSkillssh',
     guideKey: 'market.guide.skillssh',
-    // 2026-07-09 改:按"用户友好度"排序
-    // 1. skills.sh 详情 URL(用户最常从此复制)
-    // 2. GitHub blob URL(用户从 GitHub 复制也行)
+    // 2026-07-10 改:按"用户要求"精简,只保留一条 skills.sh 详情页 URL 示例,
+    // 删掉 GitHub blob URL(那一类 URL 走 GitHub tab 更合理)
     examples: [
       'https://skills.sh/anthropics/skills/pdf',
-      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
     ],
   },
   // 2026-07-09 增:GitHub 独立来源(从 skills.sh 拆出来)
@@ -80,7 +84,7 @@ const sources = [
     name: 'GitHub',
     descKey: 'market.cards.githubDesc',
     url: 'https://github.com',
-    accent: '#6b7280', // 灰色,与蓝色 skillhub / 绿色 skills.sh 区分
+    accent: '#6b7280', // 灰色,与蓝色 skillhub-cn / 绿色 skills.sh 区分
     sourceType: 'github',
     placeholderKey: 'market.input.placeholderGithub',
     guideKey: 'market.guide.github',
@@ -88,10 +92,56 @@ const sources = [
       'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
       'https://github.com/anthropics/skills/blob/main/skills/code-review/SKILL.md',
     ],
+    // 2026-07-10 增:GitHub tab 「知名 skill 仓库」快捷浏览块,
+    // UI 用 famousReposBlock 渲染,按钮调 platform.platform.openExternal 跳转。
+    famousRepos: [
+      {
+        id: 'anthropics-skills',
+        display: 'anthropics/skills',
+        owner: 'anthropics',
+        repo: 'skills',
+        url: 'https://github.com/anthropics/skills',
+      },
+      {
+        id: 'vercel-labs-agent-skills',
+        display: 'vercel-labs/agent-skills',
+        owner: 'vercel-labs',
+        repo: 'agent-skills',
+        url: 'https://github.com/vercel-labs/agent-skills',
+      },
+      {
+        id: 'mattpocock-skills',
+        display: 'mattpocock/skills',
+        owner: 'mattpocock',
+        repo: 'skills',
+        url: 'https://github.com/mattpocock/skills',
+      },
+      {
+        id: 'jacky-st0-awesome-agent-skills',
+        display: 'JackyST0/awesome-agent-skills',
+        owner: 'JackyST0',
+        repo: 'awesome-agent-skills',
+        url: 'https://github.com/JackyST0/awesome-agent-skills',
+      },
+    ],
   },
 ]
 
-const activeSourceId = ref(sources[0].id)
+// 2026-07-10 增:按当前语言选默认 tab。
+// 中文(zh-CN / zh)→ skillhub-cn(国内源,主入口);
+// 其他(en-US 等)→ skills.sh(海外源)。
+//
+// 用 getCurrentLocale()(暴露在 core/i18n)直接读 i18n 状态,避免 useI18n() 在
+// v-if 懒挂载时拿到 Proxy 不调 t 的 bug(memory 中 SkillFileInlinePanel i18n 坑)。
+function pickDefaultSourceId() {
+  const loc = String(getCurrentLocale() || '').toLowerCase()
+  if (loc.startsWith('zh')) return 'skillhub-cn'
+  return 'skillssh'
+}
+
+// 2026-07-10 改:activeSourceId 初始化从 sources[0] 改为按 locale 算的 default,
+// 切回 MarketView 重新进入时,SettingsView 改了语言也会重新计算(setup 阶段执行)。
+const activeSourceId = ref(pickDefaultSourceId())
 const activeSource = computed(
   () => sources.find((s) => s.id === activeSourceId.value) || sources[0]
 )
@@ -119,6 +169,29 @@ function fillExample(text) {
   if (installing.value) return
   userInput.value = String(text)
   installError.value = ''
+}
+
+// 2026-07-10 增:粘贴按钮 — 把系统剪贴板文本塞进输入框。
+// 桌面端走 platform.platform.clipboardText()(后端 GetClipboardText 走 wails ClipboardGetText);
+// Web 端 WebClipboardText 兜底返空串,失败时 toast 提示。
+// 失败分两种:剪贴板为空(常见,用户没复制)跟读取异常(权限拒/桌面 hook 未注册)。
+async function pasteFromClipboard() {
+  if (installing.value) return
+  let text = ''
+  try {
+    text = await platform.platform.clipboardText()
+  } catch (e) {
+    installError.value = t('market.btnPasteFailed', { msg: e?.message || String(e) })
+    return
+  }
+  const trimmed = String(text || '').trim()
+  if (!trimmed) {
+    installError.value = t('market.btnPasteEmpty')
+    return
+  }
+  userInput.value = trimmed
+  installError.value = ''
+  toast.success(t('market.btnPasteSuccess'))
 }
 
 // 2026-07-09 增:输入框 + 安装流程
@@ -390,6 +463,36 @@ const lastInstalledName = ref('')
             {{ t(activeSource.descKey) }}
           </p>
 
+          <!-- 2026-07-10 增:GitHub tab 「知名 skill 仓库」快捷浏览块。
+               v-if 限定 activeSource.id === 'github' 才出现,
+               其他 tab 不渲染。按钮调 platform.platform.openExternal 跳转浏览器,
+               走跨平台通道(桌面 wails BrowserOpenURL / Web window.open),不离开当前页。 -->
+          <div v-if="activeSource.id === 'github' && activeSource.famousRepos?.length" class="famous-repos">
+            <div class="famous-title">
+              <IconPark icon="mdi:star-circle-outline" width="14" height="14" />
+              <span>{{ t('market.githubFamous.title') }}</span>
+            </div>
+            <p class="famous-desc">{{ t('market.githubFamous.desc') }}</p>
+            <div class="famous-list">
+              <div
+                v-for="r in activeSource.famousRepos"
+                :key="r.id"
+                class="famous-item"
+              >
+                <code class="famous-repo-name">{{ r.display }}</code>
+                <button
+                  type="button"
+                  class="famous-open-btn"
+                  :title="`${t('market.githubFamous.btnOpen')} ${r.display}`"
+                  @click="openInExternal(r.url)"
+                >
+                  <IconPark icon="mdi:open-in-new" width="12" height="12" />
+                  <span>{{ t('market.githubFamous.btnOpen') }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- 2026-07-09 增:安装指南(给用户思路) -->
           <div class="install-guide">
             <div class="guide-title">
@@ -434,6 +537,18 @@ const lastInstalledName = ref('')
                 :disabled="installing"
                 @keydown.enter="handleInstall"
               />
+              <!-- 2026-07-10 增:粘贴按钮 — 装到 skill-box 按钮左侧,
+                   一键读剪贴板文本塞进输入框(避免手动 cmd+V / ctrl+V 后还需要点击输入框) -->
+              <button
+                type="button"
+                class="paste-btn"
+                :title="t('market.btnPasteTitle')"
+                :disabled="installing"
+                @click="pasteFromClipboard"
+              >
+                <IconPark icon="mdi:content-paste" width="14" height="14" />
+                <span>{{ t('market.btnPaste') }}</span>
+              </button>
               <button
                 type="button"
                 class="primary"
@@ -797,6 +912,84 @@ const lastInstalledName = ref('')
 }
 
 /* ============================================
+   2026-07-10 增:GitHub tab 知名 skill 仓库快捷浏览块
+   ============================================ */
+.famous-repos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius-sm);
+}
+.famous-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.famous-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.famous-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.famous-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.famous-repo-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.famous-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.famous-open-btn:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-card));
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.famous-open-btn:active {
+  transform: translateY(0);
+}
+
+/* ============================================
    2026-07-09 增:安装指南块
    ============================================ */
 .install-guide {
@@ -918,6 +1111,35 @@ const lastInstalledName = ref('')
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+
+/* 2026-07-10 增:粘贴按钮(装到 skill-box 按钮左侧)。
+   outline 风格跟 primary 按钮区分,操作不是主流程,
+   视觉上像「附属操作」不抢焦点。 */
+.paste-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.paste-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+.paste-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .install-input {
   flex: 1;

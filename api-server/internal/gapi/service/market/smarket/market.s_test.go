@@ -97,7 +97,8 @@ func TestListSources_IncludesDefault(t *testing.T) {
 	for _, s := range res.Items {
 		names[s.Name] = true
 	}
-	for _, want := range []string{"skillhub", "skills.sh"} {
+	// 2026-07-10 改:DefaultSources 改名后,期望 name 也跟着改
+	for _, want := range []string{"skillhub-cn", "skills.sh"} {
 		if !names[want] {
 			t.Errorf("missing source %q", want)
 		}
@@ -508,8 +509,8 @@ func TestListSkillsWithInstalled(t *testing.T) {
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
 	}
-	env.seedMarketSkill(t, 1, "skillhub", "code-review", "code-review", "1.0.0")
-	env.seedMarketSkill(t, 1, "skillhub", "commit-msg", "commit-msg", "1.0.0")
+	env.seedMarketSkill(t, 1, "skillhub-cn", "code-review", "code-review", "1.0.0")
+	env.seedMarketSkill(t, 1, "skillhub-cn", "commit-msg", "commit-msg", "1.0.0")
 	res, err := env.svc.ListSkillsWithInstalled(smarket.ListSkillsQuery{Page: 1, Size: 20})
 	if err != nil {
 		t.Fatal(err)

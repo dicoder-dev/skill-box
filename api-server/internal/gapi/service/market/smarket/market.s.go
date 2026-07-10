@@ -336,23 +336,40 @@ func DefaultSources() []*entity.MarketSource {
 		}
 	}
 	return []*entity.MarketSource{
-		mk("skillhub", skillmarket.SourceSkillhub),
+		// 2026-07-10 改:seed 默认 source 名跟 type 对齐成 "skillhub-cn",
+		// 跟 UI / 分组目录名一致。老 DB 里 type="skillhub" 仍然保留(只插入新的)。
+		mk("skillhub-cn", skillmarket.SourceSkillhub),
 		mk("skills.sh", skillmarket.SourceSkillsSH),
 	}
 }
 
 // EnsureDefaultSources seed 默认 source(只插不存在的)。幂等。
+//
+// 2026-07-10 改:seed name 由 "skillhub" 改成 "skillhub-cn"(对齐前端 UI / 分组目录名)。
+// 但老库可能已有 name="skillhub" 的旧 source 行,这里同时认 Name 和 Type 两个维度的"已存在":
+//   - 已有同 Name → skip(不插新的)
+//   - 已有同 Type(无论 Name 是否为新名)→ 也 skip,避免同一个 type 两条 enabled 记录,
+//     InstallFromInput 的 findOrCreateSourceByType 会拿到任一条
 func (s *Service) EnsureDefaultSources() error {
 	existing, _, err := s.sourceModel().FindList(nil, &where.Extra{PageNum: 1, PageSize: 100})
 	if err != nil {
 		return err
 	}
-	have := map[string]bool{}
+	haveName := map[string]bool{}
+	haveType := map[string]bool{}
 	for _, e := range existing {
-		have[e.Name] = true
+		if e == nil {
+			continue
+		}
+		if e.Name != "" {
+			haveName[e.Name] = true
+		}
+		if e.Type != "" && e.Enabled {
+			haveType[e.Type] = true
+		}
 	}
 	for _, def := range DefaultSources() {
-		if have[def.Name] {
+		if haveName[def.Name] || haveType[def.Type] {
 			continue
 		}
 		if _, err := s.sourceModel().Create(def); err != nil {

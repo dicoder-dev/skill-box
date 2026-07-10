@@ -115,10 +115,13 @@ func TestDefaultAdapters_FactorySane(t *testing.T) {
 
 func TestSanitizeSourceName(t *testing.T) {
 	cases := map[string]string{
-		"skillhub":   "skillhub",
-		"skills.sh":  "skills-sh",
-		"  Foo Bar ": "foo-bar",
-		"":           "",
+		// 2026-07-10 改:SourceSkillhub 改名后,SanitizeSourceName 输入也含 "skillhub-cn",
+		// 但 NormalizeName 同样接受中划线(^[a-z0-9_-]+),仍按原样回写
+		"skillhub-cn": "skillhub-cn",
+		"skillhub":    "skillhub", // 兼容老 sourceType
+		"skills.sh":   "skills-sh",
+		"  Foo Bar ":  "foo-bar",
+		"":            "",
 	}
 	for in, want := range cases {
 		if got := skillmarket.SanitizeSourceName(in); got != want {

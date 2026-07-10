@@ -261,8 +261,13 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 // 避免物理目录跟 Manifest.GroupPath 不一致导致 lock 路径 ENOENT。
 func defaultGroupPathFor(sourceType string) string {
 	switch sourceType {
-	case skillmarket.SourceSkillhub:
-		return "skillhub"
+	case skillmarket.SourceSkillhub, "skillhub":
+		// 2026-07-10 改:SourceSkillhub 改名 "skillhub-cn",分组目录跟 type 同名;
+		// 老 sourceType="skillhub" 走 DB 旧记录,分组仍沿用 "skillhub" 目录(避免已下载的 skill 重新落盘)
+		if sourceType == "skillhub" {
+			return "skillhub"
+		}
+		return "skillhub-cn"
 	case skillmarket.SourceSkillsSH:
 		return "skills.sh"
 	default:
@@ -272,15 +277,19 @@ func defaultGroupPathFor(sourceType string) string {
 
 // deriveGroupPath 2026-07-09 增:根据 source_type + remoteID 动态推导分组。
 //
-//   - skillhub:返 "skillhub"(固定,跟旧版兼容)
-//   - skillssh:返 "skills.sh"(固定)
-//   - github:从 remoteID="owner/repo@skill-path" 拆出 owner 当分组,
+//   - skillhub → 返 "skillhub-cn"(2026-07-10 改:对齐 UI / 磁盘目录)
+//   - skillssh → 返 "skills.sh"(固定)
+//   - github   → 从 remoteID="owner/repo@skill-path" 拆出 owner 当分组,
 //     同一个 owner 多个 skill 归到同组(anthropics/skills@pdf + anthropics/skills@pdf
 //     都进 "anthropics" 组),便于浏览;owner 不在远程 ID 里时回退到 "github"
 func deriveGroupPath(sourceType, remoteID string) string {
 	switch sourceType {
-	case skillmarket.SourceSkillhub:
-		return "skillhub"
+	case skillmarket.SourceSkillhub, "skillhub":
+		// 2026-07-10 改:同 defaultGroupPathFor,新老 type 用各自分组名
+		if sourceType == "skillhub" {
+			return "skillhub"
+		}
+		return "skillhub-cn"
 	case skillmarket.SourceSkillsSH:
 		return "skills.sh"
 	case skillmarket.SourceGitHub:
@@ -346,7 +355,7 @@ func (s *Service) findOrCreateSourceByType(sourceType string) (*entity.MarketSou
 	name := sourceType
 	switch sourceType {
 	case skillmarket.SourceSkillhub:
-		name = "skillhub"
+		name = "skillhub-cn" // 2026-07-10 改:跟 type 同名,作为 market_sources.name 默认值
 	case skillmarket.SourceSkillsSH:
 		name = "skills.sh"
 	}

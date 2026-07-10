@@ -285,7 +285,7 @@ func TestCheckUpdates_WithMarket(t *testing.T) {
 	}
 	// 走 svc 的 db 写一条 market_skill
 	svc.WriteMarketSkillForTest(&entity.MarketSkill{
-		SourceName: "skillhub", RemoteID: "alpha", Name: "alpha", Version: "0.2.0",
+		SourceName: "skillhub-cn", RemoteID: "alpha", Name: "alpha", Version: "0.2.0",
 	})
 	items, err := svc.CheckUpdates(sskillapp.CheckUpdatesInput{})
 	if err != nil {

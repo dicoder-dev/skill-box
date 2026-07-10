@@ -25,10 +25,13 @@ import (
 //   - 用户视角:从 skills.sh 装的 skill 跟从 GitHub 装的 skill 应该归不同分组
 //   - URL 形态不同:skills.sh 走 /{owner}/{repo}/{skill},github 走 github.com/blob/...
 const (
-	SourceSkillhub = "skillhub" // skillhub.cn
-	SourceSkillsSH = "skillssh" // skills.sh
-	SourceGitHub   = "github"   // github.com / raw.githubusercontent.com(2026-07-09 增)
-	SourceCustom   = "custom"   // 用户自定义 HTTP+JSON(预留)
+	// 2026-07-10 改:skil.LHub 国内源唯一 ID 由 "skillhub" 改成 "skillhub-cn",
+	// 跟 UI 展示名 / 分组名 / ListSources.label 对齐。
+	// DB 里 market_sources.type 原为 "skillhub" 的旧记录,运行时兼容两种都认(见 install_input_group_test 的兼容断言)。
+	SourceSkillhub = "skillhub-cn"
+	SourceSkillsSH = "skillssh"
+	SourceGitHub   = "github"
+	SourceCustom   = "custom"
 )
 
 // SourceConfigJSON 2026-07-04 移到此:允许 source config_json 携带的私有字段。

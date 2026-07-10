@@ -375,15 +375,32 @@ const messages = {
   },
 
   // 2026-07-09 改:MarketView 改回「卡片 + open in browser」方案。iframe 被 skillhub CORS 拒。
+  //
+  // 2026-07-10 改:
+  //   - skillhub 国内源更名为 "skillhub-cn",i18n 同步换
+  //   - GitHub tab 增 「known skill repos shortcut」
+  //   - 装到 skill-box 按钮左侧增 「Paste」按钮
   market: {
     title: 'Marketplace',
     subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh / GitHub) and paste a detail page URL to install into skill-box.',
     btnOpenInBrowser: 'Open in browser',
     btnOpenInBrowserTip: 'Open {name} in system browser',
+    // 2026-07-10: paste button (left of "Install to skill-box")
+    btnPaste: 'Paste',
+    btnPasteTitle: 'Read system clipboard text and fill in the input above',
+    btnPasteSuccess: 'Clipboard text pasted',
+    btnPasteEmpty: 'Clipboard is empty',
+    btnPasteFailed: 'Failed to read clipboard: {msg}',
     cards: {
       skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
       skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
       githubDesc: 'Agent skill repos on GitHub, install directly via raw content URL.',
+    },
+    // 2026-07-10: shortcut buttons for popular GitHub skill repos
+    githubFamous: {
+      title: 'Popular skill repos',
+      desc: 'Below are well-known community-published agent skill repos on GitHub. Click a button to open in browser.',
+      btnOpen: 'Open',
     },
     // 2026-07-09: input box one-click install
     guide: {

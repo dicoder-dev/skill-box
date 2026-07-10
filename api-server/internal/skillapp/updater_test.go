@@ -29,13 +29,14 @@ func TestSemverCmp_Basic(t *testing.T) {
 
 func TestCheckUpdates_BySourceRef(t *testing.T) {
 	local := []*entity.Skill{
-		{ID: 1, Name: "alpha", Version: "0.1.0", Scope: "global", Source: "market", SourceRef: "skillhub:alpha-1"},
+		// 2026-07-10 改:SourceRef 由 skillhub:xxx → skillhub-cn:xxx(对齐 SourceName 改名)
+		{ID: 1, Name: "alpha", Version: "0.1.0", Scope: "global", Source: "market", SourceRef: "skillhub-cn:alpha-1"},
 		{ID: 2, Name: "beta", Version: "0.5.0", Scope: "global", Source: "local", SourceRef: ""},
 	}
 	market := []*entity.MarketSkill{
-		{Name: "alpha", SourceName: "skillhub", RemoteID: "alpha-1", Version: "0.2.0"},
-		{Name: "beta", SourceName: "skillhub", RemoteID: "beta-1", Version: "0.5.0"},
-		{Name: "gamma", SourceName: "skillhub", RemoteID: "gamma-1", Version: "1.0.0"},
+		{Name: "alpha", SourceName: "skillhub-cn", RemoteID: "alpha-1", Version: "0.2.0"},
+		{Name: "beta", SourceName: "skillhub-cn", RemoteID: "beta-1", Version: "0.5.0"},
+		{Name: "gamma", SourceName: "skillhub-cn", RemoteID: "gamma-1", Version: "1.0.0"},
 	}
 	u := skillapp.NewUpdater()
 	items := u.CheckUpdates(local, market)
@@ -46,7 +47,8 @@ func TestCheckUpdates_BySourceRef(t *testing.T) {
 	if items[0].SkillName != "alpha" || !items[0].UpdateAvailable {
 		t.Errorf("alpha item = %+v", items[0])
 	}
-	if items[0].MarketSource != "skillhub" || items[0].MarketVersion != "0.2.0" {
+	// 2026-07-10 改:MarketSource 也变成 "skillhub-cn"
+	if items[0].MarketSource != "skillhub-cn" || items[0].MarketVersion != "0.2.0" {
 		t.Errorf("alpha source/version wrong: %+v", items[0])
 	}
 	// beta: 0.5.0 → 0.5.0 → 不更新
@@ -62,7 +64,8 @@ func TestCheckUpdates_FallbackByName(t *testing.T) {
 	}
 	market := []*entity.MarketSkill{
 		{Name: "alpha", SourceName: "skillssh", RemoteID: "alpha-7", Version: "0.3.0"},
-		{Name: "alpha", SourceName: "skillhub", RemoteID: "alpha-3", Version: "0.5.0"},
+		// 2026-07-10 改:SourceName 跟其它测试统一成 "skillhub-cn"
+		{Name: "alpha", SourceName: "skillhub-cn", RemoteID: "alpha-3", Version: "0.5.0"},
 	}
 	u := skillapp.NewUpdater()
 	items := u.CheckUpdates(local, market)
@@ -72,7 +75,7 @@ func TestCheckUpdates_FallbackByName(t *testing.T) {
 	if !items[0].UpdateAvailable {
 		t.Errorf("expected update available, got %+v", items[0])
 	}
-	// 应该选最大版本 0.5.0(skillhub)
+	// 应该选最大版本 0.5.0(skillhub-cn)
 	if items[0].MarketVersion != "0.5.0" {
 		t.Errorf("MarketVersion = %s, want 0.5.0", items[0].MarketVersion)
 	}

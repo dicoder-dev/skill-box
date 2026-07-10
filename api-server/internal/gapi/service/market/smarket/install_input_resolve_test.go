@@ -201,19 +201,20 @@ func TestResolveInstallInput_GitHubTreeURL(t *testing.T) {
 
 func TestResolveInstallInput_NonURLInputsRejected(t *testing.T) {
 	// 2026-07-09 改:所有 source 都要求粘详情页 URL,纯 slug / owner/repo@skill 全部拒绝
+	// 2026-07-10 改:SourceSkillhub 改名后,hint 一律用 "skillhub-cn"
 	cases := []struct {
 		name  string
 		input string
 		hint  string
 	}{
-		{"纯 slug + skillhub hint", "code-review", "skillhub"},
+		{"纯 slug + skillhub-cn hint", "code-review", "skillhub-cn"},
 		{"owner/repo@skill + skillssh hint", "anthropics/skills@pdf", "skillssh"},
 		{"纯 slug + skillssh hint", "code-review", "skillssh"},
-		{"owner/repo@skill + skillhub hint", "anthropics/skills@pdf", "skillhub"},
+		{"owner/repo@skill + skillhub-cn hint", "anthropics/skills@pdf", "skillhub-cn"},
 		{"纯 slug + 无 hint", "code-review", ""},
-		{"非法 slug + skillhub hint", "code review with space", "skillhub"},
+		{"非法 slug + skillhub-cn hint", "code review with space", "skillhub-cn"},
 		{"空输入", "   ", ""},
-		{"空输入 + hint", "", "skillhub"},
+		{"空输入 + hint", "", "skillhub-cn"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -232,10 +233,10 @@ func TestResolveInstallInput_HintNarrowsDomain(t *testing.T) {
 		input string
 		hint  string
 	}{
-		// skillhub tab 不接受 skills.sh URL
-		{"skillhub tab + skills.sh URL", "https://skills.sh/anthropics/skills/pdf", "skillhub"},
-		// skillhub tab 不接受 github URL
-		{"skillhub tab + github URL", "https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md", "skillhub"},
+		// skillhub-cn tab 不接受 skills.sh URL
+		{"skillhub-cn tab + skills.sh URL", "https://skills.sh/anthropics/skills/pdf", "skillhub-cn"},
+		// skillhub-cn tab 不接受 github URL
+		{"skillhub-cn tab + github URL", "https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md", "skillhub-cn"},
 		// skills.sh tab 不接受 skillhub URL
 		{"skills.sh tab + skillhub URL", "https://skillhub.cn/skills/code-review", "skillssh"},
 		// skills.sh tab 不接受 github URL

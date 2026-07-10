@@ -49,12 +49,14 @@ const (
 
 // 兜底 skill 列表(skillhub.cn API 暂不可达时使用)。
 // 2026-07-01 保留:即使切到真 API,失败兜底仍是这张表,UI 不空白。
+// 2026-07-10 改:Author 字段由 "skillhub" 改成 "skillhub-cn",跟
+// market_sources.name / UI 分组标签对齐("skillhub-cn > code-review")。
 var knownFallback = []skillmarket.MarketItem{
 	{
 		RemoteID:    "code-review",
 		Name:        "code-review",
 		Version:     "1.0.0",
-		Author:      "skillhub",
+		Author:      "skillhub-cn",
 		DetailURL:   "https://skillhub.cn/skills/code-review",
 		Tags:        []string{"code-quality", "review"},
 		Description: "对当前 diff 做静态代码审查,聚焦可读性与潜在 bug。",
@@ -63,7 +65,7 @@ var knownFallback = []skillmarket.MarketItem{
 		RemoteID:    "commit-msg",
 		Name:        "commit-msg",
 		Version:     "0.3.1",
-		Author:      "skillhub",
+		Author:      "skillhub-cn",
 		DetailURL:   "https://skillhub.cn/skills/commit-msg",
 		Tags:        []string{"git", "commit"},
 		Description: "根据 staged diff 自动生成符合 Conventional Commits 规范的提交信息。",
@@ -72,7 +74,7 @@ var knownFallback = []skillmarket.MarketItem{
 		RemoteID:    "debug-helper",
 		Name:        "debug-helper",
 		Version:     "0.2.0",
-		Author:      "skillhub",
+		Author:      "skillhub-cn",
 		DetailURL:   "https://skillhub.cn/skills/debug-helper",
 		Tags:        []string{"debug", "diagnostic"},
 		Description: "协助快速定位运行时错误与异常堆栈,给出最小可复现 + 修复建议。",

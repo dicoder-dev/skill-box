@@ -386,16 +386,34 @@ const messages = {
   // 2026-07-09 改:MarketView 改回「卡片 + 在浏览器中打开」方案。
   // iframe 嵌入被 skillhub 站点 CORS 拒(同源策略,代理解决不了),放弃。
   // 保留:title / subtitle / btnOpenInBrowser / cards.* 两张站点卡的描述
+  //
+  // 2026-07-10 改:
+  //   - skillhub 国内源更名为 "skillhub-cn",i18n 同步换成新名字
+  //   - tab name 改名(SkillHub → SkillHub-CN),
+  //     同时按 getter 函数(后续前端 MarketView 可以按 locale 自动选 tab)
+  //   - GitHub tab 增 「知名 skill 快捷浏览」列表 + 「粘贴」按钮 文案
   market: {
     title: '三方市场',
     subtitle: '浏览 skillhub.cn / skills.sh / GitHub 等三方源,粘详情页 URL 一键装到 skill-box。',
     btnOpenInBrowser: '在浏览器中打开',
     btnOpenInBrowserTip: '在系统浏览器打开 {name} 站点',
+    // 2026-07-10 增:粘贴按钮(通用,装到 skill-box 按钮左侧)
+    btnPaste: '粘贴',
+    btnPasteTitle: '读取系统剪贴板文本并填入上方输入框',
+    btnPasteSuccess: '已粘贴剪贴板内容',
+    btnPasteEmpty: '剪贴板为空,无法粘贴',
+    btnPasteFailed: '读取剪贴板失败:{msg}',
     // 站点卡片描述(在卡片里展示)
     cards: {
       skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
       skillsshDesc: 'Vercel 托管的 AI 技能排行榜,按热度(1H / change)实时排序。',
       githubDesc: 'GitHub 上的 agent skill 仓库,直接走 raw 内容 URL 装到本地。',
+    },
+    // 2026-07-10 增:GitHub tab 知名 skill 仓库快捷浏览块
+    githubFamous: {
+      title: '知名 skill 仓库',
+      desc: '下面是几个社区知名的、开源在 GitHub 上的 agent skill 仓库,点按钮在浏览器里浏览。',
+      btnOpen: '打开',
     },
     // 2026-07-09 增:输入框一键安装
     guide: {
