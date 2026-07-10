@@ -397,7 +397,7 @@ const messages = {
     subtitle: '浏览 skillhub.cn / skills.sh / GitHub 等三方源,粘详情页 URL 一键装到 skill-box。',
     btnOpenInBrowser: '在浏览器中打开',
     btnOpenInBrowserTip: '在系统浏览器打开 {name} 站点',
-    // 2026-07-10 增:粘贴并安装按钮(通用,装到 skill-box 按钮左侧)
+    // 2026-07-10 增:粘贴并安装按钮(主按钮「安装」右侧)
     // 2026-07-10 改:改名「粘贴」→「粘贴并安装」,粘贴成功自动触发安装流程
     btnPaste: '粘贴并安装',
     btnPasteTitle: '读取系统剪贴板文本,粘贴到上方输入框并直接开始安装',
@@ -449,7 +449,9 @@ const messages = {
       placeholderSkillhub: 'https://skillhub.cn/skills/{slug}',
       placeholderSkillssh: 'https://skills.sh/{owner}/{repo}/{skill} 或 GitHub blob URL',
       placeholderGithub: 'https://github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md',
-      btnInstall: '装到 skill-box',
+      // 2026-07-10 改:「装到 skill-box」→「安装」(用户要求简化文案,
+      // 「skill-box」已经写在页面标题里,按钮文字不用重复)
+      btnInstall: '安装',
       btnInstalling: '安装中…',
       errInvalidInput: '输入格式无法识别:每个 tab 只接受对应市场的详情页 URL',
       errSource: '找不到对应的市场源',

@@ -580,9 +580,21 @@ const lastInstalledName = ref('')
                 :disabled="installing"
                 @keydown.enter="handleInstall"
               />
-              <!-- 2026-07-10 增:粘贴按钮 — 装到 skill-box 按钮左侧
-                   2026-07-10 改:粘贴成功直接调 handleInstall()(走 4 阶段下载流程),
-                   用户无需再点主按钮。失败(剪贴板空 / 读异常)只 toast 不触发安装。 -->
+              <!-- 2026-07-10 改(用户要求):「安装」按钮放到 paste 按钮左侧
+                   形成 [安装] [粘贴并安装] 的「主按钮 + 副按钮」视觉,
+                   主按钮的「下载」意图更清晰,粘贴按钮作为「快速入口」紧邻其右 -->
+              <button
+                type="button"
+                class="primary"
+                :disabled="installing || !userInput.trim()"
+                @click="handleInstall"
+              >
+                <IconPark :icon="installing ? 'mdi:loading' : 'mdi:download'" width="14" height="14" />
+                {{ installing ? t('market.input.btnInstalling') : t('market.input.btnInstall') }}
+              </button>
+              <!-- 2026-07-10 增:粘贴按钮 — 主按钮右侧,粘贴成功自动调 handleInstall()
+                   (走 4 阶段下载流程),用户无需再点主按钮。
+                   失败(剪贴板空 / 读异常)只 toast 不触发安装。 -->
               <button
                 type="button"
                 class="paste-btn"
@@ -592,15 +604,6 @@ const lastInstalledName = ref('')
               >
                 <IconPark icon="mdi:content-paste" width="14" height="14" />
                 <span>{{ t('market.btnPaste') }}</span>
-              </button>
-              <button
-                type="button"
-                class="primary"
-                :disabled="installing || !userInput.trim()"
-                @click="handleInstall"
-              >
-                <IconPark :icon="installing ? 'mdi:loading' : 'mdi:download'" width="14" height="14" />
-                {{ installing ? t('market.input.btnInstalling') : t('market.input.btnInstall') }}
               </button>
             </div>
             <!-- 错误条(只在失败时显示) -->

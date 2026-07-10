@@ -385,7 +385,7 @@ const messages = {
     subtitle: 'Browse third-party skill catalogs (skillhub.cn / skills.sh / GitHub) and paste a detail page URL to install into skill-box.',
     btnOpenInBrowser: 'Open in browser',
     btnOpenInBrowserTip: 'Open {name} in system browser',
-    // 2026-07-10: paste button (left of "Install to skill-box")
+    // 2026-07-10: paste button (right of "Install" button)
     // 2026-07-10 改:rename "Paste" → "Paste & Install", paste ok auto-triggers install
     btnPaste: 'Paste & install',
     btnPasteTitle: 'Read clipboard text, paste into the input above and start installing immediately',
@@ -436,7 +436,8 @@ const messages = {
       placeholderSkillhub: 'https://skillhub.cn/skills/{slug}',
       placeholderSkillssh: 'https://skills.sh/{owner}/{repo}/{skill} or GitHub blob URL',
       placeholderGithub: 'https://github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md',
-      btnInstall: 'Install to skill-box',
+      // 2026-07-10: "Install to skill-box" → "Install" (page title already says skill-box)
+      btnInstall: 'Install',
       btnInstalling: 'Installing…',
       errInvalidInput: 'Unrecognized input. Each tab only accepts its own market\'s detail URL.',
       errSource: 'Market source not found',
