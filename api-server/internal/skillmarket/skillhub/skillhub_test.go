@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"ginp-api/internal/skillmarket"
 )
 
 // fakeRT 自定义 http.RoundTripper,不监听端口(沙盒限制)。
@@ -739,6 +742,39 @@ func TestDownload_NoFallback_UnknownID(t *testing.T) {
 	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "no-such-id")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+	// 2026-07-10 增:404 应当被映射成 ErrRemoteNotFound(让 controller 走 404 + 前端 errSkillNotFound),
+	// 而不是当成网络失败。文案应包含 remoteID 方便排错。
+	if !errors.Is(err, skillmarket.ErrRemoteNotFound) {
+		t.Fatalf("expected ErrRemoteNotFound, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "no-such-id") {
+		t.Fatalf("err should include remoteID for debugging, got %q", err.Error())
+	}
+}
+
+// TestDownload_COSNotFound 同测:COS bucket 上 404(302 → 404 → 404)
+// 也应该映射成 ErrRemoteNotFound,而不是裸「download zip: status 404」。
+// 模拟 302 redirect 然后 zip 真实链接返 404 的场景。
+func TestDownload_COSNotFound(t *testing.T) {
+	rt := newFakeClient(map[string]fakeResp{
+		"/api/v1/download": {
+			status:      302,
+			redirectTo:  "/cos-bucket/skills/ghost-skill.zip",
+			ct:          "application/json",
+		},
+		"/cos-bucket/skills/ghost-skill.zip": {
+			status: 404,
+			body:   "no such file in COS",
+		},
+	})
+	a := NewWithClient(rt)
+	_, err := a.Download(context.Background(), "https://api.skillhub.cn", "ghost-skill")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, skillmarket.ErrRemoteNotFound) {
+		t.Fatalf("expected ErrRemoteNotFound, got %v", err)
 	}
 }
 

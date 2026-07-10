@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/market/smarket"
+	"ginp-api/internal/skillmarket"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -46,7 +47,9 @@ type RespondInstallFromInput = smarket.InstallFromInputResult
 //
 // 错误处理:
 //   - ErrInvalidInput → 400(用户输入无法识别,前端可保留输入让用户重试)
-//   - ErrSourceNotFound / ErrSkillNotFound → 404
+//   - ErrSourceNotFound → 404(源未注册,跟 ErrRemoteNotFound 区分)
+//   - ErrRemoteNotFound → 404(slug 不存在,2026-07-10 增:前端走 errSkillNotFound 文案),
+//     跟 ErrSourceNotFound 区分(用错源 vs 源 OK 但 slug 不存在)
 //   - 其它 → 500(下载/写盘失败)
 //
 // 2026-07-09 增:首次进入市场时前端不一定先调过 ListSources,
@@ -71,6 +74,10 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 		case errors.Is(err, smarket.ErrInvalidInput):
 			c.JSON(400, gin.H{"error": err.Error()})
 		case errors.Is(err, smarket.ErrSourceNotFound):
+			c.JSON(404, gin.H{"error": err.Error()})
+		case errors.Is(err, skillmarket.ErrRemoteNotFound):
+			// 2026-07-10 增:slug 不存在(典型如用户粘贴错 URL / slug 已下架),
+			// 返 404 + 错误信息精确。前端根据 404 + err 信息命中「errSkillNotFound」文案。
 			c.JSON(404, gin.H{"error": err.Error()})
 		case errors.Is(err, smarket.ErrSkillAlreadyExists):
 			// 2026-07-09 增:同名冲突,返 409 + 现有 skill 信息(让前端弹覆盖确认)。

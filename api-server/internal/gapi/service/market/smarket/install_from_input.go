@@ -113,7 +113,10 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 	// 5) 下载
 	can, err := s.orchestrator().DownloadFromSource(ctx, src.ID, resolved.RemoteID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrPullFailed, err)
+		// 2026-07-10 改:用 %w 保留内层 error 的 wrap 链,
+		// 否则 errors.Is(err, skillmarket.ErrRemoteNotFound) 在 controller 里查不到
+		// (原 %v 是字符串插入,丢了 wrap 信息),404 错误会被误判成 500。
+		return nil, fmt.Errorf("%w: %w", ErrPullFailed, err)
 	}
 	if can == nil {
 		return nil, fmt.Errorf("%w: empty canonical for %s", ErrPullFailed, resolved.RemoteID)

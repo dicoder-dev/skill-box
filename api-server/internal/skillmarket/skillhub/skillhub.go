@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -631,6 +632,11 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 //   4. 任何环节失败 → knownFallback[remoteID] 命中 → buildFallbackCanonical,否则 ErrRemoteFetchFail
 //
 // 同时也尝试备用单文件路径 {baseURL}/api/v1/skills/{slug}/skill.md(应对 zip 接口变更)。
+//
+// 2026-07-10 改(用户反馈 topnews 报「下载失败」实际是 slug 不存在):
+// 加 firstNotFound 累计器 —— Download 内部 3 个子路径都可能返 ErrRemoteNotFound(404),
+// 主函数 final 兜底时,**优先**用 ErrRemoteNotFound(用户要的语义是「skill 不存在」,
+// 不是「下载失败」),只在所有路径都是其它错误时才回退到 ErrRemoteFetchFail。
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	if remoteID == "" {
 		return nil, skillmarket.ErrEmptyRemoteID
@@ -639,18 +645,32 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 		baseURL = defaultBaseURL
 	}
 
+	// 2026-07-10 增:firstNotFound 记录第一次 ErrRemoteNotFound;
+	// 当所有路径都失败时用它给 controller 一个明确的语义(404 ≠ 500)。
+	var firstNotFound error
+
 	// 主路径:302 → zip
-	if can, err := a.downloadViaZip(ctx, baseURL, remoteID); err == nil && can != nil {
+	can, err := a.downloadViaZip(ctx, baseURL, remoteID)
+	if err == nil && can != nil {
 		return can, nil
-	} else if err != nil {
+	}
+	if err != nil {
 		logger.Warn("skillhub download zip: %v; trying single-file fallback", err)
+		if firstNotFound == nil && errors.Is(err, skillmarket.ErrRemoteNotFound) {
+			firstNotFound = err
+		}
 	}
 
 	// 备用路径:single skill.md
-	if can, err := a.downloadSingleFile(ctx, baseURL, remoteID); err == nil && can != nil {
+	can, err = a.downloadSingleFile(ctx, baseURL, remoteID)
+	if err == nil && can != nil {
 		return can, nil
-	} else if err != nil {
+	}
+	if err != nil {
 		logger.Warn("skillhub download single-file: %v; falling back to known list", err)
+		if firstNotFound == nil && errors.Is(err, skillmarket.ErrRemoteNotFound) {
+			firstNotFound = err
+		}
 	}
 
 	// 兜底:knownFallback 命中
@@ -658,6 +678,12 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 		if it.RemoteID == remoteID {
 			return buildFallbackCanonical(it), nil
 		}
+	}
+	// 2026-07-10 改:优先返 firstNotFound(404),让前端走 errSkillNotFound;
+	// 只有当 firstNotFound = nil(说明所有路径都是其它错误,例如网络挂)
+	// 才回退到 ErrRemoteFetchFail。
+	if firstNotFound != nil {
+		return nil, firstNotFound
 	}
 	return nil, fmt.Errorf("%w: %s", skillmarket.ErrRemoteFetchFail, remoteID)
 }
@@ -688,6 +714,12 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 			}
 			return skilladapter.ParseSkillMD(string(body))
 		}
+		// 2026-07-10 改(用户反馈 topnews 报「下载失败」实际是 slug 不存在):
+		// 404 命中 → wrap ErrRemoteNotFound(让 controller 走 404 + i18n errSkillNotFound),
+		// 而不是裸返 status code 让 controller 当成「网络失败」走 generic 文案。
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %s", skillmarket.ErrRemoteNotFound, remoteID)
+		}
 		return nil, fmt.Errorf("download: status %d", resp.StatusCode)
 	}
 	location := resp.Header.Get("Location")
@@ -705,6 +737,11 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 		return nil, err
 	}
 	defer resp2.Body.Close()
+	// 2026-07-10 改:COS bucket 上 slug 不存在也是 404(常见:slug 被改名 / 上游早下架),
+	// 同样映射 ErrRemoteNotFound,避免「资源找不到」被误报为「下载失败」。
+	if resp2.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("%w: %s", skillmarket.ErrRemoteNotFound, remoteID)
+	}
 	if resp2.StatusCode < 200 || resp2.StatusCode >= 300 {
 		return nil, fmt.Errorf("download zip: status %d", resp2.StatusCode)
 	}
