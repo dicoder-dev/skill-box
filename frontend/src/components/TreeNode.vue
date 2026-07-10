@@ -207,11 +207,12 @@ function isDropTarget(node) {
            用户从 code-review 划到 aa group 行时,aa 行的 dragstart 会再次触发并重置 dataTransfer,
            导致拖动源从 skill 变成 group,误触发 moveIntoDescendant / alreadyAtRoot。
            现在 dragstart 只在用户实际点中的那个 .tree-row 上触发,跨行 hover 不会重置。 -->
-      <!-- 2026-07-10 改 v2:删除 group 行最左侧的 + / − caret 图标(用户反馈图标多余),
-           同时把 folder 图标左移,让它落在子 skill 卡片左缩进的"左外侧",
-           视觉上 folder 垂直往下"挂"出子节点,父子关系清晰。
-           做法:.tree-row-group 的 .tree-caret-spacer 设负 margin-left = -8px,
-           把 16px 占位压缩成 8px,等效于把 folder 和 name 整体左移 8px。
+      <!-- 2026-07-10 改 v3:删除 group 行最左侧的 + / − caret 图标(用户反馈图标多余),
+           folder 图标左移到 li 容器左边缘,跟子 skill 卡片左边缘对齐(子 skill 有
+           margin-left: 4 抵消 li padding,group 没有 margin,所以反向吸收 li padding)。
+           根 group folder 起点 = 4(li) + 8(.row padding) + 0(spacer 宽) - 12(margin) = 0
+           根 skill 卡片起点 = 4(li) + 0(.row padding,被 skill margin 抵消) - 4(skill margin) = 0
+           深度 N 的 group/skill 同步右移 14px,父子关系清晰。
            点击行展开/折叠的行为保留(.tree-row-group 整体 @click)。 -->
       <div
         v-if="node.is_group"
@@ -338,17 +339,23 @@ function isDropTarget(node) {
 .tree-row:hover {
   background: var(--bg-hover);
 }
-/* 2026-07-10 改 v2:删除 .tree-caret(caret 图标本身已删),.tree-caret-spacer
-   保留用于 group 行占位。
-   宽度 16px = 原 caret IconPark 16x16 等宽,视觉上不被压缩;
-   margin-left: -8px 把占位"外溢"到 .tree-row padding 之外,
-   等效于把后面的 folder 图标左移 8px,folder 起点 = 子 skill 缩进线外 8px,
-   父子层级关系清晰(group 的 folder 在上,子 skill 卡片缩进在右下方,
-   folder 视觉上"挂"在子节点左侧)。 */
+/* 2026-07-10 改 v3:用户反馈根 group 和根 skill 应同垂直线,但当前根 group folder
+   向右缩进。根因:.tree-row-skill 有 margin-left: 4 抵消 li padding,根 skill
+   实际起点 = 0;group 没有 margin,folder 起点 = li padding(4) + .row padding(8)
+   + 原本 spacer = 20,跟根 skill 差了 20px。
+
+   重算:
+   - 根 skill 卡片实际起点 = 0px(li paddingLeft=4 + skill margin-left=4 = 抵消)
+   - 子 skill 卡片(depth=1)实际起点 = 14px(li paddingLeft=18 - margin=4)
+   - 同理,根 group folder 应该 = 0px,深度 N 的 group folder = 14*N px
+   - 路径:spacer width 改 0,加 margin-left: -12px 吸收 li padding(4) + .row padding(8)
+   - 验证:root folder 起点 = 4(li) + 8(.row padding) + 0(spacer) - 12(margin) = 0 ✓
+           depth=1 group folder 起点 = 18(li) + 8 + 0 - 12 = 14 = 子 skill 起点 ✓
+*/
 .tree-caret-spacer {
   display: inline-block;
-  width: 16px; /* 与原 caret IconPark 16x16 等宽,视觉对齐 */
-  margin-left: -8px; /* 把 folder 左移到子 skill 缩进线外 */
+  width: 0; /* 占位宽度归零,folder 起始位置由 margin-left 决定 */
+  margin-left: -12px; /* 吸收 li padding(4) + .tree-row padding(8) */
   flex-shrink: 0;
 }
 .tree-group-icon, .tree-skill-icon {
