@@ -472,10 +472,11 @@ onErrorCaptured((err) => {
 <style scoped>
 .ssp-scope {
   border-bottom: 1px solid var(--border);
-  /* 2026-07-07 改 v6:作用域区改回 var(--bg-subtle) 灰底,跟 file tree 视觉对齐。
-     之前的 transparent 让面板跟文件树融为一体,层级感丢失;用户反馈"面板是白底"、
-     "标题不灰" — 其实是 hover 才有色,平时没视觉边界。 */
-  background: var(--bg-subtle);
+  /* 2026-07-10 改 v7:用户反馈"作用于区域面板"主体要白底,只保留 header 灰底做层级区分。
+     之前 v6 改回 var(--bg-subtle) 是为了跟 file tree 视觉对齐,现在按用户最新需求反转:
+     外层 panel(包含 body 列表)改用 var(--bg-card) 纯白,header 仍用 var(--bg-subtle) 灰,
+     header 自身带 border-bottom 自然分隔 header 与 body 区域。 */
+  background: var(--bg-card);
   /* 2026-07-07 改 v4:作用域区移到文件树底部,不要再 max-height:50%(占满左栏下半),
      让它作为底部一块自然收缩,文件树占主空间。 */
   flex-shrink: 0;

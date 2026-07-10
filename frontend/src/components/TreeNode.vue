@@ -207,6 +207,9 @@ function isDropTarget(node) {
            用户从 code-review 划到 aa group 行时,aa 行的 dragstart 会再次触发并重置 dataTransfer,
            导致拖动源从 skill 变成 group,误触发 moveIntoDescendant / alreadyAtRoot。
            现在 dragstart 只在用户实际点中的那个 .tree-row 上触发,跨行 hover 不会重置。 -->
+      <!-- 2026-07-10 改:删除 group 行最左侧的 + / − caret 图标(用户反馈图标多余)。
+           用等宽不可见占位 .tree-caret-spacer 顶住原 16px 宽度,保持 folder 图标和子节点
+           的水平对齐不变。点击行展开/折叠的行为保留(.tree-row-group 整体 @click)。 -->
       <div
         v-if="node.is_group"
         class="tree-row tree-row-group"
@@ -218,12 +221,7 @@ function isDropTarget(node) {
         @contextmenu="onContextMenu(node, $event)"
         @dragstart="onDragStart(node, $event)"
       >
-        <IconPark
-          :icon="isCollapsed(node) ? 'mdi:plus' : 'mdi:minus'"
-          width="16"
-          height="16"
-          class="tree-caret"
-        />
+        <span class="tree-caret-spacer" aria-hidden="true" />
         <IconPark
           :icon="isCollapsed(node) ? 'mdi:folder-outline' : 'mdi:folder-open-outline'"
           width="18"
@@ -337,13 +335,11 @@ function isDropTarget(node) {
 .tree-row:hover {
   background: var(--bg-hover);
 }
-.tree-caret {
-  color: var(--text-faint);
-  flex-shrink: 0;
-}
+/* 2026-07-10 改:删除 .tree-caret(caret 图标本身已删),.tree-caret-spacer
+   保留用于 group 行占位,保持 folder 图标与子节点水平对齐。 */
 .tree-caret-spacer {
   display: inline-block;
-  width: 14px;
+  width: 16px; /* 与原 caret IconPark 16x16 等宽,视觉对齐 */
   flex-shrink: 0;
 }
 .tree-group-icon, .tree-skill-icon {
