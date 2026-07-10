@@ -20,7 +20,7 @@ import IconPark from '@/components/IconPark.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import OfficeViewer from '@/components/skill/OfficeViewer.vue'
 import CsvViewer from '@/components/skill/CsvViewer.vue'
-import { renderMarkdownView } from '@/core/utils/markdown_view.js'
+import { renderMarkdownView, extractHeadings } from '@/core/utils/markdown_view.js'
 import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
@@ -84,8 +84,35 @@ const fileName = computed(() => {
 
 const renderedMd = computed(() => isMarkdown.value ? renderMarkdownView(props.content || '') : '')
 
+// 2026-07-10 增:md 文件大纲(只读视图用)。从 props.content 抽取 {level, text, id} 列表。
+// 只在 view 模式 + md 文件时使用,edit 模式仍由 Tiptap 自己管 outline。
+// 大纲树做"按最小 level 提一档":比如文件只有 h3 / h4,展示时按 h1 / h2 缩进,
+// 避免出现"全是缩进很深的小标题"。minLevel 减 1 当作顶层。
+const mdHeadings = computed(() => {
+  if (!isMarkdown.value || editable.value) return []
+  return extractHeadings(props.content || '')
+})
+const minHeadingLevel = computed(() => {
+  if (!mdHeadings.value.length) return 1
+  return Math.min(...mdHeadings.value.map((h) => h.level))
+})
+
 function onMdClick(e) {
   handleExternalClick(e)
+}
+
+// 大纲点击 → 滚动到对应标题。markdown-it 渲染时已经给每个 h1-h6 加了
+// id="md-h-{slug}",这里直接 document.getElementById 找节点再 scrollIntoView。
+// 标题节点在 .cv-md 滚动容器内,scrollIntoView 默认会找最近的滚动祖先
+// (行为: smooth) 跟用户预期一致。
+function scrollToHeading(id) {
+  if (!id) return
+  const el = document.getElementById(id)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // 视觉强调:短暂给目标标题加 active 类(用 CSS transition)
+  el.classList.add('cv-md-heading-active')
+  setTimeout(() => el.classList.remove('cv-md-heading-active'), 1200)
 }
 
 // 文件后缀 → highlight.js language id(常见覆盖,找不到就 plaintext)
@@ -312,23 +339,54 @@ const lineNumbers = computed(() => {
       </button>
     </div>
 
-    <!-- Markdown:可编辑用 Tiptap,只读用 v-html -->
+    <!-- Markdown:可编辑用 Tiptap,只读用 v-html。
+         2026-07-10 改:只读视图额外渲染右侧大纲导航(mdHeadings 提取的 h1-h6 列表),
+         点击大纲项 scrollIntoView 跳转到对应标题。布局走两列:左侧 md 内容(占满),
+         右侧 220px 固定宽大纲(只在有标题时才显示),避免短 md 文件出现空 panel。
+         编辑模式不显示大纲(由 Tiptap 自己管 outline,避免冲突)。 -->
     <div v-else-if="isMarkdown" class="cv-md-wrap">
-      <RichTextEditor
-        v-if="editable"
-        :model-value="content || ''"
-        :placeholder="t('skills.list.bodyEmpty', '开始输入正文…')"
-        :disabled="false"
-        min-height="100%"
-        class="cv-md-rte"
-        @update:model-value="(v) => $emit('update:content', v)"
-      />
-      <div
-        v-else
-        class="cv-md md-body markdown-body"
-        v-html="renderedMd"
-        @click="onMdClick"
-      />
+      <div class="cv-md-content">
+        <RichTextEditor
+          v-if="editable"
+          :model-value="content || ''"
+          :placeholder="t('skills.list.bodyEmpty', '开始输入正文…')"
+          :disabled="false"
+          min-height="100%"
+          class="cv-md-rte"
+          @update:model-value="(v) => $emit('update:content', v)"
+        />
+        <div
+          v-else
+          class="cv-md md-body markdown-body"
+          v-html="renderedMd"
+          @click="onMdClick"
+        />
+      </div>
+      <aside v-if="!editable && mdHeadings.length" class="cv-md-outline">
+        <header class="cv-md-outline-header">
+          <IconPark icon="mdi:format-list-bulleted" width="13" height="13" />
+          <span>大纲</span>
+          <span class="cv-md-outline-count">{{ mdHeadings.length }}</span>
+        </header>
+        <ul class="cv-md-outline-list">
+          <li
+            v-for="h in mdHeadings"
+            :key="h.id"
+            :class="['cv-md-outline-item', `cv-md-outline-l${h.level - minHeadingLevel + 1}`]"
+            :data-tip="h.text"
+          >
+            <button
+              type="button"
+              class="cv-md-outline-btn"
+              :title="h.text"
+              @click="scrollToHeading(h.id)"
+            >
+              <span class="cv-md-outline-dot" />
+              <span class="cv-md-outline-text">{{ h.text }}</span>
+            </button>
+          </li>
+        </ul>
+      </aside>
     </div>
 
     <!-- 大文件提示 -->
@@ -416,9 +474,19 @@ const lineNumbers = computed(() => {
   line-height: 1.7;
   color: var(--text);
 }
+/* 2026-07-10 改:.cv-md-wrap 改为横向 flex,内容 + 大纲两列。
+   旧版 cv-md 自带 flex:1,现在 cv-md-wrap 内层套了 .cv-md-content,
+   让内容继续 flex:1 占满,大纲侧固定 220px 宽度且只在只读 + 有标题时出现。 */
 .cv-md-wrap {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+.cv-md-content {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -428,6 +496,120 @@ const lineNumbers = computed(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 2026-07-10 增:md 大纲导航(右侧固定列)。 */
+.cv-md-outline {
+  flex-shrink: 0;
+  width: 220px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cv-md-outline-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.cv-md-outline-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.cv-md-outline-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.cv-md-outline-item {
+  list-style: none;
+}
+.cv-md-outline-btn {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-radius: 0;
+  transition: background 100ms ease, color 100ms ease;
+}
+.cv-md-outline-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.cv-md-outline-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  margin-top: 7px;
+}
+/* 缩进按 level 差:minHeadingLevel → 0,每升一级 +14px */
+.cv-md-outline-l1 .cv-md-outline-btn { padding-left: 12px; }
+.cv-md-outline-l2 .cv-md-outline-btn { padding-left: 26px; }
+.cv-md-outline-l3 .cv-md-outline-btn { padding-left: 40px; }
+.cv-md-outline-l4 .cv-md-outline-btn { padding-left: 54px; }
+.cv-md-outline-l5 .cv-md-outline-btn { padding-left: 68px; }
+.cv-md-outline-l6 .cv-md-outline-btn { padding-left: 82px; }
+.cv-md-outline-l2 .cv-md-outline-dot { width: 5px; height: 5px; margin-top: 8px; }
+.cv-md-outline-l3 .cv-md-outline-dot,
+.cv-md-outline-l4 .cv-md-outline-dot,
+.cv-md-outline-l5 .cv-md-outline-dot,
+.cv-md-outline-l6 .cv-md-outline-dot {
+  width: 4px;
+  height: 4px;
+  margin-top: 8px;
+  background: var(--border);
+}
+.cv-md-outline-text {
+  flex: 1;
+  min-width: 0;
+  /* 2026-07-10 改:大纲标题单行截断 + tooltip 浮全名(用 :data-tip 模式靠 title 属性兜底,
+     CSS 部分用 white-space + text-overflow 控制视觉) */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* 2026-07-10 增:大纲点击后,目标标题短暂高亮提示(蓝色背景渐隐) */
+.cv-md :deep(.cv-md-heading-active) {
+  background: linear-gradient(90deg, var(--accent-blue-bg, #eff6ff) 0%, transparent 100%);
+  transition: background 1200ms ease;
+  border-radius: 4px;
 }
 .cv-binary,
 .cv-large {

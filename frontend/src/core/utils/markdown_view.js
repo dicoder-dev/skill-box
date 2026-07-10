@@ -42,6 +42,63 @@ const md = new MarkdownIt({
 // GFM 任务列表:把 "- [x] xxx" 转成 <input type="checkbox" checked>
 .use(taskLists, { enabled: true, label: true })
 
+// 2026-07-10 增:给每个 heading 输出 id,用于大纲导航定位。
+// 重写 heading_open rule:h1-h6 在输出时追加 id="md-h-{slug}",
+// slug 是把标题文本做转小写 + 替换非字母数字为 - + 末尾截断的产物,
+// 同名标题追加 -1 / -2 区分(虽然大纲里同名也只显示一次,但 id 必须唯一)。
+// CodeViewer 渲染时会从 tokens 列表里扫描 heading,生成大纲树传给右侧导航。
+const _defaultHeadingOpen = md.renderer.rules.heading_open
+  || function (tokens, idx, options, env, self) { return self.renderToken(tokens, idx, options) }
+md.renderer.rules.heading_open = function (tokens, idx, options, env, self) {
+  const token = tokens[idx]
+  // tag 形如 'h1' / 'h2' ...
+  const tag = token.tag
+  if (tag && /^h[1-6]$/.test(tag)) {
+    // 下一个 token 通常是 inline,包含标题文本。优先用 children 拼出纯文本
+    // (去掉 * _ ` [ 等 markdown 标记),不要直接用 content(content 是源文本,
+    // 会带 "*italic*" 这种残留,影响 slug 美观)。
+    const next = tokens[idx + 1]
+    let text = ''
+    if (next && next.type === 'inline' && next.children && Array.isArray(next.children)) {
+      text = next.children
+        .map((c) => (c && typeof c.content === 'string') ? c.content : '')
+        .join('')
+    } else if (next && next.type === 'inline' && typeof next.content === 'string') {
+      text = next.content
+    } else if (next && Array.isArray(next.content)) {
+      text = next.content.join('')
+    } else if (next && typeof next.content === 'string') {
+      text = next.content
+    }
+    const slug = slugifyHeading(text)
+    if (slug) {
+      // 用 env._headingIdCounts 跟踪同名标题,自动追加 -1 / -2
+      env._headingIdCounts = env._headingIdCounts || {}
+      const base = `md-h-${slug}`
+      const cnt = (env._headingIdCounts[base] || 0) + 1
+      env._headingIdCounts[base] = cnt
+      const id = cnt === 1 ? base : `${base}-${cnt}`
+      token.attrSet('id', id)
+    }
+  }
+  return _defaultHeadingOpen(tokens, idx, options, env, self)
+}
+
+// 简单的 slug 化:小写 + 去标点 + 空格转 -;中文等 CJK 字符直接保留
+// (浏览器的 scrollIntoView 支持任意 id 字符串,无需 ASCII-only)。
+function slugifyHeading(text) {
+  if (!text) return ''
+  return String(text)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    // 移除 markdown-it inline 残存的标记符号(如 * / _ / ` / [ / ])
+    .replace(/[*_`~<>\[\]()#]/g, '')
+    // 截断过长 slug,避免 id 过长
+    .slice(0, 80)
+    .replace(/^-+|-+$/g, '')
+}
+
 // 2026-07-04 改:外链统一走 platform.openExternal,不走 webview 自带 target=_blank。
 // 重写 link_open rule,把链接改写成 class="md-external-link" data-url="<href>"(不带 target),
 // 由容器上的 @click="handleExternalClick" 拦截,统一调 openExternal。
@@ -70,4 +127,47 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
 export function renderMarkdownView(src) {
   if (!src) return ''
   return md.render(src)
+}
+
+// 2026-07-10 增:从 markdown 源码提取大纲(标题列表),供右侧大纲导航使用。
+// 跟 renderMarkdownView 共享 heading_open 重写,id 生成规则一致
+// (同名标题追加 -1 / -2),保证大纲 id 跟渲染后 DOM id 严格对应。
+// 走 md.parse 拿 tokens(不 render 拿 html),用同一个 slugify 跟
+// 计数规则自己算 id,避免 render 一次 html 浪费 CPU。
+export function extractHeadings(src) {
+  if (!src) return []
+  const env = {}
+  const tokens = md.parse(src, env)
+  const idCounts = {}
+  const out = []
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]
+    if (t.type !== 'heading_open') continue
+    const tag = t.tag
+    if (!tag || !/^h[1-6]$/.test(tag)) continue
+    const level = Number(tag.slice(1))
+    // 同一段 heading_open + inline + heading_close 顺序,tokens 平铺
+    const inline = tokens[i + 1]
+    let text = ''
+    if (inline && inline.type === 'inline') {
+      // 优先用 children(解析后的 token 列表,content 是纯文本不含 * _ 等标记)
+      if (inline.children && Array.isArray(inline.children)) {
+        text = inline.children
+          .map((c) => (c && typeof c.content === 'string') ? c.content : '')
+          .join('')
+      } else if (typeof inline.content === 'string') {
+        text = inline.content
+      } else if (Array.isArray(inline.content)) {
+        text = inline.content.join('')
+      }
+    }
+    const slug = slugifyHeading(text)
+    if (!slug) continue
+    const base = `md-h-${slug}`
+    const cnt = (idCounts[base] || 0) + 1
+    idCounts[base] = cnt
+    const id = cnt === 1 ? base : `${base}-${cnt}`
+    out.push({ level, text: text.trim(), id })
+  }
+  return out
 }
