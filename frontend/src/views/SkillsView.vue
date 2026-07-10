@@ -653,7 +653,8 @@ async function copySourcePath(node) {
 const editorOpen = ref(false)
 const draft = reactive({
   scope: 'global', project_id: 0, name: '', version: '0.1.0',
-  description: '', triggersText: '', body: '',
+  description: '', triggers: [], // 2026-07-10 改:触发词从逗号分隔文本改成数组,弹窗里动态增删
+  body: '',
   applyTools: [], // 2026-06-26:新建时勾选的"适用工具"列表
 })
 const editingKey = ref(null)
@@ -664,7 +665,8 @@ const editorProjectsLoading = ref(false)
 function startNew() {
   Object.assign(draft, {
     scope: 'global', project_id: 0, name: '', version: '0.1.0',
-    description: '', triggersText: '', body: '',
+    description: '', triggers: [],
+    body: '',
     applyTools: [],
   })
   editingKey.value = null
@@ -672,6 +674,14 @@ function startNew() {
   editorOpen.value = true
   // 弹窗打开时拉一次项目列表(scope=project 才需要,但提前拉好)
   loadEditorProjects()
+}
+
+// 2026-07-10 增:触发词动态列表的操作函数(新建/编辑弹窗复用同一份数据)。
+function addDraftTrigger() {
+  draft.triggers.push('')
+}
+function removeDraftTrigger(idx) {
+  draft.triggers.splice(idx, 1)
 }
 
 // 拉弹窗内需要的项目列表(全量,简单场景;支持搜索过滤)
@@ -706,7 +716,11 @@ function isApplyToolChecked(toolID) {
 }
 
 function buildSkillMd() {
-  const triggers = draft.triggersText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+  // 2026-07-10 改:触发词用 draft.triggers(数组)直接生成 yaml,
+  // 弹窗里已是动态列表,这里只做空值过滤 + trim。
+  const triggers = (draft.triggers || [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
   const m = {
     name: draft.name, version: draft.version,
     description: draft.description, triggers,
@@ -720,7 +734,9 @@ async function submit() {
   error.value = ''
   if (!draft.name.trim()) { error.value = t('skills.editor.errNameEmpty'); return }
   if (draft.description.trim().length < 10) { error.value = t('skills.editor.errDescShort'); return }
-  const triggers = draft.triggersText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+  const triggers = (draft.triggers || [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
   if (triggers.length === 0) { error.value = t('skills.editor.errTriggersEmpty'); return }
   // 2026-06-26 增:作用域=project 时必须选具体项目
   if (draft.scope === 'project' && !draft.project_id) {
@@ -2040,7 +2056,34 @@ onUnmounted(() => {
 
         <div class="editor-field-full">
           <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
-          <textarea v-model="draft.triggersText" rows="1" :placeholder="t('skills.editor.triggersHintPlaceholder')"></textarea>
+          <!-- 2026-07-10 改:触发词从逗号分隔 textarea 改成动态列表(每行一个 input + 删除按钮) -->
+          <div class="trigger-list">
+            <div
+              v-for="(_, idx) in draft.triggers"
+              :key="`trg-${idx}`"
+              class="trigger-row"
+            >
+              <input
+                v-model="draft.triggers[idx]"
+                class="trigger-input"
+                :placeholder="`触发词 #${idx + 1}`"
+                spellcheck="false"
+              />
+              <button
+                type="button"
+                class="trigger-del"
+                :title="`删除第 ${idx + 1} 个`"
+                :aria-label="`删除第 ${idx + 1} 个`"
+                @click="removeDraftTrigger(idx)"
+              >
+                <IconPark icon="mdi:close" width="13" height="13" />
+              </button>
+            </div>
+            <button type="button" class="trigger-add" @click="addDraftTrigger">
+              <IconPark icon="mdi:plus" width="13" height="13" />
+              {{ t('skills.editor.triggersHintPlaceholder') }}
+            </button>
+          </div>
         </div>
 
         <div class="editor-field-full">
@@ -3058,6 +3101,82 @@ onUnmounted(() => {
 .triggers-editor:focus {
   border-color: var(--text-faint);
   box-shadow: 0 0 0 1px var(--text-faint);
+}
+
+/* 2026-07-10 增:触发词动态列表(每行一个 input + 删除按钮,行末"添加触发词"按钮)。
+   用于新建/编辑弹窗(.trigger-list);跟 inlinePanel 的 .sfip-fm-triggers-list 风格类似,
+   但这是 SkillsView 顶层表单,样式不复用组件内部样式,各自维护。 */
+.trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.trigger-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.trigger-input {
+  flex: 1 1 auto;
+  min-width: 0; /* 防止 input 撑破 flex 父级触发底部横向滚动条 */
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s;
+  box-sizing: border-box;
+  height: 32px;
+}
+.trigger-input:hover { border-color: var(--text-faint); }
+.trigger-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--accent-blue-bg);
+}
+.trigger-del {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: all 0.12s;
+  box-sizing: border-box;
+}
+.trigger-del:hover {
+  border-color: var(--accent-red, #ef4444);
+  color: var(--accent-red, #ef4444);
+  background: var(--bg-hover);
+}
+.trigger-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--accent-blue);
+  background: transparent;
+  border: 1px dashed var(--accent-blue-border, var(--border));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.trigger-add:hover {
+  border-style: solid;
+  background: var(--accent-blue-bg);
 }
 .triggers-editor:disabled { opacity: 0.6; cursor: not-allowed; }
 

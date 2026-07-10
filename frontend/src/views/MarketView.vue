@@ -67,7 +67,7 @@ const sources = [
     id: 'skillssh',
     name: 'Skills.sh',
     descKey: 'market.cards.skillsshDesc',
-    url: 'https://www.skills.sh',
+    url: 'https://www.skills.sh/hot', // 2026-07-10 改:用户要求跳到 /hot(默认排序页)而非站点根
     accent: '#10b981',
     sourceType: 'skillssh',
     placeholderKey: 'market.input.placeholderSkillssh',
@@ -79,18 +79,26 @@ const sources = [
     ],
   },
   // 2026-07-09 增:GitHub 独立来源(从 skills.sh 拆出来)
+  // 2026-07-10 改(美化):accent 由 #6b7280 中性灰改成更深邃的色系,
+  // 跟蓝/绿两个 tab 形成层次而不是简陋灰。GitHub prime 风的深炭黑 + 暖灰底纹,
+  // 既保留「非蓝非绿」的辨识度,也避免 AI 感强的紫色(violet 禁用)。
+  // 浅色背景:bg 是 #f6f8fa(github light),dark:`#0d1117`(github dark)。
   {
     id: 'github',
     name: 'GitHub',
     descKey: 'market.cards.githubDesc',
     url: 'https://github.com',
-    accent: '#6b7280', // 灰色,与蓝色 skillhub-cn / 绿色 skills.sh 区分
+    accent: '#1f2328',
+    accentSoft: '#656d76',
+    accentBgLight: '#f6f8fa',
+    accentBgDark: '#0d1117',
     sourceType: 'github',
     placeholderKey: 'market.input.placeholderGithub',
     guideKey: 'market.guide.github',
+    // 2026-07-10 改(用户要求):GitHub 示例精简到 1 条,
+    // 只保留 anthropics/skills/tree/main/skills/pdf 这条具体 skill 路径
     examples: [
-      'https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md',
-      'https://github.com/anthropics/skills/blob/main/skills/code-review/SKILL.md',
+      'https://github.com/anthropics/skills/tree/main/skills/pdf',
     ],
     // 2026-07-10 增:GitHub tab 「知名 skill 仓库」快捷浏览块,
     // UI 用 famousReposBlock 渲染,按钮调 platform.platform.openExternal 跳转。
@@ -100,24 +108,26 @@ const sources = [
         display: 'anthropics/skills',
         owner: 'anthropics',
         repo: 'skills',
-        url: 'https://github.com/anthropics/skills',
+        // 2026-07-10 改:用户要求跳到具体 skills/ 子目录,而不是 repo 根
+        url: 'https://github.com/anthropics/skills/tree/main/skills',
       },
       {
         id: 'vercel-labs-agent-skills',
         display: 'vercel-labs/agent-skills',
         owner: 'vercel-labs',
         repo: 'agent-skills',
-        url: 'https://github.com/vercel-labs/agent-skills',
+        url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills',
       },
       {
         id: 'mattpocock-skills',
         display: 'mattpocock/skills',
         owner: 'mattpocock',
         repo: 'skills',
-        url: 'https://github.com/mattpocock/skills',
+        url: 'https://github.com/mattpocock/skills/tree/main/skills',
       },
       {
         id: 'jacky-st0-awesome-agent-skills',
+        // 2026-07-10 改:awesome 列表例外,根 README 就是「目录页」,直接给 README 入口
         display: 'JackyST0/awesome-agent-skills',
         owner: 'JackyST0',
         repo: 'awesome-agent-skills',
@@ -433,6 +443,7 @@ const lastInstalledName = ref('')
       <div class="market-body">
         <div
           :key="activeSource.id"
+          :data-source-id="activeSource.id"
           class="source-card"
           :style="{ '--accent': activeSource.accent }"
         >
@@ -912,8 +923,120 @@ const lastInstalledName = ref('')
 }
 
 /* ============================================
+   2026-07-10 增:GitHub tab 专属配色 + 视觉美化
+   ============================================
+   GitHub 走深炭黑 + 暖灰底纹的「prime dark 风」,跟 skillhub-cn 的青蓝、
+   skillssh 的翠绿形成第三种视觉,而不是简陋的 light gray(#6b7280)。
+
+   设计要点:
+   1. 卡顶 4px accent 条由 --accent(深炭黑)承担
+   2. icon 块:浅色模式用 github light bg + 深炭黑边框;深色模式用 github dark bg
+   3. 「在浏览器中打开」按钮默认 outline 风,在 github 卡里复用 accent 配色
+   4. famousRepos 块用 accentSoft 浅灰文字 + 深炭黑按钮底色,形成「GitHub files list」质感
+*/
+
+/* 用 [data-source-id="github"] 选择器,精准挑到 GitHub 卡 */
+.source-card[data-source-id="github"] {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, #1f2328 4%, var(--bg-card)) 0%,
+    var(--bg-card) 30%);
+}
+.source-card[data-source-id="github"] .source-card-icon {
+  background: color-mix(in srgb, #1f2328 12%, var(--bg-card));
+  color: #1f2328;
+  border-color: color-mix(in srgb, #1f2328 30%, var(--border));
+}
+:global(html.dark) .source-card[data-source-id="github"] .source-card-icon {
+  background: color-mix(in srgb, #f6f8fa 12%, var(--bg-card));
+  color: #f6f8fa;
+  border-color: color-mix(in srgb, #f6f8fa 25%, var(--border));
+}
+.source-card[data-source-id="github"] .open-browser-btn {
+  border-color: color-mix(in srgb, #1f2328 25%, var(--border));
+  color: #1f2328;
+}
+:global(html.dark) .source-card[data-source-id="github"] .open-browser-btn {
+  border-color: color-mix(in srgb, #f6f8fa 25%, var(--border));
+  color: #f6f8fa;
+}
+.source-card[data-source-id="github"] .open-browser-btn:hover {
+  background: color-mix(in srgb, #1f2328 8%, var(--bg-card));
+  border-color: #1f2328;
+  color: #1f2328;
+}
+:global(html.dark) .source-card[data-source-id="github"] .open-browser-btn:hover {
+  background: color-mix(in srgb, #f6f8fa 10%, var(--bg-card));
+  border-color: #f6f8fa;
+  color: #f6f8fa;
+}
+:global(html.dark) .source-card[data-source-id="github"] {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, #f6f8fa 4%, var(--bg-card)) 0%,
+    var(--bg-card) 30%);
+}
+
+/* ============================================
    2026-07-10 增:GitHub tab 知名 skill 仓库快捷浏览块
    ============================================ */
+/* GitHub 卡里 famous item 用 monospace file list 风格,
+   按钮走深炭黑底 + 白字,模拟「GitHub Action Button」质感 */
+.source-card[data-source-id="github"] .famous-repos {
+  background: #f6f8fa; /* github light bg */
+  border-color: #d0d7de;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-repos {
+  background: #15191f; /* 比 github dark #0d1117 稍亮,卡内层级 */
+  border-color: #30363d;
+}
+.source-card[data-source-id="github"] .famous-title {
+  color: #1f2328;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-title {
+  color: #f6f8fa;
+}
+.source-card[data-source-id="github"] .famous-item {
+  background: var(--bg-card);
+  border-color: #d0d7de;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-item {
+  background: #0d1117;
+  border-color: #30363d;
+}
+.source-card[data-source-id="github"] .famous-repo-name {
+  color: #1f2328;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-repo-name {
+  color: #f6f8fa;
+}
+.source-card[data-source-id="github"] .famous-open-btn {
+  background: #1f2328;
+  border-color: #1f2328;
+  color: #ffffff;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-open-btn {
+  background: #f6f8fa;
+  border-color: #f6f8fa;
+  color: #1f2328;
+}
+.source-card[data-source-id="github"] .famous-open-btn:hover {
+  background: #2d3138;
+  border-color: #2d3138;
+  filter: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px -2px rgba(31, 35, 40, 0.4);
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-open-btn:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: 0 2px 6px -2px rgba(246, 248, 250, 0.4);
+}
+.source-card[data-source-id="github"] .famous-desc {
+  color: #57606a;
+}
+:global(html.dark) .source-card[data-source-id="github"] .famous-desc {
+  color: #8b949e;
+}
+
 .famous-repos {
   display: flex;
   flex-direction: column;
