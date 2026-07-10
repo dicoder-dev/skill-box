@@ -455,8 +455,10 @@ const messages = {
       btnInstalling: '安装中…',
       errInvalidInput: '输入格式无法识别:每个 tab 只接受对应市场的详情页 URL',
       errSource: '找不到对应的市场源',
-      // 2026-07-10 增:slug 不存在(用户报告 topnews 404 报成「下载失败」误导)
-      errSkillNotFound: '该 skill 不存在(URL 里 slug 拼错 / 上游已下架),请确认 URL 后重试:{msg}',
+      // 2026-07-10 增:404 / 上游资源无效
+      // (用户报告 topnews / ima-skills 报「下载失败」误导,根因是 SKILL.md 缺 frontmatter)
+      // 文案覆盖 4 种上游语义:slug 真不存在 / slug 下架 / zip 缺 SKILL.md / zip 不合法
+      errSkillNotFound: '该 skill 拿不到({msg})。常见:slug 已下架、SKILL.md 缺 frontmatter、zip 包被截断,请确认 URL 后重试',
       errPull: '下载失败:{msg}',
       // 2026-07-09 增:前端 timeout 单独提示
       errTimeout: '请求超时(后端下载慢):{msg}。可以重试,或去浏览器手动下好后从「本地导入」装入。',

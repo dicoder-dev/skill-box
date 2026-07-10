@@ -389,11 +389,15 @@ async function doInstall(input, conflictMode) {
       installError.value = t('market.input.errInvalidInput')
     } else if (status === 404) {
       // 2026-07-10 改:404 区分两种:
-      //  - 服务器返 err 字符串含 "remote fetch failed: <slug>" 或 "skillmarket: remote fetch failed"
-      //    → 走 errSkillNotFound(用户给的具体 slug 不存在 / 已下架)
-      //  - 其它(老 errSource 走 source 未注册 / 解析后 source 没匹配等)
+      //  - 服务器 err 字符串含 "remote (skill )?not found" / "remote fetch not found"
+      //    → 走 errSkillNotFound(具体 skill/slug 找不到)
+      //  - 其它(典型 errSource:source 未注册 / source_id 解析失败等)
+      //
+      // 历史改动:后端 source 文案是 "skillmarket: source not found" 等,
+      // skill 文案是 "skillmarket: remote (skill )?not found: <slug>",
+      // 用更宽松的正则匹配避免跟前端文案不对齐。
       const errTxt = String(data?.error || msg || '')
-      if (/remote (fetch )?not found/i.test(errTxt)) {
+      if (/remote (skill )?(fetch )?not found/i.test(errTxt)) {
         installError.value = t('market.input.errSkillNotFound', { msg: errTxt })
       } else {
         installError.value = t('market.input.errSource')
