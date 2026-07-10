@@ -705,6 +705,16 @@ func (a *Adapter) downloadViaZip(ctx context.Context, baseURL, remoteID string) 
 		return nil, err
 	}
 	defer resp.Body.Close()
+	// 2026-07-10 增(诊断用):为了看 skillhub 上游真实响应(用户反馈 topnews
+	// 即使产品页正常,download API 仍返非 zip body 等非典型响应),
+	// 在这里记录 status + content-type + body 前 100 字节。
+	// 上游返 200 + 错误码包装 JSON / HTML 错误页 / 空 body 时,
+	// logger 一次打印足以让用户从 ~/.skill-box/logs 看到精确形态。
+	bodyPeek, _ := io.ReadAll(io.LimitReader(resp.Body, 100))
+	logger.Info("skillhub download diag slug=%s status=%d ct=%s body[:100]=%q",
+		remoteID, resp.StatusCode, resp.Header.Get("Content-Type"), bodyPeek)
+	// 把读过的字节拼回去给后续读取
+	resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(bodyPeek), resp.Body))
 	if resp.StatusCode != 302 && resp.StatusCode != 301 {
 		// 偶发 skillhub 直接 200(可能已经 follow 过了),容错:body 当 SKILL.md
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
