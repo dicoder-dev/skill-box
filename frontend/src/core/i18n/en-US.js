@@ -386,11 +386,12 @@ const messages = {
     btnOpenInBrowser: 'Open in browser',
     btnOpenInBrowserTip: 'Open {name} in system browser',
     // 2026-07-10: paste button (left of "Install to skill-box")
-    btnPaste: 'Paste',
-    btnPasteTitle: 'Read system clipboard text and fill in the input above',
-    btnPasteSuccess: 'Clipboard text pasted',
-    btnPasteEmpty: 'Clipboard is empty',
+    // 2026-07-10 改:rename "Paste" → "Paste & Install", paste ok auto-triggers install
+    btnPaste: 'Paste & install',
+    btnPasteTitle: 'Read clipboard text, paste into the input above and start installing immediately',
+    btnPasteEmpty: 'Clipboard is empty, please copy a skill detail page URL first',
     btnPasteFailed: 'Failed to read clipboard: {msg}',
+    // 2026-07-10: removed btnPasteSuccess(paste ok already auto-installs)
     cards: {
       skillhubDesc: 'A Skills community optimized for Chinese users, sorted by curated_score.',
       skillsshDesc: 'A Vercel-hosted leaderboard of AI agent skills, ranked by Hot (1H / change) metrics.',
@@ -489,6 +490,8 @@ const messages = {
     tabs: {
       scan: 'Scan tools',
       local: 'From local',
+      // 2026-07-10: list candidates under ~/.agents/skills, batch import
+      global: 'Global dir',
     },
     // 2026-07-01: from-local import panel
     local: {
@@ -511,6 +514,32 @@ const messages = {
       resultTitle: 'Import result',
       btnAgain: 'Import another',
       btnDone: 'Done',
+    },
+    // 2026-07-10: global-dir import panel (lists ~/.agents/skills candidates)
+    global: {
+      title: 'Import from global dir',
+      desc: 'Scan ~/.agents/skills for SKILL.md files (shared root used by Claude / Codex / Trae). Tick the ones to import into the Skill Box store.',
+      rootLabel: 'Scan root',
+      rootMissing: 'Directory does not exist',
+      rootMissingHint: 'No ~/.agents/skills on this machine yet. Install some skills via a tool that supports the Agent Skills standard, then come back and rescan.',
+      empty: 'No skills found in this directory',
+      emptyHint: 'Install some skills via Claude / Codex / Trae, then click "Rescan"',
+      loading: 'Scanning…',
+      loadFailed: 'Load failed: {msg}',
+      importOk: 'Imported: {ok} ok, {failed} failed',
+      searchPlaceholder: 'Search by name, version or description',
+      selected: 'Selected {sel} / {total}',
+      selectAll: 'Select all',
+      selectNone: 'Clear',
+      btnRescan: 'Rescan',
+      btnImport: 'Import {n} into store',
+      btnImportTitle: 'Land all ticked skills into the Skill Box store',
+      importing: 'Importing…',
+      colName: 'Name',
+      colVersion: 'Version',
+      colDesc: 'Description',
+      badgeImported: 'Exists',
+      tooltipImported: 'A skill with the same name already exists in the Skill Box store; skip',
     },
     steps: {
       status: 'Status',

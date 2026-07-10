@@ -181,27 +181,59 @@ function fillExample(text) {
   installError.value = ''
 }
 
-// 2026-07-10 增:粘贴按钮 — 把系统剪贴板文本塞进输入框。
+// 2026-07-10 改:粘贴按钮 — 把系统剪贴板文本塞进输入框 + 自动调安装。
 // 桌面端走 platform.platform.clipboardText()(后端 GetClipboardText 走 wails ClipboardGetText);
 // Web 端 WebClipboardText 兜底返空串,失败时 toast 提示。
-// 失败分两种:剪贴板为空(常见,用户没复制)跟读取异常(权限拒/桌面 hook 未注册)。
-async function pasteFromClipboard() {
-  if (installing.value) return
-  let text = ''
+//
+// 2026-07-10 改(用户要求):按钮文案「粘贴」→「粘贴并安装」,粘贴成功后自动调
+// handleInstall()(走正常的解析 → 下载 → 写盘流程),不再让用户再点一次主按钮。
+// 失败(剪贴板为空 / 读取异常)不触发安装,只 toast / 错误条提示。
+//
+// 2026-07-10 改(修 [object Object] bug):
+// 调用方拿到 clipboardText 返回值时统一走 _safeStringify ——
+// 历史上 wails 端某个版本 ClipboardGetText binding 偶尔返回
+// { text: 'xxx' } 或 string[],如果直接 `String(...)` 会拿到 '[object Object]'。
+// 这里兼容三种形态(string / string[] / { text: '...' }),最终强制成 string。
+function _clipboardToText(raw) {
+  if (raw == null) return ''
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw)) {
+    return raw.map((v) => (typeof v === 'string' ? v : String(v || ''))).join('')
+  }
+  if (typeof raw === 'object') {
+    // wails 旧 binding 形如 { text: 'xxx' } / { content: 'xxx' } 都接住
+    if (typeof raw.text === 'string') return raw.text
+    if (typeof raw.content === 'string') return raw.content
+    if (typeof raw.value === 'string') return raw.value
+  }
   try {
-    text = await platform.platform.clipboardText()
+    return JSON.stringify(raw)
+  } catch (_) {
+    return ''
+  }
+}
+
+async function pasteAndInstall() {
+  if (installing.value) return
+  let raw = null
+  try {
+    raw = await platform.platform.clipboardText()
   } catch (e) {
-    installError.value = t('market.btnPasteFailed', { msg: e?.message || String(e) })
+    // 失败原因:跨平台走 plainT(纯函数),不让 t 在 Proxy 包装下
+    // 返回 [object Object];另一个保险:err string 兜底走 String(e?.message || e || '')
+    const errMsg = (e && (e.message || e.error)) || (typeof e === 'string' ? e : '')
+    toast.error(t('market.btnPasteFailed', { msg: errMsg || 'unknown' }))
     return
   }
-  const trimmed = String(text || '').trim()
-  if (!trimmed) {
-    installError.value = t('market.btnPasteEmpty')
+  const text = _clipboardToText(raw).trim()
+  if (!text) {
+    toast.error(t('market.btnPasteEmpty'))
     return
   }
-  userInput.value = trimmed
+  // 2026-07-10 改:成功分支自动调 handleInstall(),不再二次点击主按钮
+  userInput.value = text
   installError.value = ''
-  toast.success(t('market.btnPasteSuccess'))
+  await handleInstall()
 }
 
 // 2026-07-09 增:输入框 + 安装流程
@@ -548,14 +580,15 @@ const lastInstalledName = ref('')
                 :disabled="installing"
                 @keydown.enter="handleInstall"
               />
-              <!-- 2026-07-10 增:粘贴按钮 — 装到 skill-box 按钮左侧,
-                   一键读剪贴板文本塞进输入框(避免手动 cmd+V / ctrl+V 后还需要点击输入框) -->
+              <!-- 2026-07-10 增:粘贴按钮 — 装到 skill-box 按钮左侧
+                   2026-07-10 改:粘贴成功直接调 handleInstall()(走 4 阶段下载流程),
+                   用户无需再点主按钮。失败(剪贴板空 / 读异常)只 toast 不触发安装。 -->
               <button
                 type="button"
                 class="paste-btn"
                 :title="t('market.btnPasteTitle')"
                 :disabled="installing"
-                @click="pasteFromClipboard"
+                @click="pasteAndInstall"
               >
                 <IconPark icon="mdi:content-paste" width="14" height="14" />
                 <span>{{ t('market.btnPaste') }}</span>

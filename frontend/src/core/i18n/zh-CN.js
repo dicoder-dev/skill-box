@@ -397,12 +397,13 @@ const messages = {
     subtitle: '浏览 skillhub.cn / skills.sh / GitHub 等三方源,粘详情页 URL 一键装到 skill-box。',
     btnOpenInBrowser: '在浏览器中打开',
     btnOpenInBrowserTip: '在系统浏览器打开 {name} 站点',
-    // 2026-07-10 增:粘贴按钮(通用,装到 skill-box 按钮左侧)
-    btnPaste: '粘贴',
-    btnPasteTitle: '读取系统剪贴板文本并填入上方输入框',
-    btnPasteSuccess: '已粘贴剪贴板内容',
-    btnPasteEmpty: '剪贴板为空,无法粘贴',
+    // 2026-07-10 增:粘贴并安装按钮(通用,装到 skill-box 按钮左侧)
+    // 2026-07-10 改:改名「粘贴」→「粘贴并安装」,粘贴成功自动触发安装流程
+    btnPaste: '粘贴并安装',
+    btnPasteTitle: '读取系统剪贴板文本,粘贴到上方输入框并直接开始安装',
+    btnPasteEmpty: '剪贴板为空,无法粘贴,请先复制一个 skill 详情页 URL',
     btnPasteFailed: '读取剪贴板失败:{msg}',
+    // 2026-07-10 改:v5.1 去掉 btnPasteSuccess(粘贴成功已经在装,无需 toast 提示)
     // 站点卡片描述(在卡片里展示)
     cards: {
       skillhubDesc: '中国用户的 Skills 社区,按 curated_score 排序的精选技能集合。',
@@ -504,6 +505,8 @@ const messages = {
     tabs: {
       scan: '扫描工具',
       local: '从本地导入',
+      // 2026-07-10 增:从 ~/.agents/skills 列出全局候选 skill,勾选批量导入
+      global: '全局目录',
     },
     // 2026-07-01 增:从本地 zip / 文件夹导入面板
     local: {
@@ -526,6 +529,32 @@ const messages = {
       resultTitle: '导入结果',
       btnAgain: '再导一次',
       btnDone: '完成',
+    },
+    // 2026-07-10 增:全局目录导入面板(从 ~/.agents/skills 列出候选,勾选批量导入)
+    global: {
+      title: '从全局目录导入',
+      desc: '扫描 ~/.agents/skills 下所有 SKILL.md(Claude / Codex / Trae 等共享根),勾选要导入到 Skill Box 库的项目。',
+      rootLabel: '扫描根',
+      rootMissing: '目录不存在',
+      rootMissingHint: '当前机器上没有 ~/.agents/skills,可先去任意支持 Agent Skills 标准的工具装几个 skill,再回来这里检索。',
+      empty: '这个目录里还没有任何 skill',
+      emptyHint: '可以先去 Claude / Codex / Trae 等工具里装一些 skill,然后再点"重新扫描"',
+      loading: '扫描中…',
+      loadFailed: '加载失败:{msg}',
+      importOk: '导入完成:成功 {ok} 个,失败 {failed} 个',
+      searchPlaceholder: '按名称、版本或描述搜索',
+      selected: '已选 {sel} / {total}',
+      selectAll: '全选当前',
+      selectNone: '清空当前',
+      btnRescan: '重新扫描',
+      btnImport: '导入 {n} 个到 store',
+      btnImportTitle: '把勾选的 skill 批量落地到 Skill Box 库',
+      importing: '导入中…',
+      colName: '名称',
+      colVersion: '版本',
+      colDesc: '描述',
+      badgeImported: '已存在',
+      tooltipImported: 'Skill Box 库里已经有同名 skill,跳过',
     },
     steps: {
       status: '查看状态',
