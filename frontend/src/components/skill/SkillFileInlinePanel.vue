@@ -1043,7 +1043,7 @@ defineExpose({
     <Modal
       v-model="editFmOpen"
       size="md"
-      :title="(newSkillInitial ? '新建 skill · frontmatter' : '编辑 frontmatter — ' + (skill?.name || ''))"
+      :title="(newSkillInitial ? '新建 skill · frontmatter' : '编辑 frontmatter')"
       :close-on-mask="!fmFormSaving"
       @close="closeFrontmatterEditor"
     >
