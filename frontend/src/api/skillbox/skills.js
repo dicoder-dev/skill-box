@@ -144,6 +144,23 @@ export function renameGroup(payload) {
 }
 
 /**
+ * 重命名 skill(在同分组内改目录名;group_path 不变)。
+ * 2026-07-11 增:为支持"技能右键 → 重命名"。与 rename_group 是平行的两条路径,
+ * 区别是本接口改的是 SKILL.md 所在目录的最后一段(skill 的"主键")。
+ * 入参: { src_group_path, old_name, new_name }
+ *   - src_group_path: skill 所在分组的相对路径(可空 = 根)
+ *   - old_name / new_name: 走 NormalizeName 规约(小写字母 / 数字 / -,首字符字母)
+ * 响应(成功): { ok: true, new_skill_path: string(规范化后的相对路径) }
+ * 响应(非法名): 400
+ * 响应(源不存在): 404
+ * 响应(同名冲突): 409 { code: 'target_exists' }
+ * 来源: api-server/internal/gapi/controller/skillbox/cskill/rename_skill.a.go
+ */
+export function renameSkill(payload) {
+  return http.post('/api/skillbox/skills/rename', payload)
+}
+
+/**
  * 拉取 skillstore 物理根目录的绝对路径。
  * 2026-07-03 增:供首页右键"在文件夹中打开"拼绝对路径用 — 之前右键
  * 分组 / 未选中 skill 时,前端拿不到 store root,只能把相对路径
