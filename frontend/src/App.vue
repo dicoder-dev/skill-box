@@ -95,10 +95,20 @@ onMounted(() => {
   checkViewport()
   window.addEventListener('resize', checkViewport)
   // 只在桌面端判断平台;web 端直接 false 走"贴顶"布局。
-  // 后端目前没把 os 注入 __APP_RUNTIME__,统一靠 navigator.userAgent 兜底。
+  // 后端目前没把 os / titleBarHeight 注入 __APP_RUNTIME__,统一靠 navigator.userAgent 兜底。
+  // wails3 webview 在 macOS 上 UA 通常带 "Mac OS X" 或 "Macintosh",与普通 Safari 一致。
   if (runMode === 'desktop') {
     const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
     isMacOS.value = /Mac|iPhone|iPad/i.test(ua)
+    // 2026-07-11 v4 增:调试 log,方便桌面端用户在 DevTools 确认 isMacOS 是否正确命中
+    // 与 sidebar-top-spacer 实际渲染情况(打开 webview DevTools 看 layout)。
+    if (typeof console !== 'undefined') {
+      console.log('[App] macOS detection:', {
+        runMode: runMode.value,
+        ua: ua.substring(0, 200),
+        isMacOS: isMacOS.value,
+      })
+    }
   }
 })
 onUnmounted(() => window.removeEventListener('resize', checkViewport))
@@ -347,12 +357,15 @@ onUnmounted(() => {
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-/* 顶部 macOS 交通灯预留区 - 2026-07-11 改:只在 macOS 桌面端渲染。
-   wails3 默认 trafficLightInset 标题栏(包含红绿灯)实际高度约 38-44px,
-   之前 32px 不够,会让第一个 nav 图标垂直区域与红绿灯重叠;提到 44px。
+/* 顶部 macOS 红绿灯避让区 - 2026-07-11 v4 改:
+   桌面端 wails3 在 wails_app.go:512 设了 InvisibleTitleBarHeight: 50
+   + MacTitleBarHiddenInset,意味着 webview 区域从屏幕顶 0px 开始,
+   红绿灯浮在 webview 上方 0-50px、左 0-80px 区域。
+   侧栏宽度 64px 正好覆盖红绿灯水平位置,所以侧栏顶部必须预留
+   50px(与 InvisibleTitleBarHeight 一致)才能让红绿灯显示完整。
    web / Windows / Linux 由 v-if 直接不渲染,贴顶。 */
 .sidebar-top-spacer {
-  height: 44px;
+  height: 50px;
   flex-shrink: 0;
 }
 
