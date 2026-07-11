@@ -294,10 +294,8 @@ onUnmounted(() => {
             <IconPark icon="mdi:menu" width="22" height="22" />
           </button>
 
+          <!-- 2026-07-11 v9 改:删掉图标,只显示文字 Logo -->
           <div class="topbar-logo">
-            <span class="topbar-logo-icon">
-              <IconPark icon="mdi:package-variant-closed" width="18" height="18" />
-            </span>
             <span class="topbar-logo-text">{{ t('app.brand') }}</span>
           </div>
         </div>
@@ -597,22 +595,13 @@ onUnmounted(() => {
   color: var(--text);
 }
 
-/* Logo 区 - 2026-07-11 增:从侧栏挪到顶栏左侧 */
+/* Logo 区 - 2026-07-11 增:从侧栏挪到顶栏左侧;
+   2026-07-11 v9 改:删掉图标,纯文字;去掉 gap / padding-right / margin-right /
+   border-right(图标分隔用的样式不再需要)。 */
 .topbar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-right: 12px;
-  margin-right: 4px;
-  border-right: 1px solid var(--border);
   flex-shrink: 0;
-}
-.topbar-logo-icon {
-  @apply flex items-center justify-center rounded-md;
-  width: 28px;
-  height: 28px;
-  background: var(--text);
-  color: var(--bg-card);
 }
 .topbar-logo-text {
   font-size: 15px;
@@ -680,13 +669,8 @@ onUnmounted(() => {
   .topbar {
     padding: 10px 12px;
   }
-  .topbar-logo-text {
-    display: none;          /* 移动端空间紧,只留 logo 图标 */
-  }
-  .topbar-logo {
-    padding-right: 8px;
-    margin-right: 2px;
-  }
+  /* v9 改:纯文字 logo 移动端保留文字显示(就一个 "Skill-Box" 字串,
+     不需要像之前带图标时那样隐藏) */
   .content-area {
     padding: 16px;
   }
