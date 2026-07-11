@@ -10,9 +10,9 @@
 
 const messages = {
   app: {
-    // 2026-07-11 改:品牌名统一为 "Q Boss",并把主题切换文案挪到 i18n
-    // (供顶栏 tooltip 使用)。
-    brand: 'Q Boss',
+    // 2026-07-11 改:品牌名回归 'Skill-Box'(此前误改为 'Q Boss')。
+    // 同时把主题切换文案挪到 i18n(供侧栏底部 tooltip 使用)。
+    brand: 'Skill-Box',
     closeSidebar: '关闭侧栏',
     openSidebar: '打开侧栏',
     nav: {

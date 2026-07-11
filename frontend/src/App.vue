@@ -347,11 +347,12 @@ onUnmounted(() => {
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-/* 顶部 macOS 交通灯预留区 - 2026-07-11 改:只在 macOS 桌面端渲染,
-   高度调小到 32px(原 56px 太多空白);web / Windows / Linux 由 v-if
-   直接不渲染,贴顶。 */
+/* 顶部 macOS 交通灯预留区 - 2026-07-11 改:只在 macOS 桌面端渲染。
+   wails3 默认 trafficLightInset 标题栏(包含红绿灯)实际高度约 38-44px,
+   之前 32px 不够,会让第一个 nav 图标垂直区域与红绿灯重叠;提到 44px。
+   web / Windows / Linux 由 v-if 直接不渲染,贴顶。 */
 .sidebar-top-spacer {
-  height: 32px;
+  height: 44px;
   flex-shrink: 0;
 }
 

@@ -11,7 +11,10 @@
 
 const messages = {
   app: {
-    brand: 'Q Boss',
+    // 2026-07-11 changed: brand name back to 'Skill-Box' (was incorrectly
+    // set to 'Q Boss' in v1). themeToggle copy moved into i18n so the
+    // sidebar footer tooltip can consume it.
+    brand: 'Skill-Box',
     closeSidebar: 'Close sidebar',
     openSidebar: 'Open sidebar',
     nav: {
