@@ -14,7 +14,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, onUpdated, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup, renameSkill as apiRenameSkill } from '@/api/skillbox/skills'
+import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
@@ -1041,22 +1041,33 @@ function closeCtxMenu() {
   ctxMenu.items = []
 }
 
-// skill 右键:重命名 / 删除(2026-07-11 改:按位置区分后,只保留"重命名 + 删除"两项;
-// "在文件夹打开 / 复制路径 / 打标签"等扩展项已并入详情区顶栏,不在树右键菜单里)。
+// skill 右键:删除 / 打 tag / 在文件夹打开
 function onSkillContextMenu({ node, event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
   ctxMenu.items = [
     {
-      key: 'rename-skill',
-      label: t('skills.list.ctxRenameSkill'),
-      icon: 'mdi:rename-outline',
-      onClick: () => openRenameSkillDialog(node),
+      key: 'open-folder',
+      label: t('skills.list.ctxOpenFolder'),
+      icon: 'mdi:folder-outline',
+      onClick: () => openSkillInFolder(node),
+    },
+    {
+      key: 'copy-path',
+      label: t('skills.list.ctxCopyPath'),
+      icon: 'mdi:content-copy',
+      onClick: () => copySourcePath(node),
+    },
+    {
+      key: 'tag',
+      label: t('skills.list.ctxTag'),
+      icon: 'mdi:tag-outline',
+      onClick: () => openSkillTagDialog(node),
     },
     { divided: true, key: 'div-1', label: '' },
     {
       key: 'delete',
-      label: t('skills.list.ctxDeleteSkill'),
+      label: t('skills.list.ctxDelete'),
       icon: 'mdi:delete',
       danger: true,
       onClick: () => openDeleteSkill({
@@ -1069,8 +1080,7 @@ function onSkillContextMenu({ node, event }) {
   ctxMenu.open = true
 }
 
-// 分组右键:仅"新建文档"(2026-07-11 改:按位置区分,分组右键只暴露 1 个动作;
-// "重命名 / 删除分组 / 在文件夹打开"等扩展项以后再做,先把核心需求"管理"落地)。
+// 分组右键:重命名 / 在文件夹打开 / 删除
 // 2026-07-03 改:首页分组只支持单级,移除"新建子分组"项。
 function onGroupContextMenu({ node, event }) {
   ctxMenu.x = event.clientX
@@ -1078,16 +1088,30 @@ function onGroupContextMenu({ node, event }) {
   const groupPath = node.path || ''
   ctxMenu.items = [
     {
-      key: 'new-skill',
-      label: t('skills.list.ctxNewSkill'),
-      icon: 'mdi:file-document-plus-outline',
-      onClick: () => openNewSkillDialog(groupPath, node.name),
+      key: 'rename',
+      label: t('skills.list.ctxRename'),
+      icon: 'mdi:rename-outline',
+      onClick: () => openRenameGroupDialog(node),
+    },
+    {
+      key: 'open-folder',
+      label: t('skills.list.ctxOpenFolder'),
+      icon: 'mdi:folder-outline',
+      onClick: () => openGroupInFolder(groupPath),
+    },
+    { divided: true, key: 'div-1', label: '' },
+    {
+      key: 'delete-group',
+      label: t('skills.list.ctxDeleteGroup'),
+      icon: 'mdi:folder-remove-outline',
+      danger: true,
+      onClick: () => openDeleteGroup(node),
     },
   ]
   ctxMenu.open = true
 }
 
-// 根区域(树空白处)右键:新建文件夹 / 新建文档(2026-07-11 改:按位置区分,根上两条都暴露)
+// 根区域(树空白处)右键:新建分组
 function onRootContextMenu({ event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
@@ -1097,12 +1121,6 @@ function onRootContextMenu({ event }) {
       label: t('skills.list.ctxNewGroup'),
       icon: 'mdi:folder-plus-outline',
       onClick: () => openNewGroupDialog(''),
-    },
-    {
-      key: 'new-skill',
-      label: t('skills.list.ctxNewSkill'),
-      icon: 'mdi:file-document-plus-outline',
-      onClick: () => openNewSkillDialog('', ''),
     },
   ]
   ctxMenu.open = true
@@ -1175,109 +1193,6 @@ function openRenameGroupDialog(node) {
 function closeRenameGroupDialog() {
   if (renameGroupBusy.value) return
   renameGroupOpen.value = false
-}
-
-// ====== 2026-07-11 增:重命名 skill(文档)弹窗 ======
-// 复用 rename_group 的 Modal 样式 + 校验风格,只把"分组"概念换成"文档"。
-// 父 group_path 从 node.path 拆出来(node.path 是 "group/skill",取父段;
-// 顶层 skill 的 node.path 没有 '/',父段为空 = 根)。
-const renameSkillOpen = ref(false)
-const renameSkillGroupPath = ref('')
-const renameSkillOldName = ref('')
-const renameSkillInput = ref('')
-const renameSkillBusy = ref(false)
-const renameSkillError = ref('')
-
-function openRenameSkillDialog(node) {
-  const fullPath = node?.path || ''
-  const sep = fullPath.lastIndexOf('/')
-  const groupPath = sep < 0 ? '' : fullPath.slice(0, sep)
-  const oldName = node?.skill_meta?.name || node?.name || fullPath.split('/').pop() || ''
-  if (!oldName) {
-    toast.error(t('skills.list.skillRenameNotFound'))
-    return
-  }
-  renameSkillGroupPath.value = groupPath
-  renameSkillOldName.value = oldName
-  renameSkillInput.value = oldName
-  renameSkillError.value = ''
-  renameSkillOpen.value = true
-}
-function closeRenameSkillDialog() {
-  if (renameSkillBusy.value) return
-  renameSkillOpen.value = false
-}
-async function submitRenameSkill() {
-  if (renameSkillBusy.value) return
-  const seg = (renameSkillInput.value || '').trim()
-  if (!seg) {
-    renameSkillError.value = t('skills.list.skillRenameFailed', { msg: 'empty name' })
-    return
-  }
-  // 本地预校验:走与后端 NormalizeName 一致的字符集,避免送后端再被拒
-  if (!/^[a-z][a-z0-9-]{1,63}$/.test(seg)) {
-    renameSkillError.value = t('skills.list.skillRenameFailed', { msg: t('skills.editor.nameHint') || 'invalid format' })
-    return
-  }
-  renameSkillBusy.value = true
-  renameSkillError.value = ''
-  try {
-    const r = await apiRenameSkill({
-      src_group_path: renameSkillGroupPath.value,
-      old_name: renameSkillOldName.value,
-      new_name: seg,
-    })
-    if (!r || !r.ok) {
-      const errMsg = (r && r.error) || 'rename failed'
-      if (errMsg.includes('not found')) {
-        renameSkillError.value = t('skills.list.skillRenameNotFound')
-      } else if (errMsg.includes('already exists') || r?.code === 'target_exists') {
-        renameSkillError.value = t('skills.list.skillRenameConflict')
-      } else {
-        renameSkillError.value = t('skills.list.skillRenameFailed', { msg: errMsg })
-      }
-      return
-    }
-    renameSkillOpen.value = false
-    const newName = (r.new_skill_path || '').split('/').pop() || seg
-    toast.success(t('skills.list.skillRenameOk', { name: newName }))
-    // 刷新列表(重命名后 path 变化,旧 path 选不中)
-    await reload()
-    // 尝试用新 path 选回去(可能失败,比如用户原本没选中,忽略)
-    const newFullPath = r.new_skill_path
-    const newRow = items.value.find((x) => x.path === newFullPath)
-    if (newRow) await selectItem(newRow)
-  } catch (e) {
-    renameSkillError.value = t('skills.list.skillRenameFailed', { msg: e?.message || String(e) })
-  } finally {
-    renameSkillBusy.value = false
-  }
-}
-
-// ====== 2026-07-11 增:在分组下新建 skill 的入口 ======
-// 复用详情区 InlinePanel 的 openAsNew,只是把 group_path / scope / source 透传;
-// 根区域调用时 groupPath 传空字符串。
-function openNewSkillDialog(groupPath, groupName) {
-  if (!inlinePanelRef.value || typeof inlinePanelRef.value.openAsNew !== 'function') {
-    toast.error('编辑器尚未就绪,请稍候再试')
-    return
-  }
-  inlinePanelRef.value.openAsNew({
-    name: '',
-    version: '0.1.0',
-    description: '',
-    triggers: [],
-    author: '',
-    license: '',
-    scope: 'global',
-    project_id: 0,
-    source: 'local',
-    group_path: groupPath || '',
-  })
-  // 给个轻提示,告诉用户将创建在哪个分组下
-  if (groupPath) {
-    toast.info(t('skills.list.newSkillInGroupHint', { name: groupName || groupPath }))
-  }
 }
 async function submitRenameGroup() {
   if (renameGroupBusy.value) return
@@ -2273,56 +2188,6 @@ onUnmounted(() => {
           @click="submitRenameGroup"
         >
           <span v-if="renameGroupBusy" class="spinner spinner-sm"></span>
-          <IconPark v-else icon="mdi:check" width="14" height="14" />
-          {{ t('common.save') }}
-        </button>
-      </template>
-    </Modal>
-
-    <!-- 2026-07-11 增:重命名 skill(文档)弹窗 — 跟重命名分组同一个 Modal 风格 -->
-    <Modal v-model="renameSkillOpen" size="sm" :close-on-mask="!renameSkillBusy">
-      <template #header>
-        <h3 class="modal-title">
-          <IconPark icon="mdi:rename-outline" width="18" height="18" />
-          {{ t('skills.list.skillRenamePrompt', { name: renameSkillOldName }) }}
-        </h3>
-      </template>
-      <form class="new-group-form" @submit.prevent="submitRenameSkill">
-        <div class="editor-field-full">
-          <input
-            v-model="renameSkillInput"
-            class="group-input"
-            :placeholder="renameSkillOldName"
-            :disabled="renameSkillBusy"
-            autofocus
-            @keyup.enter="submitRenameSkill"
-          />
-          <p class="muted small-hint">
-            {{ t('skills.list.skillRenameHint') }}
-          </p>
-          <p v-if="renameSkillGroupPath" class="muted small-hint">
-            <code>{{ renameSkillGroupPath }}/<span style="color: var(--text)">{{ renameSkillInput || '...' }}</span></code>
-          </p>
-          <p v-else class="muted small-hint">
-            <code>/<span style="color: var(--text)">{{ renameSkillInput || '...' }}</span></code>
-          </p>
-          <p v-if="renameSkillError" class="message message-error" style="margin: 8px 0 0">
-            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
-            {{ renameSkillError }}
-          </p>
-        </div>
-      </form>
-      <template #footer>
-        <button type="button" class="ghost" :disabled="renameSkillBusy" @click="closeRenameSkillDialog">
-          {{ t('common.cancel') }}
-        </button>
-        <button
-          type="button"
-          class="primary"
-          :disabled="renameSkillBusy || !renameSkillInput.trim() || renameSkillInput.trim() === renameSkillOldName"
-          @click="submitRenameSkill"
-        >
-          <span v-if="renameSkillBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ t('common.save') }}
         </button>
