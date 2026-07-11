@@ -254,7 +254,7 @@ onUnmounted(() => {
           role="tooltip"
           :aria-label="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
         >
-          <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="18" height="18" />
+          <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="14" height="14" />
         </button>
 
         <!-- 刷新统计 -->
@@ -265,7 +265,7 @@ onUnmounted(() => {
           role="tooltip"
           :aria-label="t('app.refreshStats')"
         >
-          <IconPark icon="mdi:refresh" width="16" height="16" />
+          <IconPark icon="mdi:refresh" width="14" height="14" />
         </button>
       </div>
 
@@ -493,22 +493,28 @@ onUnmounted(() => {
 }
 
 /* ============================================
-   侧栏底部状态组 - 2026-07-11 增:与导航同一栏,纵向排列
+   侧栏底部状态组 - 2026-07-11 增:与导航同一栏,纵向排列;
+   2026-07-11 v7 改:三个图标改成同一行水平排列,尺寸缩小,
+   去掉外框,只在 hover 时显示浅背景。
    ============================================ */
 .sidebar-footer {
   margin-top: auto;          /* 关键:把状态组推到侧栏底部 */
-  padding: 8px 0 12px;
+  padding: 6px 4px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;        /* v7:水平排列 */
   align-items: center;
-  gap: 6px;
+  justify-content: center;    /* v7:三个图标整体居中 */
+  gap: 2px;                   /* v7:收紧间距 */
   border-top: 1px solid var(--border-sidebar);
 }
 
 .footer-status {
   position: relative;       /* tooltip 锚点 */
-  @apply p-2 rounded-lg flex items-center justify-center;
-  border: 1px solid var(--border-sidebar);
+  @apply rounded-md flex items-center justify-center;
+  width: 24px;
+  height: 24px;
+  /* v7:去除外框,只在 hover 时显示背景 */
+  border: none;
   background: transparent;
   cursor: default;
 }
@@ -516,25 +522,28 @@ onUnmounted(() => {
   background: var(--bg-sidebar-hover);
 }
 .footer-status-dot {
-  @apply w-2.5 h-2.5 rounded-full;
+  @apply w-2 h-2 rounded-full;   /* v7:圆点从 2.5 缩到 2 */
 }
 .footer-status .dot-ok {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.18);
+  box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.18);
 }
 .footer-status .dot-error {
   background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.18);
+  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.18);
 }
 
 .footer-icon-btn {
   position: relative;       /* tooltip 锚点 */
-  @apply p-2 rounded-lg flex items-center justify-center;
+  @apply rounded-md flex items-center justify-center;
+  width: 24px;
+  height: 24px;
+  /* v7:去除外框,缩小到 14px 图标 */
+  border: none;
   background: transparent;
-  border: 1px solid var(--border-sidebar);
   color: var(--text-sidebar-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .footer-icon-btn:hover {
   background: var(--bg-sidebar-hover);
