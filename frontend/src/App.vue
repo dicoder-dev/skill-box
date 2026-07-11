@@ -100,6 +100,13 @@ onMounted(() => {
   if (runMode === 'desktop') {
     const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
     isMacOS.value = /Mac|iPhone|iPad/i.test(ua)
+    // 2026-07-11 v8 增:macOS 桌面端给 html 加 .is-mac-desktop class,
+    // CSS 凭这个把 .topbar 顶部 padding 抬 50px,让 logo 与红绿灯垂直错开
+    // (侧栏 spacer 已经让了 50px,但主内容区 topbar 没让位,导致 logo
+    // 视觉上被压扁在红绿灯旁边)。
+    if (isMacOS.value && typeof document !== 'undefined') {
+      document.documentElement.classList.add('is-mac-desktop')
+    }
     // 2026-07-11 v4 增:调试 log,方便桌面端用户在 DevTools 确认 isMacOS 是否正确命中
     // 与 sidebar-top-spacer 实际渲染情况(打开 webview DevTools 看 layout)。
     if (typeof console !== 'undefined') {
@@ -234,9 +241,10 @@ onUnmounted(() => {
         </button>
       </nav>
 
-      <!-- 底部状态组 - 与导航同一栏,纵向居中;2026-07-11 从顶栏下移 -->
+      <!-- 底部状态组 - 与导航同一栏,横向排列;
+           2026-07-11 v8 改:删除刷新按钮,只留后端状态(左)+ 主题(右)。 -->
       <div class="sidebar-footer">
-        <!-- 后端连接状态(小圆点) -->
+        <!-- 后端连接状态(左侧) -->
         <div
           :class="['footer-status', backendOK ? 'status-ok' : 'status-error']"
           :data-tooltip="backendOK ? t('app.backendOk') : t('app.backendDown')"
@@ -246,7 +254,7 @@ onUnmounted(() => {
           <span :class="['footer-status-dot', backendOK ? 'dot-ok' : 'dot-error']"></span>
         </div>
 
-        <!-- 主题切换 -->
+        <!-- 主题切换(右侧) -->
         <button
           class="footer-icon-btn"
           @click="toggleTheme"
@@ -255,17 +263,6 @@ onUnmounted(() => {
           :aria-label="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
         >
           <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="14" height="14" />
-        </button>
-
-        <!-- 刷新统计 -->
-        <button
-          class="footer-icon-btn"
-          @click="refreshStats"
-          :data-tooltip="t('app.refreshStats')"
-          role="tooltip"
-          :aria-label="t('app.refreshStats')"
-        >
-          <IconPark icon="mdi:refresh" width="14" height="14" />
         </button>
       </div>
 
@@ -283,8 +280,10 @@ onUnmounted(() => {
     <!-- 主内容区 -->
     <main class="main-content flex flex-col min-w-0">
       <!-- 顶部栏 - 2026-07-11 改:左侧 = Logo,右侧 = 3 个 stat-badge;
-           顶部 tabs 已删除(与侧栏图标重复),后端状态 / 主题 / 刷新下移到侧栏底部。 -->
-      <header class="topbar">
+           顶部 tabs 已删除(与侧栏图标重复),后端状态 / 主题 / 刷新下移到侧栏底部。
+           2026-07-11 v8 增:macOS 桌面端加 mac-desktop class,让 .topbar 的
+           padding-top 抬 50px,与红绿灯垂直错开(否则 logo 被压在红绿灯旁)。 -->
+      <header :class="['topbar', isMacOS ? 'mac-desktop' : '']">
         <div class="topbar-left">
           <button
             v-if="isMobile"
@@ -562,7 +561,10 @@ onUnmounted(() => {
 }
 
 /* 顶部栏 - 2026-07-11 改:左侧只剩 Logo,右侧只剩 3 个 stat-badge;
-   顶部 tabs 与后端状态/主题/刷新全部迁出。 */
+   顶部 tabs 与后端状态/主题/刷新全部迁出。
+   2026-07-11 v8 增:macOS 桌面端额外加 50px 顶部 padding,
+   让 logo 与红绿灯垂直错开(否则侧栏让了 50px,但主内容区 topbar
+   贴屏顶,logo 视觉上被压扁在红绿灯旁边)。 */
 .topbar {
   @apply flex items-center justify-between px-5 py-2.5;
   background: var(--bg-header);
@@ -572,6 +574,9 @@ onUnmounted(() => {
   top: 0;
   z-index: 20;
   transition: all 0.3s ease;
+}
+.topbar.mac-desktop {
+  padding-top: 50px;
 }
 
 .topbar-left {
