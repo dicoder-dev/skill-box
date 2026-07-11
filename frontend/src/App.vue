@@ -383,14 +383,19 @@ onUnmounted(() => {
 }
 
 /* 导航菜单 - 纯图标,hover 显示 tooltip。
-   2026-07-11 改:导航区不再 flex:1,改成自然高度,把空间让给底部状态组;
-   状态组用 mt-auto 沉底。 */
+   2026-07-11 v5 改:flex:1 撑满侧栏中间区,justify-content: center
+   让 5 个图标垂直居中(spacer 占顶部红绿灯,footer mt-auto 推底部,
+   中间剩余空间被 nav 居中占满)。这样无论 macOS spacer 多大,
+   导航图标始终视觉居中。 */
 .sidebar-nav {
   @apply px-2 py-4;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
   align-items: center;
+  justify-content: center;
+  min-height: 0;          /* flex 子项允许收缩 */
 }
 
 .nav-item {
