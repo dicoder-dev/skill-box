@@ -18,7 +18,6 @@ package skillstore
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -977,9 +976,13 @@ func (s *Store) buildTreeNode(absDir, name, groupPath, kw string, depth int) *Tr
 			return nil
 		}
 		fi := dirModTime(absDir)
-		// 2026-07-12 增:从 sidecar 读 source_path(导入来源磁盘路径)。
-		// 缺省 / 读失败时为空字符串,前端用 omitempty 不下发。
-		srcPath := readSourcePath(absDir)
+		// 2026-07-12 改:实时检测该 skill 是否在 ~/.agents/skills/ 全局目录下,
+		// 而不是依赖 sidecar 缓存。理由:全局目录是用户家目录的共享 skills 池,
+		// skillbox 应当"按需"反映其状态(用户在 ~/.agents/skills/ 增删 skill
+		// 后,下次 reload 列表立即生效),而非用 sidecar 记录"曾经导入过"
+		// 这种历史状态。命中条件:磁盘上存在 ~/.agents/skills/<name>/SKILL.md。
+		// 跨平台 home:用 os.UserHomeDir(同 onboarding 包的 osUserHomeDir)。
+		srcPath := resolveGlobalSourcePath(c.Manifest.Name)
 		return &TreeNode{
 			Name:    c.Manifest.Name,
 			Path:    joinGroupPath(groupPath, c.Manifest.Name),
@@ -1308,61 +1311,51 @@ func (s *Store) lockScope(dir string) (func(), error) {
 }
 
 // ============================================
-// 2026-07-12 增:skill 导入来源 sidecar 读写
+// 2026-07-12 增:全局 Agent 实时检测
 // ============================================
 //
-// 设计动机:首页 skill 卡片要显示"全局 Agent"标签,语义是"该 skill 最初
-// 是从 ~/.agents/skills/ 全局 Agent 目录导入到 store 的"。需要在 store
-// 层面记录导入来源的磁盘绝对路径,供 ListTree 注入到 SkillTreeMeta.SourcePath
-// 返回给前端。
+// 设计动机:首页 skill 卡片要显示"全局 Agent"标签,语义是"该 skill
+// 当前在 ~/.agents/skills/ 全局 Agent 目录下"。store 不缓存"曾经
+// 导入过"这种历史状态 — 每次 ListTree 都实时检查磁盘:
+//   1. 拼出候选路径 ~/.agents/skills/<name>/SKILL.md
+//   2. EvalSymlinks 拿真实路径(macOS /private/var/...)
+//   3. 存在则把该路径作为 SourcePath 注入,前端用正则判定后贴 tag
 //
-// 为什么用 sidecar 而非 SKILL.md frontmatter:
-//   - SKILL.md 是用户原文件,frontmatter 是 skill 自身的元数据(name/version/...),
-//     不应被 skillbox 写脏"导入来源"这种系统元数据。
-//   - 用一个隐藏文件 .skillbox-source.json 单独承载,跟 skill 内容解耦。
-//   - SkillStore.Save 不感知 source_path 概念(它是底层存储),source_path 的
-//     写入由 caller(importOneFromDir 等)负责。
-
-// sourceMetaFile 是 skill 目录下承载导入来源元数据的 sidecar 文件名。
-// 以 "." 开头保证 ListTree 扫描时跳过(store.go ListTree 用 HasPrefix(".") 过滤)。
-const sourceMetaFile = ".skillbox-source.json"
-
-// sourceMeta 是 sidecar 文件的 schema。后续如果要加"导入时间"、
-// "source_kind" 等字段,都在这里扩展。
-type sourceMeta struct {
-	// SourcePath 是导入来源磁盘绝对路径(EvalSymlinks 后的真实路径)。
-	// 写入时建议先 EvalSymlinks(macOS 真实路径在 /private/var/... 下,跟
-	// 用户看到的 ~/.agents/skills 路径不一致,需要归一化)。
-	SourcePath string `json:"source_path"`
-}
-
-// writeSourcePath 把 source_path 写入 sidecar 文件。
-// 失败不返回 error — sidecar 是 best-effort 元数据,缺失不影响 skill 本身
-// 的可用性,只是少了"全局 Agent"标签。caller 应该吞掉 error。
+// 这样做的好处:
+//   - 用户在 ~/.agents/skills/ 下增 / 删 skill 后,下次 reload 列表立即生效
+//   - 不需要任何 sidecar 缓存文件,store 保持"只读系统"的纯粹性
+//   - 不依赖"曾经导入过"的历史信息,跟磁盘真值同步
 //
-// 2026-07-12 改:export 成 WriteSourcePath,供 skillpkg.importOneFromDir
-// 在 store.Save 成功后调用。
-func WriteSourcePath(absDir, sourcePath string) {
-	if strings.TrimSpace(sourcePath) == "" {
-		return
-	}
-	data, err := json.Marshal(sourceMeta{SourcePath: sourcePath})
-	if err != nil {
-		return
-	}
-	_ = writeFileAtomic(filepath.Join(absDir, sourceMetaFile), string(data), 0o644)
-}
+// 跟 onboarding 包的 resolveGlobalSkillsRoot 区别:
+//   - onboarding 包遍历 skilladapter.All() 的 DiscoverPaths 拿到所有候选路径
+//     (claude/codex/cline 等多 adapter 都有 ~/.agents/skills,会去重)
+//   - 这里只关心"该 skill name 在 .agents/skills/<name> 下是否存在",
+//     简单 stat 即可,不需要遍历 adapter。store 层硬编码 ~/.agents/skills
+//     是 OK 的,因为这就是 skillbox 的"全局 Agent"定义(跟 adapter 无关)。
 
-// readSourcePath 从 sidecar 文件读 source_path。失败返回空字符串(不报错),
-// 跟 ListTree 的"尽力而为"语义对齐。
-func readSourcePath(absDir string) string {
-	data, err := os.ReadFile(filepath.Join(absDir, sourceMetaFile))
-	if err != nil {
+// resolveGlobalSourcePath 检测 name 对应的 skill 是否在 ~/.agents/skills/ 下。
+// 命中时返回 EvalSymlinks 后的绝对路径,未命中或 stat 失败返回空字符串。
+func resolveGlobalSourcePath(name string) string {
+	if strings.TrimSpace(name) == "" {
 		return ""
 	}
-	var m sourceMeta
-	if err := json.Unmarshal(data, &m); err != nil {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
 		return ""
 	}
-	return m.SourcePath
+	// 候选路径: <home>/.agents/skills/<name>
+	candidate := filepath.Join(home, ".agents", "skills", name)
+	// EvalSymlinks 解析真实路径(macOS 真实路径在 /private/var/... 下)。
+	// 不存在时 EvalSymlinks 也会失败,这时直接 fallback 到 candidate,
+	// 反正下面 stat 会判不存在。
+	real := candidate
+	if r, err := filepath.EvalSymlinks(candidate); err == nil {
+		real = r
+	}
+	// 关键判定:该路径下必须有 SKILL.md 才算"全局 Agent"。
+	// 不能只判目录存在 — 避免空目录 / 损坏目录被误识。
+	if _, err := os.Stat(filepath.Join(real, "SKILL.md")); err != nil {
+		return ""
+	}
+	return real
 }

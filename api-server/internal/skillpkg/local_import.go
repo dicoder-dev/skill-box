@@ -319,16 +319,11 @@ func collectSkillDirs(root string, maxDepth int) ([]string, error) {
 
 // importOneFromDir 把单个目录里所有文件读到 Canonical,走 store.Save。
 //
-// 2026-07-12 改:在 store.Save 成功后,把 source_path(原始目录 EvalSymlinks 后的
-// 真实路径)写到落盘目录的 sidecar 文件(.skillbox-source.json),
-// 供 ListTree 注入 SkillTreeMeta.SourcePath,前端据此判断"全局 Agent"标签。
-// 失败不阻断导入流程 — sidecar 缺失只会少一个标签,不影响 skill 本身可用。
+// 2026-07-12 改 v2:不再写 .skillbox-source.json sidecar。"全局 Agent" 标签
+// 在 store.buildTreeNode 里实时检测 ~/.agents/skills/<name>/SKILL.md 是否
+// 存在,跟导入历史解耦(用户在任何地方加 / 删 skill 后下次 reload 立即生效)。
 func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.ImportResult {
 	var results []skillimporter.ImportResult
-
-	// 把 dir 解析成 EvalSymlinks 后的真实路径(macOS 真实路径在 /private/var/...
-	// 下,跟用户看到的 ~/.agents/skills 不一致,需要归一化)。
-	srcReal, _ := filepath.EvalSymlinks(dir)
 
 	canonical, err := readCanonicalFromDir(dir)
 	if err != nil {
@@ -350,13 +345,6 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 		})
 		return results
 	}
-	// 2026-07-12 增:写 source_path sidecar。skill 落盘到 <store.Root>/<group>/<name>/,
-	// 当 group 为空时就是 <store.Root>/<name>/。这里用 ResolveSkillDir 拼绝对路径。
-	if srcReal != "" {
-		gp := canonical.Manifest.GroupPath
-		absDir := filepath.Join(store.Root(), skillpkgNormalizeGroup(gp), canonical.Manifest.Name)
-		skillstore.WriteSourcePath(absDir, srcReal)
-	}
 	results = append(results, skillimporter.ImportResult{
 		ToolID:  "",
 		Name:    canonical.Manifest.Name,
@@ -364,15 +352,6 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 		OK:      true,
 	})
 	return results
-}
-
-// skillpkgNormalizeGroup 把 GroupPath 里可能含的前后斜杠去掉,
-// 跟 store.resolveSkillDir 行为保持一致(store 层用 NormalizeGroupName,
-// 这里用一个本地版本避免循环 import)。
-func skillpkgNormalizeGroup(gp string) string {
-	gp = strings.TrimSpace(gp)
-	gp = strings.Trim(gp, "/")
-	return gp
 }
 
 // importOneFromArchiveEntries 把一组 archive entry(同一 skill 根)整合成 Canonical,store.Save。
