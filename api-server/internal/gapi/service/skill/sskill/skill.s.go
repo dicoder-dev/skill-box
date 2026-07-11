@@ -24,11 +24,12 @@ import (
 
 // 业务错误(sentinel),controller 可用 errors.Is 判断。
 var (
-	ErrEmptyName     = errors.New("skill: name is empty")
-	ErrEmptyScope    = errors.New("skill: scope is empty")
-	ErrInvalidScope  = errors.New("skill: scope must be 'global' or 'project'")
-	ErrNotFound      = errors.New("skill: not found")
-	ErrStoreSave     = errors.New("skill: store save failed")
+	ErrEmptyName        = errors.New("skill: name is empty")
+	ErrEmptyScope       = errors.New("skill: scope is empty")
+	ErrInvalidScope     = errors.New("skill: scope must be 'global' or 'project'")
+	ErrNotFound         = errors.New("skill: not found")
+	ErrStoreSave        = errors.New("skill: store save failed")
+	ErrInvalidSkillName = errors.New("skill: name is invalid (must match [a-z][a-z0-9-]{1,63})")
 	// 2026-07-05 增:磁盘文件被破坏(含非 UTF-8 字节)时返回该 sentinel。
 	// controller 识别后返 422 + code=corrupted_file,前端弹"需手动修复"提示。
 	ErrCorruptedFile = errors.New("skill: file contains non-UTF-8 bytes")
@@ -366,6 +367,40 @@ func (s *Service) RenameGroup(srcGroupPath string, newName string) (string, erro
 		return "", fmt.Errorf("%w: new name is empty", ErrInvalidGroupPath)
 	}
 	return s.store.RenameGroupDir(src, cleaned)
+}
+
+// RenameSkill 2026-07-11 增:在同分组内重命名 skill 目录名(name 是 SKILL.md 目录的
+// 最后一段;group_path 不变)。底层走 skillstore.RenameSkillInGroup,实际就是把
+// "<root>/<group>/<oldName>" 这个目录整体 os.Rename 到 "<root>/<group>/<newName>"。
+// 内部会上锁 + 校验目标不存在,所以并发安全。
+//
+// 设计取舍:不在 SKILL.md frontmatter 里改 name — frontmatter 跟目录名是 1:1 绑定
+// 关系(Save 走 RenderSkillMD 重渲,目录名是真值),改 frontmatter 没用,必须改目录。
+//
+// 入参: srcGroupPath(可空 = 根)、oldName(原名, 走 NormalizeName 规约)、newName(新名)。
+// 返回: (newSkillPath, error) — newSkillPath 是规范化后的新相对路径 "<group>/<newName>"。
+func (s *Service) RenameSkill(srcGroupPath string, oldName string, newName string) (string, error) {
+	old := skilladapter.NormalizeName(oldName)
+	if old == "" {
+		return "", fmt.Errorf("%w: old name is empty", ErrEmptyName)
+	}
+	cleaned := strings.TrimSpace(newName)
+	if i := strings.LastIndexAny(cleaned, "/\\"); i >= 0 {
+		// 输入含路径分隔符 → 只取最后一段(防止用户手抖输入 'foo/bar' 让目录名意外跨组)
+		cleaned = cleaned[i+1:]
+	}
+	cleaned = skilladapter.NormalizeName(cleaned)
+	if cleaned == "" {
+		return "", fmt.Errorf("%w: new name is empty", ErrInvalidSkillName)
+	}
+	if cleaned == old {
+		return "", fmt.Errorf("%w: new name equals old name", ErrInvalidSkillName)
+	}
+	gp, err := s.normalizeGroupPath(srcGroupPath)
+	if err != nil {
+		return "", err
+	}
+	return s.store.RenameSkillInGroup(gp, old, cleaned)
 }
 
 // ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。

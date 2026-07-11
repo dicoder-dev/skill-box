@@ -455,7 +455,86 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 	return nil
 }
 
-// MoveGroupDir 把整个分组目录从 srcGroupPath 移动到 dstGroupPath 下。
+// RenameSkillInGroup 2026-07-11 增:把 skill 目录在同分组内换名(只改最后一段,groupPath 不变)。
+// 与 MoveGroupPath 区别:dst 仍走 srcGroupPath,只换 name;同时锁定 src + dst 防
+// 并发覆盖。校验 newName 经 NormalizeName 归一化后非空 + 与 oldName 不一致 + 目标不存在。
+// 成功返回新相对路径(groupPath/newName,'/' 分隔,前端直接消费)。
+func (s *Store) RenameSkillInGroup(srcGroupPath string, oldName string, newName string) (string, error) {
+	if oldName == "" {
+		return "", fmt.Errorf("skillstore: rename skill: old name is empty")
+	}
+	if newName == "" {
+		return "", fmt.Errorf("skillstore: rename skill: new name is empty")
+	}
+	if oldName == newName {
+		return "", fmt.Errorf("skillstore: rename skill: old and new name are the same")
+	}
+	// groupPath 允许空(根),但含 .. / 绝对路径 / NUL 仍拒。safeRelPath 在空串
+	// 时直接报"empty path",这里把空串视作 "." 绕过,让"根下 skill"场景能走通。
+	cleanGroup := ""
+	if srcGroupPath != "" {
+		cp, err := safeRelPath(srcGroupPath)
+		if err != nil {
+			return "", fmt.Errorf("skillstore: rename skill: bad group path %q: %w", srcGroupPath, err)
+		}
+		cleanGroup = cp
+	}
+	srcAbs, err := s.resolveSkillDir(cleanGroup, oldName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(filepath.Join(srcAbs, "SKILL.md")); err != nil {
+		if os.IsNotExist(err) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	dstAbs, err := s.resolveSkillDir(cleanGroup, newName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(dstAbs); err == nil {
+		return "", fmt.Errorf("skillstore: rename skill: target %q already exists", newName)
+	}
+	// 跨目录并发的 file lock — 锁定 src(防止别人正在写)+ 锁 dst(防止同名创建竞态)。
+	// 这里走最简单的串行锁:拿到 src 后立即尝试 dst 锁(可能阻塞)。
+	// lockScope 用独立 fl 锁目录,如过 dst 目录不存在会自动 mkdir 父目录再锁。
+	// 先 mkdir 父目录(用于新路径的锁定位点),再锁 src / dst。
+	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o755); err != nil {
+		return "", fmt.Errorf("skillstore: rename skill: mkdir parent: %w", err)
+	}
+	srcUnlock, err := s.lockScope(srcAbs)
+	if err != nil {
+		return "", err
+	}
+	defer srcUnlock()
+	dstUnlock, err := s.lockScope(dstAbs)
+	if err != nil {
+		return "", err
+	}
+	defer dstUnlock()
+	// 再确认一次目标不存在(并发创建场景)
+	if _, err := os.Stat(dstAbs); err == nil {
+		return "", fmt.Errorf("skillstore: rename skill: target %q already exists", newName)
+	}
+	if err := os.Rename(srcAbs, dstAbs); err != nil {
+		// 跨设备 / 异常 → copy + remove
+		if cerr := copyDirRecursive(srcAbs, dstAbs); cerr != nil {
+			return "", fmt.Errorf("skillstore: rename skill failed (rename=%v, copy=%v)", err, cerr)
+		}
+		if rerr := os.RemoveAll(srcAbs); rerr != nil {
+			return "", fmt.Errorf("skillstore: rename skill: source cleanup failed: %w", rerr)
+		}
+	}
+	// 返回新相对路径(groupPath/newName,'/' 分隔)
+	newRel := newName
+	if cleanGroup != "" && cleanGroup != "." {
+		newRel = filepath.ToSlash(filepath.Join(cleanGroup, newName))
+	}
+	return newRel, nil
+}
+
+// RenameGroupDir 把整个分组目录从 srcGroupPath 移动到 dstGroupPath 下。
 // dstGroupPath 可以为空(=把分组挪到根下);name 不变(取 src 的最后一段)。
 //
 // 2026-06-29 增:复用 MoveGroupPath 思路,作用对象是整个分组目录子树。

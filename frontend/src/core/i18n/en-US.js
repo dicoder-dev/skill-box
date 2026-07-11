@@ -236,7 +236,14 @@ const messages = {
       // 2026-06-29: tree UI + context menu + drag
       treeEmpty: 'No skills yet. Click "New" to start.',
       treeRootHint: 'Right-click to create a group, or drag a skill here',
-      ctxNewGroup: 'New group',
+      ctxNewGroup: 'New folder',
+      // 2026-07-11: position-aware context menu
+      // - skill node: rename / delete
+      // - group node: new skill
+      // - root area: new folder / new skill
+      ctxNewSkill: 'New document',
+      ctxRenameSkill: 'Rename document',
+      ctxDeleteSkill: 'Delete document',
       ctxNewSubgroup: 'New sub-group',
       ctxDeleteGroup: 'Delete group',
       ctxRename: 'Rename',
@@ -260,6 +267,15 @@ const messages = {
       groupRenameFailed: 'Rename failed: {msg}',
       groupRenameConflict: 'A group with the same name already exists at the same level',
       groupRenameNotFound: 'Source group no longer exists',
+      // 2026-07-11: rename skill (document)
+      skillRenamePrompt: 'Rename document "{name}"',
+      skillRenameHint: 'Only the last segment is renamed; the parent group stays. Allowed chars: lowercase / digits / -',
+      skillRenameOk: 'Renamed to "{name}"',
+      skillRenameFailed: 'Rename failed: {msg}',
+      skillRenameConflict: 'A document with the same name already exists in this group',
+      skillRenameNotFound: 'Source document no longer exists',
+      // 2026-07-11: hint when creating a skill inside a specific group
+      newSkillInGroupHint: 'New document will be created under group "{name}"',
       skillDeleteConfirm: 'Delete skill "{name}"?',
       skillDeleteCascadeHint: 'Also remove copies from tool directories (5 tools × global / per-project)',
       skillDeleteFailed: 'Delete failed: {msg}',

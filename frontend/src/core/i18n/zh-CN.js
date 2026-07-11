@@ -243,7 +243,14 @@ const messages = {
       // 2026-06-29 增:分组树形 UI + 右键菜单 + 拖拽
       treeEmpty: '还没有技能,点上方"新建"开始',
       treeRootHint: '右键空白处新建分组,或拖拽 skill 到此处',
-      ctxNewGroup: '新建分组',
+      ctxNewGroup: '新建文件夹',
+      // 2026-07-11 增:按位置区分的右键菜单
+      // - 文档(skill 节点):重命名 / 删除
+      // - 分组(group 节点):新建文档
+      // - 根区域(树空白):新建文件夹 / 新建文档
+      ctxNewSkill: '新建文档',
+      ctxRenameSkill: '重命名文档',
+      ctxDeleteSkill: '删除文档',
       ctxNewSubgroup: '新建子分组',
       ctxDeleteGroup: '删除分组',
       ctxRename: '重命名',
@@ -269,6 +276,15 @@ const messages = {
       groupRenameFailed: '重命名失败: {msg}',
       groupRenameConflict: '同层已存在同名分组',
       groupRenameNotFound: '原分组不存在',
+      // 2026-07-11 增:文档(skill)重命名
+      skillRenamePrompt: '重命名文档「{name}」',
+      skillRenameHint: '只改最后一段,父分组不变;合法字符:小写字母 / 数字 / -',
+      skillRenameOk: '已重命名为「{name}」',
+      skillRenameFailed: '重命名失败: {msg}',
+      skillRenameConflict: '同分组已存在同名文档',
+      skillRenameNotFound: '原文档不存在',
+      // 2026-07-11 增:在分组下新建文档时的提示
+      newSkillInGroupHint: '将在分组「{name}」下新建文档',
       skillDeleteConfirm: '确定删除技能「{name}」吗?',
       skillDeleteCascadeHint: '同步删除该 skill 在工具目录(5 个工具 × 全局 / 各项目)中的副本',
       skillDeleteFailed: '删除失败: {msg}',
