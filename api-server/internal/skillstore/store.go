@@ -222,6 +222,21 @@ func (s *Store) loadFromDir(dir string) (*skilladapter.Canonical, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 2026-07-11 增:补全空目录 — walkFiles 只返回有文件的目录里的文件,
+	// 磁盘上"空目录"(如 dd/)在 files 数组里没有对应条目,前端 buildTree
+	// 拿不到任何 <dir>/ 子文件,空目录永远不显示。这里给每个空目录补一个
+	// .skillbox-placeholder 占位条目(后端 store.Save 看到也会 mkdir 真实
+	// 占位文件,前端 FileTreeView.buildTree 走 BUSINESS_PLACEHOLDERS 白名单
+	// 知道它是占位)。
+	emptyDirs, ederr := listEmptyDirs(dir)
+	if ederr == nil {
+		for _, d := range emptyDirs {
+			c.Files = append(c.Files, skilladapter.File{
+				Path:    filepath.ToSlash(filepath.Join(d, ".skillbox-placeholder")),
+				Content: "",
+			})
+		}
+	}
 	// 兜底:解析失败时 frontmatter 给的 files 列表可能没有 SKILL.md
 	hasMain := false
 	for _, f := range c.Files {
@@ -1143,6 +1158,53 @@ func walkFiles(root string) ([]skilladapter.File, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
+}
+
+// 2026-07-11 增:扫目录收集所有"空目录"(递归)。
+// 用于 loadFromDir 把磁盘上空目录也展示在文件树里 — 不然前端 buildTree
+// 拿不到任何 <dir>/ 子条目,空目录永远不显示。
+// 过滤规则跟 walkFiles 一致:任一段以 . 开头的目录跳过(.git / .DS_Store 等)。
+func listEmptyDirs(root string) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		// 跳过根本身
+		if path == root {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		relSlash := filepath.ToSlash(rel)
+		// 过滤隐藏目录
+		for _, seg := range strings.Split(relSlash, "/") {
+			if strings.HasPrefix(seg, ".") {
+				// 跳过整个子树
+				return filepath.SkipDir
+			}
+		}
+		// 看这个目录是不是"空"的(没有任何 entry — 既没文件也没子目录)
+		// WalkDir 已扫过这个 dir,直接 os.ReadDir 看 entries
+		entries, readErr := os.ReadDir(path)
+		if readErr != nil {
+			return readErr
+		}
+		if len(entries) == 0 {
+			out = append(out, relSlash)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // safeRelPath 拒绝 ..、绝对路径、含 \0 等可疑 path。

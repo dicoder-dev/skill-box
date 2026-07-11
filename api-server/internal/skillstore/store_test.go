@@ -490,3 +490,51 @@ func TestRenameSkillInGroup_SameName(t *testing.T) {
 		t.Errorf("err = %v; want 'same' error", err)
 	}
 }
+
+// 2026-07-11 增:listEmptyDirs 行为
+//   - 顶层空目录应被列出
+//   - 嵌套空目录应被列出
+//   - 有文件的目录不应被列出
+//   - 含子目录的目录(子目录非空)不应被列出
+//   - 含子目录的目录(子目录是空的)应被列出
+//   - 隐藏目录 (.git) 应被跳过
+func TestListEmptyDirs(t *testing.T) {
+	s := newTestStore(t)
+	// aa/dd/ (空)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "aa", "dd"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// aa/cc/with-file.txt (有文件)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "aa", "cc"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := writeFileAtomic(filepath.Join(s.Root(), "aa", "cc", "with-file.txt"), "x", 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// aa/ee/ (嵌套空)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "aa", "ee"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// aa/ff/sub/ (ff 含子目录,子目录空)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "aa", "ff", "sub"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// .git/objects/ (隐藏目录应跳过整子树)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "aa", ".git", "objects"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	got, err := listEmptyDirs(s.Root())
+	if err != nil {
+		t.Fatalf("listEmptyDirs: %v", err)
+	}
+	want := []string{"aa/dd", "aa/ee", "aa/ff/sub"}
+	if len(got) != len(want) {
+		t.Errorf("got %v; want %v", got, want)
+	}
+	for i, w := range want {
+		if i >= len(got) || got[i] != w {
+			t.Errorf("got[%d] = %q; want %q", i, got[i], w)
+		}
+	}
+}
