@@ -1,0 +1,20 @@
+- [Wails v3 darwin OnDoubleClick 死代码](wails-v3-tray-darwin-doubleclick-deadcode.md) — alpha.60 的 processClick 不 dispatch doubleClickHandler,macOS 上双击永远不触发
+- [Go //go:embed 不支持符号链接](go-embed-no-symlink.md) — pattern cannot embed irregular file,需要复制实体文件
+- [wails3 webview iconify 离线](wails3-webview-iconify-network.md) — webview 拉不到 iconify API,业务关键图标必须离线打包
+- [禁止紫色作为项目主配色](avoid-violet-as-primary-color.md) — 紫色 AI 感强,主色禁用,只能辅助;主色候选:蓝/绿/橙/红/灰
+- [工具自定义图标 + 内置图标两段式](tool-custom-icon-upload.md) — entity.Tool.icon_file / toolicon 包 / ctool 上传 + 静态服务 / seed embed builtin 图标 / ToolIcon 组件
+- [市场 skillhub 超时根因](market-skillhub-timeout.md) — 浏览器 Failed to fetch + 后端 Discover 全量分支不降级,90s 拖死
+- [三方源超时兜底策略](market-fallback-strategy.md) — UI 永远不能空,fallback 优先 + 常驻重试按钮
+- [前端 GET 请求禁带 Content-Type](frontend-get-no-content-type.md) — baseHeaders 只在 POST/PUT/PATCH 设 application/json,GET 不设(否则 BindParamsHandler EOF)
+- [http.js GET 带 Content-Type 导致 prefs 不刷新案例](http-get-content-type-vs-prefs.md) — api/http.js 与 requests/http.js 不一致,前者 GET 也带 application/json,fix 后 settings.apply_mode UI 切换正常
+- [项目统一图标库 iconpark](fe-icon-library.md) — 所有图标走 @icon-park/vue-next + IconPark 组件 + MDI_TO_ICONPARK 映射,禁 emoji/iconify 在线
+- [Go 读磁盘文件 utf8 校验](go-readfile-utf8-validate.md) — skillstore 读 SKILL.md 后 utf8.Valid,损坏返 ErrCorruptedFile + 422 + code=corrupted_file,前端弹清晰提示
+- [SkillFileInlinePanel 编辑态跨 skill 隔离](fe-fileinline-panel-mode-and-dirty.md) — editModeMap key 加 skillName 维度;selectedFile 不能 path 相同就保留旧引用
+- [hljs token 配色随底色变](fe-hljs-on-dark-bg.md) — 黑底必须用亮色 token(#60a5fa/#4ade80/#fb923c/#22d3ee),浅 token 在黑底发灰
+- [Monaco 在 wails3 webview 集成](fe-monaco-wails-webview.md) — useMonaco.js 内 Blob worker + jsdelivr workerMain.js;CodeViewer mount/unmount/suppressNextChange 模板
+- [Vue flex 面板锁死高度模式](fe-flex-panel-fixed-height.md) — height+flex-basis 锁死,内部 list overflow-y auto,不要用 max-height+overflow:auto
+- [SkillFileInlinePanel header 按钮横向溢出](fe-sfip-header-hscroll.md) — 右侧小尺寸按钮必须 flex:0 0 + box-sizing:border-box + overflow:hidden,否则 i-icon/svg 撑开 flex 父级触发底部横向滚动条
+- [Adapter DiscoverPaths 与 UserPath 职责分离](adapter-userpath-vs-discoverpaths.md) — discover 返 user+system 多 path 给 scope-status/importer;apply 写盘走 UserPath,claude/codex 同 (scope,user)+(scope,system) 才不崩
+- [skillbox:scope-refresh 自递归派发](scope-refresh-self-dispatch-loop.md) — SkillsView.onScopeChange 收到自己 dispatch 的事件后又 dispatch 自己,N 次操作引发 N 次 GET skills + scope-status
+- [ScopePanel window listener 漏 onUnmounted](scope-panel-listener-cleanup.md) — addEventListener 没 removeEventListener,InlinePanel :key 重 mount 时旧 instance 残留监听,dispatchEvent 触发幽灵 skill 的 scope-status
+- [md 文件大纲导航](fe-md-outline-nav.md) — md-it heading_open 重写 + extractHeadings 抽 title + CodeViewer .cv-md-wrap 改两列

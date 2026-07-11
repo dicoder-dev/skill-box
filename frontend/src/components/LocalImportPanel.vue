@@ -1,28 +1,36 @@
 <script setup>
-// LocalImportPanel - 从本地文件夹 / zip 压缩包导入 skill。
+// LocalImportPanel - 从本地文件夹 / 压缩包导入 skill。
 //
 // 行为:
 //   - 点"选择文件夹" → platform.fs.pickFolder() → POST /api/skillbox/onboarding/import-local {mode:'folder', path}
-//   - 点"选择 zip" →
-//       桌面端:platform.fs.pickFile() → POST /api/skillbox/onboarding/import-local {mode:'zip_path', path}
-//       Web 端:<input type=file> → POST /api/skillbox/onboarding/import-zip-bytes (octet-stream)
+//   - 点"选择压缩包" →
+//       桌面端:platform.fs.pickFile(ACCEPT) → POST /api/skillbox/onboarding/import-local {mode:'zip_path', path}
+//       Web 端:<input type=file accept=ACCEPT> → POST /api/skillbox/onboarding/import-zip-bytes (octet-stream)
 //   - 后端统一在 store pkg 校验 SKILL.md,0 命中返 ErrNoSkillMD,前端 toast 提示。
 //
 // 完成后 emit 'done' 通知父弹窗(OnboardingImportDialog)关闭,父视图刷新列表。
 //
 // 2026-07-01 新增,跟 OnboardingView(扫工具)并列放在 OnboardingImportDialog tab 容器里。
+// 2026-07-11 改:支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz
+// 八种格式,accept 列表 + 文件选择对话框都同步带上,前后端契约一致。
 
 import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { platform } from '@/platform'
-import { runOnboardingImportLocal, runOnboardingImportZipBytes } from '@/api/skillbox/onboarding'
+import { runOnboardingImportLocal, runOnboardingImportArchiveBytes } from '@/api/skillbox/onboarding'
 import { useToastStore } from '@/core/store/toast'
 
 const { t } = useI18n()
 const toast = useToastStore()
 
 const emit = defineEmits(['done'])
+
+// 2026-07-11 增:支持的压缩包后缀列表,与后端 skillpkg.detectArchiveKind 保持一致。
+// 单点维护:同时用于 <input accept> 和 platform.fs.pickFile(accept) 传给后端,
+// 文件选择对话框的过滤器统一显示。
+const ACCEPT_EXTS = ['.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.txz']
+const ACCEPT_ATTR = ACCEPT_EXTS.join(',')
 
 // 2026-07-07 增:在 OnboardingImportDialog 套用本组件做弹窗时,
 // 父组件 provide 一个 notifyImportDone(result) 回调,拿到后端响应立刻通知
@@ -55,12 +63,14 @@ async function pickFolder() {
   await doImport({ mode: 'folder', path })
 }
 
-async function pickZipViaDialog() {
+async function pickArchiveViaDialog() {
   if (phase.value === 'busy') return
   error.value = ''
   let path = ''
   try {
-    path = await platform.fs.pickFile()
+    // 2026-07-11 改:pickFile 接受 accept 参数,把压缩包后缀传给后端,
+    // 让 wails 的原生 dialog 用文件类型过滤器收窄选择范围(只显示压缩包)。
+    path = await platform.fs.pickFile(ACCEPT_EXTS)
   } catch (e) {
     // 桌面端 pickFile 未实现时降级到 file input
     if (fileInputRef.value) fileInputRef.value.click()
@@ -70,12 +80,12 @@ async function pickZipViaDialog() {
   await doImport({ mode: 'zip_path', path })
 }
 
-function pickZipViaInput() {
+function pickArchiveViaInput() {
   if (phase.value === 'busy') return
   if (fileInputRef.value) fileInputRef.value.click()
 }
 
-async function onZipFileChosen(e) {
+async function onArchiveFileChosen(e) {
   const file = e.target.files?.[0]
   // 同一文件能再次选:reset
   e.target.value = ''
@@ -83,7 +93,7 @@ async function onZipFileChosen(e) {
   error.value = ''
   try {
     const buf = await file.arrayBuffer()
-    await doImportZipBytes(buf)
+    await doImportArchiveBytes(buf)
   } catch (err) {
     error.value = err?.message || String(err)
     toast.push({ type: 'error', message: t('onboarding.local.errImport', { msg: error.value }) })
@@ -107,17 +117,19 @@ async function doImport(payload) {
   }
 }
 
-async function doImportZipBytes(buf) {
+async function doImportArchiveBytes(buf) {
   phase.value = 'busy'
   error.value = ''
   try {
-    const r = await runOnboardingImportZipBytes(buf)
+    const r = await runOnboardingImportArchiveBytes(buf)
     onImportResult(r)
   } catch (e) {
     error.value = e?.message || e
     phase.value = 'idle'
     if (/no SKILL\.md/i.test(error.value)) {
       toast.push({ type: 'error', message: t('onboarding.local.errNoSKILLMD') })
+    } else if (/unsupported archive format/i.test(error.value)) {
+      toast.push({ type: 'error', message: t('onboarding.local.errUnsupportedArchive') })
     } else {
       toast.push({ type: 'error', message: t('onboarding.local.errImport', { msg: error.value }) })
     }
@@ -179,22 +191,22 @@ function finish() {
 
         <button
           class="lip-action"
-          :title="t('onboarding.local.btnPickZipTitle')"
-          @click="isWeb ? pickZipViaInput() : pickZipViaDialog()"
+          :title="t('onboarding.local.btnPickArchiveTitle')"
+          @click="isWeb ? pickArchiveViaInput() : pickArchiveViaDialog()"
         >
           <IconPark icon="mdi:folder-zip-outline" width="28" height="28" />
-          <span class="lip-action-name">{{ t('onboarding.local.btnPickZip') }}</span>
+          <span class="lip-action-name">{{ t('onboarding.local.btnPickArchive') }}</span>
         </button>
       </div>
 
-      <!-- Web 端隐藏 file input,触发选 zip -->
+      <!-- Web 端隐藏 file input,触发选压缩包 -->
       <input
         v-if="isWeb"
         ref="fileInputRef"
         type="file"
-        accept=".zip"
+        :accept="ACCEPT_ATTR"
         style="display: none"
-        @change="onZipFileChosen"
+        @change="onArchiveFileChosen"
       />
     </section>
 

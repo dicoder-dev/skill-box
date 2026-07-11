@@ -2,16 +2,20 @@
 //
 // POST /api/skillbox/onboarding/import-local
 //
-// 2026-07-01 增:从本地文件夹 / 本地 zip 文件导入 skill。
+// 2026-07-01 增:从本地文件夹 / 本地压缩包导入 skill。
 // 跟 /api/skillbox/onboarding/import 的区别:这个 endpoint 不依赖"上次 scan 缓存",
 // 直接按用户选择的本地路径解析 SKILL.md → 落 store。
 //
 // 入参(JSON):
 //   - mode:   "folder" | "zip_path"
-//   - path:   mode=folder 时是目录绝对路径;mode=zip_path 时是 zip 文件绝对路径
+//   - path:   mode=folder 时是目录绝对路径;mode=zip_path 时是压缩包文件绝对路径
 //
 // 响应(JSON):跟 /api/skillbox/onboarding/import 同构(LocalImportResult),
 // 前端可共用结果页。
+//
+// 2026-07-11 改:mode='zip_path' 名字保持历史兼容(避免破坏旧前端),
+// 实际底层支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz 八种格式
+// (通过 magic bytes + 扩展名双重检测,见 skillpkg.detectArchiveKind)。
 package conboarding
 
 import (

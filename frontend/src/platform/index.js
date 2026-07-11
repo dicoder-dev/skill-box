@@ -122,9 +122,11 @@ function createWebPlatform() {
       // 2026-07-01 增:pickFile 弹系统文件选择对话框。
       // Web 端无桌面 hook,后端返 501 → 这里抛"不支持",由调用方降级到
       // <input type="file"> 走 /api/skillbox/onboarding/import-zip-bytes。
-      async pickFile() {
+      // 2026-07-11 改:接受 accept 数组(后缀列表),透传给后端 wails dialog 的
+      // AddFilter,只显示指定类型的文件(避免用户选错格式)。
+      async pickFile(accept) {
         try {
-          const r = await http.post('/api/desktop/fs/pick-file', {})
+          const r = await http.post('/api/desktop/fs/pick-file', { accept: accept || [] })
           return r?.path || ''
         } catch (e) {
           throw new Error(`pickFile failed: ${e?.message || e}`)
@@ -269,8 +271,9 @@ function createDesktopPlatform() {
       },
       // 2026-07-01 增:桌面端 pickFile,后端走 wails3 OpenFileDialog 绑定
       // (wails3 v3 alpha.60 暂无该绑定,fsutil 端点先返 501,后续补齐)。
-      async pickFile() {
-        const r = await http.post('/api/desktop/fs/pick-file', {})
+      // 2026-07-11 改:接受 accept 数组,后端据此设置文件类型过滤器。
+      async pickFile(accept) {
+        const r = await http.post('/api/desktop/fs/pick-file', { accept: accept || [] })
         return r?.path || ''
       },
       async inspectProject(path) {
