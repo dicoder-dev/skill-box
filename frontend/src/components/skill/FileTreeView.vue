@@ -63,7 +63,7 @@ function buildTree(files) {
     // 业务占位 .skillbox-placeholder 仍建出父目录(否则新建的空目录不显示)。
     if (name.startsWith('.') && !isBusinessPlaceholder(name)) return root
     const parent = ensureDir(parentPath)
-    const dirNode = { name, path: fullPath, dirs: [], files: [] }
+    const dirNode = { name, path: fullPath, dirs: [], files: [], children: [] }
     parent.dirs.push(dirNode)
     dirIndex.set(fullPath, dirNode)
     return dirNode
@@ -93,8 +93,16 @@ function buildTree(files) {
     n.dirs.sort((a, b) => a.name.localeCompare(b.name))
     n.files.sort((a, b) => a.name.localeCompare(b.name))
     n.dirs.forEach(sortNode)
+    // 2026-07-11 改:同步 children 别名 — FileTreeNode 模板递归用 :dirs="dir.children"
+    // (历史遗留的字段名,跟 buildTree 输出的 dirs 不一致),不补会传 undefined,
+    // 递归不渲染 → 子目录看不到。
+    for (const d of n.dirs) {
+      d.children = d.dirs
+    }
   }
   sortNode(root)
+  // 顶层 root 也要补 children
+  root.children = root.dirs
   return root
 }
 
