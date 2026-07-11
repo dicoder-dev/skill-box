@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, provide, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import ProjectsView from './views/ProjectsView.vue'
@@ -12,8 +13,10 @@ import ToastContainer from './components/ToastContainer.vue'
 import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { getOnboardingStatus } from '@/api/skillbox/onboarding'
+import { useAppStore } from '@/core/store/app.js'
 
 const { t } = useI18n()
+const { runMode } = storeToRefs(useAppStore())
 
 const tab = ref('skills')
 
@@ -79,6 +82,9 @@ function toggleTheme() {
 // 响应式
 const sidebarOpen = ref(true)
 const isMobile = ref(false)
+// 2026-07-11 增:仅 macOS 桌面端需要为交通灯按钮预留侧栏顶部空间;
+// Web 端与其他桌面系统贴顶即可。
+const isMacOS = ref(false)
 
 function checkViewport() {
   isMobile.value = window.innerWidth < 768
@@ -88,6 +94,12 @@ function checkViewport() {
 onMounted(() => {
   checkViewport()
   window.addEventListener('resize', checkViewport)
+  // 只在桌面端判断平台;web 端直接 false 走"贴顶"布局。
+  // 后端目前没把 os 注入 __APP_RUNTIME__,统一靠 navigator.userAgent 兜底。
+  if (runMode === 'desktop') {
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+    isMacOS.value = /Mac|iPhone|iPad/i.test(ua)
+  }
 })
 onUnmounted(() => window.removeEventListener('resize', checkViewport))
 
@@ -172,9 +184,9 @@ onUnmounted(() => {
       @click="sidebarOpen = false"
     ></div>
 
-    <!-- 侧边栏 - 2026-07-11 改:从 260px 图标+文字双栏,缩成 64px 纯图标条,
-         hover 时由 CSS ::after 浮出 tooltip(主题色自动反转)。底部状态条
-         / 主题切换 / 刷新按钮全部上移到顶栏,这里只剩导航。 -->
+    <!-- 侧边栏 - 2026-07-11 改:64px 纯图标条。
+         顶部 macOS 交通灯预留区只在桌面 macOS 渲染(web / Windows / Linux 贴顶)。
+         底部状态组:后端状态 / 主题 / 刷新。 -->
     <aside
       :class="[
         'sidebar flex flex-col z-40',
@@ -184,11 +196,12 @@ onUnmounted(() => {
           : 'sticky top-0 h-screen',
       ]"
     >
-      <!-- 顶部 macOS 交通灯预留区(只在桌面端需要,移动端忽略) -->
-      <div class="sidebar-top-spacer" aria-hidden="true"></div>
+      <!-- 仅 macOS 桌面端需要为交通灯预留空间;
+           web / Windows / Linux 全部贴顶,不留白 -->
+      <div v-if="isMacOS" class="sidebar-top-spacer" aria-hidden="true"></div>
 
       <!-- 导航菜单(纯图标 + hover tooltip) -->
-      <nav class="sidebar-nav flex-1">
+      <nav class="sidebar-nav">
         <button
           v-for="n in navItems"
           :key="n.key"
@@ -205,7 +218,42 @@ onUnmounted(() => {
         </button>
       </nav>
 
-      <!-- 移动端关闭按钮(锚在侧栏底部,占位用) -->
+      <!-- 底部状态组 - 与导航同一栏,纵向居中;2026-07-11 从顶栏下移 -->
+      <div class="sidebar-footer">
+        <!-- 后端连接状态(小圆点) -->
+        <div
+          :class="['footer-status', backendOK ? 'status-ok' : 'status-error']"
+          :data-tooltip="backendOK ? t('app.backendOk') : t('app.backendDown')"
+          role="tooltip"
+          :aria-label="backendOK ? t('app.backendOk') : t('app.backendDown')"
+        >
+          <span :class="['footer-status-dot', backendOK ? 'dot-ok' : 'dot-error']"></span>
+        </div>
+
+        <!-- 主题切换 -->
+        <button
+          class="footer-icon-btn"
+          @click="toggleTheme"
+          :data-tooltip="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
+          role="tooltip"
+          :aria-label="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
+        >
+          <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="18" height="18" />
+        </button>
+
+        <!-- 刷新统计 -->
+        <button
+          class="footer-icon-btn"
+          @click="refreshStats"
+          :data-tooltip="t('app.refreshStats')"
+          role="tooltip"
+          :aria-label="t('app.refreshStats')"
+        >
+          <IconPark icon="mdi:refresh" width="16" height="16" />
+        </button>
+      </div>
+
+      <!-- 移动端关闭按钮(锚在状态组下方,占位用) -->
       <button
         v-if="isMobile"
         class="mobile-close-btn"
@@ -218,7 +266,8 @@ onUnmounted(() => {
 
     <!-- 主内容区 -->
     <main class="main-content flex flex-col min-w-0">
-      <!-- 顶部栏 - 2026-07-11 改:左侧 = Logo + 标签 tabs,右侧 = 统计 badge + 后端状态 + 主题 + 刷新 -->
+      <!-- 顶部栏 - 2026-07-11 改:左侧 = Logo,右侧 = 3 个 stat-badge;
+           顶部 tabs 已删除(与侧栏图标重复),后端状态 / 主题 / 刷新下移到侧栏底部。 -->
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -230,28 +279,12 @@ onUnmounted(() => {
             <IconPark icon="mdi:menu" width="22" height="22" />
           </button>
 
-          <!-- Logo 区 - 2026-07-11 增:从侧栏挪到顶栏左侧作为品牌锚点 -->
           <div class="topbar-logo">
             <span class="topbar-logo-icon">
               <IconPark icon="mdi:package-variant-closed" width="18" height="18" />
             </span>
             <span class="topbar-logo-text">{{ t('app.brand') }}</span>
           </div>
-
-          <!-- 主导航 tabs - 顶栏左侧、Logo 之后横向排列 -->
-          <nav class="topbar-tabs" role="tablist">
-            <button
-              v-for="n in navItems"
-              :key="n.key"
-              :class="['topbar-tab', tab === n.key ? 'topbar-tab-active' : '']"
-              :aria-selected="tab === n.key"
-              role="tab"
-              @click="switchTab(n.key)"
-            >
-              <IconPark :icon="n.icon" width="14" height="14" class="topbar-tab-icon" />
-              <span>{{ n.label }}</span>
-            </button>
-          </nav>
         </div>
 
         <div class="topbar-right">
@@ -270,38 +303,6 @@ onUnmounted(() => {
             <span>{{ t('app.toolsLabel') }}</span>
             <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
           </div>
-
-          <!-- 2026-07-11 增:后端连接状态指示,从 sidebar 底部迁到顶栏 -->
-          <div
-            :class="['topbar-status', backendOK ? 'status-ok' : 'status-error']"
-            :data-tooltip="backendOK ? t('app.backendOk') : t('app.backendDown')"
-            role="tooltip"
-            :aria-label="backendOK ? t('app.backendOk') : t('app.backendDown')"
-          >
-            <span :class="['topbar-status-dot', backendOK ? 'dot-ok' : 'dot-error']"></span>
-          </div>
-
-          <!-- 2026-07-11 增:主题切换按钮,从 sidebar 底部迁到顶栏 -->
-          <button
-            class="topbar-icon-btn"
-            @click="toggleTheme"
-            :data-tooltip="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
-            role="tooltip"
-            :aria-label="isDark ? t('app.themeToggle.toLight') : t('app.themeToggle.toDark')"
-          >
-            <IconPark :icon="isDark ? 'mdi:weather-sunny' : 'mdi:weather-night'" width="18" height="18" />
-          </button>
-
-          <!-- 2026-07-11 增:刷新按钮,从 sidebar 底部迁到顶栏 -->
-          <button
-            class="topbar-icon-btn"
-            @click="refreshStats"
-            :data-tooltip="t('app.refreshStats')"
-            role="tooltip"
-            :aria-label="t('app.refreshStats')"
-          >
-            <IconPark icon="mdi:refresh" width="16" height="16" />
-          </button>
         </div>
       </header>
 
@@ -346,15 +347,12 @@ onUnmounted(() => {
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-/* 顶部 macOS 交通灯预留区(只在桌面端需要,移动端忽略) */
+/* 顶部 macOS 交通灯预留区 - 2026-07-11 改:只在 macOS 桌面端渲染,
+   高度调小到 32px(原 56px 太多空白);web / Windows / Linux 由 v-if
+   直接不渲染,贴顶。 */
 .sidebar-top-spacer {
-  height: 56px;
+  height: 32px;
   flex-shrink: 0;
-}
-@media (max-width: 768px), (hover: none) {
-  .sidebar-top-spacer {
-    height: 12px;
-  }
 }
 
 .mobile-close-btn {
@@ -370,7 +368,9 @@ onUnmounted(() => {
   color: var(--text);
 }
 
-/* 导航菜单 - 纯图标,hover 显示 tooltip */
+/* 导航菜单 - 纯图标,hover 显示 tooltip。
+   2026-07-11 改:导航区不再 flex:1,改成自然高度,把空间让给底部状态组;
+   状态组用 mt-auto 沉底。 */
 .sidebar-nav {
   @apply px-2 py-4;
   display: flex;
@@ -417,10 +417,12 @@ onUnmounted(() => {
   height: 22px;
 }
 
-/* tooltip - 纯 CSS,200ms 延迟避免划过闪烁;主题色自动反转 */
+/* tooltip - 纯 CSS,200ms 延迟避免划过闪烁;主题色自动反转。
+   2026-07-11 改:tooltip 元素改为 .nav-item / .footer-icon-btn / .footer-status,
+   删除 .topbar-icon-btn / .topbar-status 引用(状态组已下移到侧栏底部)。 */
 .nav-item::after,
-.topbar-icon-btn::after,
-.topbar-status::after {
+.footer-icon-btn::after,
+.footer-status::after {
   content: attr(data-tooltip);
   position: absolute;
   background: var(--text);
@@ -437,27 +439,19 @@ onUnmounted(() => {
   transition: opacity 0.15s ease;
 }
 /* 侧栏 tooltip - 浮在图标右侧 */
-.nav-item::after {
+.nav-item::after,
+.footer-icon-btn::after,
+.footer-status::after {
   left: calc(100% + 12px);
   top: 50%;
   transform: translateY(-50%);
 }
 .nav-item:hover::after,
-.nav-item:focus-visible::after {
-  opacity: 1;
-  transition-delay: 0.2s;
-}
-
-/* 顶栏 tooltip - 浮在按钮下方,避免被右边界裁掉 */
-.topbar-icon-btn::after,
-.topbar-status::after {
-  top: calc(100% + 8px);
-  right: 0;
-}
-.topbar-icon-btn:hover::after,
-.topbar-icon-btn:focus-visible::after,
-.topbar-status:hover::after,
-.topbar-status:focus-visible::after {
+.nav-item:focus-visible::after,
+.footer-icon-btn:hover::after,
+.footer-icon-btn:focus-visible::after,
+.footer-status:hover::after,
+.footer-status:focus-visible::after {
   opacity: 1;
   transition-delay: 0.2s;
 }
@@ -474,13 +468,67 @@ onUnmounted(() => {
 }
 
 /* ============================================
+   侧栏底部状态组 - 2026-07-11 增:与导航同一栏,纵向排列
+   ============================================ */
+.sidebar-footer {
+  margin-top: auto;          /* 关键:把状态组推到侧栏底部 */
+  padding: 8px 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--border-sidebar);
+}
+
+.footer-status {
+  position: relative;       /* tooltip 锚点 */
+  @apply p-2 rounded-lg flex items-center justify-center;
+  border: 1px solid var(--border-sidebar);
+  background: transparent;
+  cursor: default;
+}
+.footer-status:hover {
+  background: var(--bg-sidebar-hover);
+}
+.footer-status-dot {
+  @apply w-2.5 h-2.5 rounded-full;
+}
+.footer-status .dot-ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.18);
+}
+.footer-status .dot-error {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.18);
+}
+
+.footer-icon-btn {
+  position: relative;       /* tooltip 锚点 */
+  @apply p-2 rounded-lg flex items-center justify-center;
+  background: transparent;
+  border: 1px solid var(--border-sidebar);
+  color: var(--text-sidebar-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.footer-icon-btn:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text);
+}
+.footer-icon-btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+
+/* ============================================
    主内容区样式
    ============================================ */
 .main-content {
   @apply flex-1 flex flex-col min-w-0;
 }
 
-/* 顶部栏 */
+/* 顶部栏 - 2026-07-11 改:左侧只剩 Logo,右侧只剩 3 个 stat-badge;
+   顶部 tabs 与后端状态/主题/刷新全部迁出。 */
 .topbar {
   @apply flex items-center justify-between px-5 py-2.5;
   background: var(--bg-header);
@@ -534,63 +582,6 @@ onUnmounted(() => {
   letter-spacing: 0.3px;
 }
 
-/* 顶栏 tabs - 主导航从侧栏挪到顶栏,Logo 之后横向排列 */
-.topbar-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.topbar-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.topbar-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.topbar-tab:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-}
-.topbar-tab:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-}
-.topbar-tab-icon {
-  flex-shrink: 0;
-}
-.topbar-tab-active {
-  color: var(--text);
-  font-weight: 600;
-}
-.topbar-tab-active::after {
-  content: '';
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 2px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent-blue);
-}
-
 .topbar-right {
   @apply flex items-center gap-2 flex-wrap;
   flex-shrink: 0;
@@ -633,53 +624,6 @@ onUnmounted(() => {
 .stat-badge-emerald :deep(.iconify),
 .stat-badge-emerald strong { color: var(--accent-emerald); }
 
-/* 顶栏右侧图标按钮(主题切换 / 刷新) - 2026-07-11 增 */
-.topbar-icon-btn {
-  position: relative;       /* tooltip 锚点 */
-  @apply p-2 rounded-lg flex items-center justify-center;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-.topbar-icon-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.topbar-icon-btn:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 1px;
-}
-
-/* 顶栏后端连接状态指示 - 2026-07-11 增 */
-.topbar-status {
-  position: relative;       /* tooltip 锚点 */
-  @apply p-2 rounded-lg flex items-center justify-center;
-  border: 1px solid var(--border);
-  background: transparent;
-  cursor: default;
-  flex-shrink: 0;
-}
-.topbar-status:hover {
-  background: var(--bg-hover);
-}
-.topbar-status-dot {
-  @apply w-2.5 h-2.5 rounded-full flex-shrink-0;
-}
-.topbar-status .dot-ok {
-  background: var(--success);
-  box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.18);
-}
-.topbar-status .dot-error {
-  background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.18);
-}
-.topbar-status.status-error:hover {
-  background: var(--bg-hover);
-}
-
 /* 内容区域 - 内部滚动,让 sticky 侧栏相对 app-container 锁定
    而不跟随 body/html 一起滚 */
 .content-area {
@@ -687,8 +631,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-/* 响应式调整 - 移动端:侧栏抽屉 64px,顶栏 tab 可滚动,
-   状态指示 + 主题切换 + 刷新继续在顶栏(只缩小 padding)。 */
+/* 响应式调整 - 移动端:侧栏抽屉 64px,顶栏 logo 文字隐藏,
+   状态组继续在侧栏底部(移动端 viewport 内 nav-item 不一定可见,
+   底部状态组始终可见是合理的)。 */
 @media (max-width: 768px) {
   .sidebar {
     width: 64px;
