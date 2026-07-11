@@ -210,21 +210,27 @@ onUnmounted(() => {
            web / Windows / Linux 全部贴顶,不留白 -->
       <div v-if="isMacOS" class="sidebar-top-spacer" aria-hidden="true"></div>
 
-      <!-- 导航菜单(纯图标 + hover tooltip) -->
+      <!-- 导航菜单(图标 + label 垂直布局)
+           2026-07-11 v6 改:激活态去掉蓝色竖条,改成图标填充蓝色 + label 蓝色,
+           无背景色;label 始终可见,删 hover tooltip。 -->
       <nav class="sidebar-nav">
         <button
           v-for="n in navItems"
           :key="n.key"
           :class="['nav-item', tab === n.key ? 'nav-item-active' : '']"
-          :data-tooltip="n.label"
           :aria-label="n.label"
-          role="tooltip"
           @click="switchTab(n.key)"
         >
           <span class="nav-icon">
-            <IconPark :icon="n.icon" width="22" height="22" />
+            <!-- 激活态 theme="filled" 让图标变成实心蓝色;非激活保持 outline -->
+            <IconPark
+              :icon="n.icon"
+              :theme="tab === n.key ? 'filled' : 'outline'"
+              width="22"
+              height="22"
+            />
           </span>
-          <span v-if="tab === n.key" class="nav-indicator"></span>
+          <span class="nav-label">{{ n.label }}</span>
         </button>
       </nav>
 
@@ -382,64 +388,78 @@ onUnmounted(() => {
   color: var(--text);
 }
 
-/* 导航菜单 - 纯图标,hover 显示 tooltip。
-   2026-07-11 v5 改:flex:1 撑满侧栏中间区,justify-content: center
-   让 5 个图标垂直居中(spacer 占顶部红绿灯,footer mt-auto 推底部,
-   中间剩余空间被 nav 居中占满)。这样无论 macOS spacer 多大,
-   导航图标始终视觉居中。 */
+/* 导航菜单 - 图标 + label 垂直布局,label 始终可见,无需 hover tooltip。
+   2026-07-11 v6 改:每个 nav-item 宽 64px(贴满侧栏宽度),高 56px,
+   内部 flex-col 让图标和 label 垂直堆叠、上下间距 4px;gap 改成 4px,
+   5 个 item 总高度 5*56 + 4*4 = 296px,侧栏高度足够时仍由 justify-content:
+   center 居中。 */
 .sidebar-nav {
-  @apply px-2 py-4;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   justify-content: center;
-  min-height: 0;          /* flex 子项允许收缩 */
+  min-height: 0;
 }
 
 .nav-item {
-  position: relative;         /* tooltip 锚点 */
-  @apply flex items-center justify-center rounded-lg;
-  width: 44px;
-  height: 44px;
+  @apply flex flex-col items-center justify-center rounded-md;
+  width: 64px;            /* 贴满侧栏宽 */
+  height: 56px;           /* 图标 + label 垂直占位 */
   background: transparent;
   border: none;
   color: var(--text-sidebar-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
+  padding: 6px 2px;
+  gap: 4px;
 }
 .nav-item:hover {
-  background: var(--bg-sidebar-hover);
   color: var(--text);
 }
 .nav-item:focus-visible {
   outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
+/* 2026-07-11 v6 改:激活态去背景色,只让图标(theme="filled")和
+   label 文字变蓝,保持视觉简洁。 */
 .nav-item-active {
-  background: var(--bg-sidebar-active);
-  color: var(--bg-sidebar-active-text);
+  background: transparent;
+  color: var(--accent-blue);       /* label 文字变蓝 */
 }
 .nav-item-active:hover {
-  background: var(--bg-sidebar-active);
-  color: var(--bg-sidebar-active-text);
+  background: transparent;
+  color: var(--accent-blue);
 }
 .nav-item-active .nav-icon {
-  color: var(--accent-blue);
+  color: var(--accent-blue);       /* 图标变蓝(IconPark theme=filled 自动实心) */
 }
 
 .nav-icon {
   @apply flex items-center justify-center;
   width: 22px;
   height: 22px;
+  flex-shrink: 0;
+}
+
+/* 2026-07-11 v6 增:nav-label 始终显示,不再依赖 hover tooltip。
+   字号小一点,与图标形成视觉层级。 */
+.nav-label {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  text-align: center;
+  color: inherit;          /* 跟随 .nav-item 的 color,激活态变蓝 */
+  transition: color 0.15s ease;
 }
 
 /* tooltip - 纯 CSS,200ms 延迟避免划过闪烁;主题色自动反转。
-   2026-07-11 改:tooltip 元素改为 .nav-item / .footer-icon-btn / .footer-status,
-   删除 .topbar-icon-btn / .topbar-status 引用(状态组已下移到侧栏底部)。 */
-.nav-item::after,
+   2026-07-11 v6 改:tooltip 仅作用于底部状态组(.footer-icon-btn / .footer-status),
+   .nav-item 不再需要(已有永久 label)。 */
 .footer-icon-btn::after,
 .footer-status::after {
   content: attr(data-tooltip);
@@ -457,33 +477,19 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   transition: opacity 0.15s ease;
 }
-/* 侧栏 tooltip - 浮在图标右侧 */
-.nav-item::after,
+/* 侧栏底部 tooltip - 浮在图标右侧 */
 .footer-icon-btn::after,
 .footer-status::after {
   left: calc(100% + 12px);
   top: 50%;
   transform: translateY(-50%);
 }
-.nav-item:hover::after,
-.nav-item:focus-visible::after,
 .footer-icon-btn:hover::after,
 .footer-icon-btn:focus-visible::after,
 .footer-status:hover::after,
 .footer-status:focus-visible::after {
   opacity: 1;
   transition-delay: 0.2s;
-}
-
-/* 导航激活指示器 - 左侧彩色竖条(克制不刺眼) */
-.nav-indicator {
-  position: absolute;
-  left: -2px;
-  top: 25%;
-  height: 50%;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent-blue);
 }
 
 /* ============================================
