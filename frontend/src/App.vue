@@ -562,9 +562,12 @@ onUnmounted(() => {
    顶部 tabs 与后端状态/主题/刷新全部迁出。
    2026-07-11 v8 增:macOS 桌面端额外加 50px 顶部 padding,
    让 logo 与红绿灯垂直错开(否则侧栏让了 50px,但主内容区 topbar
-   贴屏顶,logo 视觉上被压扁在红绿灯旁边)。 */
+   贴屏顶,logo 视觉上被压扁在红绿灯旁边)。
+   2026-07-11 v10 改:去掉 py-2.5 上下留白,topbar 高度由内部内容撑起,
+   让 logo 文字撑满上下,视觉更紧凑。 */
 .topbar {
-  @apply flex items-center justify-between px-5 py-2.5;
+  @apply flex items-center justify-between px-5 py-0;
+  min-height: 48px;          /* v10:保底高度,移动端 / 视口矮时不至于挤压 */
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
@@ -574,7 +577,8 @@ onUnmounted(() => {
   transition: all 0.3s ease;
 }
 .topbar.mac-desktop {
-  padding-top: 50px;
+  padding-top: 50px;         /* v8:macOS 顶部让位红绿灯 */
+  padding-bottom: 12px;      /* v10:macOS 模式下补一点底 padding,不让 logo 贴底 */
 }
 
 .topbar-left {
@@ -604,8 +608,9 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .topbar-logo-text {
-  font-size: 15px;
-  font-weight: 600;
+  /* 2026-07-11 v10 改:字号 15→20,加粗到 700,作为主要视觉锚点 */
+  font-size: 20px;
+  font-weight: 700;
   color: var(--text);
   letter-spacing: 0.3px;
 }
