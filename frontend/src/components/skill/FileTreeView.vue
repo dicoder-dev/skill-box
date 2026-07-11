@@ -40,6 +40,16 @@ const emit = defineEmits([
 // 2026-07-04 增(Commit 7+):过滤掉 macOS 系统元数据文件(.DS_Store / ._*),
 // 这些是 Finder 留下的,跟 skill 内容无关,展示出来干扰用户。
 // 走"以 . 开头"为统一规则,顺手过滤 .git / .vscode 等其它隐藏文件。
+//
+// 2026-07-11 改:业务占位 .skillbox-placeholder 允许 buildDir 但不挂成 file —
+// 用它建一个空目录时,父目录必须能 ensureDir 出来(否则空目录用户看不到)。
+// 实现:用 业务占位白名单 BUSINESS_PLACEHOLDERS = {'.skillbox-placeholder'} 在两处分别处理:
+//   - ensureDir 时:这种名字**不**按 . 开头跳过(让父目录能建)
+//   - 文件循环时:这种名字整体 skip(用户视觉上不出现)
+const BUSINESS_PLACEHOLDERS = new Set(['.skillbox-placeholder'])
+function isBusinessPlaceholder(seg) {
+  return BUSINESS_PLACEHOLDERS.has(seg)
+}
 function buildTree(files) {
   const root = { dirs: [], files: [] }
   // 用 path 前缀找 / 建中间目录
@@ -49,8 +59,9 @@ function buildTree(files) {
     if (dirIndex.has(fullPath)) return dirIndex.get(fullPath)
     const parentPath = fullPath.includes('/') ? fullPath.slice(0, fullPath.lastIndexOf('/')) : ''
     const name = fullPath.slice(fullPath.lastIndexOf('/') + 1)
-    // 中间目录名也走隐藏文件过滤(.git / .vscode 等空目录)
-    if (name.startsWith('.')) return root
+    // 中间目录名过滤:仅过滤"非业务占位的 . 开头"名字(.git / .vscode 等空目录)
+    // 业务占位 .skillbox-placeholder 仍建出父目录(否则新建的空目录不显示)。
+    if (name.startsWith('.') && !isBusinessPlaceholder(name)) return root
     const parent = ensureDir(parentPath)
     const dirNode = { name, path: fullPath, dirs: [], files: [] }
     parent.dirs.push(dirNode)
@@ -59,11 +70,17 @@ function buildTree(files) {
   }
   for (const f of files || []) {
     if (!f || !f.path) continue
-    // 过滤以 . 开头的隐藏文件(.DS_Store / ._* / .git 等)
-    if (f.path.startsWith('.') || f.path.split('/').some((seg) => seg.startsWith('.'))) continue
     const parts = f.path.split('/')
     const fileName = parts[parts.length - 1]
     const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
+    // 业务占位文件(比如 .skillbox-placeholder):仅用于让父目录在 buildTree 里
+    // 被建出来(空目录要能显示),自身不挂成 file。先 ensureDir 父目录,再 continue。
+    if (parts.some((seg) => isBusinessPlaceholder(seg))) {
+      if (dirPath) ensureDir(dirPath)
+      continue
+    }
+    // 过滤以 . 开头的隐藏文件(.DS_Store / ._* / .git 等)
+    if (f.path.startsWith('.') || parts.some((seg) => seg.startsWith('.'))) continue
     const parent = ensureDir(dirPath)
     parent.files.push({
       name: fileName,

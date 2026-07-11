@@ -956,12 +956,13 @@ async function submitNewFile() {
   newFileBusy.value = true
   try {
     if (newFileKind.value === 'dir') {
-      // 目录不需要 content;后端 store.Save 看到 path 里含子目录会
-      // 自动 mkdir -p。但为了一致性,我们塞一个 .gitkeep 标记,避免
-      // ListTree / FileTreeView buildTree 把空目录过滤掉(空目录没 files 节点)。
+      // 目录需要占位文件让空目录不被后端 store.Save 的 os.RemoveAll(dir) 干掉。
+      // 命名约定:.skillbox-placeholder — FileTreeView.buildTree 把它识别为
+      // "目录占位"过滤掉(用户视觉上看不到),但 . 开头段在 ensureDir 里
+      // 也被跳过 — 因此还要在 buildTree 那边特判这个名字不参与 . 过滤。
       await persistFiles([
         ...(props.files || []),
-        { path: `${fullPath}/.gitkeep`, content: '' },
+        { path: `${fullPath}/.skillbox-placeholder`, content: '' },
       ])
     } else {
       await persistFiles([
