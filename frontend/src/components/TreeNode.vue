@@ -191,6 +191,34 @@ function toolIconURL(name) {
 function isDropTarget(node) {
   return props.dropTargetPath && props.dropTargetPath === fullPath(node)
 }
+
+// 2026-07-12 改:全局 Agent 判定 — 看 skill 的 source_path 磁盘绝对路径是否
+// 命中 ~/.agents/skills/ 段(用户家目录下的全局 skills 池,所有工具可自动读取)。
+// source_path 是后端 ListTree 在 SkillTreeMeta.source_path 字段注入的:
+// skill 从 ~/.agents/skills/<name>/ 导入到 ~/.skill-box/skills/ 时,后端
+// importOneFromDir 会把原始目录 EvalSymlinks 后的真实路径写到
+// <store>/<name>/.skillbox-source.json sidecar,buildTreeNode 读它注入。
+// 用正则 [\\/]\.agents[\\/]skills[\\/] 跨平台匹配:
+//   - macOS / Linux: `/Users/x/.agents/skills/xxx` 或 `/home/x/.agents/skills/xxx`
+//   - Windows:       `C:\Users\x\.agents\skills\xxx`
+// 不能用 startsWith('~/.agents/...'),因为后端给的是 EvalSymlinks 后的真实
+// 绝对路径(macOS 是 /private/var/.../~/.agents/skills/...),而 ~ 这种 shell
+// 缩写形式只出现在用户视角,不在 store 落盘数据里。
+function isGlobalAgent(node) {
+  if (!node || node.is_group) return false
+  const src = node.skill_meta?.source_path || ''
+  if (!src) return false
+  return /[\\/]\.agents[\\/]skills[\\/]/.test(src)
+}
+
+// 2026-07-11 增:全局 Agent 卡片的 chip 收敛 — 不显示任何 chip。
+// 设计依据:全局 Agent 已被用户从 ~/.agents/skills/ 导入,该目录是
+// 跨工具共享的全局 skills 池,工具会从该目录自动读取,无需在首页卡片上
+// 重复列出"已被哪些工具全局启用"。普通 skill 仍按原逻辑显示全部 applied_tools。
+function visibleTools(node) {
+  if (isGlobalAgent(node)) return []
+  return node.skill_meta?.applied_tools || []
+}
 </script>
 
 <template>
@@ -265,12 +293,21 @@ function isDropTarget(node) {
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
+            <!-- 2026-07-11 增:全局 Agent 卡片在 name 左侧加翠绿色 tag,
+                 直观告诉用户"该 skill 来自全局 agents 目录"。
+                 顺序:全局 Agent tag → skill name → @version,
+                 三者同行不换行,溢出时 ellipsis 优先压缩 name。 -->
+            <span
+              v-if="isGlobalAgent(node)"
+              class="tree-skill-badge-global-agent"
+              title="该技能位于全局 agents 目录,所有工具可自动读取"
+            >全局 Agent</span>
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
             <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
           </div>
-          <div v-if="(node.skill_meta?.applied_tools || []).length" class="tree-skill-tools">
+          <div v-if="visibleTools(node).length" class="tree-skill-tools">
             <span
-              v-for="tid in (node.skill_meta.applied_tools || [])"
+              v-for="tid in visibleTools(node)"
               :key="tid"
               class="tree-tool-chip"
               :class="['tool-chip-' + (TOOL_ACCENT[tid] || 'default')]"
@@ -462,6 +499,25 @@ function isDropTarget(node) {
   font-weight: 600;
   color: var(--text);
 }
+/* 2026-07-11 增:全局 Agent 标签 — 翠绿色,跟 Claude chip 同色相。
+   与 chip 样式对齐(50-tint 浅底 / 200-tint 浅边 / 600-tint 主色字),
+   视觉统一感强,且"翠绿"语义契合"全局/通用"。 */
+.tree-skill-badge-global-agent {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-emerald-bg);
+  border: 1px solid var(--accent-emerald-border);
+  color: var(--accent-emerald);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  user-select: none;
+}
+
 .tree-version {
   font-size: 10px;
   color: var(--text-faint);

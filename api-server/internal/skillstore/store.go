@@ -18,6 +18,7 @@ package skillstore
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -891,6 +892,10 @@ type TreeNode struct {
 // cskillapply 的 scope-status 反推),供前端卡片"被这些工具全局调用了"显示。
 // 复用了 cskill 包里的 GlobalAppliedTools helper(同进程),避免在 store 层
 // 重复实现 scope-status 扫描逻辑。
+// 2026-07-12 增:SourcePath 是该 skill 的"导入来源磁盘绝对路径"(EvalSymlinks
+// 后的真实路径)。仅在 skill 是从外部位置(如 ~/.agents/skills/)导入到 store
+// 时才会有值;前端据此判断"全局 Agent"标签。落盘位置:skill 目录下的
+// .skillbox-source.json sidecar 文件(避免污染 SKILL.md frontmatter)。
 type SkillTreeMeta struct {
 	Name         string   `json:"name"`
 	Version      string   `json:"version"`
@@ -898,6 +903,9 @@ type SkillTreeMeta struct {
 	Triggers     []string `json:"triggers"`
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 	AppliedTools []string `json:"applied_tools,omitempty"`
+	// 2026-07-12 增:导入来源磁盘绝对路径(可选)。前端用 [\\/]\.agents[\\/]skills[\\/]
+	// 正则判断是否来自 ~/.agents/skills/ 全局 Agent 目录,贴"全局 Agent"标签。
+	SourcePath   string   `json:"source_path,omitempty"`
 }
 
 // ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
@@ -954,6 +962,9 @@ func (s *Store) buildTreeNode(absDir, name, groupPath, kw string, depth int) *Tr
 			return nil
 		}
 		fi := dirModTime(absDir)
+		// 2026-07-12 增:从 sidecar 读 source_path(导入来源磁盘路径)。
+		// 缺省 / 读失败时为空字符串,前端用 omitempty 不下发。
+		srcPath := readSourcePath(absDir)
 		return &TreeNode{
 			Name:    c.Manifest.Name,
 			Path:    joinGroupPath(groupPath, c.Manifest.Name),
@@ -964,6 +975,7 @@ func (s *Store) buildTreeNode(absDir, name, groupPath, kw string, depth int) *Tr
 				Description: c.Manifest.Description,
 				Triggers:    c.Manifest.Triggers,
 				UpdatedAt:   fi,
+				SourcePath:  srcPath,
 			},
 		}
 	}
@@ -1231,4 +1243,64 @@ func (s *Store) lockScope(dir string) (func(), error) {
 		_ = os.Remove(lockPath)
 	}
 	return unlock, nil
+}
+
+// ============================================
+// 2026-07-12 增:skill 导入来源 sidecar 读写
+// ============================================
+//
+// 设计动机:首页 skill 卡片要显示"全局 Agent"标签,语义是"该 skill 最初
+// 是从 ~/.agents/skills/ 全局 Agent 目录导入到 store 的"。需要在 store
+// 层面记录导入来源的磁盘绝对路径,供 ListTree 注入到 SkillTreeMeta.SourcePath
+// 返回给前端。
+//
+// 为什么用 sidecar 而非 SKILL.md frontmatter:
+//   - SKILL.md 是用户原文件,frontmatter 是 skill 自身的元数据(name/version/...),
+//     不应被 skillbox 写脏"导入来源"这种系统元数据。
+//   - 用一个隐藏文件 .skillbox-source.json 单独承载,跟 skill 内容解耦。
+//   - SkillStore.Save 不感知 source_path 概念(它是底层存储),source_path 的
+//     写入由 caller(importOneFromDir 等)负责。
+
+// sourceMetaFile 是 skill 目录下承载导入来源元数据的 sidecar 文件名。
+// 以 "." 开头保证 ListTree 扫描时跳过(store.go ListTree 用 HasPrefix(".") 过滤)。
+const sourceMetaFile = ".skillbox-source.json"
+
+// sourceMeta 是 sidecar 文件的 schema。后续如果要加"导入时间"、
+// "source_kind" 等字段,都在这里扩展。
+type sourceMeta struct {
+	// SourcePath 是导入来源磁盘绝对路径(EvalSymlinks 后的真实路径)。
+	// 写入时建议先 EvalSymlinks(macOS 真实路径在 /private/var/... 下,跟
+	// 用户看到的 ~/.agents/skills 路径不一致,需要归一化)。
+	SourcePath string `json:"source_path"`
+}
+
+// writeSourcePath 把 source_path 写入 sidecar 文件。
+// 失败不返回 error — sidecar 是 best-effort 元数据,缺失不影响 skill 本身
+// 的可用性,只是少了"全局 Agent"标签。caller 应该吞掉 error。
+//
+// 2026-07-12 改:export 成 WriteSourcePath,供 skillpkg.importOneFromDir
+// 在 store.Save 成功后调用。
+func WriteSourcePath(absDir, sourcePath string) {
+	if strings.TrimSpace(sourcePath) == "" {
+		return
+	}
+	data, err := json.Marshal(sourceMeta{SourcePath: sourcePath})
+	if err != nil {
+		return
+	}
+	_ = writeFileAtomic(filepath.Join(absDir, sourceMetaFile), string(data), 0o644)
+}
+
+// readSourcePath 从 sidecar 文件读 source_path。失败返回空字符串(不报错),
+// 跟 ListTree 的"尽力而为"语义对齐。
+func readSourcePath(absDir string) string {
+	data, err := os.ReadFile(filepath.Join(absDir, sourceMetaFile))
+	if err != nil {
+		return ""
+	}
+	var m sourceMeta
+	if err := json.Unmarshal(data, &m); err != nil {
+		return ""
+	}
+	return m.SourcePath
 }
