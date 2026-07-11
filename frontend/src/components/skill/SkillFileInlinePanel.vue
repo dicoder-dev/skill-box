@@ -19,6 +19,7 @@ import { computed, onMounted, onUnmounted, onUpdated, reactive, ref, onErrorCapt
 import { plainT, messages } from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
+import ContextMenu from '@/components/ContextMenu.vue'
 import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
@@ -64,6 +65,17 @@ const LABEL_RETRY = '重试'
 const LABEL_OUTLINE_SHOW = '显示大纲'
 const LABEL_OUTLINE_HIDE = '隐藏大纲'
 const { outlineVisible, toggleOutline } = useMdOutlineVisible()
+
+// 2026-07-11 增:文件树右键菜单 + 文件/目录 CRUD 弹窗文案(组件内 0 t(),统一常量)
+const LABEL_CTX_NEW_FILE = '新建文件'
+const LABEL_CTX_NEW_DIR = '新建文件夹'
+const LABEL_CTX_RENAME_FILE = '重命名文件'
+const LABEL_CTX_DELETE_FILE = '删除文件'
+const LABEL_NEW_FILE_PROMPT = '新建文件(将在指定目录下创建)'
+const LABEL_NEW_DIR_PROMPT = '新建文件夹(将在指定目录下创建)'
+const LABEL_RENAME_FILE_PROMPT = '重命名文件'
+const LABEL_DELETE_FILE_PROMPT = '删除文件'
+const LABEL_DELETE_FILE_CONFIRM = '确定要删除 "{name}" 吗?此操作无法撤销。'
 
 const toast = useToastStore()
 
@@ -811,6 +823,322 @@ onErrorCaptured((err) => {
   return false
 })
 
+// =====================================================================
+// 2026-07-11 增:文件树右键菜单 + 文件/目录 CRUD
+// 需求:按位置区分右键菜单
+//   - 文档(文件)节点:重命名 + 删除
+//   - 分组(目录)节点:新建文件
+//   - 根区域(树空白):新建文件夹 + 新建文件
+// 设计:所有 CRUD 走 updateSkill({...files: incomingFiles}) 全量提交,后端
+//   store.Save 是覆盖式 — 这跟现有"保存一个文件"的链路完全一致,不需要
+//   新增后端端点。
+//   唯一不变量: SKILL.md 由后端按 manifest 重新渲染,前端不能从 files 数组
+//   里删 SKILL.md(后端会自己生成)。新增/重命名/删除文件时,其他文件原样保留。
+// =====================================================================
+
+// 右键菜单单例
+const ctxMenu = reactive({ open: false, x: 0, y: 0, items: [] })
+function closeCtxMenu() {
+  ctxMenu.open = false
+  ctxMenu.items = []
+}
+
+// 文件节点右键:重命名 / 删除
+function onCtxFile({ file, event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  ctxMenu.items = [
+    {
+      key: 'rename-file',
+      label: LABEL_CTX_RENAME_FILE,
+      icon: 'mdi:rename-outline',
+      onClick: () => openRenameFileDialog(file),
+    },
+    { divided: true, key: 'div-1', label: '' },
+    {
+      key: 'delete-file',
+      label: LABEL_CTX_DELETE_FILE,
+      icon: 'mdi:delete',
+      danger: true,
+      onClick: () => openDeleteFileDialog(file),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// 目录节点右键:新建文件
+// 2026-07-11 注:目录层级在 files[] 里通过 path 前缀表达,前端"新建文件"实际
+// 上是把一个 path="<dir>/<name>" 的新条目塞进 files 数组。子目录的创建也是
+// 同样的方式 — 只需要塞一个带该 path 的占位文件,后端 save 时会通过 safeRelPath
+// 自动 mkdir -p 父目录(见 store.Save 行 130-145)。
+function onCtxFolder({ dir, event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  const dirPath = dir.path || ''
+  ctxMenu.items = [
+    {
+      key: 'new-file',
+      label: LABEL_CTX_NEW_FILE,
+      icon: 'mdi:file-document-plus-outline',
+      onClick: () => openNewFileDialog(dirPath),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// 根区域右键:新建文件夹 / 新建文件
+function onCtxRoot({ event }) {
+  ctxMenu.x = event.clientX
+  ctxMenu.y = event.clientY
+  ctxMenu.items = [
+    {
+      key: 'new-dir',
+      label: LABEL_CTX_NEW_DIR,
+      icon: 'mdi:folder-plus-outline',
+      onClick: () => openNewFileDialog('', { kind: 'dir' }),
+    },
+    {
+      key: 'new-file',
+      label: LABEL_CTX_NEW_FILE,
+      icon: 'mdi:file-document-plus-outline',
+      onClick: () => openNewFileDialog(''),
+    },
+  ]
+  ctxMenu.open = true
+}
+
+// === 新建文件 / 新建目录 弹窗 ===
+// 入参: dirPath(父目录的相对路径;空 = 根), opts.kind = 'file' | 'dir'
+const newFileOpen = ref(false)
+const newFileDirPath = ref('')
+const newFileKind = ref('file') // 'file' | 'dir'
+const newFileInput = ref('')
+const newFileError = ref('')
+const newFileBusy = ref(false)
+
+function openNewFileDialog(dirPath, opts = {}) {
+  newFileDirPath.value = dirPath || ''
+  newFileKind.value = opts.kind || 'file'
+  newFileInput.value = ''
+  newFileError.value = ''
+  newFileOpen.value = true
+}
+function closeNewFileDialog() {
+  if (newFileBusy.value) return
+  newFileOpen.value = false
+}
+
+// 文件名 / 目录名校验:不允许 '/',不允许空,不允许 '..',不允许 'SKILL.md'
+// (SKILL.md 由 manifest 重新生成,前端不能直接创建)。
+function validateFsName(name, kind) {
+  const v = (name || '').trim()
+  if (!v) return '名称不能为空'
+  if (v.includes('/') || v.includes('\\')) return '名称不能含 / 或 \\'
+  if (v === '.' || v === '..') return '名称不能为 . 或 ..'
+  if (kind === 'file' && v === 'SKILL.md') return 'SKILL.md 由系统管理,不能直接新建'
+  return ''
+}
+async function submitNewFile() {
+  if (newFileBusy.value) return
+  const name = (newFileInput.value || '').trim()
+  const err = validateFsName(name, newFileKind.value)
+  if (err) { newFileError.value = err; return }
+  const parent = newFileDirPath.value || ''
+  const fullPath = parent ? `${parent}/${name}` : name
+  // 重复检测:同路径文件已存在 → 拒
+  const existing = (props.files || []).find((f) => f.path === fullPath)
+  if (existing) {
+    newFileError.value = '已存在同名文件/目录'
+    return
+  }
+  newFileBusy.value = true
+  try {
+    if (newFileKind.value === 'dir') {
+      // 目录不需要 content;后端 store.Save 看到 path 里含子目录会
+      // 自动 mkdir -p。但为了一致性,我们塞一个 .gitkeep 标记,避免
+      // ListTree / FileTreeView buildTree 把空目录过滤掉(空目录没 files 节点)。
+      await persistFiles([
+        ...(props.files || []),
+        { path: `${fullPath}/.gitkeep`, content: '' },
+      ])
+    } else {
+      await persistFiles([
+        ...(props.files || []),
+        { path: fullPath, content: '' },
+      ])
+    }
+    newFileOpen.value = false
+    // 选中新创建的文件/目录
+    if (newFileKind.value === 'file') {
+      const created = (props.files || []).find((f) => f.path === fullPath)
+      if (created) selectFileByPath(fullPath)
+    }
+    toast.success(`已新建${newFileKind.value === 'dir' ? '目录' : '文件'}「${name}」`)
+  } catch (e) {
+    newFileError.value = e?.message || String(e)
+  } finally {
+    newFileBusy.value = false
+  }
+}
+
+// === 重命名文件 弹窗 ===
+const renameFileOpen = ref(false)
+const renameFileOldPath = ref('')
+const renameFileOldName = ref('')
+const renameFileInput = ref('')
+const renameFileError = ref('')
+const renameFileBusy = ref(false)
+
+function openRenameFileDialog(file) {
+  if (!file || !file.path) return
+  const seg = file.path.split('/').pop() || ''
+  renameFileOldPath.value = file.path
+  renameFileOldName.value = seg
+  renameFileInput.value = seg
+  renameFileError.value = ''
+  renameFileOpen.value = true
+}
+function closeRenameFileDialog() {
+  if (renameFileBusy.value) return
+  renameFileOpen.value = false
+}
+async function submitRenameFile() {
+  if (renameFileBusy.value) return
+  const newName = (renameFileInput.value || '').trim()
+  const err = validateFsName(newName, 'file')
+  if (err) { renameFileError.value = err; return }
+  if (newName === renameFileOldName.value) { renameFileOpen.value = false; return }
+  const parent = renameFileOldPath.value.includes('/')
+    ? renameFileOldPath.value.slice(0, renameFileOldPath.value.lastIndexOf('/'))
+    : ''
+  const newPath = parent ? `${parent}/${newName}` : newName
+  // 重复检测
+  const dup = (props.files || []).find((f) => f.path === newPath && f.path !== renameFileOldPath.value)
+  if (dup) { renameFileError.value = '同目录下已存在同名文件'; return }
+  renameFileBusy.value = true
+  try {
+    const next = (props.files || []).map((f) =>
+      f.path === renameFileOldPath.value ? { ...f, path: newPath } : f
+    )
+    await persistFiles(next)
+    renameFileOpen.value = false
+    selectFileByPath(newPath)
+    toast.success(`已重命名为「${newName}」`)
+  } catch (e) {
+    renameFileError.value = e?.message || String(e)
+  } finally {
+    renameFileBusy.value = false
+  }
+}
+
+// === 删除文件 弹窗 ===
+const deleteFileOpen = ref(false)
+const deleteFileTarget = ref(null) // { path, name, kind: 'file'|'dir', childCount? }
+const deleteFileBusy = ref(false)
+
+function openDeleteFileDialog(file) {
+  if (!file || !file.path) return
+  deleteFileTarget.value = {
+    path: file.path,
+    name: file.path.split('/').pop(),
+    kind: 'file',
+  }
+  deleteFileOpen.value = true
+}
+function openDeleteFolderDialog(dir) {
+  if (!dir || !dir.path) return
+  // 统计子文件数(用于弹窗展示"包含 N 个文件")
+  const prefix = dir.path + '/'
+  const childPaths = (props.files || []).filter((f) => f.path.startsWith(prefix)).map((f) => f.path)
+  deleteFileTarget.value = {
+    path: dir.path,
+    name: dir.path.split('/').pop(),
+    kind: 'dir',
+    childCount: childPaths.length,
+    childPaths,
+  }
+  deleteFileOpen.value = true
+}
+function closeDeleteFileDialog() {
+  if (deleteFileBusy.value) return
+  deleteFileOpen.value = false
+  deleteFileTarget.value = null
+}
+async function submitDeleteFile() {
+  if (deleteFileBusy.value || !deleteFileTarget.value) return
+  const target = deleteFileTarget.value
+  deleteFileBusy.value = true
+  try {
+    let next = props.files || []
+    if (target.kind === 'file') {
+      // 保护 SKILL.md(由后端按 manifest 重建,前端不能"删")
+      if (target.path === 'SKILL.md') {
+        toast.error('SKILL.md 由系统管理,不能删除')
+        deleteFileOpen.value = false
+        deleteFileTarget.value = null
+        return
+      }
+      next = next.filter((f) => f.path !== target.path)
+    } else {
+      // 目录:删所有以 dir.path/ 为前缀的文件
+      const prefix = target.path + '/'
+      next = next.filter((f) => f.path !== target.path && !f.path.startsWith(prefix))
+    }
+    await persistFiles(next)
+    deleteFileOpen.value = false
+    deleteFileTarget.value = null
+    // 当前选中的文件被删了 → 切到 SKILL.md
+    if (selectedFile.value && selectedFile.value.path === target.path) {
+      selectFileByPath('SKILL.md')
+    }
+    toast.success(`已删除「${target.name}」`)
+  } catch (e) {
+    toast.error(e?.message || String(e))
+  } finally {
+    deleteFileBusy.value = false
+  }
+}
+
+// 共享:把 files 数组 updateSkill 持久化,并更新 localFiles 镜像。
+// 复用现有 saveCurrent 的链路,只是不重渲 SKILL.md(本组件不维护 manifest)。
+async function persistFiles(files) {
+  const sk = props.skill || {}
+  await updateSkill({
+    scope: sk.scope || 'global',
+    project_id: sk.project_id || 0,
+    name: sk.name,
+    version: sk.version,
+    source: sk.source || 'local',
+    manifest: sk.canonical?.manifest || {
+      name: sk.name, version: sk.version,
+    },
+    files,
+  })
+  // 同步本地缓存
+  localFiles.clear()
+  for (const f of files) {
+    if (f.path === 'SKILL.md') {
+      const { body } = splitSkillMd(f.content || '')
+      localFiles.set(f.path, body)
+    } else {
+      localFiles.set(f.path, f.content || '')
+    }
+  }
+  // 通知父级刷新(让 SkillsView 重新拉 files 列表,清掉 dirtyPaths 等)
+  emit('saved', { path: '__files-changed__', content: '' })
+}
+
+function selectFileByPath(path) {
+  const f = (props.files || []).find((x) => x.path === path)
+  if (f) onSelectFile(f)
+}
+
+// 2026-07-11 增:目录节点右键也支持"删除目录" — 在 onCtxFolder 里多塞一项
+// (用户原话"分组 → 新建文件",没提删除,但目录节点给个删除入口合理)。
+// 用 override 替换 onCtxFolder 的 items,在它后面加"删除目录"项。
+// 设计上保留 openDeleteFolderDialog,只是没在右键菜单里挂 — 等以后产品再说。
+// (实际:为了不偏离用户原话,这里**不**自动加删除目录,等用户明确要求再加。)
+
 onUnmounted(() => {})
 
 // 2026-07-07 增:暴露给父组件的方法。
@@ -889,6 +1217,9 @@ defineExpose({
             :initial-selected-path="selectedKey"
             :dirty-paths="dirtyPaths"
             @select-file="onSelectFile"
+            @context-menu-file="onCtxFile"
+            @context-menu-folder="onCtxFolder"
+            @context-menu-root="onCtxRoot"
           />
         </div>
         <SkillScopePanel :skill="skill" />
@@ -1154,6 +1485,145 @@ defineExpose({
         <button type="button" class="ghost" @click="onDiscardCancel">取消</button>
         <button type="button" class="danger" @click="onDiscardDrop">放弃修改</button>
         <button type="button" class="primary" @click="onDiscardSave">保存修改</button>
+      </template>
+    </Modal>
+
+    <!-- 2026-07-11 增:文件树右键菜单(单例) + 4 个 Modal 弹窗。
+         复用 SkillsView 同一份 ContextMenu 组件,Modal 也用同一份。
+         新建/重命名/删除文件/目录都走 updateSkill(payload.files) 链路,
+         由 persistFiles() 统一处理(写盘 + 同步 localFiles + emit('saved'))。 -->
+
+    <!-- 右键菜单 -->
+    <ContextMenu
+      v-if="ctxMenu.open"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :items="ctxMenu.items"
+      @close="closeCtxMenu"
+    />
+
+    <!-- 新建文件 / 新建目录 弹窗 -->
+    <Modal v-model="newFileOpen" size="sm" :close-on-mask="!newFileBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <IconPark
+            :icon="newFileKind === 'dir' ? 'mdi:folder-plus-outline' : 'mdi:file-document-plus-outline'"
+            width="18" height="18"
+          />
+          {{ newFileKind === 'dir' ? LABEL_CTX_NEW_DIR : LABEL_CTX_NEW_FILE }}
+        </h3>
+      </template>
+      <div class="editor-field-full">
+        <p class="muted small-hint">
+          {{ newFileKind === 'dir' ? LABEL_NEW_DIR_PROMPT : LABEL_NEW_FILE_PROMPT }}
+        </p>
+        <input
+          v-model="newFileInput"
+          class="group-input"
+          :placeholder="newFileKind === 'dir' ? '目录名(如 examples)' : '文件名(如 notes.md)'"
+          :disabled="newFileBusy"
+          autofocus
+          @keyup.enter="submitNewFile"
+        />
+        <p v-if="newFileDirPath" class="muted small-hint">
+          <code>{{ newFileDirPath }}/<span style="color: var(--text)">{{ newFileInput || '...' }}</span></code>
+        </p>
+        <p v-else class="muted small-hint">
+          <code>/<span style="color: var(--text)">{{ newFileInput || '...' }}</span></code>
+        </p>
+        <p v-if="newFileError" class="message message-error" style="margin: 8px 0 0">
+          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+          {{ newFileError }}
+        </p>
+      </div>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="newFileBusy" @click="closeNewFileDialog">取消</button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="newFileBusy || !newFileInput.trim()"
+          @click="submitNewFile"
+        >
+          <span v-if="newFileBusy" class="spinner spinner-sm"></span>
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
+          确定
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 重命名文件 弹窗 -->
+    <Modal v-model="renameFileOpen" size="sm" :close-on-mask="!renameFileBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <IconPark icon="mdi:rename-outline" width="18" height="18" />
+          {{ LABEL_RENAME_FILE_PROMPT }}
+        </h3>
+      </template>
+      <div class="editor-field-full">
+        <input
+          v-model="renameFileInput"
+          class="group-input"
+          :placeholder="renameFileOldName"
+          :disabled="renameFileBusy"
+          autofocus
+          @keyup.enter="submitRenameFile"
+        />
+        <p v-if="renameFileOldPath.includes('/')" class="muted small-hint">
+          <code>{{ renameFileOldPath.slice(0, renameFileOldPath.lastIndexOf('/')) }}/<span style="color: var(--text)">{{ renameFileInput || '...' }}</span></code>
+        </p>
+        <p v-else class="muted small-hint">
+          <code>/<span style="color: var(--text)">{{ renameFileInput || '...' }}</span></code>
+        </p>
+        <p v-if="renameFileError" class="message message-error" style="margin: 8px 0 0">
+          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+          {{ renameFileError }}
+        </p>
+      </div>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="renameFileBusy" @click="closeRenameFileDialog">取消</button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="renameFileBusy || !renameFileInput.trim() || renameFileInput.trim() === renameFileOldName"
+          @click="submitRenameFile"
+        >
+          <span v-if="renameFileBusy" class="spinner spinner-sm"></span>
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
+          保存
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 删除文件 / 目录 确认弹窗(复用) -->
+    <Modal v-model="deleteFileOpen" size="sm" :close-on-mask="!deleteFileBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <IconPark
+            :icon="deleteFileTarget?.kind === 'dir' ? 'mdi:folder-remove-outline' : 'mdi:delete'"
+            width="18" height="18"
+          />
+          {{ LABEL_DELETE_FILE_PROMPT }}
+        </h3>
+      </template>
+      <p class="confirm-message">
+        <template v-if="deleteFileTarget?.kind === 'dir'">
+          确定要删除目录「{{ deleteFileTarget.name }}」吗?
+          <template v-if="deleteFileTarget.childCount > 0">
+            <br /><br />
+            该目录下还有 <strong>{{ deleteFileTarget.childCount }}</strong> 个文件会被一并删除,此操作无法撤销。
+          </template>
+        </template>
+        <template v-else>
+          {{ LABEL_DELETE_FILE_CONFIRM.replace('{name}', deleteFileTarget?.name || '') }}
+        </template>
+      </p>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="deleteFileBusy" @click="closeDeleteFileDialog">取消</button>
+        <button type="button" class="danger" :disabled="deleteFileBusy" @click="submitDeleteFile">
+          <span v-if="deleteFileBusy" class="spinner spinner-sm"></span>
+          <IconPark v-else icon="mdi:delete" width="14" height="14" />
+          删除
+        </button>
       </template>
     </Modal>
   </div>

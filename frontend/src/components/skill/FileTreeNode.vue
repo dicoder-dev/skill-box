@@ -3,12 +3,15 @@
 //
 // 用于 SkillFileDrawer 内展示技能包的全部文件 / 目录。
 // 与 TreeNode.vue 的差异:
-//   - 不支持拖拽 / 右键菜单 / 工具 chip,纯只读浏览
+//   - 不支持拖拽(纯只读浏览);但 2026-07-11 增:支持右键菜单(由父级 FileTreeView
+//     把 @context-menu-file / @context-menu-folder 转发到 InlinePanel 处理)
 //   - 支持任意深度嵌套(现有 TreeNode 2026-07-03 改单级拍平,这里不复用)
 //   - 节点数据更简单:{ type: 'dir'|'file', name, path, children?, files?, size? }
 //   - 文件按后缀分配 iconpark 图标(语言 / markdown / 配置 / 二进制)
 //
 // 2026-07-04 增:首页技能文件浏览器(Commit 1)。
+// 2026-07-11 改:增加右键菜单 emit;由 InlinePanel 父级统一处理 CRUD(文件/目录的
+// 新建 / 重命名 / 删除),本组件只负责"右击了什么节点"语义。
 
 import { computed } from 'vue'
 import IconPark from '@/components/IconPark.vue'
@@ -29,7 +32,7 @@ const props = defineProps({
   dirtyPaths: { type: Object, default: () => new Set() },
 })
 
-const emit = defineEmits(['select-file', 'toggle-collapse'])
+const emit = defineEmits(['select-file', 'toggle-collapse', 'context-menu-file', 'context-menu-folder'])
 
 // 文件后缀 → iconpark 组件名(2026-07-08 改:直接用 iconpark PascalCase 名,
 // 不再走 mdi:xxx 中转映射。旧映射表里有大量 mdi 名(mdi:language-markdown-outline
@@ -124,6 +127,20 @@ function onClickFile(file, e) {
   emit('select-file', file)
 }
 
+// 2026-07-11 增:右键文件 / 右键目录 — 不在这里处理具体逻辑,只 emit 给父级,
+// 由 InlinePanel 决定弹什么菜单项。stopPropagation 避免外层 .file-tree-view
+// 的 @contextmenu(根区域右键)被同时触发。
+function onContextFile(file, e) {
+  e.preventDefault()
+  e.stopPropagation()
+  emit('context-menu-file', { file, event: e })
+}
+function onContextFolder(dir, e) {
+  e.preventDefault()
+  e.stopPropagation()
+  emit('context-menu-folder', { dir, event: e })
+}
+
 // 文件 dirty 检测
 function isDirty(filePath) {
   return props.dirtyPaths.has(filePath)
@@ -144,7 +161,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children 
       :style="{ paddingLeft: `${depth * 12 + 4}px` }"
       :aria-expanded="!isCollapsed(dir)"
     >
-      <div class="file-row file-row-dir" @click="toggleCollapse(dir)">
+      <div class="file-row file-row-dir" @click="toggleCollapse(dir)" @contextmenu="onContextFolder(dir, $event)">
         <IconPark
           :icon="isCollapsed(dir) ? 'mdi:plus' : 'mdi:minus'"
           width="14"
@@ -162,7 +179,9 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children 
           {{ (dir.children || []).length + (dir.files || []).length }}
         </span>
       </div>
-      <!-- 递归:目录展开时展示其内部子目录与文件 -->
+      <!-- 递归:目录展开时展示其内部子目录与文件。
+           2026-07-11 改:必须把 context-menu-file / context-menu-folder 也透传,
+           否则深层目录/文件右键事件无法上浮到 InlinePanel。 -->
       <FileTreeNode
         v-if="!isCollapsed(dir)"
         :dirs="dir.children"
@@ -173,6 +192,8 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children 
         :depth="depth + 1"
         @select-file="onClickFile"
         @toggle-collapse="(p) => emit('toggle-collapse', p)"
+        @context-menu-file="(p) => emit('context-menu-file', p)"
+        @context-menu-folder="(p) => emit('context-menu-folder', p)"
       />
     </li>
 
@@ -188,7 +209,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children 
       :style="{ paddingLeft: `${depth * 12 + 4}px` }"
       :aria-selected="selectedPath === file.path"
     >
-      <div class="file-row file-row-file" @click="onClickFile(file, $event)">
+      <div class="file-row file-row-file" @click="onClickFile(file, $event)" @contextmenu="onContextFile(file, $event)">
         <!-- 占位缩进:文件没有 caret,占 14px 让文件名对齐目录里的文件名 -->
         <span class="file-caret-placeholder" />
         <IconPark :icon="fileIcon(file.name)" width="16" height="16" class="file-file-icon" />

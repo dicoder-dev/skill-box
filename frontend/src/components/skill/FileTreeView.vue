@@ -21,7 +21,16 @@ const props = defineProps({
   dirtyPaths: { type: Object, default: () => new Set() },
 })
 
-const emit = defineEmits(['select-file'])
+const emit = defineEmits([
+  'select-file',
+  // 2026-07-11 增:转发 3 种位置的右键事件
+  // - context-menu-file  文件节点右键
+  // - context-menu-folder 目录节点右键
+  // - context-menu-root 树空白处右键(本组件自己绑)
+  'context-menu-file',
+  'context-menu-folder',
+  'context-menu-root',
+])
 
 // 把扁平 files[] 构造成嵌套树。
 // 数据结构:
@@ -91,10 +100,21 @@ function onToggleCollapse(p) {
   else s.add(p)
   collapsedPaths.value = s
 }
+
+// 2026-07-11 增:根区域(树空白处)右键 — 转发给父级,由 InlinePanel 弹
+// "新建文件 / 新建目录"。注意:FileTreeNode 内部的文件/目录行已经 stopPropagation,
+// 所以这个 handler 不会被子节点冒泡触发,只在用户点到真正的空白区域时触发。
+function onRootContextMenu(e) {
+  e.preventDefault()
+  emit('context-menu-root', { event: e })
+}
 </script>
 
 <template>
-  <div class="file-tree-view">
+  <!-- 2026-07-11 改:在 .file-tree-view 容器上加 @contextmenu,作为"根区域右键"
+       入口(用户点到树空白处时触发);子节点文件/目录行已在 FileTreeNode
+       内 stopPropagation 不会冒泡到这里。 -->
+  <div class="file-tree-view" @contextmenu="onRootContextMenu">
     <FileTreeNode
       :dirs="tree.dirs"
       :files="tree.files"
@@ -104,6 +124,8 @@ function onToggleCollapse(p) {
       :depth="0"
       @select-file="onSelectFile"
       @toggle-collapse="onToggleCollapse"
+      @context-menu-file="(p) => emit('context-menu-file', p)"
+      @context-menu-folder="(p) => emit('context-menu-folder', p)"
     />
   </div>
 </template>
