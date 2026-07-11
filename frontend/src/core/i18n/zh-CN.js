@@ -10,7 +10,9 @@
 
 const messages = {
   app: {
-    brand: 'Skill Box',
+    // 2026-07-11 改:品牌名统一为 "Q Boss",并把主题切换文案挪到 i18n
+    // (供顶栏 tooltip 使用)。
+    brand: 'Q Boss',
     closeSidebar: '关闭侧栏',
     openSidebar: '打开侧栏',
     nav: {
@@ -26,6 +28,11 @@ const messages = {
     backendDown: '后端断开',
     refreshStats: '刷新统计',
     toolsLabel: '工具',
+    // 2026-07-11 增:顶栏 tooltip 用
+    themeToggle: {
+      toDark: '切换到暗黑模式',
+      toLight: '切换到亮色模式',
+    },
   },
 
   common: {
@@ -533,18 +540,20 @@ const messages = {
       global: '全局目录',
     },
     // 2026-07-01 增:从本地 zip / 文件夹导入面板
+    // 2026-07-11 改:支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz
     local: {
       title: '从本地导入',
-      desc: '从本地的文件夹或 zip 压缩包里读取 SKILL.md,直接落地到 Skill Box 的 store。',
+      desc: '从本地的文件夹或压缩包里读取 SKILL.md,直接落地到 Skill Box 的 store。',
       btnPickFolder: '选择文件夹',
       btnPickFolderTitle: '选一个本地目录,递归读取含 SKILL.md 的子目录',
-      btnPickZip: '选择 zip 压缩包',
-      btnPickZipTitle: '选一个 .zip 文件,解压后识别所有 SKILL.md',
-      webNoFolder: 'Web 端不支持选文件夹,请用 zip',
-      webNoFolderHint: '请用下方"选择 zip 压缩包"按钮',
+      btnPickArchive: '选择压缩包',
+      btnPickArchiveTitle: '选一个压缩包文件(zip / tar / tar.gz / tar.bz2 / tar.xz),解压后识别所有 SKILL.md',
+      webNoFolder: 'Web 端不支持选文件夹,请用压缩包',
+      webNoFolderHint: '请用下方"选择压缩包"按钮',
       importing: '导入中…',
       errNoPick: '未选择任何文件/目录',
-      errNoSKILLMD: '未找到 SKILL.md 文件:目录或 zip 内必须存在 SKILL.md',
+      errNoSKILLMD: '未找到 SKILL.md 文件:目录或压缩包内必须存在 SKILL.md',
+      errUnsupportedArchive: '暂不支持该压缩包格式,目前支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz',
       errImport: '导入失败:{msg}',
       okImport: '导入完成:成功 {ok} 个,失败 {failed} 个',
       statOk: '成功',

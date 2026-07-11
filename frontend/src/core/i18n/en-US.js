@@ -11,7 +11,7 @@
 
 const messages = {
   app: {
-    brand: 'Skill Box',
+    brand: 'Q Boss',
     closeSidebar: 'Close sidebar',
     openSidebar: 'Open sidebar',
     nav: {
@@ -27,6 +27,11 @@ const messages = {
     backendDown: 'Backend down',
     refreshStats: 'Refresh stats',
     toolsLabel: 'Tools',
+    // 2026-07-11 new: topbar tooltip copy
+    themeToggle: {
+      toDark: 'Switch to dark mode',
+      toLight: 'Switch to light mode',
+    },
   },
 
   common: {
@@ -518,18 +523,20 @@ const messages = {
       global: 'Global dir',
     },
     // 2026-07-01: from-local import panel
+    // 2026-07-11: extended to support zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz
     local: {
       title: 'Import from local',
-      desc: 'Pick a local folder or .zip; we read SKILL.md and land them into the Skill Box store.',
+      desc: 'Pick a local folder or archive; we read SKILL.md and land them into the Skill Box store.',
       btnPickFolder: 'Pick folder',
       btnPickFolderTitle: 'Pick a local directory; recursively read sub-dirs with SKILL.md',
-      btnPickZip: 'Pick .zip',
-      btnPickZipTitle: 'Pick a .zip; identify all SKILL.md inside',
-      webNoFolder: 'Web mode does not support folder picker; use .zip instead',
-      webNoFolderHint: 'Please use "Pick .zip" below',
+      btnPickArchive: 'Pick archive',
+      btnPickArchiveTitle: 'Pick an archive (zip / tar / tar.gz / tar.bz2 / tar.xz); identify all SKILL.md after extraction',
+      webNoFolder: 'Web mode does not support folder picker; use archive instead',
+      webNoFolderHint: 'Please use "Pick archive" below',
       importing: 'Importing…',
       errNoPick: 'No file or folder selected',
-      errNoSKILLMD: 'No SKILL.md found: the folder or .zip must contain SKILL.md',
+      errNoSKILLMD: 'No SKILL.md found: the folder or archive must contain SKILL.md',
+      errUnsupportedArchive: 'Unsupported archive format, currently supports zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz',
       errImport: 'Import failed: {msg}',
       okImport: 'Imported: {ok} ok, {failed} failed',
       statOk: 'OK',
