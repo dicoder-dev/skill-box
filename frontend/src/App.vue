@@ -608,11 +608,30 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .topbar-logo-text {
-  /* 2026-07-11 v10 改:字号 15→20,加粗到 700,作为主要视觉锚点 */
-  font-size: 20px;
-  font-weight: 700;
+  /* 2026-07-11 v10:字号 15→20,加粗到 700,作为主要视觉锚点
+     2026-07-11 v11:艺术感强化 — Inter weight 800 + letter-spacing 2px 拉开
+     (i18n 已配 'SKILL-BOX' 大写,text-transform:uppercase 双保险)+ 主色渐变
+     + -webkit-background-clip:text + 微 text-shadow 形成「刻印」质感。 */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
   color: var(--text);
-  letter-spacing: 0.3px;
+  background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);  /* 暗色模式柔高光 */
+}
+/* v11 增:暗黑模式下渐变两端都用亮色,确保可读性;
+   text-shadow 反向为柔光,营造「发光字体」质感。 */
+:global(html.dark) .topbar-logo-text {
+  background: linear-gradient(135deg, #fafafa 0%, #a3a3a3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 12px rgba(250, 250, 250, 0.18);
 }
 
 .topbar-right {

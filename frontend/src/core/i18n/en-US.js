@@ -14,7 +14,9 @@ const messages = {
     // 2026-07-11 changed: brand name back to 'Skill-Box' (was incorrectly
     // set to 'Q Boss' in v1). themeToggle copy moved into i18n so the
     // sidebar footer tooltip can consume it.
-    brand: 'Skill-Box',
+    // 2026-07-11 v11 changed: uppercase 'SKILL-BOX' + tracking for a
+    // editorial brand-grade logo (Inter weight 800 + gradient + glow).
+    brand: 'SKILL-BOX',
     closeSidebar: 'Close sidebar',
     openSidebar: 'Open sidebar',
     nav: {
