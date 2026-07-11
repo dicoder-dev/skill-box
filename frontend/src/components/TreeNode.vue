@@ -154,6 +154,18 @@ const TOOL_ICON_MAP = {
 }
 function toolIcon(tid) { return TOOL_ICON_MAP[tid] || 'mdi:puzzle-outline' }
 
+// 2026-07-11 增:chip 按工具分色 — key 与 TOOL_ICON_MAP 同步,
+// value 是 style.css 已有的 accent 名(浅色 / 暗黑模式自动切换)。
+// opencode=紫仅作用于 chip 强调色,不会蔓延到卡片主体,符合
+// memory:avoid-violet-as-primary-color.md "紫色 AI 感强,主色禁用"。
+const TOOL_ACCENT = {
+  codex: 'accent-blue',     // 蓝 — 编程 AI
+  claude: 'accent-emerald',  // 翠 — AI 助手
+  cursor: 'accent-amber',    // 橙 — 编辑器
+  opencode: 'accent-violet', // 紫 — 开源 CLI(chip only,克制)
+  trae: 'accent-rose',       // 玫 — 字节 IDE
+}
+
 // 2026-07-03 增:tool 的 icon_file 优先级 > mdi。
 // chip 上有 icon_file 就走 <img :src="/api/files/tool-icons/<basename>">,
 // 否则走原来 toolIcon(tid) 拿 mdi 字符串。
@@ -261,6 +273,7 @@ function isDropTarget(node) {
               v-for="tid in (node.skill_meta.applied_tools || [])"
               :key="tid"
               class="tree-tool-chip"
+              :class="['tool-chip-' + (TOOL_ACCENT[tid] || 'default')]"
               :title="tid"
             >
               <!--
@@ -390,25 +403,38 @@ function isDropTarget(node) {
 
 /* =====================================================
    skill 卡片样式(2026-06-29 改:从"行"强化为"卡片")
-   保留改动前的内容(icon + name + @version + 工具 chip 列表),
-   仅加强容器视觉(圆角 / 边框 / 阴影 / 内边距),不改字段。
+   2026-07-11 美化:加蓝色 accent + 卡顶 4px 条 + 卡顶浅蓝渐变 + hover 蓝色光晕阴影,
+   跟 MarketView 的卡顶 accent 条 + color-mix 配色保持一致风格。
+   --card-accent 抽成局部变量,未来想给不同 skill 走不同 accent 只需覆盖这一个变量。
    ===================================================== */
 .tree-row-skill {
+  --card-accent: var(--accent-blue);
   /* 比 .tree-row 更厚的内边距 + 圆角 + 边框,体现"卡片"感 */
   padding: 8px 10px;
   /* 2026-06-29 改:卡片之间上下留更多空间(原 2px 4px 太挤) */
   margin: 10px 4px;
   background: var(--bg-card);
+  /* 卡顶 4px accent 条 — 给整张卡片一个明确的"主色锚点",跟 MarketView 风格一致 */
   border: 1px solid var(--border);
+  border-top: 4px solid var(--card-accent);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  /* 卡顶浅蓝渐变 — 6% accent → bg-card,只在顶部 70% 范围,底部保持纯白 */
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-accent) 6%, var(--bg-card)) 0%,
+    var(--bg-card) 70%
+  );
+  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
   cursor: pointer;
 }
 .tree-row-skill:hover {
-  border-color: var(--text-faint);
+  /* 边框色用 accent 化版本,但卡顶条保持纯 accent(不被 hover 稀释) */
+  border-color: color-mix(in srgb, var(--card-accent) 40%, var(--border));
+  border-top-color: var(--card-accent);
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  /* 蓝色光晕阴影 — 跟卡顶 accent 颜色对齐,让卡片"浮"起来时带着色温 */
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--card-accent) 30%, transparent);
 }
 .tree-row-skill:focus-visible {
   outline: 2px solid var(--accent-blue);
@@ -453,13 +479,47 @@ function isDropTarget(node) {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 5px;
+  /* 2026-07-11 改:padding 5px → 6px,给 chip 文字更舒展 */
+  padding: 1px 6px;
   border-radius: 999px;
   background: var(--bg-subtle);
   color: var(--text-dim);
   border: 1px solid var(--border);
   font-size: 10px;
   line-height: 1;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease, filter 0.1s ease;
+}
+/* 2026-07-11 增:chip 按工具分色 — 5 个变体覆盖 bg / border-color / color 三联,
+   颜色取自 style.css 已有的 --accent-*-bg(50-tint 浅底) / -border(200-tint 浅边) / *(600-tint 主色)。
+   暗黑模式下变量自动切换成深色版,无需单独写规则。 */
+.tree-tool-chip.tool-chip-accent-blue {
+  background: var(--accent-blue-bg);
+  border-color: var(--accent-blue-border);
+  color: var(--accent-blue);
+}
+.tree-tool-chip.tool-chip-accent-emerald {
+  background: var(--accent-emerald-bg);
+  border-color: var(--accent-emerald-border);
+  color: var(--accent-emerald);
+}
+.tree-tool-chip.tool-chip-accent-amber {
+  background: var(--accent-amber-bg);
+  border-color: var(--accent-amber-border);
+  color: var(--accent-amber);
+}
+.tree-tool-chip.tool-chip-accent-violet {
+  background: var(--accent-violet-bg);
+  border-color: var(--accent-violet-border);
+  color: var(--accent-violet);
+}
+.tree-tool-chip.tool-chip-accent-rose {
+  background: var(--accent-rose-bg);
+  border-color: var(--accent-rose-border);
+  color: var(--accent-rose);
+}
+/* 2026-07-11 增:chip 统一 hover 加深,filter:brightness 比改 background 更通用 */
+.tree-tool-chip:hover {
+  filter: brightness(0.97);
 }
 
 /* 2026-07-03 加:chip 前的 icon_file 真 logo 渲染样式。
@@ -473,14 +533,34 @@ function isDropTarget(node) {
   flex-shrink: 0;
 }
 
-/* 选中态(skill 卡片):蓝色边框 */
+/* 选中态(skill 卡片):蓝色边框 + accent 渐变背景 + 三层 accent 色光阴影
+   2026-07-11 美化:从单一蓝色边框升级为:
+     - 渐变背景 18% → 6% → bg-card,层次更丰富
+     - 三层阴影叠加:内描边 ring + 主光晕 6px/18px + 微近景 2px/6px */
 .tree-node-selected > .tree-row-skill {
   border-color: var(--accent-blue);
-  background: var(--bg-card);
-  box-shadow: 0 0 0 1px var(--accent-blue);
+  border-top-color: var(--accent-blue);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-blue) 18%, var(--bg-card)) 0%,
+    color-mix(in srgb, var(--accent-blue) 6%, var(--bg-card)) 60%,
+    var(--bg-card) 100%
+  );
+  box-shadow:
+    0 0 0 1px var(--accent-blue),
+    0 6px 18px -4px color-mix(in srgb, var(--accent-blue) 35%, transparent),
+    0 2px 6px -1px color-mix(in srgb, var(--accent-blue) 20%, transparent);
 }
 .tree-node-selected > .tree-row-skill:hover {
   border-color: var(--accent-blue);
+  border-top-color: var(--accent-blue);
+  box-shadow:
+    0 0 0 1px var(--accent-blue),
+    0 8px 22px -4px color-mix(in srgb, var(--accent-blue) 45%, transparent);
+}
+/* 2026-07-11 增:选中卡片内 name 也变蓝,强化焦点 */
+.tree-node-selected > .tree-row-skill .tree-name {
+  color: var(--accent-blue);
 }
 
 .tree-node-selected > .tree-row {
