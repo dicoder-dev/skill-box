@@ -888,6 +888,8 @@ function onCtxFolder({ dir, event }) {
 
 // 根区域右键:新建文件夹 / 新建文件
 function onCtxRoot({ event }) {
+  // 2026-07-11 增:诊断日志 — 确认 root context menu 事件是否到达 InlinePanel
+  console.log('[InlinePanel] onCtxRoot fired at', event?.clientX, event?.clientY)
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
   ctxMenu.items = [

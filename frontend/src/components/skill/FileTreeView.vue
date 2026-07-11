@@ -106,6 +106,8 @@ function onToggleCollapse(p) {
 // 所以这个 handler 不会被子节点冒泡触发,只在用户点到真正的空白区域时触发。
 function onRootContextMenu(e) {
   e.preventDefault()
+  // 2026-07-11 增:诊断日志(确认根区域右键事件是否真的触达 handler)
+  console.log('[FileTreeView] onRootContextMenu fired at', e.clientX, e.clientY, 'target=', e.target?.tagName, e.target?.className)
   emit('context-menu-root', { event: e })
 }
 </script>
@@ -131,7 +133,19 @@ function onRootContextMenu(e) {
 </template>
 
 <style scoped>
+/* 2026-07-11 改:.file-tree-view 撑满父容器高度,让"根区域右键"事件在用户点到
+   文件树底部大片空白时也能触达容器的 @contextmenu。
+   之前 padding: 4px 0 + 高度 auto 时,容器高度 = ul 子内容高度,父级
+   .sfip-tree-wrap flex:1 撑满的剩余空间都在 .file-tree-view 之外 — 用户
+   点那些空白时事件不冒泡到 .file-tree-view,右键菜单不弹。 */
 .file-tree-view {
   padding: 4px 0;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.file-tree-view > ul.file-tree {
+  flex: 1;
 }
 </style>
