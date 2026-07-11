@@ -70,10 +70,13 @@ const { outlineVisible, toggleOutline } = useMdOutlineVisible()
 const LABEL_CTX_NEW_FILE = '新建文件'
 const LABEL_CTX_NEW_DIR = '新建文件夹'
 const LABEL_CTX_RENAME_FILE = '重命名文件'
+const LABEL_CTX_RENAME_FOLDER = '重命名文件夹'
 const LABEL_CTX_DELETE_FILE = '删除文件'
+const LABEL_CTX_OPEN_FOLDER = '在文件浏览器中打开'
 const LABEL_NEW_FILE_PROMPT = '新建文件(将在指定目录下创建)'
 const LABEL_NEW_DIR_PROMPT = '新建文件夹(将在指定目录下创建)'
 const LABEL_RENAME_FILE_PROMPT = '重命名文件'
+const LABEL_RENAME_FOLDER_PROMPT = '重命名文件夹'
 const LABEL_DELETE_FILE_PROMPT = '删除文件'
 const LABEL_DELETE_FILE_CONFIRM = '确定要删除 "{name}" 吗?此操作无法撤销。'
 
@@ -866,11 +869,10 @@ function onCtxFile({ file, event }) {
   ctxMenu.open = true
 }
 
-// 目录节点右键:新建文件
-// 2026-07-11 注:目录层级在 files[] 里通过 path 前缀表达,前端"新建文件"实际
-// 上是把一个 path="<dir>/<name>" 的新条目塞进 files 数组。子目录的创建也是
-// 同样的方式 — 只需要塞一个带该 path 的占位文件,后端 save 时会通过 safeRelPath
-// 自动 mkdir -p 父目录(见 store.Save 行 130-145)。
+// 目录节点右键:新建文件 + 重命名 + 在文件浏览器中打开
+// 2026-07-11 改:目录右键只支持 1 项的简化版用户反馈"操作太少",
+// 加上重命名(对目录名最后一段做修改)和在文件浏览器中打开
+// (直接定位到磁盘目录)。
 function onCtxFolder({ dir, event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
@@ -881,6 +883,19 @@ function onCtxFolder({ dir, event }) {
       label: LABEL_CTX_NEW_FILE,
       icon: 'mdi:file-document-plus-outline',
       onClick: () => openNewFileDialog(dirPath),
+    },
+    { divided: true, key: 'div-1', label: '' },
+    {
+      key: 'rename-folder',
+      label: LABEL_CTX_RENAME_FOLDER,
+      icon: 'mdi:rename-outline',
+      onClick: () => openRenameFolderDialog(dir),
+    },
+    {
+      key: 'open-folder',
+      label: LABEL_CTX_OPEN_FOLDER,
+      icon: 'mdi:folder-outline',
+      onClick: () => openFolderInExplorer(dirPath),
     },
   ]
   ctxMenu.open = true
@@ -956,23 +971,31 @@ async function submitNewFile() {
   newFileBusy.value = true
   try {
     if (newFileKind.value === 'dir') {
-      // 目录需要占位文件让空目录不被后端 store.Save 的 os.RemoveAll(dir) 干掉。
-      // 命名约定:.skillbox-placeholder — FileTreeView.buildTree 把它识别为
-      // "目录占位"过滤掉(用户视觉上看不到),但 . 开头段在 ensureDir 里
-      // 也被跳过 — 因此还要在 buildTree 那边特判这个名字不参与 . 过滤。
-      await persistFiles([
-        ...(props.files || []),
-        { path: `${fullPath}/.skillbox-placeholder`, content: '' },
-      ])
+      // 2026-07-11 改:不写占位文件到磁盘(用户反馈"目录里默认有个文件"很奇怪)。
+      // 走 createGroup 端点(已有 — /api/skillbox/skills/group/create),只创建
+      // 物理目录,files[] 不变。后续 loadFromDir 走 listEmptyDirs 补 .skillbox-placeholder
+      // 占位条目,前端 buildTree 走 BUSINESS_PLACEHOLDERS 白名单让目录显示。
+      const { createGroup: apiCreateGroup } = await import('@/api/skillbox/skills')
+      // group_path 是 skill_root 内部的相对路径(<group_path> + <name>)
+      // 例如 skill_name = 'aa' 时,group_path = 'aa/<dir_name>'。
+      // 根目录下新建:group_path = '<dir_name>',store 走 CreateGroupDir。
+      const sk = props.skill || {}
+      const skillName = sk.name || ''
+      const groupPath = skillName
+        ? `${skillName}/${fullPath}`
+        : fullPath
+      await apiCreateGroup({ group_path: groupPath })
+      newFileOpen.value = false
+      // 通知父级 reload — 触发 listEmptyDirs 重新扫描
+      emit('saved', { path: '__dir-created__', content: '' })
     } else {
+      // 文件走原有 updateSkill 链路(需要把新文件加进 files[])
       await persistFiles([
         ...(props.files || []),
         { path: fullPath, content: '' },
       ])
-    }
-    newFileOpen.value = false
-    // 选中新创建的文件/目录
-    if (newFileKind.value === 'file') {
+      newFileOpen.value = false
+      // 选中新创建的文件
       const created = (props.files || []).find((f) => f.path === fullPath)
       if (created) selectFileByPath(fullPath)
     }
@@ -991,6 +1014,14 @@ const renameFileOldName = ref('')
 const renameFileInput = ref('')
 const renameFileError = ref('')
 const renameFileBusy = ref(false)
+
+// === 重命名文件夹 弹窗(2026-07-11 增)===
+const renameFolderOpen = ref(false)
+const renameFolderOldPath = ref('')
+const renameFolderOldName = ref('')
+const renameFolderInput = ref('')
+const renameFolderError = ref('')
+const renameFolderBusy = ref(false)
 
 function openRenameFileDialog(file) {
   if (!file || !file.path) return
@@ -1031,6 +1062,45 @@ async function submitRenameFile() {
     renameFileError.value = e?.message || String(e)
   } finally {
     renameFileBusy.value = false
+  }
+}
+
+// === 重命名文件夹 弹窗 实现(2026-07-11 增)===
+function closeRenameFolderDialog() {
+  if (renameFolderBusy.value) return
+  renameFolderOpen.value = false
+}
+async function submitRenameFolder() {
+  if (renameFolderBusy.value) return
+  const newName = (renameFolderInput.value || '').trim()
+  // 复用文件名校验(目录名跟文件名规则一样,不允许 / 和 ..,允许 SKILL.md 是文件专属)
+  const err = validateFsName(newName, 'dir')
+  if (err) { renameFolderError.value = err; return }
+  if (newName === renameFolderOldName.value) { renameFolderOpen.value = false; return }
+  const parent = renameFolderOldPath.value.includes('/')
+    ? renameFolderOldPath.value.slice(0, renameFolderOldPath.value.lastIndexOf('/'))
+    : ''
+  const newPath = parent ? `${parent}/${newName}` : newName
+  renameFolderBusy.value = true
+  try {
+    // 把所有 <oldDir>/ 前缀的 file.path 改成 <newDir>/
+    const oldPrefix = renameFolderOldPath.value + '/'
+    const next = (props.files || []).map((f) => {
+      if (f.path === renameFolderOldPath.value) {
+        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+      }
+      if (f.path.startsWith(oldPrefix)) {
+        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+      }
+      return f
+    })
+    await persistFiles(next)
+    renameFolderOpen.value = false
+    toast.success(`已重命名为「${newName}」`)
+  } catch (e) {
+    renameFolderError.value = e?.message || String(e)
+  } finally {
+    renameFolderBusy.value = false
   }
 }
 
@@ -1136,11 +1206,39 @@ function selectFileByPath(path) {
   if (f) onSelectFile(f)
 }
 
-// 2026-07-11 增:目录节点右键也支持"删除目录" — 在 onCtxFolder 里多塞一项
-// (用户原话"分组 → 新建文件",没提删除,但目录节点给个删除入口合理)。
-// 用 override 替换 onCtxFolder 的 items,在它后面加"删除目录"项。
-// 设计上保留 openDeleteFolderDialog,只是没在右键菜单里挂 — 等以后产品再说。
-// (实际:为了不偏离用户原话,这里**不**自动加删除目录,等用户明确要求再加。)
+// 2026-07-11 增:目录节点的 3 个新操作函数
+// 1) 重命名目录:复用重命名文件弹窗的样式,只把"最后一段"改成新名,父路径不变。
+//    走 updateSkill 链路:把所有 <dir>/ 前缀的 file.path 替换成 <newDir>/
+function openRenameFolderDialog(dir) {
+  if (!dir || !dir.path) return
+  const seg = dir.path.split('/').pop() || ''
+  renameFolderOldPath.value = dir.path
+  renameFolderOldName.value = seg
+  renameFolderInput.value = seg
+  renameFolderError.value = ''
+  renameFolderOpen.value = true
+}
+// 2) 在文件浏览器中打开:platform.fs.reveal(物理目录绝对路径)
+async function openFolderInExplorer(dirPath) {
+  // 从 skill 的 source_dir 拼绝对路径,跟 SkillsView.openGroupInFolder 一致
+  const sk = props.skill || {}
+  const srcDir = sk.canonical?.source_dir
+    || sk.canonical?.source_path
+    || ''
+  if (!srcDir) {
+    toast.error('无法定位到磁盘目录,缺少 source_dir')
+    return
+  }
+  const abs = dirPath ? `${srcDir}/${dirPath}` : srcDir
+  try {
+    const r = await platform.fs.reveal(abs)
+    if (r && r.ok === false && r.fallbackUrl) {
+      platform.platform.openExternal(r.fallbackUrl)
+    }
+  } catch (e) {
+    toast.error(`打开失败: ${e?.message || String(e)}`)
+  }
+}
 
 onUnmounted(() => {})
 
@@ -1591,6 +1689,49 @@ defineExpose({
           @click="submitRenameFile"
         >
           <span v-if="renameFileBusy" class="spinner spinner-sm"></span>
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
+          保存
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 2026-07-11 增:重命名文件夹 弹窗(跟重命名文件同款样式) -->
+    <Modal v-model="renameFolderOpen" size="sm" :close-on-mask="!renameFolderBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <IconPark icon="mdi:rename-outline" width="18" height="18" />
+          {{ LABEL_RENAME_FOLDER_PROMPT }}
+        </h3>
+      </template>
+      <div class="editor-field-full">
+        <input
+          v-model="renameFolderInput"
+          class="group-input"
+          :placeholder="renameFolderOldName"
+          :disabled="renameFolderBusy"
+          autofocus
+          @keyup.enter="submitRenameFolder"
+        />
+        <p v-if="renameFolderOldPath.includes('/')" class="muted small-hint">
+          <code>{{ renameFolderOldPath.slice(0, renameFolderOldPath.lastIndexOf('/')) }}/<span style="color: var(--text)">{{ renameFolderInput || '...' }}</span></code>
+        </p>
+        <p v-else class="muted small-hint">
+          <code>/<span style="color: var(--text)">{{ renameFolderInput || '...' }}</span></code>
+        </p>
+        <p v-if="renameFolderError" class="message message-error" style="margin: 8px 0 0">
+          <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+          {{ renameFolderError }}
+        </p>
+      </div>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="renameFolderBusy" @click="closeRenameFolderDialog">取消</button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="renameFolderBusy || !renameFolderInput.trim() || renameFolderInput.trim() === renameFolderOldName"
+          @click="submitRenameFolder"
+        >
+          <span v-if="renameFolderBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
           保存
         </button>
