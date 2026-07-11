@@ -414,12 +414,12 @@ function isDropTarget(node) {
   /* 2026-06-29 改:卡片之间上下留更多空间(原 2px 4px 太挤) */
   margin: 10px 4px;
   background: var(--bg-card);
-  /* 卡顶 4px accent 条 — 给整张卡片一个明确的"主色锚点",跟 MarketView 风格一致 */
   border: 1px solid var(--border);
-  border-top: 4px solid var(--card-accent);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  /* 卡顶浅蓝渐变 — 6% accent → bg-card,只在顶部 70% 范围,底部保持纯白 */
+  /* 卡顶浅蓝渐变 — 6% accent → bg-card,只在顶部 70% 范围,底部保持纯白。
+     2026-07-11 v2 改:删掉卡顶 4px 实色 accent 条(用户反馈用力过猛),
+     仅保留更克制的渐变"色温"提示,卡片整体不再蓝条高耸。 */
   background-image: linear-gradient(
     180deg,
     color-mix(in srgb, var(--card-accent) 6%, var(--bg-card)) 0%,
@@ -429,11 +429,10 @@ function isDropTarget(node) {
   cursor: pointer;
 }
 .tree-row-skill:hover {
-  /* 边框色用 accent 化版本,但卡顶条保持纯 accent(不被 hover 稀释) */
+  /* 边框色用 accent 化版本,带轻微蓝色色温(原卡顶条被删除后,这是唯一的"蓝色提示") */
   border-color: color-mix(in srgb, var(--card-accent) 40%, var(--border));
-  border-top-color: var(--card-accent);
   transform: translateY(-1px);
-  /* 蓝色光晕阴影 — 跟卡顶 accent 颜色对齐,让卡片"浮"起来时带着色温 */
+  /* 蓝色光晕阴影 — 跟 accent 颜色对齐,让卡片"浮"起来时带着色温 */
   box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--card-accent) 30%, transparent);
 }
 .tree-row-skill:focus-visible {
@@ -536,10 +535,10 @@ function isDropTarget(node) {
 /* 选中态(skill 卡片):蓝色边框 + accent 渐变背景 + 三层 accent 色光阴影
    2026-07-11 美化:从单一蓝色边框升级为:
      - 渐变背景 18% → 6% → bg-card,层次更丰富
-     - 三层阴影叠加:内描边 ring + 主光晕 6px/18px + 微近景 2px/6px */
+     - 三层阴影叠加:内描边 ring + 主光晕 6px/18px + 微近景 2px/6px
+   2026-07-11 v2:卡顶 4px accent 条已删除,不再需要 border-top-color 单独维护 */
 .tree-node-selected > .tree-row-skill {
   border-color: var(--accent-blue);
-  border-top-color: var(--accent-blue);
   background-image: linear-gradient(
     180deg,
     color-mix(in srgb, var(--accent-blue) 18%, var(--bg-card)) 0%,
@@ -553,7 +552,6 @@ function isDropTarget(node) {
 }
 .tree-node-selected > .tree-row-skill:hover {
   border-color: var(--accent-blue);
-  border-top-color: var(--accent-blue);
   box-shadow:
     0 0 0 1px var(--accent-blue),
     0 8px 22px -4px color-mix(in srgb, var(--accent-blue) 45%, transparent);
