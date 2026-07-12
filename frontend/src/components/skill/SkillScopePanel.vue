@@ -476,36 +476,28 @@ onErrorCaptured((err) => {
            设计要点:
              - 永远排在第一个(放在 v-for 上方,跟其他工具互不影响)
              - 没有展开/折叠(没有 targets 列表)
-             - 选中态由 .ssp-global-agent-active 高亮(绿色,跟 TreeNode 同色系)
-             - 整行可点击切换,spinner 在 toggle 中显示避免重复点击 -->
+             - 纯 tag 胶囊样式:选中=emerald 浅底+边框+主色字,未选中=透明+灰文字+无边框
+             - 整个 tag 可点击切换,spinner 在 toggle 中显示避免重复点击 -->
       <li class="ssp-scope-group ssp-scope-group-global">
         <button
           type="button"
-          :class="['ssp-scope-row ssp-global-agent-row', { 'ssp-global-agent-active': isGlobalAgent }]"
+          :class="['ssp-global-agent-tag', { 'ssp-global-agent-tag-active': isGlobalAgent }]"
           :data-tip="LABEL_GLOBAL_AGENT_TIP"
           :disabled="toggleAgentBusy || globalAgentLoading"
           @click="onToggleGlobalAgentClick"
         >
           <span
             v-if="toggleAgentBusy"
-            class="ssp-spinner ssp-spinner-xs"
+            class="ssp-spinner ssp-spinner-xs ssp-global-agent-spinner"
           ></span>
           <IconPark
             v-else
             icon="mdi:earth"
-            width="13"
-            height="13"
+            width="11"
+            height="11"
             class="ssp-global-agent-icon"
           />
-          <span class="ssp-scope-row-name">{{ LABEL_GLOBAL_AGENT }}</span>
-          <!-- 选中态打勾,跟其它行通过 .ssp-scope-row-count 区分(这里是状态而非数量) -->
-          <IconPark
-            v-if="isGlobalAgent"
-            icon="mdi:check"
-            width="12"
-            height="12"
-            class="ssp-global-agent-check"
-          />
+          <span class="ssp-global-agent-label">{{ LABEL_GLOBAL_AGENT }}</span>
         </button>
       </li>
       <li
@@ -886,25 +878,62 @@ onErrorCaptured((err) => {
 }
 
 /* 2026-07-07 增:自管确认弹窗文案 */
-/* 2026-07-12 增:全局 Agent tag 行样式 — 跟 TreeNode 上的"全局 Agent" tag
-   同色系(绿色 = 全局共享 = ~/.agents/skills/ 共享池),未选中态用普通工具行
-   同款视觉,选中后高亮为绿色(文字 + 图标 + 边框)让用户清楚知道 skill 当前
-   已同步到全局 Agent 池。
-   不展开(没有 chevron 也没有 targets),整行可点击切换状态。 */
-.ssp-global-agent-row {
-  /* 跟普通工具行视觉一致,选中态再叠 .ssp-global-agent-active */
+/* 2026-07-12 改 v2:全局 Agent 改成纯 tag 胶囊样式(2026-07-12 用户反馈)。
+   设计目标:
+     - 选中 = emerald 浅底 + 边框 + 主色字(跟 TreeNode .tree-skill-badge-global-agent
+       同款色相,视觉一致)
+     - 未选中 = 完全透明背景 + 无边框 + 灰文字(跟工具列表的"未启用"状态
+       视觉接近,只是一个轻量的标签)
+   实现:
+     - 胶囊 padding 1px 8px(比原 row padding 小很多,贴合 tag 形态)
+     - 整行可点击 — cursor:pointer,hover 时未选中态显示淡灰底提示可点
+     - 选中态 hover 加深一档(emerald-bg → emerald-border),强化反馈
+     - 字体 11px(比 row 文字小一档,贴合 tag 视觉权重)
+     - 切换中 toggleAgentBusy 时显示 spinner 替代图标 */
+.ssp-global-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 12px 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ssp-global-agent-tag:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+/* 选中态:emerald 三件套 + 字色加深 */
+.ssp-global-agent-tag-active {
+  background: var(--accent-emerald-bg);
+  border-color: var(--accent-emerald-border);
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+.ssp-global-agent-tag-active:hover:not(:disabled) {
+  /* 选中态 hover 时把边框加深一档,告诉用户"还能再点切换",而不是淡化。
+     背景保持 emerald-bg(不能加深太多,亮色底反复叠会发灰)。 */
+  border-color: var(--accent-emerald);
+  background: var(--accent-emerald-bg);
+}
+.ssp-global-agent-tag:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .ssp-global-agent-icon { color: inherit; flex-shrink: 0; }
-.ssp-global-agent-active {
-  color: #15803d; /* Tailwind green-700,跟 TreeNode .badge-global-agent 同色 */
-  background: rgba(34, 197, 94, 0.08); /* Tailwind green-500/8 浅色背景 */
-}
-.ssp-global-agent-active .ssp-global-agent-icon { color: #16a34a; } /* green-600 */
-.ssp-global-agent-active .ssp-global-agent-check { color: #16a34a; flex-shrink: 0; }
-.ssp-scope-row.ssp-global-agent-row:disabled { opacity: 0.6; cursor: not-allowed; }
+.ssp-global-agent-spinner { flex-shrink: 0; }
+/* 2026-07-12 改:tag 自身有 margin-bottom 跟下方工具行分隔,
+   旧的 border-bottom 分隔线去掉(避免视觉割裂 — tag 是 inline-flex 自带间距)。 */
 .ssp-scope-group-global {
-  /* 跟普通 group 区分:底部一道细分割线(只在首位出现一次,跟下一个 group 分隔) */
-  border-bottom: 1px solid var(--border);
   margin-bottom: 2px;
 }
 
