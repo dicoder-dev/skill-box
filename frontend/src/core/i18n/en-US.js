@@ -362,6 +362,10 @@ const messages = {
         promptHint: 'Template with {target_lang} placeholder. Auto-replaced when you change the target language.',
         promptCopy: 'Copy prompt',
         promptCopied: 'Copied',
+        // 已自定义提示词徽标(用户改过)
+        promptCustomized: 'Modified',
+        // 把自定义内容改回默认模板
+        promptReset: 'Reset to default',
         // The "original prompt" template is kept in Chinese in both locales on purpose:
         // The user's target text is the translated skill body (which can be any language),
         // but the prompt itself stays consistent across locales to make round-trip

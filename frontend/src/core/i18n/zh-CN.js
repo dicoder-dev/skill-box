@@ -374,6 +374,10 @@ const messages = {
         promptHint: '原始提示词模板;切换目标语言时,里面的 {target_lang} 占位符会自动替换。',
         promptCopy: '复制提示词',
         promptCopied: '已复制',
+        // 已自定义提示词徽标(用户改过)
+        promptCustomized: '已自定义',
+        // 把自定义内容改回默认模板
+        promptReset: '重置为默认',
         // 内置的"原始提示词"模板(含 {target_lang} 占位符,弹窗实时替换 + 显示)。
         // 这段是「给用户看的预览」 — 真正发给 LLM 的 system prompt 由后端 preset 注入,
         // 这里展示出来只是让用户对翻译质量心里有数(可点击「复制提示词」拿去别处 debug)。

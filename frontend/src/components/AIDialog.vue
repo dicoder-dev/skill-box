@@ -64,6 +64,7 @@ watch(open, (v) => {
     loadProviders()
     activeView.value = 'list'
     resetTranslate()
+    initPromptOnOpen()
   }
 })
 watch(locale, () => { /* 语言变化时 i18n 自动重渲,无需手动 */ })
@@ -79,6 +80,18 @@ const translateAbort = ref(null)
 const translateAppliedHint = ref(false)
 const promptCopied = ref(false)
 
+// 用户对原始提示词的"当前编辑态"。
+//   - 初次进入(以及点「重置为默认」)时,customPrompt = buildDefaultPrompt(targetLang)
+//   - 用户在 textarea 里改了,customPrompt 就脱离默认值
+//   - target_lang / skill_md 两个占位符由 buildEffectivePrompt() 在运行时
+//     替换,然后作为 system prompt 发给后端。用户在 textarea 里看到的
+//     `{skill_md}` / `{target_lang}` 是占位符本身的字面量,
+//     当他们手动改动时,字面量会被保留(可读性最好),由前端在发请求前替换。
+//
+// 关键防御:为了避免 textarea 在 setup 渲染完成到 watch(open) 之前闪现 1 帧的
+// 空字符串(然后才被默认值填上),这里直接初始化为默认值(不依赖 watch)。
+const customPrompt = ref(buildDefaultPrompt(targetLang.value))
+
 const langOptions = computed(() => {
   // 动态取 i18n 文件里 aiDialog.langs 的所有 key(value/title 都从 i18n 拿)
   const keys = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'de-DE', 'es-ES']
@@ -87,18 +100,44 @@ const langOptions = computed(() => {
 
 const effectiveProviderName = computed(() => providers.value[0]?.name || '')
 
-// 用户视角的"原始提示词" — 把内置模板里的 {target_lang} 替换成用户选的语种。
-// 这只是显示给用户看(以及「复制提示词」按钮用),真正发给 LLM 的 system prompt
-// 由后端 preset 控制,不受这里的内容影响。模板里 {skill_md} 不替换,
-// 留着让用户知道"skill 全文会自动拼到那里"。
-const effectivePromptText = computed(() => {
+// 取目标语言的可读 label(发请求前的最后渲染会用到)
+function langLabelOf(code) {
+  const opt = langOptions.value.find((l) => l.value === code)
+  return opt?.label || code
+}
+
+// 由 i18n 模板 + 当前 targetLang 拼出默认 prompt。
+// {target_lang} 替换成 label 让用户看更顺眼;
+// {skill_md} 占位保留(让用户知道"skill 全文会自动拼到那里")。
+function buildDefaultPrompt(langCode) {
   const tmpl = t('skills.aiDialog.translate.promptTemplate')
-  return tmpl.replace(/\{target_lang\}/g, () => {
-    // 用 langOptions 取 label 让预览更顺眼
-    const opt = langOptions.value.find((l) => l.value === targetLang.value)
-    return opt?.label || targetLang.value
-  })
+  return tmpl.replace(/\{target_lang\}/g, () => langLabelOf(langCode))
+}
+
+// 用户是否修改过 prompt(对比当前 lang 下的默认值)。
+// 用于显示「已自定义」徽标 + 是否给「重置为默认」按钮。
+const promptIsCustomized = computed(() => {
+  const dft = buildDefaultPrompt(targetLang.value)
+  return (customPrompt.value || '') !== dft
 })
+
+// 重置为默认(覆盖当前语言版本)
+function resetPromptToDefault() {
+  customPrompt.value = buildDefaultPrompt(targetLang.value)
+}
+
+// 切语言时:如果用户没有手改过 prompt,跟着 default 同步;
+// 如果手改过,保持用户的文本不动(让他手动改 {target_lang} 也行,不强制覆盖)。
+watch(targetLang, (next) => {
+  if (!promptIsCustomized.value) {
+    customPrompt.value = buildDefaultPrompt(next)
+  }
+})
+
+// 打开弹窗时初始化 prompt(以及重置状态)
+function initPromptOnOpen() {
+  customPrompt.value = buildDefaultPrompt(targetLang.value)
+}
 
 function resetTranslate() {
   if (translateAbort.value?.abort) translateAbort.value.abort()
@@ -116,24 +155,39 @@ function startTranslate() {
   translateErr.value = ''
   translateAppliedHint.value = false
 
-  let skillMd = props.contextText || ''
+  const skillMd = props.contextText || ''
   if (!skillMd) {
     translateBusy.value = false
     translateErr.value = t('skills.aiDialog.translate.noContext')
     return
   }
-
-  // 走 preset 协议:preset_id 由后端识别为 translate_skill。
-  // 关键:vars 只把 target_lang + skill_md 发过去,system prompt 由后端注入。
-  // 这样前端这里改模板文案不会影响实际 LLM 行为,避免两边漂移。
-  const mergedVars = {
-    target_lang: targetLang.value,
-    skill_md,
+  if (!(customPrompt.value || '').trim()) {
+    translateBusy.value = false
+    translateErr.value = '提示词为空,请填写或点「重置为默认」'
+    return
   }
 
+  // 发请求前:把用户当前编辑的 customPrompt 里的两个占位符都实际替换掉。
+  //   - {target_lang} → 语言 label
+  //   - {skill_md} → 当前 skill 全文
+  // 这一步非常关键 — 不替换的话 LLM 收到的 system 还在引用占位符字面量,
+  // 反而把翻译责任推给模型自己替换(而且模型未必识别这种大括号语法)。
+  const effectiveSystem = customPrompt.value
+    .replace(/\{target_lang\}/g, () => langLabelOf(targetLang.value))
+    .replace(/\{skill_md\}/g, () => skillMd)
+
+  // 走 messages 路线(不进 preset):这样前端用户改 system 真的就能影响 LLM 行为。
+  // user message 留个空内容兜底 — 一些模型对 only-system-no-user 的边界会
+  // 加 EOS 后立刻截断,把"开始输出翻译"主动交给 user 触发更稳。
   let pendingBuf = ''
   translateAbort.value = chatStream(
-    { provider: effectiveProviderName.value, preset_id: 'translate_skill', vars: mergedVars },
+    {
+      provider: effectiveProviderName.value,
+      messages: [
+        { role: 'system', content: effectiveSystem },
+        { role: 'user', content: '请按系统提示里的规则开始翻译。' },
+      ],
+    },
     {
       onEvent: (ev) => {
         if (ev.kind === 'chunk') {
@@ -165,9 +219,10 @@ function copyResult() {
 }
 
 async function copyPromptTemplate() {
-  if (!effectivePromptText.value) return
-  // 复制时把 {skill_md} 占位符保留(让用户拿去别处粘贴时知道这里会自动拼上下文)
-  const text = effectivePromptText.value
+  // 复制:用户当前在 textarea 里看到的内容(含自定义)。{skill_md}/{target_lang} 占位符
+  // 保留字面量,让用户拿走去别处也能看清原模板结构。
+  const text = (customPrompt.value || '').trim()
+  if (!text) return
   try {
     await navigator.clipboard?.writeText(text)
     promptCopied.value = true
@@ -244,15 +299,37 @@ function applyToEditor() {
 
       <label class="full-row">
         <span class="row-between">
-          <span>{{ t('skills.aiDialog.translate.promptLabel') }}</span>
-          <button class="link-btn" @click="copyPromptTemplate">
-            <IconPark :icon="promptCopied ? 'mdi:check' : 'mdi:content-copy'" width="12" height="12" />
-            {{ promptCopied
-                ? t('skills.aiDialog.translate.promptCopied')
-                : t('skills.aiDialog.translate.promptCopy') }}
-          </button>
+          <span>
+            {{ t('skills.aiDialog.translate.promptLabel') }}
+            <span v-if="promptIsCustomized" class="badge badge-warn">
+              {{ t('skills.aiDialog.translate.promptCustomized') }}
+            </span>
+          </span>
+          <span class="row-actions">
+            <button
+              v-if="promptIsCustomized"
+              class="link-btn"
+              type="button"
+              @click="resetPromptToDefault"
+              :title="t('skills.aiDialog.translate.promptReset')"
+            >
+              <IconPark icon="mdi:restore" width="12" height="12" />
+              {{ t('skills.aiDialog.translate.promptReset') }}
+            </button>
+            <button class="link-btn" type="button" @click="copyPromptTemplate">
+              <IconPark :icon="promptCopied ? 'mdi:check' : 'mdi:content-copy'" width="12" height="12" />
+              {{ promptCopied
+                  ? t('skills.aiDialog.translate.promptCopied')
+                  : t('skills.aiDialog.translate.promptCopy') }}
+            </button>
+          </span>
         </span>
-        <pre class="prompt-preview">{{ effectivePromptText }}</pre>
+        <textarea
+          v-model="customPrompt"
+          class="prompt-edit"
+          rows="14"
+          spellcheck="false"
+        />
         <span class="hint-mute">{{ t('skills.aiDialog.translate.promptHint') }}</span>
       </label>
 
@@ -384,6 +461,26 @@ label.full-row > span, .ai-translate label > span { color: var(--text-dim); }
   align-items: center;
   justify-content: space-between;
 }
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.badge-warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.30);
+}
 .link-btn {
   display: inline-flex;
   align-items: center;
@@ -397,20 +494,24 @@ label.full-row > span, .ai-translate label > span { color: var(--text-dim); }
   transition: color 0.15s ease;
 }
 .link-btn:hover { color: var(--primary-hover); }
-.prompt-preview {
-  margin: 0;
+.prompt-edit {
+  width: 100%;
   padding: 10px 12px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 220px;
-  overflow-y: auto;
-  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--bg-card);
   color: var(--text);
+  outline: none;
+  resize: vertical;
+  min-height: 200px;
+  max-height: 360px;
+}
+.prompt-edit:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
 }
 .ai-translate select,
 .ai-translate textarea {
