@@ -201,25 +201,75 @@ onUnmounted(() => {
       @click="sidebarOpen = false"
     ></div>
 
-    <!-- 侧边栏 - 2026-07-11 改:64px 纯图标条。
-         顶部 macOS 交通灯预留区只在桌面 macOS 渲染(web / Windows / Linux 贴顶)。
-         底部状态组:后端状态 / 主题 / 刷新。 -->
+    <!-- 2026-07-12 改:顶栏提到 app-container 第一行,与 sidebar/main-content 平级,
+         横穿整个屏幕宽度(包括覆盖左侧导航栏所在区域),由 .topbar-overlay-left
+         把 logo / 后端状态 / 主题等子元素定位到侧栏之上的视觉层;
+         原 64px 宽侧栏在 .body-row 内仍然占位,只是被顶栏视觉压住。 -->
+    <header :class="['topbar', isMacOS ? 'mac-desktop' : '']">
+      <div class="topbar-left">
+        <button
+          v-if="isMobile"
+          class="menu-toggle"
+          @click="sidebarOpen = true"
+          :aria-label="t('app.openSidebar')"
+        >
+          <IconPark icon="mdi:menu" width="22" height="22" />
+        </button>
+
+        <!-- 2026-07-12 改:logo 固定在顶栏最左侧(0 起),盖住侧栏 64px 区域。
+             这里 topbar-left 仍占位,但视觉上由 absolute 子层把 logo 推出来,
+             不再受 sidebar 64px 宽度影响。 -->
+        <div class="topbar-logo">
+          <span class="topbar-logo-text">{{ t('app.brand') }}</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="stat-badge stat-badge-blue">
+          <IconPark icon="mdi:book-open-variant" width="12" height="12" />
+          <span>{{ t('app.nav.skills.label') }}</span>
+          <strong>{{ stats.skills }}</strong>
+        </div>
+        <div class="stat-badge stat-badge-violet">
+          <IconPark icon="mdi:folder-multiple-outline" width="12" height="12" />
+          <span>{{ t('app.nav.projects.label') }}</span>
+          <strong>{{ stats.projects }}</strong>
+        </div>
+        <div class="stat-badge stat-badge-emerald">
+          <IconPark icon="mdi:tools" width="12" height="12" />
+          <span>{{ t('app.toolsLabel') }}</span>
+          <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2026-07-12 改:body-row 是 sidebar + main-content 的 flex 行容器,
+         顶栏在上面一行。桌面端 sidebar 是 fixed(脱离文档流,这里只放
+         main-content 占位;z-40 的 sidebar 在 main-content 左侧浮在上方,
+         main-content 自身 padding-left: 64px 让位)。
+         移动端 sidebar 抽屉化(main-content 仍占满 row)。 -->
+    <div class="body-row flex-1 flex min-h-0">
+    <!-- 侧边栏 - 2026-07-12 改:从 flex 子项改为 fixed 定位(顶部 48px 起,
+         顶栏贴顶,侧栏紧接在顶栏下方),让顶栏视觉上覆盖侧栏。
+         桌面端 z-35 浮在顶栏(z-45)之下,顶栏 logo 横穿压住侧栏背景。
+         移动端抽屉化照旧,top 统一用 topbar-h 让位避免抽屉盖住顶栏。 -->
     <aside
       :class="[
-        'sidebar flex flex-col z-40',
+        'sidebar flex flex-col',
         'transition-transform duration-300 ease-out',
         isMobile
-          ? (sidebarOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full')
-          : 'sticky top-0 h-screen',
+          ? (sidebarOpen ? 'mobile-sidebar fixed left-0 translate-x-0' : 'mobile-sidebar fixed left-0 -translate-x-full')
+          : 'fixed left-0',
       ]"
+      :style="{ top: 'var(--topbar-h, 48px)', height: 'calc(100vh - var(--topbar-h, 48px))' }"
     >
-      <!-- 仅 macOS 桌面端需要为交通灯预留空间;
-           web / Windows / Linux 全部贴顶,不留白 -->
-      <div v-if="isMacOS" class="sidebar-top-spacer" aria-hidden="true"></div>
 
       <!-- 导航菜单(图标 + label 垂直布局)
            2026-07-11 v6 改:激活态去掉蓝色竖条,改成图标填充蓝色 + label 蓝色,
-           无背景色;label 始终可见,删 hover tooltip。 -->
+           无背景色;label 始终可见,删 hover tooltip。
+           2026-07-12 改:删掉 isMacOS 的 sidebar-top-spacer(50px 红绿灯让位),
+           顶栏现在统一在 z=25 横穿全屏,侧栏从 topbar 下方开始,红绿灯只
+           落在顶栏区域,不会延伸到侧栏,spacer 不再需要。 -->
       <nav class="sidebar-nav">
         <button
           v-for="n in navItems"
@@ -277,47 +327,15 @@ onUnmounted(() => {
       </button>
     </aside>
 
-    <!-- 主内容区 -->
-    <main class="main-content flex flex-col min-w-0">
-      <!-- 顶部栏 - 2026-07-11 改:左侧 = Logo,右侧 = 3 个 stat-badge;
-           顶部 tabs 已删除(与侧栏图标重复),后端状态 / 主题 / 刷新下移到侧栏底部。
-           2026-07-11 v8 增:macOS 桌面端加 mac-desktop class,让 .topbar 的
-           padding-top 抬 50px,与红绿灯垂直错开(否则 logo 被压在红绿灯旁)。 -->
-      <header :class="['topbar', isMacOS ? 'mac-desktop' : '']">
-        <div class="topbar-left">
-          <button
-            v-if="isMobile"
-            class="menu-toggle"
-            @click="sidebarOpen = true"
-            :aria-label="t('app.openSidebar')"
-          >
-            <IconPark icon="mdi:menu" width="22" height="22" />
-          </button>
-
-          <!-- 2026-07-11 v9 改:删掉图标,只显示文字 Logo -->
-          <div class="topbar-logo">
-            <span class="topbar-logo-text">{{ t('app.brand') }}</span>
-          </div>
-        </div>
-
-        <div class="topbar-right">
-          <div class="stat-badge stat-badge-blue">
-            <IconPark icon="mdi:book-open-variant" width="12" height="12" />
-            <span>{{ t('app.nav.skills.label') }}</span>
-            <strong>{{ stats.skills }}</strong>
-          </div>
-          <div class="stat-badge stat-badge-violet">
-            <IconPark icon="mdi:folder-multiple-outline" width="12" height="12" />
-            <span>{{ t('app.nav.projects.label') }}</span>
-            <strong>{{ stats.projects }}</strong>
-          </div>
-          <div class="stat-badge stat-badge-emerald">
-            <IconPark icon="mdi:tools" width="12" height="12" />
-            <span>{{ t('app.toolsLabel') }}</span>
-            <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
-          </div>
-        </div>
-      </header>
+    <!-- 主内容区 - 2026-07-12 改:被 body-row 包住,
+         桌面端 main-content 自身有 64px 左侧 padding 避开 fixed 侧栏;
+         移动端 sidebar 抽屉化,padding-left 不需要。 -->
+    <main
+      :class="[
+        'main-content flex flex-col min-w-0',
+        isMobile ? 'w-full' : 'main-content-desktop',
+      ]"
+    >
 
       <!-- 内容区域 -->
       <div class="content-area">
@@ -328,6 +346,7 @@ onUnmounted(() => {
         <SettingsView v-else-if="tab === 'settings'" />
       </div>
     </main>
+    </div>
 
     <!-- 全局 toast 浮层(右上角) -->
     <ToastContainer />
@@ -335,28 +354,41 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* 应用容器 - 锁定视口高度,内部各自滚动,
-   避免内容多时撑高外层导致 sticky 侧栏跟着滚 */
+/* 应用容器 - 2026-07-12 改:flex 方向改为 column,
+   第一行是 .topbar(横穿全屏),第二行是 .body-row(包 sidebar + main-content)。
+   锁定视口高度,内部各自滚动,避免内容多时撑高外层导致 fixed 侧栏跟着滚。 */
 .app-container {
-  @apply flex h-screen overflow-hidden;
+  @apply flex flex-col h-screen overflow-hidden;
   background: var(--bg);
   color: var(--text);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ============================================
-   侧边栏样式 - 2026-07-11 改:纯图标条 64px
+   body-row 容器 - 包住 sidebar + main-content。
+   桌面端 sidebar 是 fixed,只占位,真正撑开高度的是 main-content。
+   移动端 sidebar 是 fixed 抽屉,只 main-content 占位。
+   ============================================ */
+.body-row {
+  position: relative;
+  width: 100%;
+}
+
+/* ============================================
+   侧边栏样式 - 2026-07-12 改:改为 fixed 定位,顶部 48px(顶栏高度)起。
+   顶栏在 z-20 浮在上方,侧栏 z-40 浮在顶栏之上(确保按钮可点),
+   桌面端宽度仍 64px。
    ============================================ */
 .sidebar {
   width: 64px;
-  flex-shrink: 0;            /* flex 容器里不被压窄,固定宽度 */
-  align-self: stretch;        /* 占满父容器(app-container)高度 */
-  position: sticky;           /* 相对 app-container 锁定,不再跟随内容滚 */
-  top: 0;
-  height: 100vh;
+  flex-shrink: 0;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-sidebar);
   box-shadow: var(--shadow-sidebar);
+  /* 2026-07-12 改:z-index 从 40 降到 35,让 topbar(z=45)横穿
+     屏幕时 logo 文字不会被 sidebar 遮住。sidebar 仍浮在
+     main-content(z=auto)之上,内容正常被压住。 */
+  z-index: 35;
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
@@ -555,30 +587,42 @@ onUnmounted(() => {
    主内容区样式
    ============================================ */
 .main-content {
-  @apply flex-1 flex flex-col min-w-0;
+  @apply flex flex-col min-w-0;
+  flex: 1;                   /* body-row 内的 flex 子项,撑开剩余空间 */
+}
+/* 2026-07-12 改:桌面端 sidebar 是 fixed 不占位,
+   这里主动加 64px 左侧 padding 让 main-content 不被侧栏盖住。 */
+.main-content-desktop {
+  padding-left: 64px;
 }
 
-/* 顶部栏 - 2026-07-11 改:左侧只剩 Logo,右侧只剩 3 个 stat-badge;
-   顶部 tabs 与后端状态/主题/刷新全部迁出。
-   2026-07-11 v8 增:macOS 桌面端额外加 50px 顶部 padding,
-   让 logo 与红绿灯垂直错开(否则侧栏让了 50px,但主内容区 topbar
-   贴屏顶,logo 视觉上被压扁在红绿灯旁边)。
-   2026-07-11 v10 改:去掉 py-2.5 上下留白,topbar 高度由内部内容撑起,
-   让 logo 文字撑满上下,视觉更紧凑。 */
+/* 顶部栏 - 2026-07-12 改:提到 app-container 第一行,横穿整个屏幕宽度。
+   原 .main-content 内部 sticky 改 app-container 顶部 sticky 即可。
+   高度由内容撑起,在 .topbar 上声明 --topbar-h 给 sidebar fixed top 引用,
+   macOS 桌面端用更具体的 .topbar.mac-desktop 选择器把 --topbar-h 改成 98px
+   (48 + 50 让位红绿灯),sidebar 会自动跟着 mac 模式对齐,无需 JS 改值。
+   2026-07-12 改:macOS 桌面端 padding-top 抬 50px 让位红绿灯,
+   移动端(单条)无 macOS 让位,直接贴顶。
+   2026-07-12 改:z-index 从 20 提到 25,确保与 sidebar(z-40)协调 —
+   顶栏在侧栏之下,侧栏按钮/状态点不会被顶栏压住;但视觉上顶栏背景
+   仍然能盖住 sidebar 上方被顶栏覆盖的区域(见 sidebar top 计算)。 */
 .topbar {
   @apply flex items-center justify-between px-5 py-0;
-  min-height: 48px;          /* v10:保底高度,移动端 / 视口矮时不至于挤压 */
+  --topbar-h: 48px;          /* 给 sidebar 的 top 引用 */
+  height: var(--topbar-h);
+  min-height: 48px;
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 45;
+  flex-shrink: 0;
   transition: all 0.3s ease;
 }
 .topbar.mac-desktop {
-  padding-top: 50px;         /* v8:macOS 顶部让位红绿灯 */
-  padding-bottom: 12px;      /* v10:macOS 模式下补一点底 padding,不让 logo 贴底 */
+  --topbar-h: 98px;          /* macOS 模式下顶栏 48 + 50 红绿灯让位 */
+  padding-top: 50px;         /* macOS 顶部让位红绿灯 */
 }
 
 .topbar-left {
@@ -684,9 +728,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-/* 响应式调整 - 移动端:侧栏抽屉 64px,顶栏 logo 文字隐藏,
-   状态组继续在侧栏底部(移动端 viewport 内 nav-item 不一定可见,
-   底部状态组始终可见是合理的)。 */
+/* 响应式调整 - 2026-07-12 改:移动端 sidebar 是抽屉化 fixed,
+   顶栏在 z-25 之上 0~48px 始终可见,移动端 main-content 不需要
+   64px 左侧 padding(抽屉盖住 main-content 但不挡顶栏)。 */
 @media (max-width: 768px) {
   .sidebar {
     width: 64px;
@@ -698,6 +742,9 @@ onUnmounted(() => {
      不需要像之前带图标时那样隐藏) */
   .content-area {
     padding: 16px;
+  }
+  .main-content-desktop {
+    padding-left: 0;
   }
 }
 </style>
