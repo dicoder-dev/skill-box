@@ -468,6 +468,42 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
 
   // ====== 折叠 / 选中 ======
 
+  // 2026-07-12 增:把目标 skill 路径的所有祖先分组从 collapsedPaths 里删除,
+  // 让左侧树"展开到该 skill 可见"。背景:store.load 在非搜索态会默认全
+  // 折叠(load → collapseAllGroups),用户切到其他 tab 再切回 skills 时,
+  // 即使 store 残留 selectedPath,分组还是折叠的,看不到当前选中行,
+  // 看起来像"选中态丢了"。这里在选中态恢复后(以及 selectItem 内)
+  // 调一次,把祖先分组全部展开。
+  // 命中条件:tree 里能找到对应 path 的 skill,且它是叶子节点(非 group)。
+  // 否则不展开(避免误展开)。path 为空或找不到都直接返回,不影响主流程。
+  function expandAncestorsOfPath(skillPath) {
+    if (!skillPath) return
+    // 把 "frontend/react/use-cache" → ["frontend", "frontend/react"]
+    const segs = String(skillPath).split('/').filter(Boolean)
+    if (segs.length < 2) return // 没有分组祖先(直接在根)
+    const ancestors = []
+    for (let i = 1; i < segs.length; i++) {
+      ancestors.push(segs.slice(0, i).join('/'))
+    }
+    // 校验目标 path 在 tree 里确实是 skill 叶子,避免展开错的分组
+    const existsInTree = (nodes, target) => {
+      for (const n of nodes || []) {
+        if (!n.is_group && n.path === target) return true
+        if (n.is_group && n.children && existsInTree(n.children, target)) return true
+      }
+      return false
+    }
+    if (!existsInTree(tree.value, skillPath)) return
+    let changed = false
+    for (const p of ancestors) {
+      if (collapsedPaths.value.has(p)) {
+        collapsedPaths.value.delete(p)
+        changed = true
+      }
+    }
+    if (changed) collapsedPaths.value = new Set(collapsedPaths.value)
+  }
+
   function toggleCollapse(path) {
     if (collapsedPaths.value.has(path)) {
       collapsedPaths.value.delete(path)
@@ -518,6 +554,9 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     toggleCollapse, setSelected, clearSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
     // 2026-07-10 增:折叠/展开所有分组的批量操作
     collapseAllGroups,
+    // 2026-07-12 增:把指定 skill 路径的所有祖先分组展开,配合 selectedPath
+    // 跨 tab 持久化,保证回到 skills tab 时当前选中的 skill 在左侧树里可见。
+    expandAncestorsOfPath,
     // helpers(供外部乐观更新)
     removeSkillByPath, removeGroupByPath, moveSkillInTree,
     // 2026-07-08 增:首页默认打开第一个技能 — 根下首个 skill 叶子,fallback 到首个 group 内的首个 skill

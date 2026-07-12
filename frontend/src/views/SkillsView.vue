@@ -323,12 +323,15 @@ async function reload() {
     // 2026-07-09 增:消费 MarketView 留下的"待选 skill name"。
     // 时序:MarketView 装好 → setPendingSelectName + 切 tab → 本视图 mount + reload。
     // 必须在 load 完之后再消费,因为要在 flatItems 里查得到。
+    // 2026-07-12 改:同样在 selectItem 前调 expandAncestorsOfPath 展开分组,
+    // 否则 MarketView 跳过来后分组折叠导致用户看不到选中行。
     const pendingName = skillTree.consumePendingSelectName()
     if (pendingName) {
       const target = skillTree.flatItems.find(
         (it) => it.name === pendingName || it.path === pendingName
       )
       if (target) {
+        skillTree.expandAncestorsOfPath(target.path || target.name)
         await selectItem(target)
       } else {
         // 找不到(同名但 path 不同?极端情况)就清掉,避免污染下次
@@ -342,12 +345,16 @@ async function reload() {
     // selectedPath 找回原 row(用户回到原 skill 继续看 / 编辑),找不到
     // 才 fallback 到根目录下第一个 skill。
     // 与 pendingSelectName 同时存在时,pending 优先(MarketView 主动跳转语义更强)。
+    // 2026-07-12 改:恢复选中前先 expandAncestorsOfPath 把祖先分组展开,
+    // 否则 store.load 默认全折叠的策略会让树上看不到当前选中行,详情区
+    // 右侧仍高亮但左侧看起来"丢失选中态"(分组折叠导致行不可见)。
     if (!keyword.value && !pendingName) {
       const remembered = skillTree.selectedPath
       if (remembered) {
         const hit = skillTree.flatItems.find((it) => it.path === remembered)
           || skillTree.flatItems.find((it) => it.name === remembered)
         if (hit) {
+          skillTree.expandAncestorsOfPath(hit.path || hit.name)
           await selectItem(hit)
           return
         }
@@ -357,8 +364,12 @@ async function reload() {
         skillTree.clearSelected()
       }
       // 兜底:首次进入 / 持久化值失效 / 搜索态 → 自动选第一个
+      // 2026-07-12 增:同样展开祖先分组,避免首页首次进入时选中态不可见
       const first = skillTree.findFirstSelectableNode()
-      if (first) await selectItem(first)
+      if (first) {
+        skillTree.expandAncestorsOfPath(first.path || first.name)
+        await selectItem(first)
+      }
     }
   } catch (e) {
     error.value = e?.message || String(e)
