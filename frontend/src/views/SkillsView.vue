@@ -787,7 +787,12 @@ async function submit() {
     scope: draft.scope, project_id: draft.project_id,
     name: draft.name, version: draft.version,
     source: 'local',
-    manifest: { name: draft.name, version: draft.version, description: draft.description, triggers },
+    manifest: {
+      name: draft.name, version: draft.version, description: draft.description,
+      // 2026-07-12 改:触发词可选,空数组不写入 manifest,避免后端 RenderSkillMD
+      // 产出空的 `triggers: []` 行;改用展开运算符按需附加。
+      ...(triggers.length ? { triggers } : {}),
+    },
     files: [{ path: 'SKILL.md', content: buildSkillMd() }],
   }
   try {
@@ -1775,9 +1780,9 @@ onUnmounted(() => {
               </button>
             </template>
           </template>
-          <!-- 2026-07-07 改:右上角 5 个图标操作搬到这里,跟 [i] 信息按钮同一栏,
-               顺序 [测试 | 标签 | 在文件夹打开 | 删除 | AI] 在 [i] 左侧依次排列。
-               数据流向不变,@click / :data-tip / :disabled 都保留原语义。 -->
+          <!-- 2026-07-12 改:顶栏 actions 只保留"测试" + "AI",把"标签/在文件夹打开/删除"3 个图标
+               从工具栏移除(用户反馈用不到,移到右键菜单或 list 行操作里更合适)。
+               原 5 个按钮 → 现 2 个,空 class 注释同步更新。 -->
           <template #actions>
             <button
               class="icon-btn"
@@ -1788,30 +1793,6 @@ onUnmounted(() => {
             >
               <span v-if="testing" class="spinner spinner-sm"></span>
               <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
-            </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipTag')"
-              :aria-label="t('skills.list.tooltipTag')"
-              @click="openTagDialog"
-            >
-              <IconPark icon="mdi:tag-outline" width="15" height="15" />
-            </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipOpenFolder')"
-              :aria-label="t('skills.list.tooltipOpenFolder')"
-              @click="openInFolder"
-            >
-              <IconPark icon="mdi:folder-outline" width="15" height="15" />
-            </button>
-            <button
-              class="icon-btn"
-              :data-tip="t('skills.list.tooltipDelete')"
-              :aria-label="t('skills.list.tooltipDelete')"
-              @click="removeCurrent"
-            >
-              <IconPark icon="mdi:delete" width="15" height="15" />
             </button>
             <button
               class="icon-btn ai-btn"
@@ -2053,9 +2034,19 @@ onUnmounted(() => {
         </div>
 
         <div class="editor-field-full">
-          <label>{{ t('skills.editor.triggers') }} <small>({{ t('skills.editor.triggersHint') }})</small></label>
+          <label>
+            {{ t('skills.editor.triggers') }}
+            <small>({{ t('skills.editor.triggersHint') }})</small>
+            <!-- 2026-07-12 增:触发词改为可选,label 加 "(可选)" 角标 -->
+            <span class="editor-field-optional">{{ t('skills.editor.triggersOptional') }}</span>
+          </label>
           <!-- 2026-07-10 改:触发词从逗号分隔 textarea 改成动态列表(每行一个 input + 删除按钮) -->
           <div class="trigger-list">
+            <!-- 2026-07-12 增:空数组时显示虚线占位 -->
+            <div v-if="!draft.triggers.length" class="trigger-empty">
+              <IconPark icon="mdi:lightbulb-on-outline" width="14" height="14" />
+              <span>{{ t('skills.editor.triggersEmptyHint') }}</span>
+            </div>
             <div
               v-for="(_, idx) in draft.triggers"
               :key="`trg-${idx}`"
@@ -3535,6 +3526,31 @@ onUnmounted(() => {
    描述/触发词的 textarea(.desc-editor / .triggers-editor)已经用 height 精确锁了
    1/2 行行高,这条全局 min-height 不能再把它们拉高 */
 .editor-field-full > textarea:not(.desc-editor):not(.triggers-editor) { min-height: 100px; }
+
+/* 2026-07-12 增:触发词可选角标(描述/触发词 label 内的灰色 pill) */
+.editor-field-optional {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+}
+/* 2026-07-12 增:触发词空态占位(虚线框 + 灯泡 + 提示文案) */
+.trigger-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-faint);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
 
 /* 2026-06-26 新增:作用域开关(全局/项目) */
 .scope-toggle-row {

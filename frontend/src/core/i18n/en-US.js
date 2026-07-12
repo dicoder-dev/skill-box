@@ -107,6 +107,9 @@ const messages = {
       triggers: 'Triggers',
       triggersHint: 'comma-separated',
       triggersHintPlaceholder: 'review pr, code review',
+      // 2026-07-12 new: triggers are now optional; label badge + empty hint
+      triggersOptional: 'optional',
+      triggersEmptyHint: 'no triggers set — skill will not auto-fire on keywords',
       body: 'Body (Markdown, frontmatter auto-merged)',
       // 2026-06-26 new: scope refactor + apply tools
       scopeGlobal: 'Global',

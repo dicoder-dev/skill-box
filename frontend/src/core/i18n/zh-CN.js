@@ -105,6 +105,9 @@ const messages = {
       triggers: '触发词',
       triggersHint: '用逗号分隔',
       triggersHintPlaceholder: 'review pr, code review',
+      // 2026-07-12 增:触发词改为可选,label 注明"可选"、列表为空时给占位提示
+      triggersOptional: '可选',
+      triggersEmptyHint: '未填写触发词,skill 不会按关键词自动触发',
       body: '正文 (Markdown,frontmatter 会自动拼)',
       // 2026-06-26 新增:作用域区改造 + 适用工具
       scopeGlobal: '全局',
