@@ -177,6 +177,14 @@ export function getStoreInfo() {
  * 切换 skill 的「全局 Agent」状态。
  * 2026-07-12 增:对应后端 POST /api/skillbox/skills/global-agent/toggle。
  *
+ * 入参:
+ *   name       - skill name(必填)
+ *   version    - skill version(可选)
+ *   group_path - skill 在 store 内的分组相对路径(2026-07-12 增:支持多级分组;
+ *                旧版不传,后端 store.Load(name) 只能命中根下直接子目录,
+ *                分组下的 skill 必报 ErrNotFound)
+ *   enabled    - true=开启镜像, false=删除目录
+ *
  * enabled=true  → 后端把当前 skill 镜像写到 ~/.agents/skills/<name>/
  *                 (镜像目录会被 buildTreeNode 实时 detect → 左侧卡片自动出"全局 Agent"tag)
  * enabled=false → 后端删除 ~/.agents/skills/<name>/ 整个目录
@@ -185,10 +193,11 @@ export function getStoreInfo() {
  * 数据流向: 不需 reload 列表;store.ListTree 是实时检测,前端只要
  * dispatch skillbox:scope-refresh 触发 SkillsView 重新拉列表即可。
  */
-export function toggleGlobalAgent({ name, version = '', enabled }) {
+export function toggleGlobalAgent({ name, version = '', group_path = '', enabled }) {
   return http.post('/api/skillbox/skills/global-agent/toggle', {
     name,
     version,
+    group_path,
     enabled: !!enabled,
   })
 }

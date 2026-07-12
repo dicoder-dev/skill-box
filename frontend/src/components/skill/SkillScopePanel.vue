@@ -298,6 +298,10 @@ async function onToggleGlobalAgentClick() {
     await toggleGlobalAgent({
       name: sk.name,
       version: sk.version || '',
+      // 2026-07-12 增:多级分组支持 —— 老代码只传 name,后端 store.Load(name)
+      // 只命中根下直接子目录,分组下的 skill 必报 ErrNotFound。
+      // 现在走 group_path + name,跟 store.LoadByPath 对齐。
+      group_path: sk.group_path || '',
       enabled: next,
     })
     isGlobalAgent.value = next

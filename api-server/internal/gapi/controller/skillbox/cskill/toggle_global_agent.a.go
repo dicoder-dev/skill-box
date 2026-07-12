@@ -29,13 +29,17 @@ import (
 //   左侧 skill 卡片 tag 与本面板 tag 自动同步。
 //
 // 入参:
-//   name    - skill name(必填;SKILL.md manifest.name,跟目录名一致)
-//   version - skill version(可选,只用于日志)
-//   enabled - true=开启镜像, false=删除目录
+//   name       - skill name(必填;SKILL.md manifest.name,跟目录名一致)
+//   version    - skill version(可选,只用于日志)
+//   group_path - skill 在 store 内的分组相对路径(2026-07-12 增:支持多级分组;
+//                旧版只用 name 走 store.Load 只能命中根下直接子目录,
+//                像 "frontend/react/use-cache" 这类嵌套 skill 必然 404)
+//   enabled    - true=开启镜像, false=删除目录
 type RequestToggleGlobalAgent struct {
-	Name    string `json:"name" form:"name"`
-	Version string `json:"version" form:"version"`
-	Enabled bool   `json:"enabled" form:"enabled"`
+	Name      string `json:"name" form:"name"`
+	Version   string `json:"version" form:"version"`
+	GroupPath string `json:"group_path" form:"group_path"`
+	Enabled   bool   `json:"enabled" form:"enabled"`
 }
 
 // RespondToggleGlobalAgent 响应。
@@ -93,13 +97,20 @@ func ToggleGlobalAgent(c *ginp.ContextPlus, req *RequestToggleGlobalAgent) {
 	}
 
 	// 开启:从 store 读 canonical,把所有 file 镜像写盘。
-	canonical, lerr := store.Load(name)
+	// 2026-07-12 改:用 LoadByPath 支持多级分组 —— 旧版 store.Load(name) 只
+	// 命中根下直接子目录,分组下的 skill(例如 "frontend/react/use-cache")
+	// 100% 报 ErrNotFound。
+	canonical, lerr := store.LoadByPath(req.GroupPath, name)
 	if lerr != nil {
 		if errors.Is(lerr, skillstore.ErrNotFound) {
-			c.JSON(404, gin.H{"error": "skill not found in store: " + name})
+			c.JSON(404, gin.H{
+				"error":      "skill not found in store: " + req.GroupPath + "/" + name,
+				"group_path": req.GroupPath,
+				"name":       name,
+			})
 			return
 		}
-		logger.Error("toggle-global-agent: load %s failed: %v", name, lerr)
+		logger.Error("toggle-global-agent: load %s/%s failed: %v", req.GroupPath, name, lerr)
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return
 	}
