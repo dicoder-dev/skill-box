@@ -21,7 +21,7 @@ import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skil
 // 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
 // (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
-import AIPanel from '@/components/AIPanel.vue'
+import AIDialog from '@/components/AIDialog.vue'
 import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
@@ -1821,8 +1821,9 @@ onUnmounted(() => {
       <!-- 空状态(没 current 时显示) -->
     </section>
 
-    <!-- AI 侧栏 -->
-    <AIPanel v-if="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
+    <!-- AI 全局弹窗(替代旧 AIPanel 嵌入侧栏)。
+         双绑 aiOpen,工具栏的 AI 按钮 toggle 后即可弹出。 -->
+    <AIDialog v-model="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
 
     <!-- 2026-07-04 改:文件浏览器改成正文右侧内联面板(不再用抽屉),挂载点已合并到 detail-body-split 里。 -->
     <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->

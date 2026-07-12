@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onUnmounted, watch, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
+import AISettingsPanel from '@/components/AISettingsPanel.vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
 import { setLocale, getLocale } from '@/core/i18n'
@@ -389,6 +390,9 @@ function onWindowTabChange(e) {
         <span style="white-space: pre-line">{{ applyModeHint }}</span>
       </div>
     </section>
+
+    <!-- 2026-07-12 增:AI 模型配置(独立 card,可见即可用,不分 Web / 桌面端) -->
+    <AISettingsPanel />
 
     <!-- 桌面端设置 -->
     <section v-if="isDesktop" class="card">

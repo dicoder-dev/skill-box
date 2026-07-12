@@ -57,6 +57,7 @@ const messages = {
     none: '—',
     dash: '—',
     confirm: '确认',
+    loading: '加载中…',
     // 2026-07-01 改:去 1000 上限后 total 数字不代表全网真数,误导。
     // 改为只显示"第 X / Y 页",Y 是 totalPages 由 size 推算出来(可能 = 实际页数 / ctx 超时后是个偏小的估计)。
     pageOf: '第 {page} / {total} 页 · 共 {count} 条',
@@ -346,6 +347,53 @@ const messages = {
       stop: '停止',
       noExtraInput: '(无额外输入,只基于上下文)',
       errorTag: '[错误] {msg}',
+
+      // 2026-07-12 增:AI 操作弹窗(全局,与下方 aiDialog.* 共享)。AIPanel 仍可能在用,
+      // aiDialog.* 是新弹窗专用 key。
+    },
+
+    // 2026-07-12 增:AI 弹窗(全局独立弹窗,替代旧 AIPanel 嵌入)。
+    aiDialog: {
+      title: 'AI 操作',
+      subtitle: '基于大模型的常用工具',
+      btnOpen: 'AI',
+      actionsTitle: '请选择一个操作',
+      actions: {
+        translate: '翻译 Skill',
+        translateDesc: '把当前技能全文翻译为目标语言',
+        optimize: '优化 Frontmatter',
+        optimizeDesc: '改写 name / description / triggers',
+        comingSoon: '敬请期待',
+      },
+      // translate 子面板
+      translate: {
+        title: '翻译 Skill',
+        desc: '调用 AI 把当前技能的 SKILL.md 翻译到目标语言,保留 frontmatter 字段名与代码块。',
+        targetLang: '目标语言',
+        promptLabel: '给模型的原始提示词',
+        promptHint: '系统会自动拼上"当前 Skill 全文"作为上下文,这里填你要补充的额外要求',
+        promptDefault: '请将下面的 SKILL.md 翻译到目标语言:',
+        submit: '开始翻译',
+        submitting: '翻译中…',
+        stop: '停止',
+        resultTitle: '翻译结果',
+        copyResult: '复制结果',
+        applyToEditor: '应用到编辑器',
+        applied: '已应用到编辑器',
+        noContext: '(当前没有选中技能,无法获取 SKILL.md)',
+      },
+      langs: {
+        'zh-CN': '简体中文',
+        'zh-TW': '繁體中文',
+        'en-US': 'English',
+        'ja-JP': '日本語',
+        'ko-KR': '한국어',
+        'fr-FR': 'Français',
+        'de-DE': 'Deutsch',
+        'es-ES': 'Español',
+      },
+      providerMissing: '尚未配置 AI 模型,请先到「设置 → AI 模型」里配一个。',
+      providerMissingTitle: '需要先配置 AI 模型',
     },
   },
 
@@ -646,6 +694,38 @@ const messages = {
       languageHint: '切换后立即生效,刷新或下次打开仍会保留',
       langZhCN: '简体中文',
       langEnUS: 'English',
+    },
+
+    // 2026-07-12 增:AI 模型(独立 card,Web / 桌面端均可见)。
+    ai: {
+      title: 'AI 模型',
+      subtitle: '配置大模型用于翻译 / 优化技能等操作',
+      btnNew: '新建',
+      btnTest: '测试连接',
+      btnTestTitle: '用当前配置向模型发起一次最小请求,验证连通性',
+      listEmpty: '还没有配置任何模型,点右上"新建"开始',
+      formNew: '新建模型',
+      formEdit: '编辑模型',
+      fieldName: '名称',
+      fieldNameHint: '唯一标识,英文或中文',
+      fieldKind: '厂商类型',
+      fieldBaseURL: '接口地址',
+      fieldBaseURLHint: '留空走厂商默认;OpenAI 兼容型必须填',
+      fieldModel: '模型名',
+      fieldModelHint: '如 gpt-4o-mini / claude-3-5-sonnet / deepseek-chat',
+      fieldApiKey: 'API Key',
+      fieldApiKeyHint: '填入并保存到本地配置',
+      fieldApiKeyEditHint: '留空 = 不修改;填入则覆盖',
+      fieldPriority: '优先级',
+      fieldEnabled: '启用',
+      hasKey: '已配 Key',
+      noKey: '未配 Key',
+      badgeDisabled: '已停用',
+      confirmDelete: '确定删除模型「{name}」?',
+      errLoad: '加载失败:{msg}',
+      errSave: '保存失败:{msg}',
+      errDelete: '删除失败:{msg}',
+      testOk: '测试成功',
     },
 
     desktop: {

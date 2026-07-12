@@ -41,6 +41,20 @@ export function listPresets() {
 }
 
 /**
+ * 探测 provider 是否能跑通。
+ * 入参不写盘:只用做一次性握手检查。
+ *
+ * @param {object} payload
+ *   { provider_id?, name?, kind?, base_url?, model?, api_key? }
+ *   - 给了 provider_id: 用 ai_providers 表里的元数据 + settings 已存 key
+ *   - 否则:用裸参数(表单未保存时也能测)
+ * @returns {Promise<{ok: boolean, message: string, sample?: string, latency_ms: number}>}
+ */
+export function testConnection(payload) {
+  return http.post('/api/skillbox/ai/test', payload)
+}
+
+/**
  * 解析 SSE 流的工具:逐行读 chunks,以 \n\n 分帧。
  * 每个回调拿到一个 data 字符串(去掉 "data: " 前缀);DONE 标记触达时返回。
  *
