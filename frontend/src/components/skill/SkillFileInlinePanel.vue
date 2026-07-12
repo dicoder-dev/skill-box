@@ -459,6 +459,18 @@ function parseFrontmatter(text) {
 }
 
 const hasFrontmatter = computed(() => Object.keys(frontmatter.value).length > 0)
+// 2026-07-12 增:技能简介 — 详情区顶部技能名下方那行灰色小字。
+// 数据来源:props.skill.canonical.manifest.description(后端 store 在
+// getSkill 时把 manifest 挂在 canonical.manifest 上);fallback 到
+// currentMeta.description(预留路径,正常情况下前者已覆盖)。trim 后空串
+// 就当无 description,模板里 v-if 不渲染那一行,避免出现孤立的占位。
+const skillDescription = computed(() => {
+  const sk = props.skill || {}
+  const desc = sk?.canonical?.manifest?.description
+    || sk?.description
+    || ''
+  return String(desc || '').trim()
+})
 const fmOpen = ref(false)
 // 2026-07-10 改:openFrontmatter 现在只读 — 弹窗是"信息"按钮(原"班级按钮"),只展示
 // frontmatter 内容(走回原只读表格)。"编辑"按钮(铅笔)改触发 editFmOpen 表单弹窗。
@@ -1104,22 +1116,23 @@ async function submitRenameFolder() {
   renameFolderBusy.value = true
   try {
     // 把所有 <oldDir>/ 前缀的 file.path 改成 <newDir>/
-    // 2026-07-12 改:同步过滤 .skillbox-placeholder 占位条目 —
-    // 重命名后这些条目要么 prefix 命中变成 <newDir>/.skillbox-placeholder
-    // 继续往后端传,要么 .slice 算错路径。直接在 map 前剔掉最稳,
-    // 也避免后端 Save 把它写到磁盘(虽然后端 Save 也加了过滤,这是双保险)。
+    // 2026-07-12 改:不再 filter 删占位条目 — 上一版的 filter 会把 cc/.skillbox-placeholder
+    // 整条删掉,后端 Save 是全量覆盖式,占位条目一删磁盘上的 cc 目录就永久
+    // 消失(用户报告"重命名 cc→dd 后两个都没了")。这里改成保留占位条目
+    // 走 prefix 替换 — cc/.skillbox-placeholder → dd/.skillbox-placeholder,
+    // 后端 Save 把它转成 mkdir cc/ + mkdir dd/(在 aa/ 下),cc 旧目录会被
+    // RemoveAll 清掉、dd 新目录由 MkdirAll 建出,两个空目录都保留。
     const oldPrefix = renameFolderOldPath.value + '/'
-    const next = (props.files || [])
-      .filter((f) => f && f.path && !f.path.split('/').pop().startsWith('.skillbox-placeholder'))
-      .map((f) => {
-        if (f.path === renameFolderOldPath.value) {
-          return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
-        }
-        if (f.path.startsWith(oldPrefix)) {
-          return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
-        }
-        return f
-      })
+    const next = (props.files || []).map((f) => {
+      if (!f || !f.path) return f
+      if (f.path === renameFolderOldPath.value) {
+        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+      }
+      if (f.path.startsWith(oldPrefix)) {
+        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+      }
+      return f
+    })
     await persistFiles(next)
     renameFolderOpen.value = false
     toast.success(`已重命名为「${newName}」`)
@@ -1202,14 +1215,12 @@ async function submitDeleteFile() {
 // 复用现有 saveCurrent 的链路,只是不重渲 SKILL.md(本组件不维护 manifest)。
 async function persistFiles(files) {
   const sk = props.skill || {}
-  // 2026-07-12 改:送往后端前剥掉 .skillbox-placeholder 占位条目。
-  // 这些是空目录标识(后端 loadFromDir.listEmptyDirs 注入),只在内存里
-  // 用于 buildTree 建空目录,落到磁盘用户会看到"目录里默认有个文件"。
-  // 后端 Save 也有同名过滤,这里再剥一次是双保险(任何前端直传 updateSkill
-  // 的路径都生效,不会漏改某条新调用点)。
-  const stripped = (files || []).filter(
-    (f) => f && f.path && !f.path.split('/').pop().startsWith('.skillbox-placeholder')
-  )
+  // 2026-07-12 改:不再剥 .skillbox-placeholder 占位条目 — 这些条目是
+  // 空目录标识,后端 Save 会用它们 mkdir 对应的空目录(2026-07-12 改
+  // store.Save 处理)。剥了之后磁盘上空目录永久丢失 — 用户报告"重命名
+  // 空目录后连旧目录都没了"就是因为这个 filter + 后端全量覆盖 Save
+  // 双重作用。
+  const stripped = files || []
   await updateSkill({
     scope: sk.scope || 'global',
     project_id: sk.project_id || 0,
@@ -1311,7 +1322,15 @@ defineExpose({
     <header class="sfip-header">
       <div class="sfip-title-block">
         <IconPark icon="FileCabinet" width="16" height="16" />
-        <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+        <!-- 2026-07-12 改:把名称 + 简介竖向堆在一列里,放在 .sfip-title-block
+             横排中的"名称位"。.sfip-title-stack 自身是 flex column,
+             .sfip-name 仍负责显示 name + version,新增 .sfip-desc 显示
+             简介(灰色 12px,只在 skillDescription 非空时渲染)。
+             这样不影响 .sfip-header 整体横向布局,.sfip-actions 仍然靠右。 -->
+        <div class="sfip-title-stack">
+          <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+          <span v-if="skillDescription" class="sfip-desc" :title="skillDescription">{{ skillDescription }}</span>
+        </div>
         <span v-if="skill?.source" :class="['badge', skill.source === 'market' ? 'blue' : 'gray']">{{ skill.source }}</span>
         <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
         <span class="sfip-name-actions">
@@ -1862,6 +1881,30 @@ defineExpose({
   color: var(--text-faint);
   font-weight: 400;
   margin-left: 2px;
+}
+/* 2026-07-12 增:名称 + 简介的竖向堆叠容器。display:flex column 让简介
+   紧贴名称下方,不占用额外的横向空间,跟 .sfip-title-block 横排其它元素
+   (badge / count / name-actions)共存。 */
+.sfip-title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 2px;
+}
+/* 2026-07-12 增:技能简介小字,放在 .sfip-name 正下方一行。
+   灰色(--text-faint)+ 12px,留 -webkit-line-clamp:2 避免超长换行撑爆顶栏;
+   title 给完整内容(用户悬停看全)。 */
+.sfip-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  max-width: 100%;
 }
 .sfip-count {
   color: var(--text-faint);
