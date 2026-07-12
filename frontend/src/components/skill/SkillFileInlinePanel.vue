@@ -1322,17 +1322,22 @@ defineExpose({
     <header class="sfip-header">
       <div class="sfip-title-block">
         <IconPark icon="FileCabinet" width="16" height="16" />
-        <!-- 2026-07-12 改:把名称 + 简介竖向堆在一列里,放在 .sfip-title-block
-             横排中的"名称位"。.sfip-title-stack 自身是 flex column,
-             .sfip-name 仍负责显示 name + version,新增 .sfip-desc 显示
-             简介(灰色 12px,只在 skillDescription 非空时渲染)。
-             这样不影响 .sfip-header 整体横向布局,.sfip-actions 仍然靠右。 -->
+        <!-- 2026-07-12 改:把名称行(name + version + 文件数徽标 + 简介)竖向堆在
+             .sfip-title-stack 里。
+             - .sfip-name-row:name + version + 文件数徽标 同一行横向排列
+             - .sfip-desc:简介单独下一行(灰色 12px,只在 skillDescription 非空时渲染)
+             把 count 紧跟 name 是为了视觉上"标题行 → 简介行"层级清晰,
+             而不是把 count 甩到 desc 末端(那个版本用户反馈不对)。
+             .sfip-title-stack 整体仍占据 .sfip-title-block 横排中的"名称位",
+             不影响 .sfip-header 横向布局,.sfip-actions 仍 margin-left:auto 靠右。 -->
         <div class="sfip-title-stack">
-          <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+          <div class="sfip-name-row">
+            <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+            <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
+          </div>
           <span v-if="skillDescription" class="sfip-desc" :title="skillDescription">{{ skillDescription }}</span>
         </div>
         <span v-if="skill?.source" :class="['badge', skill.source === 'market' ? 'blue' : 'gray']">{{ skill.source }}</span>
-        <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
         <span class="sfip-name-actions">
           <slot name="name-actions" />
         </span>
@@ -1883,14 +1888,21 @@ defineExpose({
   margin-left: 2px;
 }
 /* 2026-07-12 增:名称 + 简介的竖向堆叠容器。display:flex column 让简介
-   紧贴名称下方,不占用额外的横向空间,跟 .sfip-title-block 横排其它元素
-   (badge / count / name-actions)共存。 */
+   紧贴名称行下方。min-width:0 防止 name-row 的 count 把 stack 撑到右侧。 */
 .sfip-title-stack {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
   gap: 2px;
+}
+/* 2026-07-12 增:名称行(name + version + count 徽标),flex row + baseline 对齐,
+   让 14px 的 name + 11px 的 count 徽标基线对齐,而不是中间对齐(垂直更协调)。 */
+.sfip-name-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 /* 2026-07-12 增:技能简介小字,放在 .sfip-name 正下方一行。
    灰色(--text-faint)+ 12px,留 -webkit-line-clamp:2 避免超长换行撑爆顶栏;
