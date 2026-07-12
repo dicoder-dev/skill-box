@@ -80,6 +80,10 @@ const LABEL_RENAME_FOLDER_PROMPT = '重命名文件夹'
 const LABEL_DELETE_FILE_PROMPT = '删除文件'
 const LABEL_DELETE_FILE_CONFIRM = '确定要删除 "{name}" 吗?此操作无法撤销。'
 
+// 2026-07-12 增:触发词改为可选(对应"可选 + 空态"两个文案)
+const LABEL_TRIGGERS_OPTIONAL = '可选'
+const LABEL_TRIGGERS_EMPTY_HINT = '未填写触发词,skill 不会按关键词自动触发'
+
 const toast = useToastStore()
 
 const props = defineProps({
@@ -644,7 +648,9 @@ async function saveFrontmatterForm() {
           name,
           version,
           description: desc,
-          triggers,
+          // 2026-07-12 改:触发词可选,空数组不写入 manifest,避免后端 RenderSkillMD
+          // 产出空的 `triggers: []` 行;改用展开运算符按需附加。
+          ...(triggers.length ? { triggers } : {}),
           author: fmDict.author || '',
           license: fmDict.license || '',
         },
@@ -684,7 +690,8 @@ async function saveFrontmatterForm() {
           name,
           version,
           description: desc,
-          triggers,
+          // 2026-07-12 改:触发词可选,空数组不写入 manifest。
+          ...(triggers.length ? { triggers } : {}),
           author: fmDict.author || '',
           license: fmDict.license || '',
         },
@@ -1422,11 +1429,9 @@ defineExpose({
             <span class="sfip-name">{{ skill?.name || '' }}</span>
             <span v-if="skillVersion" class="sfip-version">@{{ skillVersion }}</span>
             <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
-            <!-- 2026-07-12 改:badge 显示版本号(灰色);数据走 skillVersion computed
-                 多层兜底(canonical.manifest.version → row.version → row.skill_meta.version),
-                 避免版本号丢失时回退显示 source = LOCAL。 -->
-            <span v-if="skillVersion" class="badge gray sfip-version-badge">v{{ skillVersion }}</span>
-            <span v-else-if="skill?.source" class="badge gray">{{ skill.source }}</span>
+            <!-- 2026-07-12 改:badge 之前显示 v{version} 跟 @version 重复;用户反馈
+                 "版本号重复显示了,编辑前面的版本号就要显示了",去掉 v{version} badge。
+                 留 name-actions 编辑按钮组,无中间 badge 占位,标题行更紧凑。 -->
             <span class="sfip-name-actions">
               <slot name="name-actions" />
             </span>
@@ -1677,8 +1682,15 @@ defineExpose({
             <label class="sfip-fm-label">
               triggers
               <span class="sfip-fm-label-hint">触发词(列表)</span>
+              <!-- 2026-07-12 改:触发词改为可选,label 加 "(可选)" 角标 -->
+              <span class="sfip-fm-label-badge">{{ LABEL_TRIGGERS_OPTIONAL }}</span>
             </label>
             <div class="sfip-fm-triggers-list">
+              <!-- 2026-07-12 增:触发词为可选,空数组时显示一行虚线占位文案 -->
+              <div v-if="!fmForm.triggers.length" class="sfip-fm-trigger-empty">
+                <IconPark icon="mdi:lightbulb-on-outline" width="14" height="14" />
+                <span>{{ LABEL_TRIGGERS_EMPTY_HINT }}</span>
+              </div>
               <div
                 v-for="(_, idx) in fmForm.triggers"
                 :key="`trg-${idx}`"
@@ -2287,6 +2299,17 @@ defineExpose({
   color: var(--text-faint);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+/* 2026-07-12 增:触发词可选角标(仿照 description "必填" 红色) */
+.sfip-fm-label-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
 .sfip-fm-input,
 .sfip-fm-textarea {
   font-size: 13px;
@@ -2328,6 +2351,21 @@ defineExpose({
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
+}
+/* 2026-07-12 增:触发词空态占位(虚线 hint + 提示文案) */
+.sfip-fm-trigger-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+.sfip-fm-trigger-empty span {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .sfip-fm-trigger-row {
   display: flex;
