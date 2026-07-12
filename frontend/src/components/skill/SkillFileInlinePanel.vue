@@ -1332,7 +1332,12 @@ defineExpose({
              不影响 .sfip-header 横向布局,.sfip-actions 仍 margin-left:auto 靠右。 -->
         <div class="sfip-title-stack">
           <div class="sfip-name-row">
-            <span class="sfip-name">{{ skill?.name || '' }}<span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span></span>
+            <!-- 2026-07-12 改:把 version (v1) 从 .sfip-name 内部抽出来,
+                 跟 name + count 同一横排显示。这样视觉上是
+                 "title + version + count files",不把 version 甩到下一行
+                 的描述开头,避免看起来"版本混在描述里"。 -->
+            <span class="sfip-name">{{ skill?.name || '' }}</span>
+            <span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span>
             <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
           </div>
           <span v-if="skillDescription" class="sfip-desc" :title="skillDescription">{{ skillDescription }}</span>
