@@ -14,7 +14,9 @@ const messages = {
     // 同时把主题切换文案挪到 i18n(供侧栏底部 tooltip 使用)。
     // 2026-07-11 v11 改:大写 'SKILL-BOX' + 字体本身 letter-spacing 拉开,
     // 配合 weight 800 + 渐变 + 微高光呈现品牌级艺术感。
-    brand: 'SKILL-BOX',
+    // 2026-07-12 改:首字母大写 'SkillBox',去掉横杠;保留 weight 800 +
+    // 渐变 + 微高光,但 letter-spacing 收紧回 0.5px(无全大写不需要拉宽)。
+    brand: 'SkillBox',
     closeSidebar: '关闭侧栏',
     openSidebar: '打开侧栏',
     nav: {

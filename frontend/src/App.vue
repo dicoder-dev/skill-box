@@ -611,12 +611,13 @@ onUnmounted(() => {
   /* 2026-07-11 v10:字号 15→20,加粗到 700,作为主要视觉锚点
      2026-07-11 v11:艺术感强化 — Inter weight 800 + letter-spacing 2px 拉开
      (i18n 已配 'SKILL-BOX' 大写,text-transform:uppercase 双保险)+ 主色渐变
-     + -webkit-background-clip:text + 微 text-shadow 形成「刻印」质感。 */
+     + -webkit-background-clip:text + 微 text-shadow 形成「刻印」质感。
+     2026-07-12 v12:回归 'SkillBox' 首字母大写,去掉横杠;删 text-transform,
+     letter-spacing 收紧回 0.5px;其他艺术感(weight 800 / 渐变 / 微高光)保留。 */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: 2px;
-  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;

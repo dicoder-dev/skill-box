@@ -16,7 +16,9 @@ const messages = {
     // sidebar footer tooltip can consume it.
     // 2026-07-11 v11 changed: uppercase 'SKILL-BOX' + tracking for a
     // editorial brand-grade logo (Inter weight 800 + gradient + glow).
-    brand: 'SKILL-BOX',
+    // 2026-07-12 changed: 'SkillBox' (sentence case, no hyphen);
+    // letter-spacing tightened to 0.5px since we are no longer uppercase.
+    brand: 'SkillBox',
     closeSidebar: 'Close sidebar',
     openSidebar: 'Open sidebar',
     nav: {
