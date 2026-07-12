@@ -630,6 +630,10 @@ onUnmounted(() => {
 .topbar.mac-desktop {
   padding-left: 80px;        /* macOS 左侧让位红绿灯水平位置(0~80px) */
 }
+.topbar.mac-desktop .topbar-logo-text {
+  margin-top: 6px;          /* 把 logo 视觉中心下移,对齐红绿灯圆心(~25px) */
+  margin-left: 12px;        /* logo 离红绿灯远一点,避免视觉粘连 */
+}
 
 .topbar-left {
   @apply flex items-center gap-3 min-w-0 flex-1;
@@ -663,11 +667,16 @@ onUnmounted(() => {
      (i18n 已配 'SKILL-BOX' 大写,text-transform:uppercase 双保险)+ 主色渐变
      + -webkit-background-clip:text + 微 text-shadow 形成「刻印」质感。
      2026-07-12 v12:回归 'SkillBox' 首字母大写,去掉横杠;删 text-transform,
-     letter-spacing 收紧回 0.5px;其他艺术感(weight 800 / 渐变 / 微高光)保留。 */
+     letter-spacing 收紧回 0.5px;其他艺术感(weight 800 / 渐变 / 微高光)保留。
+     2026-07-12 v13 改:macOS 桌面端让 logo 文字与红绿灯水平对齐 —
+     红绿灯圆心在 0~50px 区域垂直中心(~25px),logo 文字 22px 行高,
+     加 margin-top: 6px 让文字视觉中心下移对齐红绿灯圆心;
+     margin-left: 12px 让 logo 离红绿灯远一点(图里挨太近)。 */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.5px;
+  line-height: 1;              /* 锁住行高,让 margin-top 精准控制位置 */
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;
