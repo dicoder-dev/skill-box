@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
@@ -246,4 +247,156 @@ func validKind(k string) bool {
 		}
 	}
 	return false
+}
+
+// TestParams 单次测试请求体(可以指 provider_id 用已存的,或直接传裸 kind/base_url/model/api_key)。
+//
+// 设计原因:
+//   - 设置界面:用户在表单里改完想"先试一下能不能通"再保存 —— api key 此时还没落盘
+//   - 列表页:用户想验证已存 provider 的 key 没失效
+// 两类用法合并为一个 controller,避免 controller 数量膨胀。
+type TestParams struct {
+	// ProviderID 非空 = 用 ai_providers 表里的元数据(name/kind/base_url/model)+ settings 里的 api_key
+	ProviderID uint
+	// 或者以下裸参数(优先于 ProviderID),方便"还没保存就试一下"
+	Name    string
+	Kind    string
+	BaseURL string
+	Model   string
+	APIKey  string
+}
+
+// TestResult 测试结果。
+type TestResult struct {
+	OK        bool   `json:"ok"`
+	Message   string `json:"message"`          // 失败原因 或 成功说明
+	Sample    string `json:"sample,omitempty"` // 成功时截取前 80 字片段作为回执
+	LatencyMS int64  `json:"latency_ms"`       // 端到端耗时(不含本次本身)
+}
+
+// TestConnection 探测 provider 是否真的能跑通。
+//
+// 行为:
+//   - kind 不合法 / API key 空 → 立即返 ok=false + 清晰错误
+//   - 用最小 prompt + max_tokens=8 探测,只要拿到任意 chunk 就视为"成功"
+//   - 30s 兜底超时,防止 provider 卡死拖死 controller
+//   - 拿到 provider 真实错误原文(状态码 + body)原样回传,设置界面直接展示
+func (s *Service) TestConnection(p TestParams) (*TestResult, error) {
+	// 1) 解析最终参数:ProviderID 优先拉库里的,否则用裸参数
+	cfg := aiengine.Config{}
+	apiKey := p.APIKey
+	if p.ProviderID != 0 {
+		row, err := s.model().FindOneById(p.ProviderID)
+		if err != nil {
+			return nil, fmt.Errorf("ai: provider %d not found: %w", p.ProviderID, ErrNotFound)
+		}
+		cfg.Kind = strings.ToLower(strings.TrimSpace(row.Kind))
+		cfg.BaseURL = row.BaseURL
+		cfg.Model = row.Model
+		if apiKey == "" {
+			v, _, gerr := s.settings.Get(apiKeyPrefix + row.Name + ":api_key")
+			if gerr == nil {
+				apiKey = v
+			}
+		}
+	}
+	if p.Kind != "" {
+		cfg.Kind = strings.ToLower(strings.TrimSpace(p.Kind))
+	}
+	if p.BaseURL != "" {
+		cfg.BaseURL = p.BaseURL
+	}
+	if p.Model != "" {
+		cfg.Model = p.Model
+	}
+
+	// 2) 基础校验
+	if !validKind(cfg.Kind) {
+		return &TestResult{OK: false, Message: fmt.Sprintf("未知的 provider kind: %q(仅支持 %v)", cfg.Kind, aiengine.AllKinds)}, nil
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		return &TestResult{OK: false, Message: "API Key 为空,请先在表单填写或保存后再试"}, nil
+	}
+	if cfg.Model == "" {
+		cfg.Model = defaultTestModel(cfg.Kind)
+	}
+
+	// 3) 构造 provider
+	prov, err := s.manager.BuildFromConfig(cfg)
+	if err != nil {
+		return &TestResult{OK: false, Message: err.Error()}, nil
+	}
+
+	// 4) 探测:发一条极短 user prompt,只关心能不能拿到任意 chunk
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	mt := 8
+	req := aiengine.ChatRequest{
+		Model:     cfg.Model,
+		Messages:  []aiengine.Message{{Role: aiengine.RoleUser, Content: "hi"}},
+		MaxTokens: &mt,
+	}
+	ch := make(chan aiengine.StreamEvent, 8)
+	start := time.Now()
+	go func() { _ = prov.Chat(ctx, req, strings.TrimSpace(apiKey), ch) }()
+
+	var (
+		sample strings.Builder
+		gotAny bool
+		gotErr string
+	)
+	for {
+		// 先做超时兜底:30s 内没收到任何东西或 provider 卡死
+		select {
+		case <-ctx.Done():
+			return &TestResult{OK: false, Message: fmt.Sprintf("30s 超时未回应: %v", ctx.Err()), LatencyMS: time.Since(start).Milliseconds()}, nil
+		case ev, ok := <-ch:
+			if !ok {
+				// channel 关闭 = provider 自己收了尾
+				if gotErr != "" {
+					return &TestResult{OK: false, Message: gotErr, LatencyMS: time.Since(start).Milliseconds()}, nil
+				}
+				if gotAny {
+					return &TestResult{OK: true, Message: "测试成功", Sample: truncate(sample.String(), 80), LatencyMS: time.Since(start).Milliseconds()}, nil
+				}
+				return &TestResult{OK: false, Message: "provider 已关闭 stream,但没有任何事件(dial 成功但未给出内容)", LatencyMS: time.Since(start).Milliseconds()}, nil
+			}
+			switch ev.Kind {
+			case "chunk":
+				gotAny = true
+				if sample.Len() < 80 {
+					sample.WriteString(ev.Text)
+				}
+			case "error":
+				gotErr = ev.Err
+			case "done":
+				if gotErr != "" {
+					return &TestResult{OK: false, Message: gotErr, LatencyMS: time.Since(start).Milliseconds()}, nil
+				}
+				if gotAny {
+					return &TestResult{OK: true, Message: "测试成功", Sample: truncate(sample.String(), 80), LatencyMS: time.Since(start).Milliseconds()}, nil
+				}
+			}
+		}
+	}
+}
+
+// defaultTestModel 给没填 model 的探测兜底(各 kind 用主流默认)。
+func defaultTestModel(kind string) string {
+	switch kind {
+	case aiengine.KindAnthropic:
+		return "claude-3-5-sonnet-20241022"
+	case aiengine.KindOpenAICom:
+		return "deepseek-chat"
+	default:
+		return "gpt-4o-mini"
+	}
+}
+
+// truncate 简单按字节截(不算严谨,展示给用户看足够)。
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

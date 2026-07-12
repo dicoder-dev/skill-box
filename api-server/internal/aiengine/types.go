@@ -139,6 +139,25 @@ var AllPresets = []Preset{
 			"Output: list of findings, each with severity (low/med/high) and a one-line fix.",
 		UserTemplate: "Skill to audit:\n\n```markdown\n{skill_md}\n```",
 	},
+	{
+		// ID: translate_skill — 前端「翻译 Skill」操作专用。
+		// 设计要点:
+		//   - target_lang 占位符由前端渲染时填入,允许任意 ISO/自然语言名
+		//     ("English" / "ja" / "简体中文" 都行,让 LLM 自决)
+		//   - system 强制:frontmatter 字段保持原文 + 代码块不译 + 仅输出翻译后正文
+		//   - 上限交给模型默认 max_tokens;测试发现 4k 对单 skill 已远超够用
+		ID:          "translate_skill",
+		Title:       "翻译 Skill",
+		Description: "把当前 Skill 内容翻译到目标语言,保留 frontmatter 字段名与代码块",
+		System: "You are a translation assistant for Claude / Codex skill packages. " +
+			"Translate the SKILL.md body into the target language while: " +
+			"(1) keeping the YAML frontmatter field names (name / description / version) unchanged; " +
+			"(2) translating the frontmatter 'description' value if it is prose; " +
+			"(3) NOT translating anything inside fenced code blocks (``` ... ```); " +
+			"(4) preserving the original markdown structure (headings, lists, links); " +
+			"(5) outputting ONLY the translated markdown without any extra explanation or chatty prefix.",
+		UserTemplate: "Target language: {target_lang}\n\nHere is the SKILL.md to translate:\n\n```markdown\n{skill_md}\n```\n\nOutput the translated version now:",
+	},
 }
 
 // RenderPreset 把 Preset + 用户参数合成为 Messages 列表。
