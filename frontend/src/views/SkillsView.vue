@@ -336,11 +336,27 @@ async function reload() {
       }
       return // 优先显示用户指定 skill,不再走下面"自动选第一个"
     }
-    // 2026-07-08 增:首次进入 / 搜索结果刷新时,若尚未选中任何 skill 且非搜索态,
-    // 自动选中根目录下第一个 skill,fallback 到首个 group 内的首个 skill;
-    // store 内部已包含"找不到则返回 null"的语义,此时详情区空状态会提示用户新建。
-    // 搜索态不自动选(用户输入关键字时预期是搜索结果列表,自动跳详情反而打扰)。
-    if (!selectedKey.value && !skillTree.selectedPath && !keyword.value) {
+    // 2026-07-12 改:跨 tab 持久化的选中态优先恢复。
+    // 切 tab 时 SkillsView 整体 unmount,组件级 selectedKey / current 全丢;
+    // 重 mount + reload 时先尝试用 store 里残留 + localStorage 持久化的
+    // selectedPath 找回原 row(用户回到原 skill 继续看 / 编辑),找不到
+    // 才 fallback 到根目录下第一个 skill。
+    // 与 pendingSelectName 同时存在时,pending 优先(MarketView 主动跳转语义更强)。
+    if (!keyword.value && !pendingName) {
+      const remembered = skillTree.selectedPath
+      if (remembered) {
+        const hit = skillTree.flatItems.find((it) => it.path === remembered)
+          || skillTree.flatItems.find((it) => it.name === remembered)
+        if (hit) {
+          await selectItem(hit)
+          return
+        }
+        // 持久化的 path 在新列表里不存在(用户把那个 skill 删了 / 移走),
+        // 清掉持久化值,落到下面的"自动选第一个"分支兜底,
+        // 避免下次 mount 又拿这个无效 path 反复找。
+        skillTree.clearSelected()
+      }
+      // 兜底:首次进入 / 持久化值失效 / 搜索态 → 自动选第一个
       const first = skillTree.findFirstSelectableNode()
       if (first) await selectItem(first)
     }
@@ -378,9 +394,18 @@ async function loadCurrent(row) {
     currentBody.value = extractBody(md)
     currentMeta.description = c.description || ''
     currentMeta.triggers = c.triggers || []
-    // 2026-06-29 改:在 row 上回填后端给的 path(可能规范化过) + 写回 store 选中态
+    // 2026-07-12 改:回填 version 给 row,否则传给 InlinePanel 的
+    // props.skill.version 是 undefined,详情区顶部 badge 显示不了版本号
+    // (回退到 source = LOCAL)。row 自带 skill_meta.version,但展开 row
+    // 时 version 在根级没拷贝,这里从 full.version 显式补。
     const finalPath = full?.path || row.path || row.name
-    const enriched = { ...row, _full: full, path: finalPath, group_path: full?.group_path || row.group_path }
+    const enriched = {
+      ...row,
+      _full: full,
+      path: finalPath,
+      group_path: full?.group_path || row.group_path,
+      version: full?.version || row?.skill_meta?.version || row?.version || '',
+    }
     current.value = enriched
     skillTree.setSelected(finalPath)
     // 同步拉一次 tag 列表,让详情区"标签"chip 有数据
@@ -906,6 +931,10 @@ async function confirmDelete() {
       if (editing.value) cancelInlineEdit()
       current.value = null
       selectedKey.value = null
+      // 2026-07-12 增:同步清掉 store 里的选中态(含 localStorage 持久化值),
+      // 否则下一次 mount + reload 仍会用旧 path 去 flatItems 里找,虽然
+      // 找不到会走兜底,但频繁删 / mount 仍会留脏数据,显式清更稳。
+      skillTree.clearSelected()
       // 同步工具目录
       if (cascade) {
         const r = await cleanupToolDirs(target.name, target.version)

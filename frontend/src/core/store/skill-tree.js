@@ -52,6 +52,36 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   // 解决:MarketView 装好跳 skills tab 时,SkillsView 可能还没 mount,
   // 事件就丢了。这里存个"待选清单",SkillsView mount 后 + list 加载完时检查一次。
   const pendingSelectName = ref('')
+
+  // 2026-07-12 增:选中态跨 tab 持久化。
+  // 原 selectedPath 是 pinia 的内存 ref,切 tab 时 SkillsView 整体
+  // unmount → 销毁(组件级 selectedKey / current 一起没)→ 回到
+  // skills tab 时走到 reload 的"自动选第一个"分支,而不是恢复用户
+  // 上次选中的 skill。这里把最后一次有效选中 path 同步写一份到
+  // localStorage,SkillsView 重新 mount + reload 时优先按这个 path
+  // 找回 row,失败再 fallback 到自动选第一个。
+  // key 加 storeId 前缀,未来如果引入多 store 不串数据;
+  // 失败静默(无痕模式 / 存储满)不阻断 UI。
+  const STORAGE_KEY = 'skillbox:skill-tree:last-selected-path'
+  function readPersistedSelected() {
+    try {
+      return localStorage.getItem(STORAGE_KEY) || ''
+    } catch (_) {
+      return ''
+    }
+  }
+  function writePersistedSelected(path) {
+    try {
+      if (path) localStorage.setItem(STORAGE_KEY, path)
+      else localStorage.removeItem(STORAGE_KEY)
+    } catch (_) { /* 静默失败:无痕模式 / 存储满都不阻断 UI */ }
+  }
+  // 初始化时从 localStorage 恢复一次,确保 store 重新创建(pinia 热重载、
+  // 浏览器刷新)后第一次读 selectedPath 就有值,而不是空。
+  // 注意:此处写 selectedPath.value 不会触发持久化(下面 setSelected 里
+  // 再写等于双写,直接跳过避免重复 IO)。
+  const _initialLastSelected = readPersistedSelected()
+  if (_initialLastSelected) selectedPath.value = _initialLastSelected
   const storeRoot = ref('')
   const storeRootLoaded = ref(false)
 
@@ -450,6 +480,16 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
 
   function setSelected(path) {
     selectedPath.value = path || ''
+    // 2026-07-12 增:每次有效选中都同步落盘一次。空值(清空选中)
+    // 也走 removeItem,避免上次选中的 skill 被删后仍残留脏值。
+    writePersistedSelected(selectedPath.value)
+  }
+
+  // 2026-07-12 增:清空选中态(组件级 selectedKey 清空 / 删除当前 skill /
+  // 验证选中失败时调),同步清盘上的持久化值。
+  function clearSelected() {
+    selectedPath.value = ''
+    writePersistedSelected('')
   }
 
   function setDropTarget(path) {
@@ -475,7 +515,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     flatItems, totalSkills,
     // actions
     load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup,
-    toggleCollapse, setSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
+    toggleCollapse, setSelected, clearSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
     // 2026-07-10 增:折叠/展开所有分组的批量操作
     collapseAllGroups,
     // helpers(供外部乐观更新)
