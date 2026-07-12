@@ -897,6 +897,15 @@ function onCtxFolder({ dir, event }) {
       icon: 'mdi:folder-outline',
       onClick: () => openFolderInExplorer(dirPath),
     },
+    { divided: true, key: 'div-2', label: '' },
+    {
+      // 2026-07-12 增:删除文件夹 — 复用现有 deleteFile 弹窗(支持 kind='dir')
+      key: 'delete-folder',
+      label: '删除文件夹',
+      icon: 'mdi:folder-remove-outline',
+      danger: true,
+      onClick: () => openDeleteFolderDialog(dir),
+    },
   ]
   ctxMenu.open = true
 }
