@@ -74,10 +74,32 @@ const LABEL_GLOBAL_AGENT_INFO_TIP = '查看全局 Agent 说明'
 const LABEL_GLOBAL_AGENT_FOLDER_TIP = '在文件浏览器中打开 ~/.agents/skills/'
 
 // 2026-07-12 增:info 弹窗内文案(常量字符串,不依赖 i18n,跟组件其它 LABEL_* 一致)。
+// 2026-07-12 改:联网搜索后改写"适配全局 Agent 的工具"清单为固定值 ——
+// 不要动态过滤 toolsStore(那边字段可能跟用户实际安装的工具不一致,
+// 也覆盖不到未在 store 注册的工具)。固定清单基于公开资料总结:
+//
+//   ✅ 支持 ~/.agents/skills/ 的工具:
+//     - GitHub Copilot(VS Code Agent Skills 文档明确)
+//     - Antigravity(Google,antigravity.google/docs/skills)
+//     - Claude Code(项目级 .agents/skills/ 共享标准)
+//     - Codex CLI(沿用开放标准)
+//     - Qwen Code(已支持 Skills 标准)
+//     - Cursor(项目级 .cursor/skills/,个人级尚未确认 .agents 路径)
+//
+//   ⚠️ 待确认/暂不支持个人级 ~/.agents/skills/ 的工具:
+//     - Claude Code 个人级实际是 ~/.claude/skills/(非 .agents/skills/)
+//     - Trae — 文档未明确支持 .agents 路径
+//     - Cline — 文档未提及 .agents/skills
+//     - Cursor 个人级可能走 ~/.cursor/skills/
+//
+// 写死而不是走 store 过滤,是产品决定的"事实快照",跟后端 resolver 也
+// 解耦(后端只看磁盘 .agents/skills/<name>/SKILL.md 存不存在)。
 const LABEL_INFO_TITLE = '全局 Agent Skill'
-const LABEL_INFO_DESC = '写入 ~/.agents/skills/ 共享池后,所有声明该目录的 AI 工具(Claude Code / Codex / Trae / Cline 等)均可自动读取该 skill。'
-const LABEL_INFO_TOOL_TITLE = '适配全局 Agent 的工具'
-const LABEL_INFO_TOOL_EMPTY = '暂未发现适配全局 Agent 的工具。'
+const LABEL_INFO_DESC = '把 skill 写入 ~/.agents/skills/ 后,所有声明该目录作为个人级 skills 池的 AI 工具都能自动读取(无需复制到每个工具的目录)。'
+const LABEL_INFO_TOOL_TITLE = '适配 ~/.agents/skills/ 的工具(2026-07-12)'
+const LABEL_INFO_TOOL_SUPPORTED = '已支持'
+const LABEL_INFO_TOOL_PARTIAL = '部分支持'
+const LABEL_INFO_TOOL_EMPTY = '暂未发现适配工具。'
 
 const scopeTools = ref([])
 const scopeHits = ref([])
@@ -310,30 +332,81 @@ function onScopeRefresh() {
 
 // 2026-07-12 增:info 弹窗 — 列出"哪些工具适配了 ~/.agents/skills/"。
 //
-// 数据来源:前端 toolsStore(全量工具表,已经在 SkillScopePanel 上方用 findTool
-// 加载过),筛选规则 = 该 tool 的 paths 数组里有任意一项同时满足:
-//   - scope='global'  && category='user'
-//   - path 字符串含 '.agents/skills'(跨平台匹配 / 或 \,走 substring 兜底)
+// 2026-07-12 改:从动态 toolsStore 过滤改为固定清单(用户反馈"目前来说是
+// 固定的")。理由:
+//   - toolsStore 是后端返回的工具元数据表,跟"哪些工具真的支持 .agents/skills
+//     个人级路径"是两回事 —— store 里有的工具不一定支持这条路径,反之亦然
+//   - 联网搜索结果显示当前生态对 ~/.agents/skills/ 的支持矩阵尚未稳定,
+//     走动态过滤会误导用户(显示一堆"已支持"但其实只支持其他路径)
+//   - 固定清单是产品文档级别的"事实快照",跟后端 store 解耦,后续有官方
+//     声明变化时统一改这一个常量即可
 //
-// 不走新加 API,纯粹前端 filter,跟"左侧 TreeNode"看到的 tool 列表同源。
+// 工具对象结构:
+//   - name:    显示名(用 mdi: 字段给 ToolIcon 渲染图标,没图标就 fallback)
+//   - mdi:     mdi icon 名
+//   - status:  'supported' | 'partial' | 'unsupported' 三种状态
+//   - note:    备注(如 "个人级走 ~/.claude/skills/")
+const GLOBAL_AGENT_SUPPORTED_TOOLS = [
+  {
+    name: 'GitHub Copilot',
+    mdi: 'mdi:github',
+    status: 'supported',
+    note: 'VS Code Agent Skills 文档明确支持 ~/.agents/skills/ 个人级',
+  },
+  {
+    name: 'Antigravity',
+    mdi: 'mdi:rocket-launch-outline',
+    status: 'supported',
+    note: 'Google 官方支持(antigravity.google/docs/skills)',
+  },
+  {
+    name: 'Claude Code',
+    mdi: 'mdi:anthropic',
+    status: 'partial',
+    note: '项目级 .agents/skills/ 支持;个人级实际走 ~/.claude/skills/',
+  },
+  {
+    name: 'Codex CLI',
+    mdi: 'mdi:console-line',
+    status: 'supported',
+    note: 'OpenAI CLI 沿用 Agent Skills 开放标准',
+  },
+  {
+    name: 'Qwen Code',
+    mdi: 'mdi:language-python',
+    status: 'supported',
+    note: '阿里 Qwen Code 官方支持 Skills 标准',
+  },
+  {
+    name: 'Cursor',
+    mdi: 'mdi:cursor-default-click-outline',
+    status: 'partial',
+    note: '主要走 ~/.cursor/skills/,个人级 .agents 路径尚未官方文档化',
+  },
+  {
+    name: 'Trae IDE',
+    mdi: 'mdi:application-outline',
+    status: 'unsupported',
+    note: '官方文档未明确支持 ~/.agents/skills/ 个人级路径',
+  },
+  {
+    name: 'Cline',
+    mdi: 'mdi:robot-outline',
+    status: 'unsupported',
+    note: '官方文档未提及 ~/.agents/skills/ 路径',
+  },
+]
 const globalAgentInfoOpen = ref(false)
+// 显示顺序:supported → partial → unsupported;同状态按字母序稳定排序。
 const globalAgentTools = computed(() => {
-  const list = toolsStore.items || []
-  const out = []
-  for (const t of list) {
-    if (!t || !t.tool_id) continue
-    const paths = Array.isArray(t.paths) ? t.paths : []
-    const hit = paths.some((p) => {
-      if (!p) return false
-      const isGlobalUser = p.scope === 'global' && p.category === 'user'
-      const path = String(p.path || '')
-      // 跨平台匹配 ~/.agents/skills / %USERPROFILE%/.agents/skills 等
-      return isGlobalUser && /[\\/]\.agents[\\/]skills\b/.test(path)
-    })
-    if (hit) out.push(t)
-  }
-  // 按 display_name 字母序稳定排序,方便用户对照"哪几个工具配了"
-  out.sort((a, b) => String(a.display_name || a.tool_id).localeCompare(String(b.display_name || b.tool_id)))
+  const out = [...GLOBAL_AGENT_SUPPORTED_TOOLS]
+  const order = { supported: 0, partial: 1, unsupported: 2 }
+  out.sort((a, b) => {
+    const oa = order[a.status] ?? 9
+    const ob = order[b.status] ?? 9
+    if (oa !== ob) return oa - ob
+    return String(a.name).localeCompare(String(b.name))
+  })
   return out
 })
 function openGlobalAgentInfo() {
@@ -610,7 +683,7 @@ onErrorCaptured((err) => {
                实际上这里不是嵌套 — tag 和图标按钮是 div 里的两个并列 button,
                用 stop 是防御性)。
                命中平台:desktop (wails3) 走 platform.fs.reveal 物理打开;
-               Web 端兜底走 platform.platform.openExternal fallback。 -->
+               Web 端兜底走 platform.openExternal fallback。 -->
           <button
             type="button"
             class="ssp-global-agent-icon-btn"
@@ -723,8 +796,9 @@ onErrorCaptured((err) => {
   <!-- 2026-07-12 增:全局 Agent 信息弹窗 — 列出适配 ~/.agents/skills/ 的工具。
        跟 confirm 弹窗分两个独立 Modal 组件实例,各自管理 v-model。内容:
        - 顶部描述(全局 Agent 共享池语义)
-       - 中间"适配工具"标题 + chip 列表(从 toolsStore 拿,实时反映后端配置)
-       - 空态友好提示(没有适配工具时) -->
+       - 中间"适配工具"标题 + 工具列表(固定清单,带状态 chip + 备注)
+       - 状态:supported(绿) / partial(琥珀) / unsupported(灰)
+       - 每行:工具图标 + 名称 + 状态 chip + 备注文字 -->
   <Modal
     v-model="globalAgentInfoOpen"
     size="md"
@@ -737,15 +811,24 @@ onErrorCaptured((err) => {
       <ul v-if="globalAgentTools.length" class="ssp-info-tool-list">
         <li
           v-for="t in globalAgentTools"
-          :key="t.tool_id"
-          class="ssp-info-tool-chip"
+          :key="t.name"
+          :class="['ssp-info-tool-item', `ssp-info-tool-${t.status}`]"
         >
-          <ToolIcon
-            :tool="t"
-            :size="13"
-            class="ssp-info-tool-icon"
-          />
-          <span class="ssp-info-tool-name">{{ t.display_name || t.tool_id }}</span>
+          <IconPark :icon="t.mdi" width="14" height="14" class="ssp-info-tool-icon" />
+          <span class="ssp-info-tool-name">{{ t.name }}</span>
+          <span
+            v-if="t.status === 'supported'"
+            class="ssp-info-tool-badge ssp-info-tool-badge-supported"
+          >{{ LABEL_INFO_TOOL_SUPPORTED }}</span>
+          <span
+            v-else-if="t.status === 'partial'"
+            class="ssp-info-tool-badge ssp-info-tool-badge-partial"
+          >{{ LABEL_INFO_TOOL_PARTIAL }}</span>
+          <span
+            v-else
+            class="ssp-info-tool-badge ssp-info-tool-badge-unsupported"
+          >—</span>
+          <span class="ssp-info-tool-note">{{ t.note }}</span>
         </li>
       </ul>
       <p v-else class="ssp-info-tool-empty">{{ LABEL_INFO_TOOL_EMPTY }}</p>
@@ -1202,28 +1285,73 @@ onErrorCaptured((err) => {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
-.ssp-info-tool-chip {
-  display: inline-flex;
+/* 2026-07-12 改:从 chip 胶囊改成行列表,每行 = 图标 + 名称 + 状态 badge + 备注。
+   理由:chip 胶囊在状态"部分支持/不支持"时无法区分,改成 row 列表让
+   用户能横向对比 + 看备注。flex 布局,icon + name + badge 左对齐,
+   note 占剩余宽度自动换行。 */
+.ssp-info-tool-item {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  background: var(--accent-emerald-bg);
-  border: 1px solid var(--accent-emerald-border);
-  color: var(--accent-emerald);
-  border-radius: 999px;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-size: 12px;
-  font-weight: 500;
+  line-height: 1.5;
+  flex-wrap: wrap;
 }
 .ssp-info-tool-icon {
   flex-shrink: 0;
+  color: var(--text-dim);
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 13px;
-  height: 13px;
+}
+.ssp-info-tool-name {
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+/* 状态 badge:三种颜色对应支持程度
+   - supported: emerald(跟 tag 选中态同色系,统一"全局 Agent"主题)
+   - partial: amber(琥珀,提示"能用但有限制")
+   - unsupported: gray(灰,提示"暂不支持") */
+.ssp-info-tool-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.ssp-info-tool-badge-supported {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  border-color: var(--accent-emerald-border);
+}
+.ssp-info-tool-badge-partial {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.ssp-info-tool-badge-unsupported {
+  background: var(--bg);
+  color: var(--text-faint);
+  border-color: var(--border);
+}
+.ssp-info-tool-note {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  word-break: break-word;
 }
 .ssp-info-tool-empty {
   margin: 0;
