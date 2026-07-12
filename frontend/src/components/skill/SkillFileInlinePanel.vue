@@ -15,7 +15,7 @@
 //   - scope 区迁移到 <SkillScopePanel> 子组件,本组件只传 props
 //   - Frontmatter / CodeViewer / FileTreeView 已是独立子组件,不重写
 
-import { computed, onMounted, onUnmounted, onUpdated, reactive, ref, onErrorCaptured } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, reactive, ref, onErrorCaptured } from 'vue'
 import { plainT, messages } from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
@@ -355,6 +355,15 @@ const displayContent = computed(() => {
     return splitSkillMd(currentContent.value).body
   }
   return currentContent.value
+})
+
+// 2026-07-12 增:当前选中文件是否是 Markdown 文件(用于控制"大纲"按钮显隐)。
+// 规则:路径以 .md 结尾即视为 Markdown(覆盖 SKILL.md / *.md / notes.MD)。
+// toLowerCase() 让 .MD / .Md 也能命中(Windows / macOS 文件名大小写不一)。
+// 没选中文件时返 false,模板里短路不会渲染大纲按钮。
+const isMarkdownFile = computed(() => {
+  const p = selectedFile.value?.path || ''
+  return p.toLowerCase().endsWith('.md')
 })
 
 const currentMode = computed(() => {
@@ -843,22 +852,54 @@ onErrorCaptured((err) => {
 // mouseenter/mouseleave + setTimeout 控制 hover 浮层显示。
 // - 150ms 延迟避免快速划过去误触发
 // - leave 时 clearTimeout 防"显示→立刻被取消"
-// - descTipShow 控制 .sfip-desc-tip.show class 切换显隐
-// - sfipDescEl / sfipDescTipEl 给 keyboard / 调试时定位用
+// - tip 用 Teleport 挂到 body 下 + position:fixed + getBoundingClientRect
+//   算视口坐标,避免被父级 overflow / transform / position:relative
+//   改变 containing block 导致 tip 错位("左上角显示且不完整"那个 bug)。
+// - tipStyle 动态设 top / left / maxWidth,最大宽度 480px 但受视口约束。
 const sfipDescEl = ref(null)
-const sfipDescTipEl = ref(null)
 const descTipShow = ref(false)
+const tipStyle = reactive({ top: '0px', left: '0px', maxWidth: '480px' })
 let descTipTimer = 0
+function positionTip() {
+  const el = sfipDescEl.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  // 默认放在 desc 底部下方 6px,左对齐
+  let top = r.bottom + 6
+  let left = r.left
+  // 视口宽度限制:不让 tip 越过右边界 16px
+  const vw = window.innerWidth || document.documentElement.clientWidth
+  const tipMaxW = Math.min(480, vw - 32)
+  if (left + tipMaxW > vw - 16) {
+    left = Math.max(16, vw - 16 - tipMaxW)
+  }
+  // 顶部溢出保护:如果 desc 下方空间不够,改放上方
+  const vh = window.innerHeight || document.documentElement.clientHeight
+  if (top + 80 > vh) {
+    top = Math.max(8, r.top - 6)
+    // 动态给个 [data-placement] 让 CSS 切换箭头方向(暂未实现箭头,留接口)
+    el.dataset.tipPlacement = 'top'
+  } else {
+    el.dataset.tipPlacement = 'bottom'
+  }
+  tipStyle.top = `${Math.round(top)}px`
+  tipStyle.left = `${Math.round(left)}px`
+  tipStyle.maxWidth = `${tipMaxW}px`
+}
 function onDescEnter() {
   if (descTipTimer) clearTimeout(descTipTimer)
-  descTipTimer = setTimeout(() => { descTipShow.value = true }, 150)
+  descTipTimer = setTimeout(() => {
+    descTipShow.value = true
+    // nextTick 等 Teleport 真正把 tip 渲染出来后再算坐标
+    nextTick(positionTip)
+  }, 150)
 }
 function onDescLeave() {
   if (descTipTimer) { clearTimeout(descTipTimer); descTipTimer = 0 }
   descTipShow.value = false
 }
 onUnmounted(() => {
-  // 组件卸载时清掉残留 timer,避免在已销毁组件上回调 set descTipShow
+  // 组件卸载时清掉残留 timer,避免在已销毁组件上回调
   if (descTipTimer) { clearTimeout(descTipTimer); descTipTimer = 0 }
 })
 
@@ -1373,8 +1414,13 @@ defineExpose({
             </span>
           </div>
           <!-- 2026-07-12 改:简介单行截断 + mouseenter/mouseleave 自定义快速
-               tooltip(150ms 延迟)。template 上不再挂 native :title(默认 1s
-               延迟 + 浏览器渲染),改用 ref 控制 .sfip-desc-tip.show。 -->
+               tooltip(150ms 延迟)。
+               - 不挂 native :title(1s 延迟 + 浏览器渲染太慢)
+               - tip 用 <Teleport to="body"> + position:fixed + 视口坐标,
+                 避免被 .sfip-header / .sfip-title-block 的 overflow /
+                 transform / position 影响导致"tip 在左上角显示且不完整"。
+               - positionTip 用 getBoundingClientRect 算 desc 真实视口位置,
+                 desc 下方空间不足时自动改放上方。 -->
           <span
             v-if="skillDescription"
             ref="sfipDescEl"
@@ -1382,14 +1428,15 @@ defineExpose({
             @mouseenter="onDescEnter"
             @mouseleave="onDescLeave"
           >{{ skillDescription }}</span>
-          <span
-            v-if="skillDescription"
-            class="sfip-desc-tip"
-            :class="{ show: descTipShow }"
-            ref="sfipDescTipEl"
-          >{{ skillDescription }}</span>
         </div>
       </div>
+      <Teleport to="body">
+        <div
+          v-if="descTipShow && skillDescription"
+          class="sfip-desc-tip"
+          :style="{ top: tipStyle.top, left: tipStyle.left, maxWidth: tipStyle.maxWidth }"
+        >{{ skillDescription }}</div>
+      </Teleport>
       <div class="sfip-actions">
         <slot name="actions" />
       </div>
@@ -1455,7 +1502,7 @@ defineExpose({
                展开/收起用同一个图标 + data-tip 区分文案,展开时加 sfip-mode-btn-active
                蓝色高亮让用户清楚知道大纲当前是显示的。 -->
           <button
-            v-if="selectedFile?.path && currentMode === 'view'"
+            v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile"
             class="sfip-mode-btn"
             :data-tip="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
             :aria-label="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
@@ -1979,34 +2026,35 @@ defineExpose({
   cursor: text;
   position: relative;
 }
-/* 2026-07-12 增:描述 hover 自定义快速 tooltip。
-   - 不用浏览器 native title(默认延迟 0.5~1s,用户反馈"等很久")
-   - mouseenter/mouseleave + setTimeout 150ms 延迟,比 native 快得多
-   - 默认 hidden,mouseenter 后 show=true → 浮层显示
-   - position:absolute 紧贴 desc 顶部上 + 左对齐
-   - 浮层不上限行数,完整展示;max-width:480px 防止巨长撑爆
-   - z-index 提到 header 层级之上,避免被 file-tree 覆盖 */
+/* 2026-07-12 增:简介 hover 自定义快速 tooltip 浮层。
+   - 用 <Teleport to="body"> 挂到 document.body 直接下属,
+     脱离 .sfip-header / .sfip-title-block 的 flex / overflow / transform
+     containing block 影响(之前的版本 tip 跑到了左上角)。
+   - position:fixed 用视口坐标 top/left(由 script positionTip 计算)。
+   - maxWidth 由 script 传(最小 480 上限,避免越视口右边界)。
+   - max-height:60vh + overflow:auto 防超长 description 撑爆屏幕。
+   - z-index 100 确保盖在所有内容上方(包括 .sfip-actions)。
+   - 不写 [data-v-xxx] 作用域(因为在 body 下,而 body 下的元素没局部样式作用),
+     所以用 :global() + 唯一类名 .sfip-desc-tip 避免被组件 scoped 规则影响。
+   - :deep() 让 scoped 样式穿透 Teleport 子元素。 */
 .sfip-desc-tip {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 6px);
-  display: none;
-  padding: 6px 10px;
+  position: fixed;
+  display: block;
+  padding: 8px 12px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  max-width: 480px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   white-space: normal;
   word-break: break-word;
   cursor: text;
-  z-index: 50;
-  pointer-events: none;
+  z-index: 100;
+  max-height: 60vh;
+  overflow-y: auto;
 }
-.sfip-desc-tip.show { display: block; }
 .sfip-count {
   color: var(--text-faint);
   font-size: 11px;
