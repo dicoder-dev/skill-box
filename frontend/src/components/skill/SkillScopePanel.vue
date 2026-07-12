@@ -1053,8 +1053,12 @@ onErrorCaptured((err) => {
   padding: 1px 8px;
   border-radius: 999px;
   background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-faint);
+  /* 2026-07-12 改:未选中态边框用 var(--border) 普通灰边(不要再 transparent,
+     用户反馈"边框要保留"——保留边让 tag 始终像可识别的标签,不被当成 inline
+     文字流走);文字色用 var(--text-dim) 普通灰(不再 --text-faint 置灰,
+     让 tag 视觉权重跟其它 pill 同档)。 */
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
@@ -1065,7 +1069,8 @@ onErrorCaptured((err) => {
 }
 .ssp-global-agent-tag:hover:not(:disabled) {
   background: var(--bg-hover);
-  color: var(--text-dim);
+  color: var(--text);
+  border-color: var(--text-faint);
 }
 /* 选中态:emerald 三件套 + 字色加深 */
 .ssp-global-agent-tag-active {
