@@ -1917,11 +1917,15 @@ defineExpose({
   margin-left: auto;
 }
 /* 2026-07-12 增:技能简介小字,放在 .sfip-name 正下方一行。
-   灰色(--text-faint)+ 12px,留 -webkit-line-clamp:2 避免超长换行撑爆顶栏;
-   title 给完整内容(用户悬停看全)。 */
+   灰色(--text-faint)+ 12px,-webkit-line-clamp:1 单行截断
+   (避免超长换行撑爆顶栏,描述过长交给 hover title 看全;
+   cursor: help 给视觉反馈,告诉用户鼠标悬停有内容)。
+   text-overflow: ellipsis 需要 inline/inline-block 才能渲染省略号,
+   这里 display:-webkit-box + line-clamp 模式不会自动加 …,所以配合
+   overflow:hidden。 */
 .sfip-desc {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
@@ -1929,6 +1933,7 @@ defineExpose({
   line-height: 1.4;
   color: var(--text-faint);
   max-width: 100%;
+  cursor: help;
 }
 .sfip-count {
   color: var(--text-faint);
