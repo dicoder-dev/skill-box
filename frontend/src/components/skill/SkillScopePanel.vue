@@ -15,7 +15,7 @@ import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
-import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply } from '@/api/skillbox/skills'
+import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 
 const props = defineProps({
@@ -56,6 +56,9 @@ const LABEL_ENABLE = '启用作用域'
 const LABEL_DISABLE = '停用作用域'
 const LABEL_TITLE_ERROR = '作用域加载出错'
 const LABEL_RETRY = '重试'
+// 2026-07-12 增:顶部"全局 Agent" tag 文案常量(跟 TreeNode 卡片上的 tag 一致)。
+const LABEL_GLOBAL_AGENT = '全局 Agent'
+const LABEL_GLOBAL_AGENT_TIP = '同步到 ~/.agents/skills/ 共享池(所有工具均可读取)'
 
 const scopeTools = ref([])
 const scopeHits = ref([])
@@ -197,17 +200,100 @@ function _syncWatch() {
   // 2026-07-07 改 v4:切 skill 必须 reset 折叠态,旧折叠对该 skill 的 tool_id 集合无意义。
   // loadScope 内部根据参数决定是否 reset。
   loadScope({ resetCollapsed: true })
+  // 2026-07-12 增:切 skill 也要重查"全局 Agent"状态,旧 skill 的 is_global_agent
+  // 不能继承到新 skill。同时清掉 toggleLoading(避免新 skill 状态被旧 toggle 的
+  // loading 卡住)。
+  loadGlobalAgentStatus({ reset: true })
 }
 onUpdated(_syncWatch)
+
+// 2026-07-12 增:全局 Agent 状态(顶部 tag 的"选中态"=该 skill 同步到
+// ~/.agents/skills/ 全局目录下)。
+//
+// 数据来源:后端 get_skill 接口返回的 is_global_agent / global_source_path 字段
+// (后端走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
+// SKILL.md 是否存在,跟 buildTreeNode 注入到 TreeNode 的 source_path 是同一个
+// 判定函数 —— 避免出现"列表说不是全局,详情说是全局"的割裂)。
+//
+// 切 skill / 收到 scope-refresh 事件(用户保存了 SKILL.md)时重查;toggle 完
+// 成后立刻用后端返回值覆盖本地状态,无需再发请求。
+const isGlobalAgent = ref(false)
+const globalAgentLoading = ref(false)
+const toggleAgentBusy = ref(false)
+async function loadGlobalAgentStatus({ reset } = {}) {
+  const sk = props.skill
+  if (!sk || !sk.name) {
+    isGlobalAgent.value = false
+    return
+  }
+  // 切 skill 时立刻重置本地状态,避免旧 skill 的全局 Agent tag 在新 skill
+  // 加载完成前闪一下。
+  if (reset) {
+    isGlobalAgent.value = false
+  }
+  globalAgentLoading.value = true
+  try {
+    const r = await getSkill({
+      name: sk.name,
+      version: sk.version || '',
+      path: sk.group_path ? `${sk.group_path}/${sk.name}` : sk.name,
+    })
+    isGlobalAgent.value = !!r?.is_global_agent
+  } catch (_) {
+    // 静默失败:tag 默认 false,不影响主流程
+    isGlobalAgent.value = false
+  } finally {
+    globalAgentLoading.value = false
+  }
+}
+
+async function onToggleGlobalAgentClick() {
+  if (toggleAgentBusy.value) return
+  const sk = props.skill
+  if (!sk || !sk.name) return
+  toggleAgentBusy.value = true
+  const next = !isGlobalAgent.value
+  try {
+    await toggleGlobalAgent({
+      name: sk.name,
+      version: sk.version || '',
+      enabled: next,
+    })
+    isGlobalAgent.value = next
+    // 通知左侧 skill 卡片列表 reload —— store.ListTree 是实时检测
+    // ~/.agents/skills/<name>/ 物理文件,新镜像写盘后下次拉取即可看到 tag。
+    // 走 dispatchEvent('skillbox:scope-refresh') 让 SkillsView / ScopePanel 内部
+    // 各自刷新(loadScope 自己不重查 isGlobalAgent,这里再单独补一次)。
+    window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
+    // 顺便 reload 自身 scope-status(用户可能希望看到工具列表里某些 tool 的
+    // applied_tools 发生变化 — 但其实跟全局 Agent tag 无关,这里保留以防万一)。
+    loadScope()
+    // 再主动重查一次 is_global_agent 后端权威值(写盘后端 store 可能要 stat
+    // 真实路径,跟前端期望严格一致)。
+    await loadGlobalAgentStatus()
+    toast.success(next
+      ? `已同步到 ~/.agents/skills/${sk.name}/`
+      : `已从 ~/.agents/skills/${sk.name}/ 移除`)
+  } catch (e) {
+    toast.error(`切换全局 Agent 失败: ${e?.message || e}`)
+  } finally {
+    toggleAgentBusy.value = false
+  }
+}
 
 function onScopeRefresh() {
   // 2026-07-07 改 v4:外部 scope-refresh(用户保存 SKILL.md / 重拉数据等)
   // 不应该把用户的折叠状态清掉。apply/undo 完成后自己显式调 loadScope() 也是保留态。
   loadScope()
+  // 2026-07-12 增:同步重查全局 Agent 状态,确保用户保存 SKILL.md 后 tag 仍是最新值。
+  loadGlobalAgentStatus()
 }
 
 onMounted(() => {
-  if (props.skill?.name) loadScope({ resetCollapsed: true })
+  if (props.skill?.name) {
+    loadScope({ resetCollapsed: true })
+    loadGlobalAgentStatus({ reset: true })
+  }
   window.addEventListener('skillbox:scope-refresh', onScopeRefresh)
 })
 // 2026-07-08 增:旧版漏 onUnmounted 清理 listener,导致 ScopePanel 实例重建时
@@ -383,6 +469,45 @@ onErrorCaptured((err) => {
       />
     </button>
     <ul v-if="!sectionCollapsed" class="ssp-scope-list">
+      <!-- 2026-07-12 增:作用域区首位"全局 Agent" tag。
+           跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
+           + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
+           SKILL.md),用户点 tag 切换后会立刻刷新工具列表(scope-refresh event)。
+           设计要点:
+             - 永远排在第一个(放在 v-for 上方,跟其他工具互不影响)
+             - 没有展开/折叠(没有 targets 列表)
+             - 选中态由 .ssp-global-agent-active 高亮(绿色,跟 TreeNode 同色系)
+             - 整行可点击切换,spinner 在 toggle 中显示避免重复点击 -->
+      <li class="ssp-scope-group ssp-scope-group-global">
+        <button
+          type="button"
+          :class="['ssp-scope-row ssp-global-agent-row', { 'ssp-global-agent-active': isGlobalAgent }]"
+          :data-tip="LABEL_GLOBAL_AGENT_TIP"
+          :disabled="toggleAgentBusy || globalAgentLoading"
+          @click="onToggleGlobalAgentClick"
+        >
+          <span
+            v-if="toggleAgentBusy"
+            class="ssp-spinner ssp-spinner-xs"
+          ></span>
+          <IconPark
+            v-else
+            icon="mdi:earth"
+            width="13"
+            height="13"
+            class="ssp-global-agent-icon"
+          />
+          <span class="ssp-scope-row-name">{{ LABEL_GLOBAL_AGENT }}</span>
+          <!-- 选中态打勾,跟其它行通过 .ssp-scope-row-count 区分(这里是状态而非数量) -->
+          <IconPark
+            v-if="isGlobalAgent"
+            icon="mdi:check"
+            width="12"
+            height="12"
+            class="ssp-global-agent-check"
+          />
+        </button>
+      </li>
       <li
         v-for="group in (scopeGroupByTool || [])"
         :key="group.tool_id"
@@ -761,6 +886,28 @@ onErrorCaptured((err) => {
 }
 
 /* 2026-07-07 增:自管确认弹窗文案 */
+/* 2026-07-12 增:全局 Agent tag 行样式 — 跟 TreeNode 上的"全局 Agent" tag
+   同色系(绿色 = 全局共享 = ~/.agents/skills/ 共享池),未选中态用普通工具行
+   同款视觉,选中后高亮为绿色(文字 + 图标 + 边框)让用户清楚知道 skill 当前
+   已同步到全局 Agent 池。
+   不展开(没有 chevron 也没有 targets),整行可点击切换状态。 */
+.ssp-global-agent-row {
+  /* 跟普通工具行视觉一致,选中态再叠 .ssp-global-agent-active */
+}
+.ssp-global-agent-icon { color: inherit; flex-shrink: 0; }
+.ssp-global-agent-active {
+  color: #15803d; /* Tailwind green-700,跟 TreeNode .badge-global-agent 同色 */
+  background: rgba(34, 197, 94, 0.08); /* Tailwind green-500/8 浅色背景 */
+}
+.ssp-global-agent-active .ssp-global-agent-icon { color: #16a34a; } /* green-600 */
+.ssp-global-agent-active .ssp-global-agent-check { color: #16a34a; flex-shrink: 0; }
+.ssp-scope-row.ssp-global-agent-row:disabled { opacity: 0.6; cursor: not-allowed; }
+.ssp-scope-group-global {
+  /* 跟普通 group 区分:底部一道细分割线(只在首位出现一次,跟下一个 group 分隔) */
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
 .ssp-confirm-msg {
   margin: 0;
   font-size: 13px;

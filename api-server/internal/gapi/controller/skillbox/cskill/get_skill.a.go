@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
+	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -69,33 +70,43 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 		sourcePath = filepath.Join(sourcePath, filepath.FromSlash(groupPath))
 	}
 	sourcePath = filepath.Join(sourcePath, name)
+	// 2026-07-12 增:实时检测 skill 是否在 ~/.agents/skills/ 全局 Agent 目录下。
+	// 复用 skillstore.resolveGlobalSourcePath(跟 buildTreeNode 用同一函数),
+	// 保证前端"全局 Agent" tag 在 get 和 list 两个接口看到的真值完全一致。
+	// 用 SourcePath != "" 作为 is_global_agent 的判定(空字符串意味着 stat 失败,
+	// 即 ~/.agents/skills/<name>/SKILL.md 不存在)。
+	globalSourcePath := skillstore.ResolveGlobalSourcePath(name)
+	isGlobalAgent := globalSourcePath != ""
 	if req.Full {
 		c.JSON(200, gin.H{
-			"name":        canon.Manifest.Name,
-			"version":     canon.Manifest.Version,
-			"description": canon.Manifest.Description,
-			"triggers":    canon.Manifest.Triggers,
-			"author":      canon.Manifest.Author,
-			"license":     canon.Manifest.License,
-			"depends_on":  canon.Manifest.DependsOn,
-			"source_path": sourcePath,
-			"path":        req.Path,
-			"group_path":  canon.Manifest.GroupPath,
-			"canonical":   canon,
+			"name":           canon.Manifest.Name,
+			"version":        canon.Manifest.Version,
+			"description":    canon.Manifest.Description,
+			"triggers":       canon.Manifest.Triggers,
+			"author":         canon.Manifest.Author,
+			"license":        canon.Manifest.License,
+			"depends_on":     canon.Manifest.DependsOn,
+			"source_path":    sourcePath,
+			"path":           req.Path,
+			"group_path":     canon.Manifest.GroupPath,
+			"canonical":      canon,
+			"is_global_agent": isGlobalAgent,
+			"global_source_path": globalSourcePath,
 		})
 		return
 	}
 	c.JSON(200, gin.H{
-		"name":        canon.Manifest.Name,
-		"version":     canon.Manifest.Version,
-		"description": canon.Manifest.Description,
-		"triggers":    canon.Manifest.Triggers,
-		"author":      canon.Manifest.Author,
-		"license":     canon.Manifest.License,
-		"depends_on":  canon.Manifest.DependsOn,
-		"source_path": sourcePath,
-		"path":        req.Path,
-		"group_path":  canon.Manifest.GroupPath,
+		"name":           canon.Manifest.Name,
+		"version":        canon.Manifest.Version,
+		"description":    canon.Manifest.Description,
+		"triggers":       canon.Manifest.Triggers,
+		"author":         canon.Manifest.Author,
+		"license":        canon.Manifest.License,
+		"depends_on":     canon.Manifest.DependsOn,
+		"source_path":    sourcePath,
+		"path":           req.Path,
+		"group_path":     canon.Manifest.GroupPath,
+		"is_global_agent": isGlobalAgent,
 	})
 }
 

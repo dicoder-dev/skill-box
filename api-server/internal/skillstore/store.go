@@ -100,7 +100,11 @@ func HashFile(content string) string {
 // 2026-06-29 改:支持 groupPath;当 c.Manifest.GroupPath 非空时,skill 写到
 // root/<groupPath>/<name>/。name 走 NormalizeName 规约(不含 '/'),
 // groupPath 由 caller 走 NormalizeGroupName 规约(允许 '/')。
-func (s *Store) Save(c skilladapter.Canonical) error {
+//
+// 2026-07-12 改:deletedPaths 是前端"明确删除"路径列表(相对 skill 根的 rel path),
+// WalkDir 复制阶段命中即跳过 — 让外层 RemoveAll(dir) 真正物理删除这些路径,
+// 避免 "Save 复活了前端已删除的目录" 的 bug。传 nil/空等价于旧版行为(完全向后兼容)。
+func (s *Store) Save(c skilladapter.Canonical, deletedPaths []string) error {
 	if strings.TrimSpace(c.Manifest.Name) == "" {
 		return fmt.Errorf("skillstore: name is empty")
 	}
@@ -203,6 +207,15 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 			if relErr != nil {
 				return nil
 			}
+			// 2026-07-12 增:命中 deletedPaths(精确匹配 / prefix 子树匹配)→ 跳过复制,
+			// 让外层 RemoveAll(dir) 真正物理删除该路径。前端 "删文件夹/删文件"
+			// 会把这个列表带过来;其它入口(普通保存 / 重命名 / 导入)传 nil,行为不变。
+			if isDeletedPath(rel, deletedPaths) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			// 跳过占位文件本身
 			if !d.IsDir() && filepath.Base(srcPath) == ".skillbox-placeholder" {
 				return nil
@@ -242,6 +255,30 @@ func copyFileAtomic(src, dst string) error {
 		return err
 	}
 	return writeFileAtomic(dst, string(content), 0o644)
+}
+
+// isDeletedPath 判断 rel 是否命中 deletedPaths 任一项。
+//
+// 2026-07-12 增:精确匹配 → 命中;prefix 子树匹配(deleted + "/") → 命中整棵子树;
+// 空字符串 / nil 列表 → 一律 false(等价于旧版"不删任何东西",行为完全兼容)。
+func isDeletedPath(rel string, deleted []string) bool {
+	if len(deleted) == 0 {
+		return false
+	}
+	rel = filepath.ToSlash(rel)
+	for _, p := range deleted {
+		if p == "" {
+			continue
+		}
+		p = filepath.ToSlash(strings.TrimRight(p, "/"))
+		if rel == p {
+			return true
+		}
+		if strings.HasPrefix(rel, p+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // Load 读取 canonical skill;不存在返回 (nil, ErrNotFound)。
@@ -1422,6 +1459,16 @@ func (s *Store) lockScope(dir string) (func(), error) {
 //   - 这里只关心"该 skill name 在 .agents/skills/<name> 下是否存在",
 //     简单 stat 即可,不需要遍历 adapter。store 层硬编码 ~/.agents/skills
 //     是 OK 的,因为这就是 skillbox 的"全局 Agent"定义(跟 adapter 无关)。
+
+// ResolveGlobalSourcePath 是 resolveGlobalSourcePath 的导出版本,
+// 供 controller 层(如 cskill.get_skill / cskill.toggle_global_agent)实时检测
+// "skill 是否在 ~/.agents/skills/ 全局目录下"。语义跟 store.buildTreeNode
+// 用的判定完全一致,避免出现"列表接口说不是全局,详情接口说是全局"的割裂。
+//
+// 返回 EvalSymlinks 后的绝对路径,未命中或 stat 失败返空字符串。
+func ResolveGlobalSourcePath(name string) string {
+	return resolveGlobalSourcePath(name)
+}
 
 // resolveGlobalSourcePath 检测 name 对应的 skill 是否在 ~/.agents/skills/ 下。
 // 命中时返回 EvalSymlinks 后的绝对路径,未命中或 stat 失败返回空字符串。

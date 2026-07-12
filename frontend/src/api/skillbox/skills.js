@@ -8,6 +8,7 @@
 //   POST   /api/skillbox/skills/delete
 
 //   GET    /api/skillbox/skills/scope-status?name=&version=
+//   POST   /api/skillbox/skills/global-agent/toggle?name=&enabled=&version=
 
 import { http } from '@/core/utils/requests'
 
@@ -170,4 +171,24 @@ export function renameSkill(payload) {
  */
 export function getStoreInfo() {
   return http.get('/api/skillbox/skills/store-info')
+}
+
+/**
+ * 切换 skill 的「全局 Agent」状态。
+ * 2026-07-12 增:对应后端 POST /api/skillbox/skills/global-agent/toggle。
+ *
+ * enabled=true  → 后端把当前 skill 镜像写到 ~/.agents/skills/<name>/
+ *                 (镜像目录会被 buildTreeNode 实时 detect → 左侧卡片自动出"全局 Agent"tag)
+ * enabled=false → 后端删除 ~/.agents/skills/<name>/ 整个目录
+ *                 (下次 buildTreeNode detect 不到 → 左侧卡片 tag 自动消失)
+ *
+ * 数据流向: 不需 reload 列表;store.ListTree 是实时检测,前端只要
+ * dispatch skillbox:scope-refresh 触发 SkillsView 重新拉列表即可。
+ */
+export function toggleGlobalAgent({ name, version = '', enabled }) {
+  return http.post('/api/skillbox/skills/global-agent/toggle', {
+    name,
+    version,
+    enabled: !!enabled,
+  })
 }
