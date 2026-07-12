@@ -290,22 +290,89 @@ function skillKey(p) {
 
 // AI 输入的上下文 = 当前 skill 的 body
 const currentSkillMd = computed(() => currentBody.value || '')
-function onAIApply(text) {
-  const m = text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)
-  currentBody.value = m ? m[1].trim() : text.trim()
-  // 同时把 frontmatter 部分也同步到 currentMeta(若 AI 给了完整 frontmatter)
-  const fm = text.match(/^---\n([\s\S]*?)\n---/)
-  if (fm) {
-    try {
-      // 极简 frontmatter 解析:description / triggers
-      const block = fm[1]
-      const desc = block.match(/description:\s*(.+)/)?.[1]?.replace(/^["']|["']$/g, '')
-      const trg = block.match(/triggers:\s*\[([^\]]*)\]/)?.[1]
-        ?.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
-      if (desc) currentMeta.description = desc
-      if (trg) currentMeta.triggers = trg
-    } catch (_) { /* 忽略 AI 输出非标准 frontmatter */ }
+
+// 2026-07-12 fix:AI 翻译「应用」按钮触发的事件处理。
+//
+// 之前(2026-07-12 上一版)只把 text 写到 currentBody.value,没有调 updateSkill,
+// 所以磁盘上的 SKILL.md 完全没变 — 用户表现是「点了应用但什么都没发生」。
+//
+// 当前逻辑:
+//   - 弹出 toast(成功 / 失败)
+//   - 调 updateSkill 把 text 作为新 body 写盘
+//   - 同步刷新 currentBody / currentMd / currentMeta.description
+//     (尝试从新 body 第一段非空文本抽一条 description 兜底)
+//   - 触发 'skillbox:skills-refresh' 让其它订阅者(树 / InlinePanel)同步
+//
+// 不强制进入 inline edit 态 — AI 输出已经是「最终内容」,直接落盘更符合用户直觉。
+const aiApplyBusy = ref(false)
+async function onAIApply(text) {
+  if (!current.value) {
+    toast.error('应用失败:当前未选中技能')
+    return
   }
+  const newBody = (text || '').trim()
+  if (!newBody) {
+    toast.error('应用失败:AI 输出为空')
+    return
+  }
+  aiApplyBusy.value = true
+  try {
+    const target = current.value
+    // 从新 body 的前 1-2 段抽一个简短的 description 兜底 —
+    // 若 AI 输出第一行是 H1 标题(常见的 markdown 起手),跳过 H1,
+    // 拿接下来第一段非空文字作为 description(限长 200 字)。
+    const newDescription = extractDescriptionFromBody(newBody)
+
+    await updateSkill({
+      scope: target.scope,
+      project_id: target.project_id,
+      name: target.name,
+      version: target.version,
+      source: target.source || 'local',
+      manifest: {
+        name: target.name,
+        version: target.version,
+        description: newDescription,
+        triggers: currentMeta.triggers || [],
+      },
+      files: [{ path: 'SKILL.md', content: newBody }],
+    })
+    // 落盘后再同步前端状态
+    currentMd.value = newBody
+    currentBody.value = extractBody(newBody)
+    if (newDescription) currentMeta.description = newDescription
+
+    // 触发跨组件刷新(列表 / InlinePanel / tree 等)
+    window.dispatchEvent(new CustomEvent('skillbox:skills-refresh', {
+      detail: { source: 'ai-apply', scope: target.scope, name: target.name },
+    }))
+
+    toast.success(`已应用(已写回 ${target.scope}/${target.name})`)
+  } catch (e) {
+    toast.error(`应用失败:${e?.message || e}`)
+  } finally {
+    aiApplyBusy.value = false
+  }
+}
+
+// 简单抽 description:跳过 H1 标题,拿接下来第一段非空文本(截前 200 字)
+function extractDescriptionFromBody(body) {
+  const lines = (body || '').split(/\r?\n/)
+  let buf = ''
+  let passedH1 = false
+  for (const line of lines) {
+    const t = line.trim()
+    if (!passedH1 && /^#\s+/.test(t)) { passedH1 = true; continue }
+    if (!t) {
+      if (buf) break // 段空行 = 段落结束
+      continue
+    }
+    // 跳过 markdown 标记符号,留纯文本
+    const plain = t.replace(/^#{1,6}\s*/, '').replace(/^[-*+]\s+/, '').replace(/`([^`]+)`/g, '$1')
+    buf += (buf ? ' ' : '') + plain
+    if (buf.length >= 200) break
+  }
+  return buf.slice(0, 200).trim() || ''
 }
 
 // ====== 数据加载 ======

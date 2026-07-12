@@ -370,16 +370,40 @@ const messages = {
         title: '翻译 Skill',
         desc: '调用 AI 把当前技能的 SKILL.md 翻译到目标语言,保留 frontmatter 字段名与代码块。',
         targetLang: '目标语言',
-        promptLabel: '给模型的原始提示词',
-        promptHint: '系统会自动拼上"当前 Skill 全文"作为上下文,这里填你要补充的额外要求',
-        promptDefault: '请将下面的 SKILL.md 翻译到目标语言:',
+        promptLabel: '原始提示词',
+        promptHint: '原始提示词模板;切换目标语言时,里面的 {target_lang} 占位符会自动替换。',
+        promptCopy: '复制提示词',
+        promptCopied: '已复制',
+        // 内置的"原始提示词"模板(含 {target_lang} 占位符,弹窗实时替换 + 显示)。
+        // 这段是「给用户看的预览」 — 真正发给 LLM 的 system prompt 由后端 preset 注入,
+        // 这里展示出来只是让用户对翻译质量心里有数(可点击「复制提示词」拿去别处 debug)。
+        promptTemplate:
+`请把下面的「Claude / Codex Skill」SKILL.md 文档完整翻译成目标语言:{target_lang}。
+
+# 翻译规则(必须严格遵守)
+1. frontmatter 字段名(name / version / description / triggers)保留英文原文,不翻译字段名;
+2. frontmatter 的 description 字段值如果是一段中文描述,翻译成目标语言;
+3. Markdown 中以三个反引号 \`\`\` ... \`\`\` 包起来的代码块、命令、输出例子,**完全不翻译**,原样保留;
+4. Markdown 标题层级、列表、链接、图片、表格结构保留不动,只翻译里面的文字;
+5. 翻译风格:专业、简洁、保持技术写作的语气;不要加注释、不要解释、不要寒暄;
+6. 输出格式:只输出翻译后的完整 SKILL.md 文档,不要任何开场白、不要解释、不要附加段落;
+7. 如果 SKILL.md 是英文写的,description 字段值就是英文的,这种情况也照常翻译 description 字段值。
+
+# 待翻译的 SKILL.md
+\`\`\`markdown
+{skill_md}
+\`\`\`
+
+# 输出(只输出翻译后的 markdown 正文)
+`,
         submit: '开始翻译',
         submitting: '翻译中…',
         stop: '停止',
         resultTitle: '翻译结果',
         copyResult: '复制结果',
-        applyToEditor: '应用到编辑器',
-        applied: '已应用到编辑器',
+        applyToEditor: '应用',
+        applied: '已应用',
+        applyFailed: '应用失败:{msg}',
         noContext: '(当前没有选中技能,无法获取 SKILL.md)',
       },
       langs: {

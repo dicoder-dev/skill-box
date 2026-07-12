@@ -358,16 +358,42 @@ const messages = {
         title: 'Translate Skill',
         desc: 'Translate the current SKILL.md into a target language. Frontmatter field names and code blocks are preserved.',
         targetLang: 'Target language',
-        promptLabel: 'Original prompt sent to the model',
-        promptHint: 'The current SKILL.md body is automatically attached as context. Add any extra instructions here.',
-        promptDefault: 'Translate the following SKILL.md into the target language:',
+        promptLabel: 'Original prompt',
+        promptHint: 'Template with {target_lang} placeholder. Auto-replaced when you change the target language.',
+        promptCopy: 'Copy prompt',
+        promptCopied: 'Copied',
+        // The "original prompt" template is kept in Chinese in both locales on purpose:
+        // The user's target text is the translated skill body (which can be any language),
+        // but the prompt itself stays consistent across locales to make round-trip
+        // debugging and copying the prompt to other tools easier. The actual system
+        // prompt sent to the LLM is injected by the backend preset, this is just a preview.
+        promptTemplate:
+`Translate the following Claude / Codex Skill "SKILL.md" into the target language:{target_lang}.
+
+# Translation rules (strict)
+1. Keep frontmatter field names (name / version / description / triggers) in English — do NOT translate field names.
+2. If the description field value is a Chinese description, translate it into the target language.
+3. Code blocks wrapped in triple backticks \`\`\` ... \`\`\` (commands, expected output, examples) MUST NOT be translated — leave them as-is.
+4. Preserve Markdown structure (headings, lists, links, images, tables). Only translate the human text.
+5. Style: professional, concise, technical-writing tone. No commentary, no preface, no afterword.
+6. Output: ONLY the translated SKILL.md — no preamble, no explanation, no extra paragraphs.
+7. If the source description field is already in English, still translate it if the target language differs from English.
+
+# SKILL.md to translate
+\`\`\`markdown
+{skill_md}
+\`\`\`
+
+# Output (translate-only markdown body)
+`,
         submit: 'Translate',
         submitting: 'Translating…',
         stop: 'Stop',
         resultTitle: 'Translation result',
         copyResult: 'Copy result',
-        applyToEditor: 'Apply to editor',
-        applied: 'Applied to editor',
+        applyToEditor: 'Apply',
+        applied: 'Applied',
+        applyFailed: 'Apply failed: {msg}',
         noContext: '(No skill is selected, SKILL.md unavailable)',
       },
       langs: {

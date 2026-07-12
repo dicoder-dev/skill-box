@@ -11,12 +11,16 @@
 //   - 两栏 step 切换:
 //     step 1 = action list
 //     step 2 = 单个 action 的输入 + 输出(流式渲染 + 复制 + 应用到编辑器)
-//   - "应用到编辑器":通过 emit apply 把翻译结果回传 SkillsView,
-//     由 SkillsView 接住并写回到当前 skill 的 SKILL.md
+//   - 「应用」按钮:emit apply 把翻译结果回传 SkillsView,
+//     父级直接调 updateSkill 落盘到 SKILL.md(2026-07-12 之前仅改 ref,
+//     apply 不生效,根因是 onAIApply 没调 updateSkill)。
 //
 // 后端协议:
 //   - 流式 chat: fetch /api/skillbox/ai/chat(SSE)
 //   - 复用 ai.js 的 chatStream 客户端,带 abort
+//   - 翻译的实际 system prompt 由后端 aiengine types.go 里的 translate_skill
+//     preset 注入,前端这里的 raw prompt 文本仅作「预览 + 复制」用途
+//     (用户可拿去别的工具跑,后端不受影响)
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Modal from '@/components/Modal.vue'
@@ -68,12 +72,12 @@ const activeView = ref('list') // 'list' | 'translate'
 
 // === 翻译子面板状态 ===
 const targetLang = ref('en-US')
-const extraPrompt = ref('') // 用户在原始 prompt 上加的额外要求
 const translateBusy = ref(false)
 const translateResult = ref('')
 const translateErr = ref('')
 const translateAbort = ref(null)
 const translateAppliedHint = ref(false)
+const promptCopied = ref(false)
 
 const langOptions = computed(() => {
   // 动态取 i18n 文件里 aiDialog.langs 的所有 key(value/title 都从 i18n 拿)
@@ -83,11 +87,17 @@ const langOptions = computed(() => {
 
 const effectiveProviderName = computed(() => providers.value[0]?.name || '')
 
+// 用户视角的"原始提示词" — 把内置模板里的 {target_lang} 替换成用户选的语种。
+// 这只是显示给用户看(以及「复制提示词」按钮用),真正发给 LLM 的 system prompt
+// 由后端 preset 控制,不受这里的内容影响。模板里 {skill_md} 不替换,
+// 留着让用户知道"skill 全文会自动拼到那里"。
 const effectivePromptText = computed(() => {
-  // 显示给用户的"原始提示词"。系统预设始终展示,额外说明贴附在末尾。
-  const base = t('skills.aiDialog.translate.promptDefault')
-  const extras = extraPrompt.value.trim()
-  return extras ? `${base} ${extras}` : base
+  const tmpl = t('skills.aiDialog.translate.promptTemplate')
+  return tmpl.replace(/\{target_lang\}/g, () => {
+    // 用 langOptions 取 label 让预览更顺眼
+    const opt = langOptions.value.find((l) => l.value === targetLang.value)
+    return opt?.label || targetLang.value
+  })
 })
 
 function resetTranslate() {
@@ -97,6 +107,7 @@ function resetTranslate() {
   translateResult.value = ''
   translateErr.value = ''
   translateAppliedHint.value = false
+  promptCopied.value = false
 }
 
 function startTranslate() {
@@ -105,22 +116,19 @@ function startTranslate() {
   translateErr.value = ''
   translateAppliedHint.value = false
 
-  const systemExtra = extraPrompt.value.trim()
   let skillMd = props.contextText || ''
-  // 把 frontmatter 单独留个回执提示,避免截断缺失
   if (!skillMd) {
     translateBusy.value = false
     translateErr.value = t('skills.aiDialog.translate.noContext')
     return
   }
 
-  // 用 preset 走 chat 接口;preset_id 由后端识别为 translate_skill
-  // 把 extra 拼到 skill_md 头部,让 LLM 一起看到
+  // 走 preset 协议:preset_id 由后端识别为 translate_skill。
+  // 关键:vars 只把 target_lang + skill_md 发过去,system prompt 由后端注入。
+  // 这样前端这里改模板文案不会影响实际 LLM 行为,避免两边漂移。
   const mergedVars = {
     target_lang: targetLang.value,
-    skill_md: systemExtra
-      ? `<!-- extra instructions: ${systemExtra} -->\n\n${skillMd}`
-      : skillMd,
+    skill_md,
   }
 
   let pendingBuf = ''
@@ -154,6 +162,17 @@ function stopTranslate() {
 function copyResult() {
   if (!translateResult.value) return
   navigator.clipboard?.writeText(translateResult.value).catch(() => {})
+}
+
+async function copyPromptTemplate() {
+  if (!effectivePromptText.value) return
+  // 复制时把 {skill_md} 占位符保留(让用户拿去别处粘贴时知道这里会自动拼上下文)
+  const text = effectivePromptText.value
+  try {
+    await navigator.clipboard?.writeText(text)
+    promptCopied.value = true
+    setTimeout(() => (promptCopied.value = false), 1500)
+  } catch (_) {}
 }
 
 function applyToEditor() {
@@ -224,13 +243,17 @@ function applyToEditor() {
       </div>
 
       <label class="full-row">
-        <span>{{ t('skills.aiDialog.translate.promptLabel') }}</span>
-        <textarea
-          v-model="extraPrompt"
-          rows="4"
-          :placeholder="t('skills.aiDialog.translate.promptHint')"
-        />
-        <span class="hint-mute">{{ effectivePromptText }}</span>
+        <span class="row-between">
+          <span>{{ t('skills.aiDialog.translate.promptLabel') }}</span>
+          <button class="link-btn" @click="copyPromptTemplate">
+            <IconPark :icon="promptCopied ? 'mdi:check' : 'mdi:content-copy'" width="12" height="12" />
+            {{ promptCopied
+                ? t('skills.aiDialog.translate.promptCopied')
+                : t('skills.aiDialog.translate.promptCopy') }}
+          </button>
+        </span>
+        <pre class="prompt-preview">{{ effectivePromptText }}</pre>
+        <span class="hint-mute">{{ t('skills.aiDialog.translate.promptHint') }}</span>
       </label>
 
       <div v-if="translateErr" class="hint-box error-hint">
@@ -356,6 +379,39 @@ label.full-row, .ai-translate label {
   font-size: 12.5px;
 }
 label.full-row > span, .ai-translate label > span { color: var(--text-dim); }
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--primary);
+  transition: color 0.15s ease;
+}
+.link-btn:hover { color: var(--primary-hover); }
+.prompt-preview {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
 .ai-translate select,
 .ai-translate textarea {
   padding: 6px 10px;
