@@ -603,11 +603,14 @@ onUnmounted(() => {
    (48 + 50 让位红绿灯),sidebar 会自动跟着 mac 模式对齐,无需 JS 改值。
    2026-07-12 改:macOS 桌面端 padding-top 抬 50px 让位红绿灯,
    移动端(单条)无 macOS 让位,直接贴顶。
-   2026-07-12 改:z-index 从 20 提到 25,确保与 sidebar(z-40)协调 —
-   顶栏在侧栏之下,侧栏按钮/状态点不会被顶栏压住;但视觉上顶栏背景
-   仍然能盖住 sidebar 上方被顶栏覆盖的区域(见 sidebar top 计算)。 */
+   2026-07-12 v2 改:macOS 桌面端 topbar 内部左侧加 padding-left: 80px
+   让位红绿灯(0~80px 区域),避免 logo 文字被红绿灯遮挡。
+   2026-07-12 改:z-index 从 20 提到 45,确保与 sidebar(z-35)协调 —
+   顶栏在侧栏之上,横穿屏幕时 logo 文字浮在 sidebar 背景之上。 */
 .topbar {
-  @apply flex items-center justify-between px-5 py-0;
+  @apply flex items-center justify-between py-0;
+  padding-left: 20px;        /* 默认左侧留白(原 px-5) */
+  padding-right: 20px;       /* 默认右侧留白(原 px-5) */
   --topbar-h: 48px;          /* 给 sidebar 的 top 引用 */
   height: var(--topbar-h);
   min-height: 48px;
@@ -623,6 +626,7 @@ onUnmounted(() => {
 .topbar.mac-desktop {
   --topbar-h: 98px;          /* macOS 模式下顶栏 48 + 50 红绿灯让位 */
   padding-top: 50px;         /* macOS 顶部让位红绿灯 */
+  padding-left: 80px;        /* v2:macOS 左侧让位红绿灯水平位置(0~80px) */
 }
 
 .topbar-left {
