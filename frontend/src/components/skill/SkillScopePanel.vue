@@ -15,7 +15,7 @@ import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
-import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill } from '@/api/skillbox/skills'
+import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 
 const props = defineProps({
@@ -56,9 +56,22 @@ const LABEL_ENABLE = '启用作用域'
 const LABEL_DISABLE = '停用作用域'
 const LABEL_TITLE_ERROR = '作用域加载出错'
 const LABEL_RETRY = '重试'
-// 2026-07-12 增:顶部"全局 Agent" tag 文案常量(跟 TreeNode 卡片上的 tag 一致)。
-const LABEL_GLOBAL_AGENT = '全局 Agent'
+// 2026-07-12 增:顶部"全局 Agent Skill" tag 文案常量(跟 TreeNode 卡片上的 tag 一致)。
+// 用户反馈把"全局 Agent"补全成"全局 Agent Skill"——更明确指向"这是一个全局
+// Agent 的技能",跟普通工具作用域区分。
+const LABEL_GLOBAL_AGENT = '全局 Agent Skill'
 const LABEL_GLOBAL_AGENT_TIP = '同步到 ~/.agents/skills/ 共享池(所有工具均可读取)'
+// 2026-07-12 增:tag 右侧两个图标按钮的 tip 文案。
+// - info 按钮 = 弹窗提示全局 Agent 的说明 + 列出适配的工具
+// - folder 按钮 = 直接打开 ~/.agents/skills/ 共享池根目录
+const LABEL_GLOBAL_AGENT_INFO_TIP = '查看全局 Agent 说明'
+const LABEL_GLOBAL_AGENT_FOLDER_TIP = '在文件浏览器中打开 ~/.agents/skills/'
+
+// 2026-07-12 增:info 弹窗内文案(常量字符串,不依赖 i18n,跟组件其它 LABEL_* 一致)。
+const LABEL_INFO_TITLE = '全局 Agent Skill'
+const LABEL_INFO_DESC = '写入 ~/.agents/skills/ 共享池后,所有声明该目录的 AI 工具(Claude Code / Codex / Trae / Cline 等)均可自动读取该 skill。'
+const LABEL_INFO_TOOL_TITLE = '适配全局 Agent 的工具'
+const LABEL_INFO_TOOL_EMPTY = '暂未发现适配全局 Agent 的工具。'
 
 const scopeTools = ref([])
 const scopeHits = ref([])
@@ -289,6 +302,79 @@ function onScopeRefresh() {
   loadGlobalAgentStatus()
 }
 
+// 2026-07-12 增:info 弹窗 — 列出"哪些工具适配了 ~/.agents/skills/"。
+//
+// 数据来源:前端 toolsStore(全量工具表,已经在 SkillScopePanel 上方用 findTool
+// 加载过),筛选规则 = 该 tool 的 paths 数组里有任意一项同时满足:
+//   - scope='global'  && category='user'
+//   - path 字符串含 '.agents/skills'(跨平台匹配 / 或 \,走 substring 兜底)
+//
+// 不走新加 API,纯粹前端 filter,跟"左侧 TreeNode"看到的 tool 列表同源。
+const globalAgentInfoOpen = ref(false)
+const globalAgentTools = computed(() => {
+  const list = toolsStore.items || []
+  const out = []
+  for (const t of list) {
+    if (!t || !t.tool_id) continue
+    const paths = Array.isArray(t.paths) ? t.paths : []
+    const hit = paths.some((p) => {
+      if (!p) return false
+      const isGlobalUser = p.scope === 'global' && p.category === 'user'
+      const path = String(p.path || '')
+      // 跨平台匹配 ~/.agents/skills / %USERPROFILE%/.agents/skills 等
+      return isGlobalUser && /[\\/]\.agents[\\/]skills\b/.test(path)
+    })
+    if (hit) out.push(t)
+  }
+  // 按 display_name 字母序稳定排序,方便用户对照"哪几个工具配了"
+  out.sort((a, b) => String(a.display_name || a.tool_id).localeCompare(String(b.display_name || b.tool_id)))
+  return out
+})
+function openGlobalAgentInfo() {
+  globalAgentInfoOpen.value = true
+}
+function closeGlobalAgentInfo() {
+  globalAgentInfoOpen.value = false
+}
+
+// 2026-07-12 增:folder 按钮 — 直接打开 ~/.agents/skills/ 共享池根目录。
+//
+// 路径来源:后端 get_store_info 接口在 2026-07-12 加了 global_agent_root 字段
+// (home + .agents/skills,跨平台一致)。前端不传 ~ 缩写(wails desktop 端
+// fs.reveal 不一定做 shell 展开),直接用绝对路径,跟详情区 openInFolder 行为对齐。
+// 缓存策略:首次点击时拉一次,后续直接复用 ref,避免重复 HTTP。
+const globalAgentRootPath = ref('')
+async function ensureGlobalAgentRoot() {
+  if (globalAgentRootPath.value) return globalAgentRootPath.value
+  try {
+    const info = await getStoreInfo()
+    globalAgentRootPath.value = info?.global_agent_root || ''
+  } catch (_) {
+    globalAgentRootPath.value = ''
+  }
+  return globalAgentRootPath.value
+}
+
+async function openGlobalAgentFolder() {
+  const p = await ensureGlobalAgentRoot()
+  if (!p) {
+    toast.error('无法获取 ~/.agents/skills/ 路径')
+    return
+  }
+  try {
+    if (platform?.fs?.reveal) {
+      const r = await platform.fs.reveal(p)
+      if (r && r.ok === false && r.fallbackUrl) {
+        platform.platform.openExternal(r.fallbackUrl)
+      }
+      return
+    }
+    toast.info(`全局 Agent 目录: ${p}`)
+  } catch (e) {
+    toast.error(`打开文件夹失败: ${e?.message || e}`)
+  }
+}
+
 onMounted(() => {
   if (props.skill?.name) {
     loadScope({ resetCollapsed: true })
@@ -469,36 +555,70 @@ onErrorCaptured((err) => {
       />
     </button>
     <ul v-if="!sectionCollapsed" class="ssp-scope-list">
-      <!-- 2026-07-12 增:作用域区首位"全局 Agent" tag。
+      <!-- 2026-07-12 增 v2:作用域区首位"全局 Agent Skill" 行。
            跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
            + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
            SKILL.md),用户点 tag 切换后会立刻刷新工具列表(scope-refresh event)。
-           设计要点:
+           设计要点(2026-07-12 用户反馈增):
              - 永远排在第一个(放在 v-for 上方,跟其他工具互不影响)
              - 没有展开/折叠(没有 targets 列表)
-             - 纯 tag 胶囊样式:选中=emerald 浅底+边框+主色字,未选中=透明+灰文字+无边框
-             - 整个 tag 可点击切换,spinner 在 toggle 中显示避免重复点击 -->
+             - 整行 = 左侧 toggle button(胶囊)+ 右侧 2 个图标按钮(info / folder)
+             - 选中态 = emerald 浅底+边框+主色字,未选中=透明+灰文字+无边框
+             - 行下方一道横杠把 tag 区跟下方工具列表视觉分隔
+             - info 按钮弹窗列出"哪些工具适配了 ~/.agents/skills/"(从 toolsStore 拿)
+             - folder 按钮调 platform.fs.reveal 打开 ~/.agents/skills/ 共享池根目录 -->
       <li class="ssp-scope-group ssp-scope-group-global">
-        <button
-          type="button"
-          :class="['ssp-global-agent-tag', { 'ssp-global-agent-tag-active': isGlobalAgent }]"
-          :data-tip="LABEL_GLOBAL_AGENT_TIP"
-          :disabled="toggleAgentBusy || globalAgentLoading"
-          @click="onToggleGlobalAgentClick"
-        >
-          <span
-            v-if="toggleAgentBusy"
-            class="ssp-spinner ssp-spinner-xs ssp-global-agent-spinner"
-          ></span>
-          <IconPark
-            v-else
-            icon="mdi:earth"
-            width="11"
-            height="11"
-            class="ssp-global-agent-icon"
-          />
-          <span class="ssp-global-agent-label">{{ LABEL_GLOBAL_AGENT }}</span>
-        </button>
+        <div class="ssp-global-agent-row">
+          <button
+            type="button"
+            :class="['ssp-global-agent-tag', { 'ssp-global-agent-tag-active': isGlobalAgent }]"
+            :data-tip="LABEL_GLOBAL_AGENT_TIP"
+            :disabled="toggleAgentBusy || globalAgentLoading"
+            @click="onToggleGlobalAgentClick"
+          >
+            <span
+              v-if="toggleAgentBusy"
+              class="ssp-spinner ssp-spinner-xs ssp-global-agent-spinner"
+            ></span>
+            <IconPark
+              v-else
+              icon="mdi:earth"
+              width="11"
+              height="11"
+              class="ssp-global-agent-icon"
+            />
+            <span class="ssp-global-agent-label">{{ LABEL_GLOBAL_AGENT }}</span>
+          </button>
+          <!-- 2026-07-12 增:tag 右侧两个图标按钮 — info 提示 / folder 打开目录。
+               跟 tag 之间留 4px 间距,跟工具列表的 chevron 视觉权重一致。
+               点击事件用 stop 防止冒泡触发外层 tag(嵌套 button 不允许,
+               实际上这里不是嵌套 — tag 和图标按钮是 div 里的两个并列 button,
+               用 stop 是防御性)。
+               命中平台:desktop (wails3) 走 platform.fs.reveal 物理打开;
+               Web 端兜底走 platform.platform.openExternal fallback。 -->
+          <button
+            type="button"
+            class="ssp-global-agent-icon-btn"
+            :data-tip="LABEL_GLOBAL_AGENT_INFO_TIP"
+            :aria-label="LABEL_GLOBAL_AGENT_INFO_TIP"
+            @click.stop="openGlobalAgentInfo"
+          >
+            <IconPark icon="mdi:information-outline" width="11" height="11" />
+          </button>
+          <button
+            type="button"
+            class="ssp-global-agent-icon-btn"
+            :data-tip="LABEL_GLOBAL_AGENT_FOLDER_TIP"
+            :aria-label="LABEL_GLOBAL_AGENT_FOLDER_TIP"
+            @click.stop="openGlobalAgentFolder"
+          >
+            <IconPark icon="mdi:folder-outline" width="11" height="11" />
+          </button>
+        </div>
+        <!-- 2026-07-12 增:tag 行下方一根横杠,跟下方工具列表视觉分组。
+             全局 Agent 跟"普通工具作用域"是两种语义不同的"位置",用分隔线
+             强调边界;横杠颜色用 var(--border) 弱化,跟列表内 group 间距一致。 -->
+        <hr class="ssp-global-agent-divider" />
       </li>
       <li
         v-for="group in (scopeGroupByTool || [])"
@@ -582,6 +702,41 @@ onErrorCaptured((err) => {
     <template #footer>
       <button type="button" class="ghost" @click="onConfirmNo">取消</button>
       <button type="button" class="primary" @click="onConfirmYes">确定</button>
+    </template>
+  </Modal>
+
+  <!-- 2026-07-12 增:全局 Agent 信息弹窗 — 列出适配 ~/.agents/skills/ 的工具。
+       跟 confirm 弹窗分两个独立 Modal 组件实例,各自管理 v-model。内容:
+       - 顶部描述(全局 Agent 共享池语义)
+       - 中间"适配工具"标题 + chip 列表(从 toolsStore 拿,实时反映后端配置)
+       - 空态友好提示(没有适配工具时) -->
+  <Modal
+    v-model="globalAgentInfoOpen"
+    size="md"
+    :title="LABEL_INFO_TITLE"
+    @close="closeGlobalAgentInfo"
+  >
+    <div class="ssp-info-body">
+      <p class="ssp-info-desc">{{ LABEL_INFO_DESC }}</p>
+      <h4 class="ssp-info-tool-title">{{ LABEL_INFO_TOOL_TITLE }}</h4>
+      <ul v-if="globalAgentTools.length" class="ssp-info-tool-list">
+        <li
+          v-for="t in globalAgentTools"
+          :key="t.tool_id"
+          class="ssp-info-tool-chip"
+        >
+          <ToolIcon
+            :tool="t"
+            :size="13"
+            class="ssp-info-tool-icon"
+          />
+          <span class="ssp-info-tool-name">{{ t.display_name || t.tool_id }}</span>
+        </li>
+      </ul>
+      <p v-else class="ssp-info-tool-empty">{{ LABEL_INFO_TOOL_EMPTY }}</p>
+    </div>
+    <template #footer>
+      <button type="button" class="primary" @click="closeGlobalAgentInfo">关闭</button>
     </template>
   </Modal>
 </template>
@@ -931,10 +1086,130 @@ onErrorCaptured((err) => {
 }
 .ssp-global-agent-icon { color: inherit; flex-shrink: 0; }
 .ssp-global-agent-spinner { flex-shrink: 0; }
-/* 2026-07-12 改:tag 自身有 margin-bottom 跟下方工具行分隔,
-   旧的 border-bottom 分隔线去掉(避免视觉割裂 — tag 是 inline-flex 自带间距)。 */
+
+/* 2026-07-12 增 v2:整行 row 容器 — 包住左侧 tag + 右侧两个图标按钮。
+   display:flex + align-items:center 让 tag 和图标按钮在同一基线水平排列,
+   跟工具行 .ssp-scope-row 视觉对齐。margin 跟旧版一致(左右 12px),保证
+   tag 的胶囊视觉位置不变。 */
+.ssp-global-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 12px 4px;
+}
+/* 2026-07-12 增:tag 右侧两个图标按钮 — 跟工具行 chevron 同尺寸(11~12px),
+   视觉权重轻,不抢 tag 的视觉中心。
+   - 未选中态:透明背景 + 灰文字 + 透明边框,hover 时淡灰底
+   - 选中态:跟 tag 同色系(emerald),跟 tag 整体协调(可视为 tag 的附属)
+   - flex:0 0 auto + box-sizing:border-box + 显式 width/height,避免 icon
+     把 flex 父级撑开触发横向滚动(参考 fe-sfip-header-hscroll) */
+.ssp-global-agent-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ssp-global-agent-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+/* 当 tag 处于选中态时(图标按钮跟 emerald tag 视觉对齐):
+   图标颜色淡 emerald,hover 加深,跟 tag hover 的 emerald-border 一致 */
+.ssp-global-agent-row:has(.ssp-global-agent-tag-active) .ssp-global-agent-icon-btn {
+  color: var(--accent-emerald);
+  opacity: 0.85;
+}
+.ssp-global-agent-row:has(.ssp-global-agent-tag-active) .ssp-global-agent-icon-btn:hover {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  border-color: var(--accent-emerald-border);
+  opacity: 1;
+}
+
+/* 2026-07-12 增 v2:tag 行下方的横杠,跟下方工具列表视觉分组。
+   跟旧版 border-bottom 区别:这里改用 hr + 显式 margin,占据独立一行,
+   视觉上像"标题区 / 内容区"的分割,而不是 group 之间的小间隙。
+   颜色用 var(--border) 弱化(跟文件树 header 底边一致)。 */
+.ssp-global-agent-divider {
+  margin: 4px 12px 6px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  height: 0;
+  background: transparent;
+}
+/* 去掉旧的 .ssp-scope-group-global margin-bottom — 现在由 divider 主导分隔 */
 .ssp-scope-group-global {
-  margin-bottom: 2px;
+  margin-bottom: 0;
+}
+
+/* 2026-07-12 增:全局 Agent info 弹窗样式。
+   - 描述:跟普通段落同色,line-height 1.6 便于阅读
+   - 工具标题:h4 字号 12px(比正文小),字色 dim,letter-spacing 跟其他
+     section header 对齐
+   - 工具列表:flex wrap 让 chip 在窄屏自然换行
+   - 单个 chip:浅 emerald 底 + 翠绿字 + icon + 名称,跟"全局 Agent Skill"
+     主题色一致,用户一眼看出"这些是适配工具" */
+.ssp-info-body {
+  font-size: 13px;
+  color: var(--text);
+}
+.ssp-info-desc {
+  margin: 0 0 16px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.ssp-info-tool-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ssp-info-tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ssp-info-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: var(--accent-emerald-bg);
+  border: 1px solid var(--accent-emerald-border);
+  color: var(--accent-emerald);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.ssp-info-tool-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+}
+.ssp-info-tool-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
 }
 
 .ssp-confirm-msg {
