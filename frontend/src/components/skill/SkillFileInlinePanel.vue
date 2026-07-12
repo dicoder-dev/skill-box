@@ -838,6 +838,30 @@ onErrorCaptured((err) => {
   return false
 })
 
+// 2026-07-12 增:简介 hover 自定义快速 tooltip 状态。
+// 不依赖浏览器 native title(默认延迟 0.5~1s,等得人抓狂),自己用
+// mouseenter/mouseleave + setTimeout 控制 hover 浮层显示。
+// - 150ms 延迟避免快速划过去误触发
+// - leave 时 clearTimeout 防"显示→立刻被取消"
+// - descTipShow 控制 .sfip-desc-tip.show class 切换显隐
+// - sfipDescEl / sfipDescTipEl 给 keyboard / 调试时定位用
+const sfipDescEl = ref(null)
+const sfipDescTipEl = ref(null)
+const descTipShow = ref(false)
+let descTipTimer = 0
+function onDescEnter() {
+  if (descTipTimer) clearTimeout(descTipTimer)
+  descTipTimer = setTimeout(() => { descTipShow.value = true }, 150)
+}
+function onDescLeave() {
+  if (descTipTimer) { clearTimeout(descTipTimer); descTipTimer = 0 }
+  descTipShow.value = false
+}
+onUnmounted(() => {
+  // 组件卸载时清掉残留 timer,避免在已销毁组件上回调 set descTipShow
+  if (descTipTimer) { clearTimeout(descTipTimer); descTipTimer = 0 }
+})
+
 // =====================================================================
 // 2026-07-11 增:文件树右键菜单 + 文件/目录 CRUD
 // 需求:按位置区分右键菜单
@@ -1338,12 +1362,32 @@ defineExpose({
             <span class="sfip-name">{{ skill?.name || '' }}</span>
             <span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span>
             <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
-            <span v-if="skill?.source" :class="['badge', skill.source === 'market' ? 'blue' : 'gray']">{{ skill.source }}</span>
+            <!-- 2026-07-12 改:把 source 徽标(LOCAL/market)改成显示 version 号,
+                 灰色字体。reason:源信息日常对用户没区分度(从 store 加载基本都是
+                 local),version 号更有意义,且方便快速对比同一 skill 不同版本。
+                 当 version 缺失时降级显示 source(不会留空)。 -->
+            <span v-if="skill?.version" class="badge gray sfip-version-badge">v{{ skill.version }}</span>
+            <span v-else-if="skill?.source" class="badge gray">{{ skill.source }}</span>
             <span class="sfip-name-actions">
               <slot name="name-actions" />
             </span>
           </div>
-          <span v-if="skillDescription" class="sfip-desc" :title="skillDescription">{{ skillDescription }}</span>
+          <!-- 2026-07-12 改:简介单行截断 + mouseenter/mouseleave 自定义快速
+               tooltip(150ms 延迟)。template 上不再挂 native :title(默认 1s
+               延迟 + 浏览器渲染),改用 ref 控制 .sfip-desc-tip.show。 -->
+          <span
+            v-if="skillDescription"
+            ref="sfipDescEl"
+            class="sfip-desc"
+            @mouseenter="onDescEnter"
+            @mouseleave="onDescLeave"
+          >{{ skillDescription }}</span>
+          <span
+            v-if="skillDescription"
+            class="sfip-desc-tip"
+            :class="{ show: descTipShow }"
+            ref="sfipDescTipEl"
+          >{{ skillDescription }}</span>
         </div>
       </div>
       <div class="sfip-actions">
@@ -1918,11 +1962,10 @@ defineExpose({
 }
 /* 2026-07-12 增:技能简介小字,放在 .sfip-name 正下方一行。
    灰色(--text-faint)+ 12px,-webkit-line-clamp:1 单行截断
-   (避免超长换行撑爆顶栏,描述过长交给 hover title 看全;
-   cursor: help 给视觉反馈,告诉用户鼠标悬停有内容)。
-   text-overflow: ellipsis 需要 inline/inline-block 才能渲染省略号,
-   这里 display:-webkit-box + line-clamp 模式不会自动加 …,所以配合
-   overflow:hidden。 */
+   (避免超长换行撑爆顶栏,过长交给 hover 看全)。
+   cursor:text(普通文本光标)避免某些平台 (macOS webkit) 渲染 help
+   问号图标 — 用户反馈"图标可能不存在",直接用文本光标最稳。
+   position:relative 让自定义 .sfip-desc-tip 浮层能基于自己定位。 */
 .sfip-desc {
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -1933,8 +1976,37 @@ defineExpose({
   line-height: 1.4;
   color: var(--text-faint);
   max-width: 100%;
-  cursor: help;
+  cursor: text;
+  position: relative;
 }
+/* 2026-07-12 增:描述 hover 自定义快速 tooltip。
+   - 不用浏览器 native title(默认延迟 0.5~1s,用户反馈"等很久")
+   - mouseenter/mouseleave + setTimeout 150ms 延迟,比 native 快得多
+   - 默认 hidden,mouseenter 后 show=true → 浮层显示
+   - position:absolute 紧贴 desc 顶部上 + 左对齐
+   - 浮层不上限行数,完整展示;max-width:480px 防止巨长撑爆
+   - z-index 提到 header 层级之上,避免被 file-tree 覆盖 */
+.sfip-desc-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: none;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  max-width: 480px;
+  white-space: normal;
+  word-break: break-word;
+  cursor: text;
+  z-index: 50;
+  pointer-events: none;
+}
+.sfip-desc-tip.show { display: block; }
 .sfip-count {
   color: var(--text-faint);
   font-size: 11px;
