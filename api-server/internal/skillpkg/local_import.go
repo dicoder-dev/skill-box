@@ -335,7 +335,7 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 		})
 		return results
 	}
-	if err := store.Save(canonical); err != nil {
+	if err := store.Save(canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
 			ToolID:  "",
 			Name:    canonical.Manifest.Name,
@@ -432,7 +432,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 		})
 	}
 
-	if err := store.Save(*canonical); err != nil {
+	if err := store.Save(*canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
 			ToolID:  "",
 			Name:    canonical.Manifest.Name,

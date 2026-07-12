@@ -58,13 +58,18 @@ func normalizeScope(scope string) (string, error) {
 
 // WriteInput Create/Update 入参。
 // Name 必填;scope / version 可选(空时走默认);Manifest / Files 由 caller 构造。
+//
+// 2026-07-12 增:DeletedPaths 是前端"明确删除"路径列表(相对 skill 根的 rel path),
+// Update 时透传给 store.Save,避免 "Save 复活前端已删除目录" 的 bug;
+// Create / 导入 / 普通保存都不需要(传 nil)。
 type WriteInput struct {
-	Scope     string                `json:"scope"`
-	ProjectID uint                  `json:"project_id"`
-	Name      string                `json:"name"`
-	Version   string                `json:"version"`
-	Manifest  skilladapter.Manifest `json:"manifest"`
-	Files     []skilladapter.File   `json:"files"`
+	Scope        string                `json:"scope"`
+	ProjectID    uint                  `json:"project_id"`
+	Name         string                `json:"name"`
+	Version      string                `json:"version"`
+	Manifest     skilladapter.Manifest `json:"manifest"`
+	Files        []skilladapter.File   `json:"files"`
+	DeletedPaths []string              `json:"deleted_paths,omitempty"`
 }
 
 // BuildCanonical 从 WriteInput 合成 Canonical(name/version 兜底)。
@@ -161,7 +166,8 @@ func (s *Service) Create(in *WriteInput) (*skilladapter.Canonical, error) {
 	}
 	in.Name = name
 	c := in.BuildCanonical()
-	if err := s.store.Save(c); err != nil {
+	// Create 是新建场景,无"明确删除"语义,deletedPaths 固定传 nil。
+	if err := s.store.Save(c, nil); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrStoreSave, err)
 	}
 	return &c, nil
@@ -190,7 +196,9 @@ func (s *Service) Update(name string, in *WriteInput) (*skilladapter.Canonical, 
 	// 强制以目录名为准,不允许通过 Update 改 name(rename 走 Delete + Create)
 	c := in.BuildCanonical()
 	c.Manifest.Name = name
-	if err := s.store.Save(c); err != nil {
+	// 2026-07-12 增:透传 DeletedPaths 到 store.Save,让前端 "删文件夹/删文件"
+	// 的请求能真正物理落地(不传 nil 时行为完全兼容旧版)。
+	if err := s.store.Save(c, in.DeletedPaths); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrStoreSave, err)
 	}
 	return &c, nil

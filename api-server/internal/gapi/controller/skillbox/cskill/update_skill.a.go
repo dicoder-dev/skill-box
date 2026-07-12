@@ -11,13 +11,17 @@ import (
 )
 
 // RequestUpdateSkill 更新入参。按 name 定位,body 里给新 manifest / files。
+//
+// 2026-07-12 增:DeletedPaths 是前端"明确删除"路径列表(相对 skill 根的 rel path),
+// 透传给 store.Save,让 "详情目录树删文件夹/文件" 真正物理落地。
 type RequestUpdateSkill struct {
-	Scope     string                `json:"scope"`
-	ProjectID uint                  `json:"project_id"`
-	Name      string                `json:"name"`
-	Version   string                `json:"version"`
-	Manifest  skilladapter.Manifest `json:"manifest"`
-	Files     []skilladapter.File   `json:"files"`
+	Scope        string                `json:"scope"`
+	ProjectID    uint                  `json:"project_id"`
+	Name         string                `json:"name"`
+	Version      string                `json:"version"`
+	Manifest     skilladapter.Manifest `json:"manifest"`
+	Files        []skilladapter.File   `json:"files"`
+	DeletedPaths []string              `json:"deleted_paths,omitempty"`
 }
 
 // UpdateSkill POST /api/skillbox/skills/update
@@ -29,12 +33,13 @@ func UpdateSkill(c *ginp.ContextPlus, req *RequestUpdateSkill) {
 	}
 	svc := sskill.New(store)
 	canon, uerr := svc.Update(req.Name, &sskill.WriteInput{
-		Scope:     req.Scope,
-		ProjectID: req.ProjectID,
-		Name:      req.Name,
-		Version:   req.Version,
-		Manifest:  req.Manifest,
-		Files:     req.Files,
+		Scope:        req.Scope,
+		ProjectID:    req.ProjectID,
+		Name:         req.Name,
+		Version:      req.Version,
+		Manifest:     req.Manifest,
+		Files:        req.Files,
+		DeletedPaths: req.DeletedPaths,
 	})
 	if uerr != nil {
 		switch {

@@ -46,7 +46,7 @@ func TestGroupTreeSmoke(t *testing.T) {
 			GroupPath:   "frontend/react",
 		},
 		Files: []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: use-cache\nversion: 0.1.0\ndescription: react hook cache pattern\ntriggers: [cache]\n---\n\nbody text\n"}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Save (in group): %v", err)
 	}
@@ -93,11 +93,11 @@ func TestGroupTreeSmoke(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "skill-a", Version: "0.1.0", Description: "a", Triggers: []string{"a"}, GroupPath: "backend/go"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: skill-a\nversion: 0.1.0\ndescription: a\ntriggers: [a]\n---\n\nbody\n"}},
-	})
+	}, nil)
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "skill-b", Version: "0.1.0", Description: "b", Triggers: []string{"b"}, GroupPath: "backend/go"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: skill-b\nversion: 0.1.0\ndescription: b\ntriggers: [b]\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 10a) cascade=false 非空 → 应失败 + 返回 deleted 列表
 	deleted, err := store.DeleteGroupDir("backend/go", false)
@@ -156,7 +156,7 @@ func TestMoveGroupDir(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "a"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 把分组 a 挪到 b 下 → b/a
 	if err := store.MoveGroupDir("a", "b"); err != nil {
@@ -202,11 +202,11 @@ func TestRenameGroupDir(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "use-cache", Version: "0.1.0", GroupPath: "frontend/react"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: use-cache\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "other", Version: "0.1.0", GroupPath: "frontend/react"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: other\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 1) 改"react"为"react-x" → 整个子树挪过去
 	newPath, err := store.RenameGroupDir("frontend/react", "react-x")
@@ -275,7 +275,7 @@ func TestMoveGroupDir_AncestorCheck(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 把 aa 挪到 aa/yy 下 → 目标 = aa/yy/aa,正好在 src(aa) 内,必须拒
 	if err := store.MoveGroupDir("aa", "aa/yy"); err == nil {
@@ -308,7 +308,7 @@ func TestMoveGroupPath_AncestorCheck(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 把 aa/x 挪到 aa/x/inner 下 → 目标 = aa/x/inner/x,正好在 src(aa/x) 内,必须拒
 	if err := store.MoveGroupPath("aa", "x", "aa/x/inner"); err == nil {
@@ -362,7 +362,7 @@ func TestMoveGroupDir_ToRoot(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa/sub"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 把 aa/sub 挪到根下 → 目标 = root/sub,合法
 	if err := store.MoveGroupDir("aa/sub", ""); err != nil {
@@ -395,7 +395,7 @@ func TestMoveGroupDir_NoOp_ToRoot(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "aa"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 1) 顶层分组"挪到根" → 必须 no-op 成功
 	if err := store.MoveGroupDir("aa", ""); err != nil {
@@ -415,7 +415,7 @@ func TestMoveGroupDir_NoOp_ToRoot(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "y", Version: "0.1.0", GroupPath: "aa/bb"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: y\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 	if err := store.MoveGroupDir("aa/bb", "aa"); err != nil {
 		t.Fatalf("MoveGroupDir no-op to parent: should succeed, got %v", err)
 	}

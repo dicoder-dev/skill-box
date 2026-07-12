@@ -394,7 +394,7 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 		// 没有 triggers / description 过短。store 校验要求严格,直接 Save 会失败。
 		// normalizeForStore 自动补全,不影响已经合法的 manifest。
 		NormalizeForStore(&c)
-		if err := im.store.Save(c); err != nil {
+		if err := im.store.Save(c, nil); err != nil {
 			out = append(out, ImportResult{
 				ToolID: it.ToolID, Name: it.Name, Version: ver,
 				OK: false, Error: err.Error(),

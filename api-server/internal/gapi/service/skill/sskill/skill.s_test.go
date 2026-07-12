@@ -179,12 +179,17 @@ func TestList_FilterByName(t *testing.T) {
 	}
 }
 
-// TestUpdate_PartialFilesDropsOthers 2026-07-08 增:Save 接口是"原子全量覆盖"语义,
-// 必须 caller 拼齐完整的 files 数组才能不丢文件;否则只 send 当前 dirty 文件,其他
-// 文件会因 tmp 目录没被写而消失。本测试复现根因,作为契约固定下来:
-// 任何调用方如果遇到 "传 files 但丢文件",责任在 caller,而非 store。
-// 详见 SkillFileInlinePanel.saveCurrent (frontend) 为修复点的对应改动。
-func TestUpdate_PartialFilesDropsOthers(t *testing.T) {
+// TestUpdate_PartialFilesPreservesOthers 2026-07-08 增,2026-07-12 改语义:
+//
+// 旧契约(2026-07-08):Save 是"原子全量覆盖",caller 必须传齐完整 files,
+// 否则只 send 当前 dirty 文件,其他文件会因 tmp 目录没被写而消失。
+//
+// 新契约(2026-07-12):Save 会"保留前端不知道的文件" — caller 只传部分
+// files 也行,其余从原 dir 复制回 tmp(对应 store.Save 的 WalkDir 复制逻辑,
+// 见 store.go:198-239)。删除场景由 DeletedPaths 字段显式表达:
+// **前端必须在 files 里剔除要删的路径**(否则 tmp 重建阶段会重新写出来,
+// WalkDir 跳过也没用)。本测试固定新契约。
+func TestUpdate_PartialFilesPreservesOthers(t *testing.T) {
 	svc, storeRoot := newTestService(t)
 	mk := skilladapter.Manifest{
 		Name: "partial", Version: "0.1.0",
@@ -205,33 +210,60 @@ func TestUpdate_PartialFilesDropsOthers(t *testing.T) {
 	if len(full.Files) < 4 { // SKILL.md + a + b + c
 		t.Fatalf("precondition: expected 4 files, got %d", len(full.Files))
 	}
-	// 模拟前端只 send 当前 dirty 文件(契约未对齐)
+	// 模拟前端只 send 当前 dirty 文件
 	if _, err := svc.Update("partial", &sskill.WriteInput{
 		Scope:    "global",
 		Manifest: mk,
 		Files: []skilladapter.File{
 			{Path: "a.md", Content: "AAA-modified"},
 		},
+		// 不传 DeletedPaths → 原 dir 里 b.md/c.md 会被复制回 tmp,保留。
 	}); err != nil {
 		t.Fatal(err)
 	}
 	full, _ = svc.GetFull("partial")
-	// SKILL.md + a.md(b/c 应该丢失) — 确认根因可复现
 	var gotPaths []string
 	for _, f := range full.Files {
 		gotPaths = append(gotPaths, f.Path)
 	}
 	t.Logf("after partial update: files = %v", gotPaths)
-	for _, lost := range []string{"b.md", "c.md"} {
-		// 磁盘侧再二次校验
-		if _, err := os.Stat(filepath.Join(storeRoot, "partial", lost)); err == nil {
-			t.Errorf("BUG NOT REPRODUCED: %s unexpectedly still exists on disk", lost)
+	// 新契约:partial update 必须保留 b.md / c.md(从原 dir 复制回 tmp)
+	for _, kept := range []string{"b.md", "c.md"} {
+		if _, err := os.Stat(filepath.Join(storeRoot, "partial", kept)); err != nil {
+			t.Errorf("partial update SHOULD preserve %s; got err=%v", kept, err)
 		}
 	}
-	// 兜底断言:确认这两个文件已不在 full.Files 里(契约硬性)
+	// 验证保留后内容是原值(没被覆盖)
 	for _, f := range full.Files {
-		if f.Path == "b.md" || f.Path == "c.md" {
-			t.Errorf("partial update MUST drop %s per current Save contract; got %+v", f.Path, gotPaths)
+		switch f.Path {
+		case "b.md":
+			if f.Content != "BBB" {
+				t.Errorf("partial update preserved b.md but content drifted: %q", f.Content)
+			}
+		case "c.md":
+			if f.Content != "CCC" {
+				t.Errorf("partial update preserved c.md but content drifted: %q", f.Content)
+			}
 		}
+	}
+	// 显式删 b.md 时(契约:前端 files 里剔除 b.md + DeletedPaths=["b.md"]),
+	// 必须真正物理删除。
+	if _, err := svc.Update("partial", &sskill.WriteInput{
+		Scope: "global",
+		Manifest: mk,
+		Files: []skilladapter.File{
+			{Path: "a.md", Content: "AAA-modified"},
+			{Path: "c.md", Content: "CCC"}, // 保留 c.md,b.md 剔除
+		},
+		DeletedPaths: []string{"b.md"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(storeRoot, "partial", "b.md")); !os.IsNotExist(err) {
+		t.Errorf("explicit DeletedPaths should remove b.md; got err=%v", err)
+	}
+	// 验证 c.md 还在(没被误删)
+	if _, err := os.Stat(filepath.Join(storeRoot, "partial", "c.md")); err != nil {
+		t.Errorf("c.md should still exist after explicit delete of b.md; got err=%v", err)
 	}
 }

@@ -1273,6 +1273,10 @@ async function submitDeleteFile() {
   deleteFileBusy.value = true
   try {
     let next = props.files || []
+    // 2026-07-12 增:显式告诉后端"我要删这些路径",避免 Save 阶段 WalkDir
+    // 把已删的目录/文件从原 dir 复制回 tmp 复活(只有后端 Save 收到这个
+    // 列表,才会真正物理删除对应路径)。
+    const deletedPaths = [target.path]
     if (target.kind === 'file') {
       // 保护 SKILL.md(由后端按 manifest 重建,前端不能"删")
       if (target.path === 'SKILL.md') {
@@ -1287,7 +1291,7 @@ async function submitDeleteFile() {
       const prefix = target.path + '/'
       next = next.filter((f) => f.path !== target.path && !f.path.startsWith(prefix))
     }
-    await persistFiles(next)
+    await persistFiles(next, deletedPaths)
     deleteFileOpen.value = false
     deleteFileTarget.value = null
     // 当前选中的文件被删了 → 切到 SKILL.md
@@ -1304,7 +1308,12 @@ async function submitDeleteFile() {
 
 // 共享:把 files 数组 updateSkill 持久化,并更新 localFiles 镜像。
 // 复用现有 saveCurrent 的链路,只是不重渲 SKILL.md(本组件不维护 manifest)。
-async function persistFiles(files) {
+//
+// 2026-07-12 增:deletedPaths(可选)是前端"明确删除"路径列表,会附加到
+// updateSkill payload 的 deleted_paths 字段;后端 Save 收到后会在
+// WalkDir 复制阶段跳过这些路径,让物理删除真正落地。不传等价于 nil,
+// 走原有 "保留前端不知道的文件" 逻辑(向后兼容普通保存 / 重命名等场景)。
+async function persistFiles(files, deletedPaths) {
   const sk = props.skill || {}
   // 2026-07-12 改:不再剥 .skillbox-placeholder 占位条目 — 这些条目是
   // 空目录标识,后端 Save 会用它们 mkdir 对应的空目录(2026-07-12 改
@@ -1312,7 +1321,7 @@ async function persistFiles(files) {
   // 空目录后连旧目录都没了"就是因为这个 filter + 后端全量覆盖 Save
   // 双重作用。
   const stripped = files || []
-  await updateSkill({
+  const payload = {
     scope: sk.scope || 'global',
     project_id: sk.project_id || 0,
     name: sk.name,
@@ -1322,7 +1331,11 @@ async function persistFiles(files) {
       name: sk.name, version: sk.version,
     },
     files: stripped,
-  })
+  }
+  if (deletedPaths && deletedPaths.length) {
+    payload.deleted_paths = [...deletedPaths]
+  }
+  await updateSkill(payload)
   // 同步本地缓存 — 用 stripped 跟后端保持一致,避免占位条目留缓存里被下次
   // 编辑循环回带出。
   localFiles.clear()

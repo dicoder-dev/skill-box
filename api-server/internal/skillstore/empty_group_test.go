@@ -21,7 +21,7 @@ func TestEmptyGroupVisibleAfterMove(t *testing.T) {
 	store.Save(skilladapter.Canonical{
 		Manifest: skilladapter.Manifest{Name: "x", Version: "0.1.0", GroupPath: "a"},
 		Files:    []skilladapter.File{{Path: "SKILL.md", Content: "---\nname: x\nversion: 0.1.0\n---\n\nbody\n"}},
-	})
+	}, nil)
 
 	// 移出唯一 skill 到根
 	if err := store.MoveGroupPath("a", "x", ""); err != nil {

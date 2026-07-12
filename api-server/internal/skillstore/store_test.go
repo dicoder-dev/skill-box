@@ -45,7 +45,7 @@ func validCanonical() skilladapter.Canonical {
 func TestSaveAndLoad(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	got, err := s.Load("code-review")
@@ -71,7 +71,7 @@ func TestLoad_NotFound(t *testing.T) {
 func TestDelete_Idempotent(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	_ = s.Save(c)
+	_ = s.Save(c, nil)
 	if err := s.Delete("code-review"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestList_FiltersKeyword(t *testing.T) {
 	for _, n := range names {
 		m := validManifest()
 		m.Name = n
-		if err := s.Save(skilladapter.Canonical{Manifest: m, Files: validCanonical().Files}); err != nil {
+		if err := s.Save(skilladapter.Canonical{Manifest: m, Files: validCanonical().Files}, nil); err != nil {
 			t.Fatalf("Save %s: %v", n, err)
 		}
 	}
@@ -111,12 +111,12 @@ func TestList_FiltersKeyword(t *testing.T) {
 func TestSave_Overwrite(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("first Save: %v", err)
 	}
 	// 第二次保存,内容略有不同
 	c.Files[0].Content = "# Code Review v2\n"
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("second Save: %v", err)
 	}
 	got, err := s.Load("code-review")
@@ -152,7 +152,7 @@ func TestSave_Concurrent(t *testing.T) {
 			defer wg.Done()
 			cc := c
 			cc.Files = []skilladapter.File{{Path: "SKILL.md", Content: "# v" + string(rune('0'+i)) + "\n"}}
-			if err := s.Save(cc); err != nil {
+			if err := s.Save(cc, nil); err != nil {
 				errCh <- err
 			}
 		}(i)
@@ -176,7 +176,7 @@ func TestLoadByName_FindsNestedSkill(t *testing.T) {
 	// 1) 先建一个"根下" skill(对照组)
 	rootC := validCanonical()
 	rootC.Manifest.Name = "root-skill"
-	if err := s.Save(rootC); err != nil {
+	if err := s.Save(rootC, nil); err != nil {
 		t.Fatalf("Save root: %v", err)
 	}
 
@@ -189,7 +189,7 @@ func TestLoadByName_FindsNestedSkill(t *testing.T) {
 	nestedC := validCanonical()
 	nestedC.Manifest.Name = "debug-helper"
 	nestedC.Manifest.GroupPath = "aa"
-	if err := s.Save(nestedC); err != nil {
+	if err := s.Save(nestedC, nil); err != nil {
 		t.Fatalf("Save nested: %v", err)
 	}
 
@@ -238,7 +238,7 @@ func TestLoadByName_ShallowFirst(t *testing.T) {
 	rootC := validCanonical()
 	rootC.Manifest.Name = "dup-skill"
 	rootC.Manifest.Description = "root one"
-	if err := s.Save(rootC); err != nil {
+	if err := s.Save(rootC, nil); err != nil {
 		t.Fatalf("Save root: %v", err)
 	}
 
@@ -249,7 +249,7 @@ func TestLoadByName_ShallowFirst(t *testing.T) {
 	nestedC.Manifest.Name = "dup-skill"
 	nestedC.Manifest.Description = "nested one"
 	nestedC.Manifest.GroupPath = "aa"
-	if err := s.Save(nestedC); err != nil {
+	if err := s.Save(nestedC, nil); err != nil {
 		t.Fatalf("Save nested: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestList_SkipsCorruptedAndLogs(t *testing.T) {
 func TestLoad_PopulatesSourceDir(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -391,7 +391,7 @@ func TestLoadByName_PopulatesSourceDir_Nested(t *testing.T) {
 	c := validCanonical()
 	c.Manifest.Name = "unit-test-gen"
 	c.Manifest.GroupPath = "aa"
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -416,7 +416,7 @@ func TestLoadByName_PopulatesSourceDir_Nested(t *testing.T) {
 func TestRenameSkillInGroup_RootLevel(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical() // name = code-review
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	newPath, err := s.RenameSkillInGroup("", "code-review", "cr")
@@ -444,7 +444,7 @@ func TestRenameSkillInGroup_NestedGroup(t *testing.T) {
 	c := validCanonical()
 	c.Manifest.Name = "cr"
 	c.Manifest.GroupPath = "frontend"
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	newPath, err := s.RenameSkillInGroup("frontend", "cr", "code-review")
@@ -469,7 +469,7 @@ func TestRenameSkillInGroup_TargetExists(t *testing.T) {
 	for _, n := range []string{"alpha", "beta"} {
 		c := validCanonical()
 		c.Manifest.Name = n
-		if err := s.Save(c); err != nil {
+		if err := s.Save(c, nil); err != nil {
 			t.Fatalf("Save %s: %v", n, err)
 		}
 	}
@@ -482,7 +482,7 @@ func TestRenameSkillInGroup_TargetExists(t *testing.T) {
 func TestRenameSkillInGroup_SameName(t *testing.T) {
 	s := newTestStore(t)
 	c := validCanonical()
-	if err := s.Save(c); err != nil {
+	if err := s.Save(c, nil); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	_, err := s.RenameSkillInGroup("", "code-review", "code-review")
@@ -536,5 +536,122 @@ func TestListEmptyDirs(t *testing.T) {
 		if i >= len(got) || got[i] != w {
 			t.Errorf("got[%d] = %q; want %q", i, got[i], w)
 		}
+	}
+}
+
+// TestSave_DeletedPaths_File 验证 deletedPaths 能让单个文件真正物理删除。
+//
+// 2026-07-12 增:对应 bug "技能详情目录树删除文件提示成功但磁盘未删"。
+// 根因是 Save 阶段 WalkDir 把已删文件从原 dir 复制回 tmp 复活;
+// 传 deletedPaths 后 WalkDir 跳过该路径,外层 RemoveAll(dir) 真正清理。
+//
+// 注:删单文件时,空父目录(examples/)是否被清理是产品决策(下一次
+// updateSkill 时是否带 .skillbox-placeholder 占位条目决定),不在本测试保证范围。
+func TestSave_DeletedPaths_File(t *testing.T) {
+	s := newTestStore(t)
+	c := validCanonical()
+	if err := s.Save(c, nil); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	// 确认初始磁盘上有 examples/review.sh
+	abs := filepath.Join(s.Root(), "code-review", "examples", "review.sh")
+	if _, err := os.Stat(abs); err != nil {
+		t.Fatalf("initial file missing: %v", err)
+	}
+
+	// 第二次 Save:files 里删掉 examples/review.sh + 显式传 deletedPaths
+	c.Files = []skilladapter.File{{Path: "SKILL.md", Content: "# Code Review\n"}}
+	if err := s.Save(c, []string{"examples/review.sh"}); err != nil {
+		t.Fatalf("Save with deletedPaths: %v", err)
+	}
+
+	// 验证磁盘上 examples/review.sh 已物理删除
+	if _, err := os.Stat(abs); !os.IsNotExist(err) {
+		t.Errorf("deleted file still exists: err=%v", err)
+	}
+	// 加载回来后 c.Files 里也没有该 path(双向校验)
+	got, err := s.Load("code-review")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, f := range got.Files {
+		if f.Path == "examples/review.sh" {
+			t.Errorf("Load 返回了已删文件 examples/review.sh")
+		}
+	}
+}
+
+// TestSave_DeletedPaths_DirSubtree 验证 deletedPaths 能让整棵目录子树物理删除。
+//
+// 对应 bug "技能详情目录树删除文件夹提示成功但磁盘未删"。
+func TestSave_DeletedPaths_DirSubtree(t *testing.T) {
+	s := newTestStore(t)
+	c := validCanonical()
+	// 加一个子文件让目录里有多个文件
+	c.Files = append(c.Files, skilladapter.File{
+		Path:    "examples/sub/another.md",
+		Content: "# another\n",
+	})
+	if err := s.Save(c, nil); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	// 确认初始磁盘状态
+	reviewSh := filepath.Join(s.Root(), "code-review", "examples", "review.sh")
+	anotherMd := filepath.Join(s.Root(), "code-review", "examples", "sub", "another.md")
+	if _, err := os.Stat(reviewSh); err != nil {
+		t.Fatalf("initial review.sh missing: %v", err)
+	}
+	if _, err := os.Stat(anotherMd); err != nil {
+		t.Fatalf("initial another.md missing: %v", err)
+	}
+
+	// 第二次 Save:files 里只留 SKILL.md + deletedPaths 指向 examples/ 整棵子树
+	c.Files = []skilladapter.File{{Path: "SKILL.md", Content: "# Code Review\n"}}
+	if err := s.Save(c, []string{"examples"}); err != nil {
+		t.Fatalf("Save with deletedPaths: %v", err)
+	}
+
+	// 验证 examples/ 整个子树(目录 + 子文件)都被物理删除
+	for _, p := range []string{
+		filepath.Join(s.Root(), "code-review", "examples"),
+		reviewSh,
+		anotherMd,
+	} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("path still exists: %s err=%v", p, err)
+		}
+	}
+}
+
+// TestSave_DeletedPaths_NilBackwardCompat 验证 deletedPaths=nil 时行为完全兼容旧版。
+//
+// 即"保留磁盘上前端不知道的文件"逻辑不能因为新参数而退化。
+func TestSave_DeletedPaths_NilBackwardCompat(t *testing.T) {
+	s := newTestStore(t)
+	// 第一次 Save 落 examples/review.sh
+	c := validCanonical()
+	if err := s.Save(c, nil); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	// 模拟"前端不知道的磁盘文件":直接往磁盘上 cp 一个文件
+	externalFile := filepath.Join(s.Root(), "code-review", "external.md")
+	if err := os.WriteFile(externalFile, []byte("# external\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile external: %v", err)
+	}
+
+	// 第二次 Save:files 里只留 SKILL.md,deletedPaths 传 nil(等价于旧版)
+	c.Files = []skilladapter.File{{Path: "SKILL.md", Content: "# Code Review\n"}}
+	if err := s.Save(c, nil); err != nil {
+		t.Fatalf("Save(nil): %v", err)
+	}
+
+	// external.md 必须被保留(WalkDir 复制阶段从原 dir 复制到 tmp)
+	if _, err := os.Stat(externalFile); err != nil {
+		t.Errorf("external.md should be preserved: err=%v", err)
+	}
+	// examples/review.sh 也应该被保留(原 dir 里有 → 复制到 tmp)
+	reviewSh := filepath.Join(s.Root(), "code-review", "examples", "review.sh")
+	if _, err := os.Stat(reviewSh); err != nil {
+		t.Errorf("review.sh should be preserved: err=%v", err)
 	}
 }
