@@ -1369,12 +1369,36 @@ function openRenameFolderDialog(dir) {
   renameFolderOpen.value = true
 }
 // 2) 在文件浏览器中打开:platform.fs.reveal(物理目录绝对路径)
+//
+// 2026-07-12 改:之前只看 sk.canonical?.source_dir / source_path,如果当前 skill 的
+// canonical 是 nil 或字段缺失,就直接弹"缺少 source_dir"错误。用户反馈右键
+// 根区域空白 → 在文件夹中打开 100% 失败,即使 store 里有这个 skill。
+//
+// 兜底链(从优先到兜底):
+//   1. sk.canonical?.source_path(后端 get_skill?full=true 时返;Canonical.SourceDir
+//      是 json:"-" 不导出,所以这里读不到)
+//   2. getStoreInfo().store_root + sk.group_path + name(skill 在 store 内的物理根)
+//   3. 如果 store_root 也拿不到 → 真正失败,弹"无法定位"
+//
+// 拼路径时把 dirPath(目录右键时带的相对路径)拼到 store 内的物理目录上,
+// 跟 SkillsView.openGroupInFolder(走 store_root + 相对路径) 行为一致。
 async function openFolderInExplorer(dirPath) {
-  // 从 skill 的 source_dir 拼绝对路径,跟 SkillsView.openGroupInFolder 一致
   const sk = props.skill || {}
-  const srcDir = sk.canonical?.source_dir
-    || sk.canonical?.source_path
-    || ''
+  let srcDir = sk.canonical?.source_path || ''
+  if (!srcDir) {
+    // 兜底:走 store-info 拿 store 物理根,再拼上 skill 的 group_path + name
+    try {
+      const info = await getStoreInfo()
+      const root = info?.store_root || ''
+      if (root) {
+        const gp = sk.group_path || ''
+        const nm = sk.name || ''
+        srcDir = gp ? `${root}/${gp}/${nm}` : `${root}/${nm}`
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
   if (!srcDir) {
     toast.error('无法定位到磁盘目录,缺少 source_dir')
     return
