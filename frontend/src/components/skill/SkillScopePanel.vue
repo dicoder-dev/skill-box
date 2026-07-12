@@ -17,6 +17,12 @@ import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
+// 2026-07-12 增:folder 按钮需要 platform.fs.reveal / platform.openExternal,
+// 显式 import 而非依赖 wails3 全局变量(裸名 platform 在 Web 部署 / Vite dev
+// server 上找不到 → 报 "Can't find variable: platform",跟 SkillFileInlinePanel
+// / CodeViewer 等老代码用裸名是同一个坑,这里按 platform/index.js 的命名导出
+// 显式 import,跨平台稳)。
+import { platform } from '@/platform'
 
 const props = defineProps({
   skill: { type: Object, default: () => ({}) },
@@ -362,10 +368,19 @@ async function openGlobalAgentFolder() {
     return
   }
   try {
+    // 2026-07-12 修:platform 已经显式 import,直接 platform.fs.reveal / platform.openExternal,
+    // 不要再 platform.platform.openExternal(嵌套访问失败)。
     if (platform?.fs?.reveal) {
       const r = await platform.fs.reveal(p)
+      // 桌面端 fs.reveal 成功 → return true / 对象;Web 部署无 hook → 抛 501 带 fallback_url,
+      // platform 内部已经把 fallbackUrl 解到 e.data.fallback_url 并 return {ok:false, fallbackUrl},
+      // 这里再调 platform.openExternal 走浏览器兜底。
       if (r && r.ok === false && r.fallbackUrl) {
-        platform.platform.openExternal(r.fallbackUrl)
+        if (platform?.openExternal) {
+          platform.openExternal(r.fallbackUrl)
+        } else {
+          toast.info(`全局 Agent 目录: ${r.fallbackUrl}`)
+        }
       }
       return
     }
