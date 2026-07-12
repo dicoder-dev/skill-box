@@ -147,7 +147,13 @@ function isDirty(filePath) {
 }
 
 // 过滤后的子节点:空目录不渲染(避免空 folder 节点干扰视觉)
-const visibleDirs = computed(() => (props.dirs || []).filter((d) => (d.children || []).length + (d.files || []).length > 0))
+//
+// 2026-07-12 改:保留 isEmpty=true 的目录(后端 listEmptyDirs 注入
+// .skillbox-placeholder 占位条目后,buildTree 给该 dirNode 打标)。
+// 没这个口子的话,后端明明知道磁盘有 aa/bb 这种空目录,前端还是把它过滤掉,
+// 等于整套占位机制白做。isEmpty 目录 children/files 都为 0,渲染时自然
+// 是空 folder 节点,语义跟磁盘一致 — 用户视觉上能看到、不会消失。
+const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty || (d.children || []).length + (d.files || []).length > 0))
 </script>
 
 <template>

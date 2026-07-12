@@ -75,8 +75,18 @@ function buildTree(files) {
     const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
     // 业务占位文件(比如 .skillbox-placeholder):仅用于让父目录在 buildTree 里
     // 被建出来(空目录要能显示),自身不挂成 file。先 ensureDir 父目录,再 continue。
+    //
+    // 2026-07-12 改:父目录 ensureDir 后,打 isEmpty=true 标记 —
+    // FileTreeNode.visibleDirs 默认过滤 children+files==0 的空目录,
+    // 没有这个标记,后端 listEmptyDirs 注入的占位条目会被自身循环 continue 掉,
+    // 父目录 dirs[] 永远是 0 长度 → visibleDirs 把它过滤掉 → 视觉上还是看不到。
+    // 标记后 visibleDirs 保留该 dirNode,渲染时因 files 为空自然没文件行,
+    // 树里就是一个空的 folder 节点 — 跟磁盘一致。
     if (parts.some((seg) => isBusinessPlaceholder(seg))) {
-      if (dirPath) ensureDir(dirPath)
+      if (dirPath) {
+        const dirNode = ensureDir(dirPath)
+        dirNode.isEmpty = true
+      }
       continue
     }
     // 过滤以 . 开头的隐藏文件(.DS_Store / ._* / .git 等)
