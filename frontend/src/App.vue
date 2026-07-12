@@ -97,7 +97,11 @@ onMounted(() => {
   // 只在桌面端判断平台;web 端直接 false 走"贴顶"布局。
   // 后端目前没把 os / titleBarHeight 注入 __APP_RUNTIME__,统一靠 navigator.userAgent 兜底。
   // wails3 webview 在 macOS 上 UA 通常带 "Mac OS X" 或 "Macintosh",与普通 Safari 一致。
-  if (runMode === 'desktop') {
+  // 2026-07-12 fix:runMode 是 storeToRefs 解构出的 Ref,直接 == 'desktop' 永远 false
+  // (ref 对象 vs 字符串),导致 isMacOS 永远是 false,mac-desktop class 永远挂不上,
+  // .topbar 的 padding-top: 50px / padding-left: 80px 让位红绿灯逻辑全部失效,
+  // logo 文字与红绿灯重叠。必须用 .value 访问原值。
+  if (runMode.value === 'desktop') {
     const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
     isMacOS.value = /Mac|iPhone|iPad/i.test(ua)
     // 2026-07-11 v8 增:macOS 桌面端给 html 加 .is-mac-desktop class,
