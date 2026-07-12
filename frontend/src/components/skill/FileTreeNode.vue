@@ -181,7 +181,16 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
           class="file-dir-icon"
         />
         <span class="file-name">{{ dir.name }}</span>
-        <span v-if="(dir.children || []).length + (dir.files || []).length" class="file-count">
+        <!-- 2026-07-12 改:空目录显式标注"(空)",避免视觉上"消失" —
+             旧版 children+files==0 时不渲染 file-count,跟有内容的目录对比
+             一眼看上去像没东西,用户反馈"文件夹不见了"。文字徽标比数字徽标
+             更明确,跟右侧 file-count(数字)风格统一。 -->
+        <span
+          v-if="(dir.children || []).length + (dir.files || []).length === 0"
+          class="file-count file-count-empty"
+          title="空文件夹"
+        >空</span>
+        <span v-else-if="(dir.children || []).length + (dir.files || []).length" class="file-count">
           {{ (dir.children || []).length + (dir.files || []).length }}
         </span>
       </div>
@@ -288,6 +297,13 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
   padding: 1px 6px;
   background: var(--bg-subtle);
   border-radius: 999px;
+}
+/* 2026-07-12 增:空目录徽标 — 比有内容的目录徽标更"淡",让用户一眼
+   区分"有内容"和"空"两类文件夹,空文件夹不会被误以为"消失"。 */
+.file-count-empty {
+  color: var(--text-faint);
+  opacity: 0.7;
+  font-style: italic;
 }
 .file-tree-selected > .file-row {
   background: var(--accent-blue);
