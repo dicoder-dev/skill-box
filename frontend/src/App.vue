@@ -605,10 +605,10 @@ onUnmounted(() => {
    高度由内容撑起,在 .topbar 上声明 --topbar-h 给 sidebar fixed top 引用,
    macOS 桌面端用更具体的 .topbar.mac-desktop 选择器把 --topbar-h 改成 98px
    (48 + 50 让位红绿灯),sidebar 会自动跟着 mac 模式对齐,无需 JS 改值。
-   2026-07-12 改:macOS 桌面端 padding-top 抬 50px 让位红绿灯,
-   移动端(单条)无 macOS 让位,直接贴顶。
-   2026-07-12 v2 改:macOS 桌面端 topbar 内部左侧加 padding-left: 80px
-   让位红绿灯(0~80px 区域),避免 logo 文字被红绿灯遮挡。
+   2026-07-12 v2 改:macOS 桌面端顶栏内容不需要 padding-top 50px 让位
+   (用户反馈会换行/视觉错位),只保留水平 padding-left: 80px 让位红绿灯。
+   macOS 模式下 --topbar-h 仍保持 48px(不撑高顶栏),红绿灯浮在 webview
+   顶部 0~50px / 0~80px 区域,只是 logo 文字水平方向避开它。
    2026-07-12 改:z-index 从 20 提到 45,确保与 sidebar(z-35)协调 —
    顶栏在侧栏之上,横穿屏幕时 logo 文字浮在 sidebar 背景之上。 */
 .topbar {
@@ -628,9 +628,7 @@ onUnmounted(() => {
   transition: all 0.3s ease;
 }
 .topbar.mac-desktop {
-  --topbar-h: 98px;          /* macOS 模式下顶栏 48 + 50 红绿灯让位 */
-  padding-top: 50px;         /* macOS 顶部让位红绿灯 */
-  padding-left: 80px;        /* v2:macOS 左侧让位红绿灯水平位置(0~80px) */
+  padding-left: 80px;        /* macOS 左侧让位红绿灯水平位置(0~80px) */
 }
 
 .topbar-left {
@@ -688,8 +686,10 @@ onUnmounted(() => {
 }
 
 .topbar-right {
-  @apply flex items-center gap-2 flex-wrap;
+  @apply flex items-center gap-2;
   flex-shrink: 0;
+  flex-wrap: nowrap;          /* 顶栏高度 48px,3 个 badge 一行,不允许换行 */
+  white-space: nowrap;
 }
 
 .stat-badge {
