@@ -135,6 +135,14 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 		if err != nil {
 			return fmt.Errorf("skillstore: invalid file path %q: %w", f.Path, err)
 		}
+		// 2026-07-12 改:过滤业务占位 .skillbox-placeholder(空目录标识)。
+		// loadFromDir 用它在内存里建出"空目录节点",但绝不能落到磁盘 —
+		// 用户视角下"目录里默认有个文件"很奇怪,而且再次 Save 也不会清除
+		// 已存在的占位文件(可能由旧版本残留)。占位条目用文件 basename 判定,
+		// 不管在哪个目录层级,统一过滤。
+		if filepath.Base(rel) == ".skillbox-placeholder" {
+			continue
+		}
 		dst := filepath.Join(tmp, rel)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return fmt.Errorf("skillstore: mkdir %s: %w", filepath.Dir(dst), err)
@@ -144,7 +152,25 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 		}
 	}
 
-	// 原子替换:先把目标目录(如果存在)删了,再 rename temp -> target
+	// 原子替换:先把目标目录(如果存在)删了,再 rename temp -> target。
+	//
+	// 2026-07-12 改:删旧目录前先扫一遍,如果里面有 .skillbox-placeholder 残留
+	// (旧版本 Save 写进去的),递归删掉 — 这些是空目录占位条目,正常路径不该
+	// 出现在磁盘上。否则删除 skill 时用户也会看到目录里残留 .skillbox-placeholder。
+	if _, statErr := os.Stat(dir); statErr == nil {
+		_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if filepath.Base(p) == ".skillbox-placeholder" {
+				_ = os.Remove(p)
+			}
+			return nil
+		})
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("skillstore: remove old dir: %w", err)
 	}

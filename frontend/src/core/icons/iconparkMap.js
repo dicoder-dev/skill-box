@@ -61,6 +61,11 @@ export const MDI_TO_ICONPARK = {
   // 文件
   'file-outline':                 'File',
   'file-document-outline':        'FileText',
+  // 2026-07-12 增:新建文件图标 mdi:file-document-plus-outline 映射。
+  // iconpark 里有 FileAddition(文件+加号叠加,语义"新建文件")。
+  // 旧版没这条,根区域右键/目录右键的"新建文件"项 fallback 到 Help(问号),
+  // 用户视觉上图标不显示。FileAddition 是最贴近 mdi:file-document-plus-outline 语义的。
+  'file-document-plus-outline':   'FileAddition',
   'text-box-outline':             'Text',            // 文本框
   'pencil-box-outline':           'EditOne',
 

@@ -910,7 +910,11 @@ function onCtxFolder({ dir, event }) {
   ctxMenu.open = true
 }
 
-// 根区域右键:新建文件夹 / 新建文件
+// 根区域右键:新建文件夹 / 新建文件 / 在文件浏览器中打开
+// 2026-07-12 改:加"在文件浏览器中打开"项(走 openFolderInExplorer('') =
+// 打开 skill 根目录)。跟目录节点右键的"在文件浏览器中打开"复用同一项,
+// 用户反馈右键空白处缺这个入口,导致想直接定位磁盘目录还得先建个空文件夹
+// 然后右键它,体验割裂。
 function onCtxRoot({ event }) {
   // 2026-07-11 增:诊断日志 — 确认 root context menu 事件是否到达 InlinePanel
   console.log('[InlinePanel] onCtxRoot fired at', event?.clientX, event?.clientY)
@@ -928,6 +932,13 @@ function onCtxRoot({ event }) {
       label: LABEL_CTX_NEW_FILE,
       icon: 'mdi:file-document-plus-outline',
       onClick: () => openNewFileDialog(''),
+    },
+    { divided: true, key: 'div-root-1', label: '' },
+    {
+      key: 'open-folder',
+      label: LABEL_CTX_OPEN_FOLDER,
+      icon: 'mdi:folder-outline',
+      onClick: () => openFolderInExplorer(''),
     },
   ]
   ctxMenu.open = true
@@ -1093,16 +1104,22 @@ async function submitRenameFolder() {
   renameFolderBusy.value = true
   try {
     // 把所有 <oldDir>/ 前缀的 file.path 改成 <newDir>/
+    // 2026-07-12 改:同步过滤 .skillbox-placeholder 占位条目 —
+    // 重命名后这些条目要么 prefix 命中变成 <newDir>/.skillbox-placeholder
+    // 继续往后端传,要么 .slice 算错路径。直接在 map 前剔掉最稳,
+    // 也避免后端 Save 把它写到磁盘(虽然后端 Save 也加了过滤,这是双保险)。
     const oldPrefix = renameFolderOldPath.value + '/'
-    const next = (props.files || []).map((f) => {
-      if (f.path === renameFolderOldPath.value) {
-        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
-      }
-      if (f.path.startsWith(oldPrefix)) {
-        return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
-      }
-      return f
-    })
+    const next = (props.files || [])
+      .filter((f) => f && f.path && !f.path.split('/').pop().startsWith('.skillbox-placeholder'))
+      .map((f) => {
+        if (f.path === renameFolderOldPath.value) {
+          return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+        }
+        if (f.path.startsWith(oldPrefix)) {
+          return { ...f, path: newPath + '/' + f.path.slice(oldPrefix.length) }
+        }
+        return f
+      })
     await persistFiles(next)
     renameFolderOpen.value = false
     toast.success(`已重命名为「${newName}」`)
@@ -1185,6 +1202,14 @@ async function submitDeleteFile() {
 // 复用现有 saveCurrent 的链路,只是不重渲 SKILL.md(本组件不维护 manifest)。
 async function persistFiles(files) {
   const sk = props.skill || {}
+  // 2026-07-12 改:送往后端前剥掉 .skillbox-placeholder 占位条目。
+  // 这些是空目录标识(后端 loadFromDir.listEmptyDirs 注入),只在内存里
+  // 用于 buildTree 建空目录,落到磁盘用户会看到"目录里默认有个文件"。
+  // 后端 Save 也有同名过滤,这里再剥一次是双保险(任何前端直传 updateSkill
+  // 的路径都生效,不会漏改某条新调用点)。
+  const stripped = (files || []).filter(
+    (f) => f && f.path && !f.path.split('/').pop().startsWith('.skillbox-placeholder')
+  )
   await updateSkill({
     scope: sk.scope || 'global',
     project_id: sk.project_id || 0,
@@ -1194,11 +1219,12 @@ async function persistFiles(files) {
     manifest: sk.canonical?.manifest || {
       name: sk.name, version: sk.version,
     },
-    files,
+    files: stripped,
   })
-  // 同步本地缓存
+  // 同步本地缓存 — 用 stripped 跟后端保持一致,避免占位条目留缓存里被下次
+  // 编辑循环回带出。
   localFiles.clear()
-  for (const f of files) {
+  for (const f of stripped) {
     if (f.path === 'SKILL.md') {
       const { body } = splitSkillMd(f.content || '')
       localFiles.set(f.path, body)
