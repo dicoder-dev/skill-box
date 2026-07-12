@@ -468,6 +468,21 @@ function parseFrontmatter(text) {
 }
 
 const hasFrontmatter = computed(() => Object.keys(frontmatter.value).length > 0)
+// 2026-07-12 增:技能版本号 — 用于详情区 title 行的 v1.0.0 灰色 badge 显示。
+// 数据源(按优先级):
+//   1. props.skill.canonical.manifest.version(getSkill full=true 时的权威值)
+//   2. props.skill.version(SkillsView enriched 时塞进来的兜底值)
+//   3. props.skill.skill_meta.version(list 原始 row 里的版本号)
+// 三层兜底避免版本号丢失 → 否则 badge 会回退显示 source = LOCAL。
+const skillVersion = computed(() => {
+  const sk = props.skill || {}
+  return String(
+    sk?.canonical?.manifest?.version
+    || sk?.version
+    || sk?.skill_meta?.version
+    || ''
+  ).trim()
+})
 // 2026-07-12 增:技能简介 — 详情区顶部技能名下方那行灰色小字。
 // 数据来源:props.skill.canonical.manifest.description(后端 store 在
 // getSkill 时把 manifest 挂在 canonical.manifest 上);fallback 到
@@ -575,7 +590,11 @@ async function saveFrontmatterForm() {
   if (!version) { fmFormError.value = 'version 不能为空'; return }
   if (!desc) { fmFormError.value = 'description 不能为空'; return }
   const triggers = normalizeFmTriggers()
-  if (triggers.length === 0) { fmFormError.value = '至少需要 1 个触发词'; return }
+  // 2026-07-12 改:触发词改为可选,不再要求至少 1 个。
+  // - fmDict.triggers 处已经只在 triggers.length>0 时写入,所以空数组不会在
+  //   SKILL.md frontmatter 里出现 triggers 这一行;
+  // - manifest.triggers 仍透传(后端 RenderSkillMD 同理按数组长度决定是否输出)。
+  // 这里不做早返回,任何残余校验留给 name/version/description(它们才是真必填)。
 
   fmFormSaving.value = true
   try {
@@ -1401,13 +1420,12 @@ defineExpose({
         <div class="sfip-title-stack">
           <div class="sfip-name-row">
             <span class="sfip-name">{{ skill?.name || '' }}</span>
-            <span v-if="skill?.version" class="sfip-version">@{{ skill.version }}</span>
+            <span v-if="skillVersion" class="sfip-version">@{{ skillVersion }}</span>
             <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
-            <!-- 2026-07-12 改:把 source 徽标(LOCAL/market)改成显示 version 号,
-                 灰色字体。reason:源信息日常对用户没区分度(从 store 加载基本都是
-                 local),version 号更有意义,且方便快速对比同一 skill 不同版本。
-                 当 version 缺失时降级显示 source(不会留空)。 -->
-            <span v-if="skill?.version" class="badge gray sfip-version-badge">v{{ skill.version }}</span>
+            <!-- 2026-07-12 改:badge 显示版本号(灰色);数据走 skillVersion computed
+                 多层兜底(canonical.manifest.version → row.version → row.skill_meta.version),
+                 避免版本号丢失时回退显示 source = LOCAL。 -->
+            <span v-if="skillVersion" class="badge gray sfip-version-badge">v{{ skillVersion }}</span>
             <span v-else-if="skill?.source" class="badge gray">{{ skill.source }}</span>
             <span class="sfip-name-actions">
               <slot name="name-actions" />
@@ -2026,28 +2044,21 @@ defineExpose({
   cursor: text;
   position: relative;
 }
-/* 2026-07-12 增:简介 hover 自定义快速 tooltip 浮层。
-   - 用 <Teleport to="body"> 挂到 document.body 直接下属,
-     脱离 .sfip-header / .sfip-title-block 的 flex / overflow / transform
-     containing block 影响(之前的版本 tip 跑到了左上角)。
-   - position:fixed 用视口坐标 top/left(由 script positionTip 计算)。
-   - maxWidth 由 script 传(最小 480 上限,避免越视口右边界)。
-   - max-height:60vh + overflow:auto 防超长 description 撑爆屏幕。
-   - z-index 100 确保盖在所有内容上方(包括 .sfip-actions)。
-   - 不写 [data-v-xxx] 作用域(因为在 body 下,而 body 下的元素没局部样式作用),
-     所以用 :global() + 唯一类名 .sfip-desc-tip 避免被组件 scoped 规则影响。
-   - :deep() 让 scoped 样式穿透 Teleport 子元素。 */
+/* 2026-07-12 改:tip 浮层黑底白字样式 — 用户期望 tooltip 是深色卡片,
+   比浅底 + 边框更显眼易读(系统级 native title 也是黑底白字,统一风格)。
+   浮层背景直接写 #1f2937 (slate-800),文字 #f3f4f6 (gray-100),
+   边框用半透明白色提亮阴影。 */
 .sfip-desc-tip {
   position: fixed;
   display: block;
   padding: 8px 12px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: #f3f4f6;
+  background: #1f2937;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   white-space: normal;
   word-break: break-word;
   cursor: text;

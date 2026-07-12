@@ -773,10 +773,11 @@ async function submit() {
   error.value = ''
   if (!draft.name.trim()) { error.value = t('skills.editor.errNameEmpty'); return }
   if (draft.description.trim().length < 10) { error.value = t('skills.editor.errDescShort'); return }
+  // 2026-07-12 改:触发词改成可选,不再报"至少填一个"错误。
+  // 沿用原有 trim+filter 逻辑把空字符串/重复清掉,得到归一化后的数组交给后端。
   const triggers = (draft.triggers || [])
     .map((s) => String(s || '').trim())
     .filter(Boolean)
-  if (triggers.length === 0) { error.value = t('skills.editor.errTriggersEmpty'); return }
   // 2026-06-26 增:作用域=project 时必须选具体项目
   if (draft.scope === 'project' && !draft.project_id) {
     error.value = t('skills.editor.errProjectRequired')
