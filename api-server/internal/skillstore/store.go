@@ -135,15 +135,19 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 		if err != nil {
 			return fmt.Errorf("skillstore: invalid file path %q: %w", f.Path, err)
 		}
-		// 2026-07-12 改:过滤业务占位 .skillbox-placeholder(空目录标识)。
-		// loadFromDir 用它在内存里建出"空目录节点",但绝不能落到磁盘 —
-		// 用户视角下"目录里默认有个文件"很奇怪,而且再次 Save 也不会清除
-		// 已存在的占位文件(可能由旧版本残留)。占位条目用文件 basename 判定,
-		// 不管在哪个目录层级,统一过滤。
+		dst := filepath.Join(tmp, rel)
+		// 2026-07-12 改:业务占位 .skillbox-placeholder 转 mkdir — 不写文件,
+		// 只确保父目录存在。这是"空目录标识"的真正语义:占位条目代表
+		// <dir>/ 是一个空目录,MkdirAll(filepath.Dir(dst)) 后 dst 这个
+		// 占位文件路径本身就是这个空目录。上一版的"continue"会把空目录
+		// 吞掉,导致前端任何 updateSkill(重命名 / 编辑文件)后磁盘上空
+		// 目录永久消失。
 		if filepath.Base(rel) == ".skillbox-placeholder" {
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return fmt.Errorf("skillstore: mkdir %s: %w", filepath.Dir(dst), err)
+			}
 			continue
 		}
-		dst := filepath.Join(tmp, rel)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return fmt.Errorf("skillstore: mkdir %s: %w", filepath.Dir(dst), err)
 		}
@@ -171,6 +175,56 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 			return nil
 		})
 	}
+	// 2026-07-12 改:不再 RemoveAll(dir) 全量覆盖 — 这是空目录消失的根因。
+	// 旧版 Save 是"覆盖式": tmp 重建完整目录树 → 删旧目录 → rename。
+	// 问题:前端 state 未必包含磁盘上所有空目录的占位条目(比如前端只 push
+	// 了 dirty 的 SKILL.md,没遍历 state 包含占位),Save 后磁盘上空目录
+	// 全部丢失 — 用户报告"重命名 cc→dd 后 cc/dd 都消失了"。
+	//
+	// 新版: tmp 已经按 c.Files 重建了完整目录树(包括占位目录)。
+	// 此时把"磁盘原 dir 里 tmp 没有的非占位文件"复制到 tmp(保留磁盘上
+	// 前端不知道的文件/空目录树),然后再 RemoveAll + rename 即可。
+	//
+	// 关键不变量:
+	//   - 用户文件(SKILL.md / 普通 .md / .json 等):c.Files 里有的覆盖、tmp
+	//     没有的保留(从原 dir 复制过去)。
+	//   - 空目录:c.Files 里有占位条目 → tmp 已有该目录;c.Files 里没有但磁盘
+	//     上有空目录 → 复制过去保留(目录本身会被 WalkDir 自动处理)。
+	//   - .skillbox-placeholder:绝不能复制到 tmp(避免重新引入占位文件)。
+	if _, statErr := os.Stat(dir); statErr == nil {
+		_ = filepath.WalkDir(dir, func(srcPath string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if srcPath == dir {
+				return nil
+			}
+			rel, relErr := filepath.Rel(dir, srcPath)
+			if relErr != nil {
+				return nil
+			}
+			// 跳过占位文件本身
+			if !d.IsDir() && filepath.Base(srcPath) == ".skillbox-placeholder" {
+				return nil
+			}
+			dstPath := filepath.Join(tmp, rel)
+			if _, existsErr := os.Stat(dstPath); existsErr == nil {
+				// tmp 已有这个路径(来自 c.Files 的某个 file/占位目录),不覆盖
+				return nil
+			}
+			// tmp 缺这个路径,从 src 复制到 dst(保留磁盘上前端不知道的内容)
+			if d.IsDir() {
+				if err := os.MkdirAll(dstPath, 0o755); err != nil {
+					return nil
+				}
+				return nil
+			}
+			if err := copyFileAtomic(srcPath, dstPath); err != nil {
+				return nil
+			}
+			return nil
+		})
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("skillstore: remove old dir: %w", err)
 	}
@@ -178,6 +232,16 @@ func (s *Store) Save(c skilladapter.Canonical) error {
 		return fmt.Errorf("skillstore: rename temp: %w", err)
 	}
 	return nil
+}
+
+// copyFileAtomic 把 src 单文件复制到 dst(读 src 内容 → writeFileAtomic dst)。
+// 用于 Save 阶段"保留磁盘上前端不知道的文件"场景。
+func copyFileAtomic(src, dst string) error {
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(dst, string(content), 0o644)
 }
 
 // Load 读取 canonical skill;不存在返回 (nil, ErrNotFound)。
