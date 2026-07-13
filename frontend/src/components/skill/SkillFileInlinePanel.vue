@@ -237,6 +237,11 @@ onMounted(() => {
   _syncSelectedFile()
   _syncLocalFiles()
   fetchStoreRoot()
+  // 2026-07-13 增:注册全局 Ctrl+S / Cmd+S 快捷键保存。
+  // 挂 window 而非组件根 div,这样焦点在 Monaco/Tiptap 编辑器内部时也能捕获。
+  // 仅在编辑模式或当前文件 dirty 时触发,避免空保存(同工具栏"保存"按钮的可见条件)。
+  // macOS 上 metaKey(Cmd)等价 ctrlKey;其它平台 ctrlKey。输入法组合中不抢键。
+  window.addEventListener('keydown', onKeyDown)
 })
 
 // 2026-07-07 改:切换文件前也走 dirty 检查。
@@ -748,6 +753,23 @@ const skillRelPath = computed(() => {
 // ===== Save / Discard =====
 const saving = ref(false)
 const saveError = ref('')
+// 2026-07-13 增:全局 Ctrl+S / Cmd+S 触发保存。
+// 触发条件:编辑模式或当前文件 dirty(与工具栏"保存"按钮 v-if 一致)。
+// macOS Cmd+S(metaKey),其它平台 Ctrl+S(ctrlKey)。输入法组合中不抢。
+function onKeyDown(e) {
+  if (e?.isComposing) return
+  const isSaveCombo = (e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey) && !e.altKey
+  if (!isSaveCombo) return
+  // 当前未选中文件:不抢键(让浏览器自己处理,虽然桌面 webview 也没默认行为)
+  if (!selectedFile.value?.path) return
+  // 不在编辑模式、也没 dirty → 让浏览器默认行为(虽然理论上也不会保存网页)
+  if (!isDirty.value && currentMode.value !== 'edit') return
+  e.preventDefault()
+  // 防止保存中重复触发(连按多次 Ctrl+S 只跑一次保存)
+  if (saving.value) return
+  // 异步触发,避免阻塞 keydown handler
+  saveCurrent()
+}
 async function saveCurrent() {
   const path = selectedFile.value?.path
   if (!path) return
@@ -927,6 +949,8 @@ function onDescLeave() {
 onUnmounted(() => {
   // 组件卸载时清掉残留 timer,避免在已销毁组件上回调
   if (descTipTimer) { clearTimeout(descTipTimer); descTipTimer = 0 }
+  // 2026-07-13 增:卸载快捷键监听,避免 InlinePanel :key 重 mount 时旧实例残留
+  window.removeEventListener('keydown', onKeyDown)
 })
 
 // =====================================================================
