@@ -442,8 +442,13 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
     <!-- 消息列表 -->
     <div ref="listEl" class="airp-list">
       <p v-if="!messages.length" class="airp-empty">
-        <IconPark icon="mdi:chat-outline" width="20" height="20" />
-        <span>{{ t('skills.aiPanel.emptyHint') }}</span>
+        <img
+          class="airp-empty-img"
+          src="/images/skill-box-dog.png"
+          alt="skill-box mascot"
+          draggable="false"
+        />
+        <span class="airp-empty-text">{{ t('skills.aiPanel.emptyHint') }}</span>
       </p>
       <div
         v-for="m in messages"
@@ -705,12 +710,26 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   margin: 30px 8px;
   text-align: center;
   color: var(--text-faint);
   font-size: 12.5px;
   line-height: 1.6;
+}
+.airp-empty-img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  /* 黑色背景图配面板的浅底:加柔和投影 + 透明黑边,让狗狗不至于融在背景里 */
+  border-radius: 12px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.airp-empty-text {
+  display: block;
+  align-self: center;
 }
 
 .airp-msg {

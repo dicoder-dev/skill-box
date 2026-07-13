@@ -453,7 +453,7 @@ const messages = {
       clearHistory: '清空对话',
       roleYou: '你',
       roleAI: 'AI',
-      emptyHint: '点上方标签快速调用,或直接在下方输入框提问。',
+      emptyHint: '点下方标签快速调用,或直接在下方输入框提问。',
       noProvider: '尚未配置 AI 模型,请先到「设置 → AI 模型」里配一个。',
       noContent: '当前文件无内容,无法调用 AI。',
       apply: '应用',

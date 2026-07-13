@@ -570,7 +570,7 @@ const messages = {
       clearHistory: 'Clear chat',
       roleYou: 'You',
       roleAI: 'AI',
-      emptyHint: 'Tap a tag above for a quick action, or just type your question below.',
+      emptyHint: 'Tap a tag below for a quick action, or just type your question below.',
       noProvider: 'No AI provider configured yet. Please set one up under Settings → AI Models first.',
       noContent: 'The current file is empty — AI needs content to work with.',
       apply: 'Apply',
