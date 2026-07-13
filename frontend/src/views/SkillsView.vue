@@ -21,7 +21,8 @@ import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skil
 // 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
 // (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
-import AIDialog from '@/components/AIDialog.vue'
+// 2026-07-13 改:AIDialog 入口迁到 SkillFileInlinePanel 右侧 AI 面板,AIDialog 组件
+// 保留文件不删(后续若需"全局 AI 操作"可启用),这里不再 import。
 import Modal from '@/components/Modal.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
@@ -203,9 +204,10 @@ function toolIcon(toolID) {
   const t = toolsById.value[toolID]
   return t?.icon || 'mdi:puzzle-outline'
 }
-// AI 侧栏
-const aiOpen = ref(false)
-function toggleAI() { aiOpen.value = !aiOpen.value }
+// 2026-07-13 改:AI 入口从 SkillsView 顶栏 actions slot 迁到 SkillFileInlinePanel
+// 文件工具栏大纲图标位置(右侧 AI 对话面板替换大纲区域)。aiOpen / toggleAI 已
+// 删除,onAIApply 保留(由 InlinePanel emit('ai-apply-skill') 触发,处理 SKILL.md
+// 应用的落盘 + dispatchEvent 同步)。
 
 // 2026-07-04 改:文件浏览器从抽屉改成内联面板,直接放正文右侧,不再需要 fileDrawerOpen。
 // currentFiles 仍保留(供 SkillFileInlinePanel 用)。
@@ -1819,6 +1821,7 @@ onUnmounted(() => {
           }"
           @saved="onDrawerSaved"
           @created="onInlinePanelCreated"
+          @ai-apply-skill="onAIApply"
         >
           <!-- 2026-07-07 改 v3:把"编辑 / 取消 / 保存"按钮搬到 InlinePanel 面包屑行内,
                跟 [i] 信息按钮同一栏、[i] 左侧依次排列(渲染顺序:name-actions → actions → [i])。
@@ -1872,14 +1875,8 @@ onUnmounted(() => {
               <span v-if="testing" class="spinner spinner-sm"></span>
               <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
             </button>
-            <button
-              class="icon-btn ai-btn"
-              :data-tip="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-              :aria-label="aiOpen ? t('skills.btnAiClose') : t('skills.btnAiOpen')"
-              @click="toggleAI"
-            >
-              <IconPark :icon="aiOpen ? 'mdi:robot' : 'mdi:robot-outline'" width="15" height="15" />
-            </button>
+            <!-- 2026-07-13 改:AI 按钮从此处移除,迁到 SkillFileInlinePanel 文件工具栏
+                 大纲图标位置(由 InlinePanel 内部渲染,点击切换右侧 AI 对话面板)。 -->
           </template>
         </SkillFileInlinePanel>
         <p v-if="!currentFiles.length && !currentLoading" class="section-empty">{{ t('skills.list.bodyEmpty') }}</p>
@@ -1887,10 +1884,6 @@ onUnmounted(() => {
 
       <!-- 空状态(没 current 时显示) -->
     </section>
-
-    <!-- AI 全局弹窗(替代旧 AIPanel 嵌入侧栏)。
-         双绑 aiOpen,工具栏的 AI 按钮 toggle 后即可弹出。 -->
-    <AIDialog v-model="aiOpen" :context-text="currentSkillMd" @apply="onAIApply" />
 
     <!-- 2026-07-04 改:文件浏览器改成正文右侧内联面板(不再用抽屉),挂载点已合并到 detail-body-split 里。 -->
     <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->

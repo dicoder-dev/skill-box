@@ -438,6 +438,66 @@ const messages = {
       // aiDialog.* 是新弹窗专用 key。
     },
 
+    // 2026-07-13 增:AI 右侧对话面板(替换原大纲区域,接替旧 AIDialog 弹窗入口)。
+    // 文件工具栏点 AI 图标 → 右侧面板从大纲切换为聊天面板;标签栏提供翻译/检测快捷入口。
+    aiPanel: {
+      open: '打开 AI 助手',
+      close: '关闭 AI 助手',
+      tagTranslate: '翻译',
+      tagReview: '检测',
+      inputPlaceholder: '向 AI 提问…(Shift+Enter 换行)',
+      send: '发送',
+      stop: '停止',
+      closeBtn: '关闭',
+      switchToOutline: '切换到大纲',
+      clearHistory: '清空对话',
+      roleYou: '你',
+      roleAI: 'AI',
+      emptyHint: '点上方标签快速调用,或直接在下方输入框提问。',
+      noProvider: '尚未配置 AI 模型,请先到「设置 → AI 模型」里配一个。',
+      noContent: '当前文件无内容,无法调用 AI。',
+      apply: '应用',
+      reject: '拒绝',
+      applied: '已应用',
+      rejected: '已拒绝',
+      applyFailed: '应用失败:{msg}',
+      reviewTitle: '检测结果',
+      noIssues: '未发现明显问题',
+      translateDialog: {
+        title: '选择目标语言',
+        desc: '确定后,系统会把翻译提示词 + 当前文档原文填到下方输入框,你点击发送即可。',
+        confirm: '确定',
+        cancel: '取消',
+      },
+      translatePromptTemplate:
+`请把下面的 Markdown 文档翻译成 {target_lang}。
+
+要求:
+1) frontmatter 字段名保留英文,不翻译字段名。
+2) 代码块、命令、文件名原样保留,完全不翻译。
+3) 标题层级、列表、链接、表格结构保留,只翻译里面的文字。
+4) 不要任何开场白、不要解释、不要寒暄,只输出翻译后的完整 markdown。
+
+待翻译文档:
+\`\`\`
+{skill_md}
+\`\`\``,
+      reviewPromptTemplate:
+`请仔细审阅下面的 Markdown 文档(Claude / Codex Skill 文件),按下面维度给出问题列表:
+1) 语法 / 拼写错误
+2) 表述不清或歧义
+3) 与 frontmatter 中 description / triggers 的一致性问题
+4) 缺失或冗余的章节
+5) 与 Claude / Codex Skill 最佳实践的偏差
+
+输出格式:Markdown bullet list,每条标注问题位置(行号或章节名)和修改建议;无明显问题就说「未发现明显问题」。不要寒暄。
+
+待审阅文档:
+\`\`\`
+{skill_md}
+\`\`\``,
+    },
+
     // 2026-07-13 增:SkillScopePanel 作用域区文案(从组件内 LABEL_* 常量迁移过来)。
     scope: {
       title: 'skill 作用域',

@@ -555,6 +555,66 @@ const messages = {
       providerMissingTitle: 'AI model required',
     },
 
+    // 2026-07-13 new: AI right panel (replaces the outline panel for AI assistance).
+    // Lives next to the file viewer; chat-style UI with tag shortcuts (translate / review).
+    aiPanel: {
+      open: 'Open AI Assistant',
+      close: 'Close AI Assistant',
+      tagTranslate: 'Translate',
+      tagReview: 'Review',
+      inputPlaceholder: 'Ask AI… (Shift+Enter for newline)',
+      send: 'Send',
+      stop: 'Stop',
+      closeBtn: 'Close',
+      switchToOutline: 'Switch to outline',
+      clearHistory: 'Clear chat',
+      roleYou: 'You',
+      roleAI: 'AI',
+      emptyHint: 'Tap a tag above for a quick action, or just type your question below.',
+      noProvider: 'No AI provider configured yet. Please set one up under Settings → AI Models first.',
+      noContent: 'The current file is empty — AI needs content to work with.',
+      apply: 'Apply',
+      reject: 'Reject',
+      applied: 'Applied',
+      rejected: 'Rejected',
+      applyFailed: 'Apply failed: {msg}',
+      reviewTitle: 'Review result',
+      noIssues: 'No obvious issues found.',
+      translateDialog: {
+        title: 'Pick a target language',
+        desc: 'After confirming, the translate prompt and the current document will be filled into the input box below — hit Send to run it.',
+        confirm: 'Confirm',
+        cancel: 'Cancel',
+      },
+      translatePromptTemplate:
+`Translate the following Markdown document into {target_lang}.
+
+Rules:
+1) Keep frontmatter field names in English.
+2) Code blocks, shell commands and file names must stay as-is.
+3) Keep Markdown structure (headings, lists, links) — only translate the human text.
+4) No preface, no explanation — output ONLY the translated markdown.
+
+Document to translate:
+\`\`\`
+{skill_md}
+\`\`\``,
+      reviewPromptTemplate:
+`Carefully review the following Markdown document (a Skill file) and list problems across these dimensions:
+1) Grammar / spelling errors
+2) Ambiguous or unclear wording
+3) Inconsistencies with the frontmatter (description / triggers)
+4) Missing or redundant sections
+5) Deviations from Claude / Codex Skill best practices
+
+Output: Markdown bullet list. Each item: location (line number or section name) + suggested fix. If everything looks fine, just say "No obvious issues found." No greetings.
+
+Document to review:
+\`\`\`
+{skill_md}
+\`\`\``,
+    },
+
     // 2026-07-13 new: AI apply / translate toasts (used by SkillsView.onAIApply)
     aiApply: {
       noSkill: 'Apply failed: no skill selected',

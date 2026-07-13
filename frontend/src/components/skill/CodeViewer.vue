@@ -25,7 +25,9 @@ import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
 import { loadMonaco, isDark } from '@/core/composables/useMonaco'
-import { useMdOutlineVisible } from '@/core/composables/useMdOutlineVisible'
+// 2026-07-13 增:右侧 AI 对话面板(替换大纲区域)。由父级 SkillFileInlinePanel 通过
+// rightPanelMode 决定渲染哪个 aside('outline' / 'ai' / 'none')。
+import AIRightPanel from '@/components/ai/AIRightPanel.vue'
 // highlight.js 用于只读视图高亮(全量包, 384 语言)。
 import hljs from 'highlight.js'
 
@@ -38,9 +40,20 @@ const props = defineProps({
   mode: { type: String, default: 'view' },
   skillRelPath: { type: String, default: '' },
   storeRoot: { type: String, default: '' },
+  // 2026-07-13 增:右侧面板模式。'outline' = 大纲(默认),'ai' = AI 对话,'none' = 不显示。
+  // 由父级 SkillFileInlinePanel 通过 useRightPanelMode composable 注入并响应用户切换。
+  rightPanelMode: { type: String, default: 'outline' },
 })
 
-const emit = defineEmits(['update:content', 'dirty-change', 'update:mode'])
+// 2026-07-13 改:增加右侧面板模式双向绑定(由父级 v-model 接管),以及 AI 应用的两条转发:
+//   - ai-apply-skill:(text) → 父级走 SkillsView.onAIApply(updateSkill) 落盘
+//   - ai-apply-local:(text) → 父级 (SkillFileInlinePanel) 写 localFiles + 标 dirty
+const emit = defineEmits([
+  'update:content', 'dirty-change', 'update:mode',
+  'update:right-panel-mode',
+  'ai-apply-skill',
+  'ai-apply-local',
+])
 
 const editable = computed(() => props.mode === 'edit')
 
@@ -98,9 +111,10 @@ const minHeadingLevel = computed(() => {
   return Math.min(...mdHeadings.value.map((h) => h.level))
 })
 
-// 2026-07-10 增:大纲面板全局显示状态(composable 内 localStorage 持久化,
-// 跨文件 + 跨刷新保留)。用户收起后,打开其他 md 文件默认也是隐藏的。
-const { outlineVisible, toggleOutline } = useMdOutlineVisible()
+// 2026-07-13 改:大纲面板状态由父级通过 rightPanelMode prop 注入,本组件不再直接
+// 读 useMdOutlineVisible 的内部状态(避免父子状态双源)。composable 仍在
+// SkillFileInlinePanel 中使用(给 AI 图标 / outline 图标提供切换入口),这里
+// 只保留 import 兼容,不再解构 outlineVisible / toggleOutline。
 
 function onMdClick(e) {
   handleExternalClick(e)
@@ -369,8 +383,11 @@ const lineNumbers = computed(() => {
           @click="onMdClick"
         />
       </div>
+      <!-- 2026-07-13 改:大纲面板条件改为 rightPanelMode === 'outline'(原来用 outlineVisible
+           composable 二元状态),由父级统一管控。aside 本身仍按 view + 有标题 + outline 三条件
+           显隐。收起按钮的点击事件也改为 emit 模式(由父级更新 rightPanelMode)。 -->
       <aside
-        v-if="!editable && mdHeadings.length && outlineVisible"
+        v-if="!editable && mdHeadings.length && rightPanelMode === 'outline'"
         class="cv-md-outline"
       >
         <header class="cv-md-outline-header">
@@ -382,7 +399,7 @@ const lineNumbers = computed(() => {
             class="cv-md-outline-toggle"
             :data-tip="t('skills.fileBrowser.hideOutline')"
             :aria-label="t('skills.fileBrowser.hideOutline')"
-            @click="toggleOutline"
+            @click="$emit('update:right-panel-mode', 'none')"
           >
             <IconPark icon="mdi:chevron-right" width="14" height="14" />
           </button>
@@ -404,6 +421,27 @@ const lineNumbers = computed(() => {
             </button>
           </li>
         </ul>
+      </aside>
+
+      <!-- 2026-07-13 增:AI 对话面板(替换大纲区域)。rightPanelMode === 'ai' 时挂载。
+           AIRightPanel 内部完成翻译/检测标签、消息流、流式渲染、应用/拒绝按钮。
+           - apply-skill → 父级 SkillsView.onAIApply(updateSkill) 落盘(SKILL.md 路径)
+           - apply-local → 父级 SkillFileInlinePanel 写 localFiles + dirty(其它文件)
+           - close / switch-outline → 更新 rightPanelMode,父级响应。 -->
+      <aside
+        v-else-if="rightPanelMode === 'ai' && !editable"
+        class="cv-md-ai"
+      >
+        <AIRightPanel
+          :file-path="path"
+          :file-content="content"
+          :is-skill-md="path === 'SKILL.md'"
+          :read-only="editable"
+          @close="$emit('update:right-panel-mode', 'none')"
+          @switch-outline="$emit('update:right-panel-mode', 'outline')"
+          @apply-skill="$emit('ai-apply-skill', $event)"
+          @apply-local="$emit('ai-apply-local', $event)"
+        />
       </aside>
     </div>
 
@@ -460,6 +498,24 @@ const lineNumbers = computed(() => {
           <pre class="cv-text-pre hljs"><code v-html="highlightedHtml" /></pre>
         </div>
       </div>
+
+      <!-- 2026-07-13 增:非 md 文件也支持 AI 面板(用户决策:所有文件 + view 模式)。
+           嵌入 cv-text-wrap 内部右侧,跟 md 区域 cv-md-wrap 内嵌 aside 视觉一致。 -->
+      <aside
+        v-if="rightPanelMode === 'ai' && !editable"
+        class="cv-text-ai"
+      >
+        <AIRightPanel
+          :file-path="path"
+          :file-content="content"
+          :is-skill-md="path === 'SKILL.md'"
+          :read-only="editable"
+          @close="$emit('update:right-panel-mode', 'none')"
+          @switch-outline="$emit('update:right-panel-mode', 'outline')"
+          @apply-skill="$emit('ai-apply-skill', $event)"
+          @apply-local="$emit('ai-apply-local', $event)"
+        />
+      </aside>
     </div>
   </div>
 </template>
@@ -514,6 +570,18 @@ const lineNumbers = computed(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 2026-07-13 增:md 文件 AI 对话面板 aside。沿用 .cv-md-outline 的 box model,
+   宽度 280px(比大纲 220px 稍宽,容纳气泡)。 */
+.cv-md-ai {
+  flex-shrink: 0;
+  width: 280px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 2026-07-10 增:md 大纲导航(右侧固定列)。
@@ -753,6 +821,25 @@ const lineNumbers = computed(() => {
   display: flex;
   overflow: hidden;
 }
+
+/* 2026-07-13 增:非 md 文件 AI 面板(嵌入 cv-text-wrap 右侧)。
+   cv-text-wrap 是纵向布局,aside 用 absolute 定位叠在右侧,不破坏原代码视图布局。
+   AIRightPanel 内部是 height:100% 自适应容器高度。 */
+.cv-text-ai {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2;
+}
+/* cv-text-wrap 本身需要 relative 上下文,作为 cv-text-ai 的定位父级 */
+.cv-text-wrap { position: relative; }
 
 /* 行号列(共用) */
 .cv-text-gutter {

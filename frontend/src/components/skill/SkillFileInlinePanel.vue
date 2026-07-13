@@ -24,7 +24,9 @@ import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
 import { updateSkill, createSkill, getStoreInfo } from '@/api/skillbox/skills'
-import { useMdOutlineVisible } from '@/core/composables/useMdOutlineVisible'
+// 2026-07-13 改:右侧面板状态改用 useRightPanelMode(原 useMdOutlineVisible 不再使用,
+// import 也去掉)。CodeViewer 内也不再 import 这个 composable。
+import { useRightPanelMode } from '@/core/composables/useRightPanelMode'
 import { useToastStore } from '@/core/store/toast'
 
 // 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
@@ -69,7 +71,43 @@ const LABEL_RETRY = 'common.retry'
 // header 内的 toggle 是同一份状态,两边都能控制。
 const LABEL_OUTLINE_SHOW = 'skills.fileBrowser.showOutline'
 const LABEL_OUTLINE_HIDE = 'skills.fileBrowser.hideOutline'
-const { outlineVisible, toggleOutline } = useMdOutlineVisible()
+// 2026-07-13 改:右侧面板状态改用 useRightPanelMode。
+const { mode: rightMode, aiActive, showAI, showOutline, hidePanel } = useRightPanelMode()
+
+// 2026-07-13 增:工具栏 AI 按钮文案 + 点击行为(ai ↔ none)。
+const LABEL_AI_OPEN = '打开 AI 助手'
+const LABEL_AI_CLOSE = '关闭 AI 助手'
+function onClickAi() {
+  if (aiActive.value) hidePanel()
+  else showAI()
+}
+
+// 2026-07-13 增:CodeViewer 内 AI aside emit 转发。
+//   - onAiApplySkill(text):SKILL.md 路径 → 透传到父级 SkillsView.onAIApply(updateSkill)
+//   - onAiApplyLocal(text):非 SKILL.md 路径 → 内部直接写 localFiles + 标 dirty,
+//     由用户手动点保存(Ctrl+S / Cmd+S 或保存按钮)落盘,与手编编辑体验一致。
+//   - onSetRightPanelMode(m):统一处理 CodeViewer emit 的 update:right-panel-mode
+//     (outline aside 收起按钮 / AI aside 关闭按钮 / 切换大纲按钮)。
+function onAiApplySkill(text) {
+  emit('ai-apply-skill', text)
+}
+
+function onAiApplyLocal(text) {
+  const path = selectedFile.value?.path
+  if (!path || path === 'SKILL.md') return
+  localFiles.set(path, text || '')
+  // 触发 dirty(走与手编编辑一致的路径)
+  const s = new Set(dirtyPaths.value)
+  s.add(path)
+  dirtyPaths.value = s
+  toast.success('AI 输出已写入,请点保存(Ctrl+S / Cmd+S)落盘')
+}
+
+function onSetRightPanelMode(m) {
+  if (m === 'outline') showOutline()
+  else if (m === 'ai') showAI()
+  else hidePanel()
+}
 
 // 2026-07-11 增:文件树右键菜单 + 文件/目录 CRUD 弹窗文案(组件内 0 t(),统一常量)
 const LABEL_CTX_NEW_FILE = 'skills.fileBrowser.ctxNewFile'
@@ -97,7 +135,7 @@ const props = defineProps({
   skill: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['saved'])
+const emit = defineEmits(['saved', 'ai-apply-skill'])
 
 // ====== File selection state ======
 const selectedFile = ref(null)
@@ -1588,20 +1626,22 @@ defineExpose({
           >
             <IconPark icon="Edit" width="14" height="14" />
           </button>
-          <!-- 2026-07-10 改 v3:图标用 iconpark 原生 ListView(目录/大纲语义),不用 mdi: 前缀
-               避免 mdi 映射兜底导致图标不可见(之前 mdi:bookmark-plus-outline 没在
-               MDI_TO_ICONPARK 里,fallback 到 NOT_FOUND_ICON='Help' 显示不出来)。
-               展开/收起用同一个图标 + data-tip 区分文案,展开时加 sfip-mode-btn-active
-               蓝色高亮让用户清楚知道大纲当前是显示的。 -->
+          <!-- 2026-07-13 改:把原大纲图标位置换成 AI 图标。原大纲图标删除 —— 大纲入口
+               改由 CodeViewer 内 outline aside header 右上角的小 X 按钮控制(已在
+               CodeViewer 中通过 emit('update:right-panel-mode', 'none') 实现)。
+               AI 图标显示条件:有选中文件 + view 模式(不限制 md,所有文件都支持)。
+               - 展开时显示 robot(mdi:robot) + sfip-mode-btn-active 高亮
+               - 收起时显示 robot-outline
+               与 CodeViewer 共享 useRightPanelMode 同一份状态,两边操作一致。 -->
           <button
-            v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile"
+            v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
-            :data-tip="outlineVisible ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
-            :aria-label="outlineVisible ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
-            :class="{ 'sfip-mode-btn-active': outlineVisible }"
-            @click="toggleOutline"
+            :data-tip="aiActive ? LABEL_AI_CLOSE : LABEL_AI_OPEN"
+            :aria-label="aiActive ? LABEL_AI_CLOSE : LABEL_AI_OPEN"
+            :class="{ 'sfip-mode-btn-active': aiActive }"
+            @click="onClickAi"
           >
-            <IconPark icon="ListView" width="14" height="14" />
+            <IconPark :icon="aiActive ? 'mdi:robot' : 'mdi:robot-outline'" width="14" height="14" />
           </button>
           <!-- 2026-07-08 改:删掉"返回预览"按钮(原 mode=edit 分支)。
                用户决定编辑后只能一直编辑,通过"放弃修改"或"保存"按钮离开编辑态。
@@ -1641,8 +1681,12 @@ defineExpose({
           :mode="currentMode"
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
+          :right-panel-mode="rightMode"
           @update:content="onContentChange"
           @dirty-change="onDirtyChange"
+          @update:right-panel-mode="onSetRightPanelMode"
+          @ai-apply-skill="onAiApplySkill"
+          @ai-apply-local="onAiApplyLocal"
         />
         <div v-else class="sfip-empty">
           <IconPark icon="mdi:file-outline" width="48" height="48" />

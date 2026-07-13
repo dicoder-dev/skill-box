@@ -178,6 +178,7 @@ export const MDI_TO_ICONPARK = {
   'code-braces':                  'CodeBrackets',
   'robot':                        'Robot',
   'robot-outline':                'RobotOne',
+  'translate':                    'Translate',
   'leaf':                         'Leaf',
   'cursor-default-click-outline': 'Cursor',
   'script-text-outline':          'FileCode',
