@@ -701,7 +701,11 @@ onUnmounted(() => {
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1;              /* 锁住行高,让 margin-top 精准控制位置 */
-  /* 2026-07-13 改:删 margin-top: -2px,改回水平居中对齐。 */
+  /* 2026-07-13 改:加 margin-top: -2px 微调,
+     水平居中对齐基础上让文字视觉上提一点,
+     让 'S' 字母中线略高于 logo 中线,补偿 logo PNG 底部的
+     透明 padding 导致的视觉下沉感。 */
+  margin-top: -2px;
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;
