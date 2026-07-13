@@ -13,6 +13,10 @@
 // 要么用 markRaw/shallowRef。我们用 shallowRef + 直接 .value 写,绕过 proxy。
 
 import { computed, ref, shallowRef, watch, defineAsyncComponent } from 'vue'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:OfficeViewer 文案走 i18n(plainT 兜底)。
+const t = (key, values) => plainT(key, values)
 // 2026-07-08 改:vue-office 4 个组件用 defineAsyncComponent 动态 import,
 // 不进 CodeViewer 主 chunk。pdfjs-dist 单包 ~ 1MB,docx 的 mammoth 类解析器
 // 也 ~ 800KB,excel 用 xlsx 解析 ~ 500KB,4 个全静态 import 直接撑爆主 bundle。
@@ -86,8 +90,8 @@ function onError(e) {
       @error="onError"
     />
     <div v-else-if="encodeError || parseError" class="ov-error">
-      <p>文档解析失败: {{ encodeError || parseError }}</p>
-      <p class="ov-error-hint">文件可能已损坏,或在 wails3 webview 下二进制 bytes 还原不完整。请用"在文件夹中打开"在原生应用查看。</p>
+      <p>{{ t('skills.fileBrowser.officeParseFailed') }}: {{ encodeError || parseError }}</p>
+      <p class="ov-error-hint">{{ t('skills.fileBrowser.officeParseHint') }}</p>
     </div>
     <div v-else class="ov-loading">
       <span class="ov-spinner" />

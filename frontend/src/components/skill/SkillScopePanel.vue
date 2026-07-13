@@ -17,6 +17,7 @@ import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
+import { plainT } from '@/core/i18n/index.js'
 // 2026-07-12 增:folder 按钮需要 platform.fs.reveal / platform.openExternal,
 // 显式 import 而非依赖 wails3 全局变量(裸名 platform 在 Web 部署 / Vite dev
 // server 上找不到 → 报 "Can't find variable: platform",跟 SkillFileInlinePanel
@@ -53,25 +54,33 @@ function toolDisplay(toolID) {
   return t.display_name || t.display || t.tool_id || toolShort(toolID)
 }
 
-const LABEL_SCOPE = 'skill 作用域'
-const LABEL_GLOBAL = '全局'
-const LABEL_PROJECT_PREFIX = '项目 #'
-const LABEL_EMPTY = '该技能尚未写入任何工具/位置'
-const LABEL_LOADING = '加载中...'
-const LABEL_ENABLE = '启用作用域'
-const LABEL_DISABLE = '停用作用域'
-const LABEL_TITLE_ERROR = '作用域加载出错'
-const LABEL_RETRY = '重试'
+// 2026-07-13 改:SkillScopePanel 文案走 i18n key(原本是 LABEL_* 硬编码常量,
+// 跟 SkillFileInlinePanel 同款策略 — 不用 useI18n,直接 plainT 兜底,
+// 避免 v-if 懒挂载 + wails webview 下的 ProxyObject 异常)。
+// 同样复用 t(key, values) 包装 plainT,跟 SkillsView / SkillFileInlinePanel
+// 保持一致。
+function t(key, values) {
+  return plainT(key, values)
+}
+const LABEL_SCOPE = 'skills.scope.title'
+const LABEL_GLOBAL = 'skills.scope.global'
+const LABEL_PROJECT_PREFIX = 'skills.scope.projectPrefix'
+const LABEL_EMPTY = 'skills.scope.empty'
+const LABEL_LOADING = 'skills.scope.loading'
+const LABEL_ENABLE = 'skills.scope.enable'
+const LABEL_DISABLE = 'skills.scope.disable'
+const LABEL_TITLE_ERROR = 'skills.scope.loadError'
+const LABEL_RETRY = 'skills.scope.retry'
 // 2026-07-12 增:顶部"全局 Agent Skill" tag 文案常量(跟 TreeNode 卡片上的 tag 一致)。
 // 用户反馈把"全局 Agent"补全成"全局 Agent Skill"——更明确指向"这是一个全局
 // Agent 的技能",跟普通工具作用域区分。
-const LABEL_GLOBAL_AGENT = '全局 Agent Skill'
-const LABEL_GLOBAL_AGENT_TIP = '同步到 ~/.agents/skills/ 共享池(所有工具均可读取)'
+const LABEL_GLOBAL_AGENT = 'skills.scope.globalAgent'
+const LABEL_GLOBAL_AGENT_TIP = 'skills.scope.globalAgentTip'
 // 2026-07-12 增:tag 右侧两个图标按钮的 tip 文案。
 // - info 按钮 = 弹窗提示全局 Agent 的说明 + 列出适配的工具
 // - folder 按钮 = 直接打开 ~/.agents/skills/ 共享池根目录
-const LABEL_GLOBAL_AGENT_INFO_TIP = '查看全局 Agent 说明'
-const LABEL_GLOBAL_AGENT_FOLDER_TIP = '在文件浏览器中打开 ~/.agents/skills/'
+const LABEL_GLOBAL_AGENT_INFO_TIP = 'skills.scope.globalAgentInfoTip'
+const LABEL_GLOBAL_AGENT_FOLDER_TIP = 'skills.scope.globalAgentFolderTip'
 
 // 2026-07-12 增:info 弹窗内文案(常量字符串,不依赖 i18n,跟组件其它 LABEL_* 一致)。
 // 2026-07-12 改:联网搜索后改写"适配全局 Agent 的工具"清单为固定值 ——
@@ -94,12 +103,12 @@ const LABEL_GLOBAL_AGENT_FOLDER_TIP = '在文件浏览器中打开 ~/.agents/ski
 //
 // 写死而不是走 store 过滤,是产品决定的"事实快照",跟后端 resolver 也
 // 解耦(后端只看磁盘 .agents/skills/<name>/SKILL.md 存不存在)。
-const LABEL_INFO_TITLE = '全局 Agent Skill'
-const LABEL_INFO_DESC = '把 skill 写入 ~/.agents/skills/ 后,所有声明该目录作为个人级 skills 池的 AI 工具都能自动读取(无需复制到每个工具的目录)。'
-const LABEL_INFO_TOOL_TITLE = '适配 ~/.agents/skills/ 的工具(2026-07-12)'
-const LABEL_INFO_TOOL_SUPPORTED = '已支持'
-const LABEL_INFO_TOOL_PARTIAL = '部分支持'
-const LABEL_INFO_TOOL_EMPTY = '暂未发现适配工具。'
+const LABEL_INFO_TITLE = 'skills.scope.globalAgentInfoTitle'
+const LABEL_INFO_DESC = 'skills.scope.globalAgentInfoDesc'
+const LABEL_INFO_TOOL_TITLE = 'skills.scope.globalAgentCompatibleToolsTitle'
+const LABEL_INFO_TOOL_SUPPORTED = 'skills.scope.globalAgentSupported'
+const LABEL_INFO_TOOL_PARTIAL = 'skills.scope.globalAgentPartial'
+const LABEL_INFO_TOOL_EMPTY = 'skills.scope.globalAgentEmpty'
 
 const scopeTools = ref([])
 const scopeHits = ref([])
@@ -317,10 +326,10 @@ async function onToggleGlobalAgentClick() {
     // 真实路径,跟前端期望严格一致)。
     await loadGlobalAgentStatus()
     toast.success(next
-      ? `已同步到 ~/.agents/skills/${sk.name}/`
-      : `已从 ~/.agents/skills/${sk.name}/ 移除`)
+      ? t('skills.scope.globalAgentEnabled', { name: sk.name })
+      : t('skills.scope.globalAgentDisabled', { name: sk.name }))
   } catch (e) {
-    toast.error(`切换全局 Agent 失败: ${e?.message || e}`)
+    toast.error(t('skills.scope.globalAgentToggleFailed', { msg: e?.message || e }))
   } finally {
     toggleAgentBusy.value = false
   }
@@ -349,55 +358,55 @@ function onScopeRefresh() {
 //   - name:    显示名(用 mdi: 字段给 ToolIcon 渲染图标,没图标就 fallback)
 //   - mdi:     mdi icon 名
 //   - status:  'supported' | 'partial' | 'unsupported' 三种状态
-//   - note:    备注(如 "个人级走 ~/.claude/skills/")
+//   - note:    备注 key(走 i18n,skills.scope.toolNotes.*)
 const GLOBAL_AGENT_SUPPORTED_TOOLS = [
   {
     name: 'GitHub Copilot',
     mdi: 'mdi:github',
     status: 'supported',
-    note: 'VS Code Agent Skills 文档明确支持 ~/.agents/skills/ 个人级',
+    noteKey: 'skills.scope.toolNotes.vscode',
   },
   {
     name: 'Antigravity',
     mdi: 'mdi:rocket-launch-outline',
     status: 'supported',
-    note: 'Google 官方支持(antigravity.google/docs/skills)',
+    noteKey: 'skills.scope.toolNotes.antigravity',
   },
   {
     name: 'Claude Code',
     mdi: 'mdi:anthropic',
     status: 'partial',
-    note: '项目级 .agents/skills/ 支持;个人级实际走 ~/.claude/skills/',
+    noteKey: 'skills.scope.toolNotes.claude',
   },
   {
     name: 'Codex CLI',
     mdi: 'mdi:console-line',
     status: 'supported',
-    note: 'OpenAI CLI 沿用 Agent Skills 开放标准',
+    noteKey: 'skills.scope.toolNotes.codex',
   },
   {
     name: 'Qwen Code',
     mdi: 'mdi:language-python',
     status: 'supported',
-    note: '阿里 Qwen Code 官方支持 Skills 标准',
+    noteKey: 'skills.scope.toolNotes.qwen',
   },
   {
     name: 'Cursor',
     mdi: 'mdi:cursor-default-click-outline',
     status: 'partial',
-    note: '主要走 ~/.cursor/skills/,个人级 .agents 路径尚未官方文档化',
+    noteKey: 'skills.scope.toolNotes.cursor',
   },
   {
     name: 'Trae IDE',
     mdi: 'mdi:application-outline',
     status: 'unsupported',
-    note: '官方文档未明确支持 ~/.agents/skills/ 个人级路径',
+    noteKey: 'skills.scope.toolNotes.opencode',
   },
   {
     name: 'Cline',
     mdi: 'mdi:robot-outline',
     status: 'unsupported',
-    note: '官方文档未提及 ~/.agents/skills/ 路径',
+    noteKey: 'skills.scope.toolNotes.other',
   },
 ]
 const globalAgentInfoOpen = ref(false)
@@ -441,7 +450,7 @@ async function ensureGlobalAgentRoot() {
 async function openGlobalAgentFolder() {
   const p = await ensureGlobalAgentRoot()
   if (!p) {
-    toast.error('无法获取 ~/.agents/skills/ 路径')
+    toast.error(t('skills.scope.globalAgentPathFailed'))
     return
   }
   try {
@@ -456,14 +465,14 @@ async function openGlobalAgentFolder() {
         if (platform?.openExternal) {
           platform.openExternal(r.fallbackUrl)
         } else {
-          toast.info(`全局 Agent 目录: ${r.fallbackUrl}`)
+          toast.info(t('skills.scope.globalAgentDirToast', { url: r.fallbackUrl }))
         }
       }
       return
     }
-    toast.info(`全局 Agent 目录: ${p}`)
+    toast.info(t('skills.scope.dirToast', { path: p }))
   } catch (e) {
-    toast.error(`打开文件夹失败: ${e?.message || e}`)
+    toast.error(t('skills.scope.openFolderFailed', { msg: e?.message || e }))
   }
 }
 
@@ -503,14 +512,14 @@ async function doApplyOne(target, group) {
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
     const ins = inspectApplyResult(res)
     if (ins.allOk) {
-      toast.success(`已启用 ${group.display} · ${targetLabel(target)}`)
+      toast.success(t('skills.scope.enableSuccess', { tool: group.display, scope: targetLabel(target) }))
     } else {
       const detail = formatFailedDetail(ins.failedItems)
-      toast.error(`部分失败: ${detail}`, 6000)
+      toast.error(t('skills.scope.partialFailed') + ': ' + detail, 6000)
       scopeError.value = detail
     }
   } catch (e) {
-    toast.error(`启用失败: ${e?.message || e}`)
+    toast.error(t('skills.scope.enableFailed', { msg: e?.message || e }))
   } finally {
     busyKey.value = ''
   }
@@ -542,9 +551,9 @@ async function doUnapplyOne(target, group) {
     await loadScope()
     // 2026-07-08 修:同 doApplyOne,unapply 后也必须 dispatch,左侧 chip 才会同步消失。
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
-    toast.success(`已停用 ${group.display} · ${targetLabel(target)}`)
+    toast.success(t('skills.scope.disableSuccess', { tool: group.display, scope: targetLabel(target) }))
   } catch (e) {
-    toast.error(`停用失败: ${e?.message || e}`)
+    toast.error(t('skills.scope.disableFailed', { msg: e?.message || e }))
   } finally {
     busyKey.value = ''
   }
@@ -559,15 +568,15 @@ async function handleClick(group, target) {
     // 用户感受就是"点了没反应"。
     confirmAction.value = {
       kind: 'unapply',
-      title: '停用作用域',
-      message: `确定要从 ${group.display} · ${targetLabel(target)} 删除 skill "${props.skill.name}"?`,
+      title: t(LABEL_DISABLE),
+      message: t('skills.scope.disableConfirm', { tool: group.display, scope: targetLabel(target), name: props.skill.name }),
       group, target,
     }
   } else {
     confirmAction.value = {
       kind: 'apply',
-      title: '启用作用域',
-      message: `确定要把 skill "${props.skill.name}" 复制到 ${group.display} · ${targetLabel(target)}?`,
+      title: t(LABEL_ENABLE),
+      message: t('skills.scope.enableConfirm', { name: props.skill.name, tool: group.display, scope: targetLabel(target) }),
       group, target,
     }
   }
@@ -607,8 +616,8 @@ onErrorCaptured((err) => {
   <!-- 错误降级 UI -->
   <div v-if="localError" class="ssp-error">
     <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
-    <span>{{ LABEL_TITLE_ERROR }}: {{ localError }}</span>
-    <button class="link" @click="safeReload">{{ LABEL_RETRY }}</button>
+    <span>{{ t(LABEL_TITLE_ERROR) }}: {{ localError }}</span>
+    <button class="link" @click="safeReload">{{ t(LABEL_RETRY) }}</button>
   </div>
   <!-- 2026-07-08 改:作用域区高度锁死策略
        - sectionCollapsed=true(整体收起):只显示 header 一行,高度由内容决定,约 36px
@@ -634,8 +643,8 @@ onErrorCaptured((err) => {
            "作用域" 语义核心是"这个 skill 在哪些工具/位置上生效",位置/坐标定位图标比问号更贴切。
            用 PascalCase 直传 iconpark 组件名,避免 mdi 映射兜底导致 fallback 到问号。 -->
       <IconPark icon="Local" width="13" height="13" />
-      <span>{{ LABEL_SCOPE }}</span>
-      <span class="ssp-scope-header-count">{{ scopeGroupByTool.length }} 个工具</span>
+      <span>{{ t(LABEL_SCOPE) }}</span>
+      <span class="ssp-scope-header-count">{{ t('skills.scope.toolCountShort', { n: scopeGroupByTool.length }) }}</span>
       <!-- 2026-07-07 改:展开收起箭头 chevron-up/down → plus/minus。
            plus = 当前是合上点开后展开,minus = 当前是展开点合上。
            跟 TreeNode/FileTreeNode 同步。 -->
@@ -664,7 +673,7 @@ onErrorCaptured((err) => {
           <button
             type="button"
             :class="['ssp-global-agent-tag', { 'ssp-global-agent-tag-active': isGlobalAgent }]"
-            :data-tip="LABEL_GLOBAL_AGENT_TIP"
+            :data-tip="t(LABEL_GLOBAL_AGENT_TIP)"
             :disabled="toggleAgentBusy || globalAgentLoading"
             @click="onToggleGlobalAgentClick"
           >
@@ -679,7 +688,7 @@ onErrorCaptured((err) => {
               height="11"
               class="ssp-global-agent-icon"
             />
-            <span class="ssp-global-agent-label">{{ LABEL_GLOBAL_AGENT }}</span>
+            <span class="ssp-global-agent-label">{{ t(LABEL_GLOBAL_AGENT) }}</span>
           </button>
           <!-- 2026-07-12 增:tag 右侧两个图标按钮 — info 提示 / folder 打开目录。
                跟 tag 之间留 4px 间距,跟工具列表的 chevron 视觉权重一致。
@@ -691,8 +700,8 @@ onErrorCaptured((err) => {
           <button
             type="button"
             class="ssp-global-agent-icon-btn"
-            :data-tip="LABEL_GLOBAL_AGENT_INFO_TIP"
-            :aria-label="LABEL_GLOBAL_AGENT_INFO_TIP"
+            :data-tip="t(LABEL_GLOBAL_AGENT_INFO_TIP)"
+            :aria-label="t(LABEL_GLOBAL_AGENT_INFO_TIP)"
             @click.stop="openGlobalAgentInfo"
           >
             <IconPark icon="mdi:information-outline" width="11" height="11" />
@@ -700,8 +709,8 @@ onErrorCaptured((err) => {
           <button
             type="button"
             class="ssp-global-agent-icon-btn"
-            :data-tip="LABEL_GLOBAL_AGENT_FOLDER_TIP"
-            :aria-label="LABEL_GLOBAL_AGENT_FOLDER_TIP"
+            :data-tip="t(LABEL_GLOBAL_AGENT_FOLDER_TIP)"
+            :aria-label="t(LABEL_GLOBAL_AGENT_FOLDER_TIP)"
             @click.stop="openGlobalAgentFolder"
           >
             <IconPark icon="mdi:folder-outline" width="11" height="11" />
@@ -740,7 +749,7 @@ onErrorCaptured((err) => {
           <span class="ssp-scope-row-name">{{ group.display }}</span>
           <!-- 2026-07-08 增:工具启用了全局时,在数量标签前显示"全局"chip,
                让用户一眼看出"这个 skill 是生效在全局还是项目级"。 -->
-          <span v-if="group.hasGlobal" class="ssp-scope-row-global" :title="'已启用全局作用域'">全局</span>
+          <span v-if="group.hasGlobal" class="ssp-scope-row-global" :title="t('skills.scope.globalEnabledTip')">{{ t(LABEL_GLOBAL) }}</span>
           <span v-if="group.hitCount > 0" class="ssp-scope-row-count">{{ group.hitCount }}</span>
         </button>
         <ul v-if="!isCollapsed(group.tool_id)" class="ssp-scope-targets">
@@ -748,7 +757,7 @@ onErrorCaptured((err) => {
             <button
               type="button"
               :class="['ssp-scope-target', target.exists ? 'ssp-scope-target-active' : '']"
-              :title="target.exists ? LABEL_DISABLE : LABEL_ENABLE"
+              :title="target.exists ? t(LABEL_DISABLE) : t(LABEL_ENABLE)"
               :disabled="!!busyKey"
               @click="handleClick(group, target)"
             >
@@ -766,7 +775,7 @@ onErrorCaptured((err) => {
             </button>
           </li>
           <li v-if="!group.targets.length" class="ssp-scope-empty">
-            {{ LABEL_EMPTY }}
+            {{ t(LABEL_EMPTY) }}
           </li>
         </ul>
       </li>
@@ -779,7 +788,7 @@ onErrorCaptured((err) => {
   <p v-else-if="scopeLoading" class="ssp-scope-loading">
     <span class="ssp-spinner ssp-spinner-xs"></span>
   </p>
-  <p v-else class="ssp-scope-empty-tip">{{ LABEL_EMPTY }}</p>
+  <p v-else class="ssp-scope-empty-tip">{{ t(LABEL_EMPTY) }}</p>
 
   <!-- 2026-07-07 增:自管确认弹窗,替代 window.confirm。
        wails desktop webview 默认禁用 window.confirm,直接调确认会被静默拒绝。 -->
@@ -792,8 +801,8 @@ onErrorCaptured((err) => {
   >
     <p class="ssp-confirm-msg">{{ confirmAction?.message || '' }}</p>
     <template #footer>
-      <button type="button" class="ghost" @click="onConfirmNo">取消</button>
-      <button type="button" class="primary" @click="onConfirmYes">确定</button>
+      <button type="button" class="ghost" @click="onConfirmNo">{{ t('common.cancel') }}</button>
+      <button type="button" class="primary" @click="onConfirmYes">{{ t('common.confirm') }}</button>
     </template>
   </Modal>
 
@@ -806,12 +815,12 @@ onErrorCaptured((err) => {
   <Modal
     v-model="globalAgentInfoOpen"
     size="md"
-    :title="LABEL_INFO_TITLE"
+    :title="t(LABEL_INFO_TITLE)"
     @close="closeGlobalAgentInfo"
   >
     <div class="ssp-info-body">
-      <p class="ssp-info-desc">{{ LABEL_INFO_DESC }}</p>
-      <h4 class="ssp-info-tool-title">{{ LABEL_INFO_TOOL_TITLE }}</h4>
+      <p class="ssp-info-desc">{{ t(LABEL_INFO_DESC) }}</p>
+      <h4 class="ssp-info-tool-title">{{ t(LABEL_INFO_TOOL_TITLE) }}</h4>
       <ul v-if="globalAgentTools.length" class="ssp-info-tool-list">
         <li
           v-for="t in globalAgentTools"
@@ -823,22 +832,22 @@ onErrorCaptured((err) => {
           <span
             v-if="t.status === 'supported'"
             class="ssp-info-tool-badge ssp-info-tool-badge-supported"
-          >{{ LABEL_INFO_TOOL_SUPPORTED }}</span>
+          >{{ t(LABEL_INFO_TOOL_SUPPORTED) }}</span>
           <span
             v-else-if="t.status === 'partial'"
             class="ssp-info-tool-badge ssp-info-tool-badge-partial"
-          >{{ LABEL_INFO_TOOL_PARTIAL }}</span>
+          >{{ t(LABEL_INFO_TOOL_PARTIAL) }}</span>
           <span
             v-else
             class="ssp-info-tool-badge ssp-info-tool-badge-unsupported"
           >—</span>
-          <span class="ssp-info-tool-note">{{ t.note }}</span>
+          <span class="ssp-info-tool-note">{{ t.noteKey ? t(t.noteKey) : '' }}</span>
         </li>
       </ul>
-      <p v-else class="ssp-info-tool-empty">{{ LABEL_INFO_TOOL_EMPTY }}</p>
+      <p v-else class="ssp-info-tool-empty">{{ t(LABEL_INFO_TOOL_EMPTY) }}</p>
     </div>
     <template #footer>
-      <button type="button" class="primary" @click="closeGlobalAgentInfo">关闭</button>
+      <button type="button" class="primary" @click="closeGlobalAgentInfo">{{ t('common.close') }}</button>
     </template>
   </Modal>
 </template>

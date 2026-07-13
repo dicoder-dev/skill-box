@@ -105,7 +105,7 @@ function startInlineEdit() {
   if (inlinePanelRef.value && typeof inlinePanelRef.value.openFrontmatterEditor === 'function') {
     inlinePanelRef.value.openFrontmatterEditor()
   } else {
-    toast.error('编辑器尚未就绪,请稍候再试')
+    toast.error(t('skills.editor.notReady'))
   }
 }
 function cancelInlineEdit() {
@@ -264,9 +264,9 @@ async function onInlinePanelCreated({ payload, response, name, version }) {
     const row = items.value.find((x) => x.path === expectedPath)
       || items.value.find((x) => x.name === name && x.version === version)
     if (row) await selectItem(row)
-    toast.success(`已创建 ${name}@${version}`)
+    toast.success(t('skills.editor.created', { name, version }))
   } catch (e) {
-    toast.error(`新建完成但刷新失败: ${e?.message || String(e)}`)
+    toast.error(t('skills.editor.createdRefreshFailed', { msg: e?.message || String(e) }))
   }
 }
 
@@ -307,12 +307,12 @@ const currentSkillMd = computed(() => currentBody.value || '')
 const aiApplyBusy = ref(false)
 async function onAIApply(text) {
   if (!current.value) {
-    toast.error('应用失败:当前未选中技能')
+    toast.error(t('skills.aiApply.noSkill'))
     return
   }
   const newBody = (text || '').trim()
   if (!newBody) {
-    toast.error('应用失败:AI 输出为空')
+    toast.error(t('skills.aiApply.empty'))
     return
   }
   aiApplyBusy.value = true
@@ -347,9 +347,9 @@ async function onAIApply(text) {
       detail: { source: 'ai-apply', scope: target.scope, name: target.name },
     }))
 
-    toast.success(`已应用(已写回 ${target.scope}/${target.name})`)
+    toast.success(t('skills.aiApply.applied', { scope: target.scope, name: target.name }))
   } catch (e) {
-    toast.error(`应用失败:${e?.message || e}`)
+    toast.error(t('skills.aiApply.failed', { msg: e?.message || e }))
   } finally {
     aiApplyBusy.value = false
   }
@@ -785,7 +785,7 @@ function startNew() {
   // 用户在表单里填 name/version/description/triggers,保存走 createSkill。
   if (!inlinePanelRef.value || typeof inlinePanelRef.value.openAsNew !== 'function') {
     // 兜底:InlinePanel 还没 mount(刚进首页空状态),弹个 toast 提示
-    toast.error('编辑器尚未就绪,请稍候再试')
+    toast.error(t('skills.editor.notReady'))
     return
   }
   inlinePanelRef.value.openAsNew({
@@ -2134,14 +2134,14 @@ onUnmounted(() => {
               <input
                 v-model="draft.triggers[idx]"
                 class="trigger-input"
-                :placeholder="`触发词 #${idx + 1}`"
+                :placeholder="t('skills.editor.triggerPlaceholder', { idx: idx + 1 })"
                 spellcheck="false"
               />
               <button
                 type="button"
                 class="trigger-del"
-                :title="`删除第 ${idx + 1} 个`"
-                :aria-label="`删除第 ${idx + 1} 个`"
+                :title="t('skills.editor.deleteTrigger', { idx: idx + 1 })"
+                :aria-label="t('skills.editor.deleteTrigger', { idx: idx + 1 })"
                 @click="removeDraftTrigger(idx)"
               >
                 <IconPark icon="mdi:close" width="13" height="13" />

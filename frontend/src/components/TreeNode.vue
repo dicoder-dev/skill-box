@@ -30,6 +30,11 @@
  */
 import { computed } from 'vue'
 import IconPark from '@/components/IconPark.vue'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:TreeNode 文案走 i18n(避免在 template 内联 t(),用常量 key)
+// 跟 SkillScopePanel / SkillFileInlinePanel 同样的 plainT 兜底策略。
+const t = (key, values) => plainT(key, values)
 
 const props = defineProps({
   // 当前节点的 children 列表(从树根传入)
@@ -222,7 +227,7 @@ function visibleTools(node) {
 </script>
 
 <template>
-  <ul class="tree" role="tree">
+  <ul class="tree" role="tree" :style="{ '--drop-hint': t('skills.treeNode.dropHere') }">
     <!-- 2026-06-29 改:删除原 .tree-root-blank 占位 li(根区域右键事件已上移到
          SkillsView 的 .tree-container 元素上 — 那里覆盖整个左侧,无论是否有节点 / 折叠) -->
 
@@ -300,8 +305,8 @@ function visibleTools(node) {
             <span
               v-if="isGlobalAgent(node)"
               class="tree-skill-badge-global-agent"
-              title="该技能位于全局 agents 目录,所有工具可自动读取"
-            >全局 Agent</span>
+              :title="t('skills.treeNode.globalAgentTip')"
+            >{{ t('skills.treeNode.globalAgentBadge') }}</span>
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
             <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
           </div>
@@ -635,10 +640,10 @@ function visibleTools(node) {
   position: relative;
 }
 
-/* 拖入目标右侧追加"→ 放到此处"文字提示。
+/* 拖入目标右侧追加"→ 放到此处"文字提示(走 i18n key skills.treeNode.dropHere)。
    父级是相对定位,after 绝对定位钉在行尾。 */
 .tree-node-drop-target > .tree-row::after {
-  content: '放到此处';
+  content: var(--drop-hint, 'Drop here');
   position: absolute;
   right: 10px;
   top: 50%;

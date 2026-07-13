@@ -569,7 +569,7 @@ const lastInstalledName = ref('')
                   v-for="(ex, idx) in activeSource.examples"
                   :key="idx"
                   class="example-item"
-                  :title="`点击填入 ${ex}`"
+                  :title="`${t('market.input.clickToFill')} ${ex}`"
                   @click="fillExample(ex)"
                 >
                   <code>{{ ex }}</code>
@@ -627,7 +627,7 @@ const lastInstalledName = ref('')
                 <!-- 2026-07-09 增:失败时给「重试」按钮 + 限流场景特殊提示 -->
                 <div v-if="isLikelyRateLimit" class="install-error-hint">
                   <IconPark icon="mdi:timer-sand" width="12" height="12" />
-                  疑似 GitHub 限流(未鉴权 IP 每小时约 60 次)。等几分钟再点「重试」,或去浏览器手动下好后从「首页 → 本地导入」装入。
+                  {{ t('market.input.rateLimitHint') }}
                 </div>
                 <button
                   v-if="progressStage === 'fail'"
@@ -636,7 +636,7 @@ const lastInstalledName = ref('')
                   @click="retryInstall"
                 >
                   <IconPark icon="mdi:refresh" width="12" height="12" />
-                  重试
+                  {{ t('common.retry') }}
                 </button>
               </div>
             </div>

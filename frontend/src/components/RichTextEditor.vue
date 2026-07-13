@@ -14,10 +14,15 @@ import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import { renderMarkdown } from '@/core/utils/markdown.js'
 import { htmlToMarkdown } from '@/core/utils/html_to_markdown.js'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:RichTextEditor 文案走 i18n(避免 props placeholder 默认值硬编码)。
+// 同 plainT 兜底,直接读 messages 对象。
+const t = (key, values) => plainT(key, values)
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: '开始输入内容...' },
+  placeholder: { type: String, default: '' },
   minHeight: { type: String, default: '320px' },
   disabled: { type: Boolean, default: false },
 })
@@ -31,7 +36,7 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
       // 不允许 horizontalRule / hardBreak 的快捷键(本项目 markdown 不渲染 <hr>)
     }),
-    Placeholder.configure({ placeholder: props.placeholder }),
+    Placeholder.configure({ placeholder: props.placeholder || t('skills.richText.placeholder') }),
     Link.configure({
       openOnClick: false,
       autolink: false,
@@ -151,13 +156,13 @@ function isBtn(name, attrs = undefined) {
     <!-- 工具栏 -->
     <div v-if="editor" class="rte-toolbar">
       <div class="rte-group">
-        <button type="button" :class="isBtn('heading', { level: 1 })" data-tip="H1 标题" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()">
+        <button type="button" :class="isBtn('heading', { level: 1 })" :data-tip="t('skills.richText.heading1') + ' 1'" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()">
           <span class="rte-btn-text">H1</span>
         </button>
-        <button type="button" :class="isBtn('heading', { level: 2 })" data-tip="H2 标题" @click="editor.chain().focus().toggleHeading({ level: 2 }).run()">
+        <button type="button" :class="isBtn('heading', { level: 2 })" :data-tip="t('skills.richText.heading2') + ' 2'" @click="editor.chain().focus().toggleHeading({ level: 2 }).run()">
           <span class="rte-btn-text">H2</span>
         </button>
-        <button type="button" :class="isBtn('heading', { level: 3 })" data-tip="H3 标题" @click="editor.chain().focus().toggleHeading({ level: 3 }).run()">
+        <button type="button" :class="isBtn('heading', { level: 3 })" :data-tip="t('skills.richText.heading3') + ' 3'" @click="editor.chain().focus().toggleHeading({ level: 3 }).run()">
           <span class="rte-btn-text">H3</span>
         </button>
       </div>
@@ -165,16 +170,16 @@ function isBtn(name, attrs = undefined) {
       <div class="rte-divider" />
 
       <div class="rte-group">
-        <button type="button" :class="isBtn('bold')" data-tip="加粗" @click="editor.chain().focus().toggleBold().run()">
+        <button type="button" :class="isBtn('bold')" :data-tip="t('skills.richText.bold')" @click="editor.chain().focus().toggleBold().run()">
           <IconPark icon="mdi:format-bold" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('italic')" data-tip="斜体" @click="editor.chain().focus().toggleItalic().run()">
+        <button type="button" :class="isBtn('italic')" :data-tip="t('skills.richText.italic')" @click="editor.chain().focus().toggleItalic().run()">
           <IconPark icon="mdi:format-italic" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('strike')" data-tip="删除线" @click="editor.chain().focus().toggleStrike().run()">
+        <button type="button" :class="isBtn('strike')" :data-tip="t('skills.richText.strike')" @click="editor.chain().focus().toggleStrike().run()">
           <IconPark icon="mdi:format-strikethrough" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('code')" data-tip="行内代码" @click="editor.chain().focus().toggleCode().run()">
+        <button type="button" :class="isBtn('code')" :data-tip="t('skills.richText.inlineCode')" @click="editor.chain().focus().toggleCode().run()">
           <IconPark icon="mdi:code-tags" width="14" height="14" />
         </button>
       </div>
@@ -182,16 +187,16 @@ function isBtn(name, attrs = undefined) {
       <div class="rte-divider" />
 
       <div class="rte-group">
-        <button type="button" :class="isBtn('bulletList')" data-tip="无序列表" @click="editor.chain().focus().toggleBulletList().run()">
+        <button type="button" :class="isBtn('bulletList')" :data-tip="t('skills.richText.bulletList')" @click="editor.chain().focus().toggleBulletList().run()">
           <IconPark icon="mdi:format-list-bulleted" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('orderedList')" data-tip="有序列表" @click="editor.chain().focus().toggleOrderedList().run()">
+        <button type="button" :class="isBtn('orderedList')" :data-tip="t('skills.richText.orderedList')" @click="editor.chain().focus().toggleOrderedList().run()">
           <IconPark icon="mdi:format-list-numbered" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('blockquote')" data-tip="引用" @click="editor.chain().focus().toggleBlockquote().run()">
+        <button type="button" :class="isBtn('blockquote')" :data-tip="t('skills.richText.blockquote')" @click="editor.chain().focus().toggleBlockquote().run()">
           <IconPark icon="mdi:format-quote-close" width="14" height="14" />
         </button>
-        <button type="button" :class="isBtn('codeBlock')" data-tip="代码块" @click="editor.chain().focus().toggleCodeBlock().run()">
+        <button type="button" :class="isBtn('codeBlock')" :data-tip="t('skills.richText.codeBlock')" @click="editor.chain().focus().toggleCodeBlock().run()">
           <IconPark icon="mdi:code-braces" width="14" height="14" />
         </button>
       </div>
@@ -203,7 +208,7 @@ function isBtn(name, attrs = undefined) {
           <button
             type="button"
             :class="isBtn('link')"
-            data-tip="链接"
+            :data-tip="t('skills.richText.link')"
             @click="openLinkInput"
           >
             <IconPark icon="mdi:link-variant" width="14" height="14" />
@@ -212,7 +217,7 @@ function isBtn(name, attrs = undefined) {
             v-if="editor.isActive('link')"
             type="button"
             class="rte-btn rte-btn-danger"
-            data-tip="取消链接"
+            :data-tip="t('skills.richText.unlink')"
             @click="unsetLink"
           >
             <IconPark icon="mdi:link-variant-off" width="14" height="14" />
@@ -228,8 +233,8 @@ function isBtn(name, attrs = undefined) {
               @keyup.escape="closeLinkInput"
             />
             <div class="rte-popover-actions">
-              <button type="button" class="rte-btn-sm" @click="closeLinkInput">取消</button>
-              <button type="button" class="rte-btn-sm rte-btn-primary" @click="setLink">确定</button>
+              <button type="button" class="rte-btn-sm" @click="closeLinkInput">{{ t('common.cancel') }}</button>
+              <button type="button" class="rte-btn-sm rte-btn-primary" @click="setLink">{{ t('common.confirm') }}</button>
             </div>
           </div>
         </div>
@@ -238,7 +243,7 @@ function isBtn(name, attrs = undefined) {
           <button
             type="button"
             class="rte-btn"
-            data-tip="插入图片(填 URL)"
+            :data-tip="t('skills.richText.insertImageTip')"
             @click="openImageInput"
           >
             <IconPark icon="mdi:image-outline" width="14" height="14" />
@@ -249,7 +254,7 @@ function isBtn(name, attrs = undefined) {
               v-model="imageUrl"
               type="url"
               class="rte-input"
-              placeholder="图片 URL"
+              :placeholder="t('skills.richText.imageUrl')"
               @keyup.enter="insertImage"
               @keyup.escape="closeImageInput"
             />
@@ -257,13 +262,13 @@ function isBtn(name, attrs = undefined) {
               v-model="imageAlt"
               type="text"
               class="rte-input"
-              placeholder="替代文本(可选)"
+              :placeholder="t('skills.richText.imageAlt')"
               @keyup.enter="insertImage"
               @keyup.escape="closeImageInput"
             />
             <div class="rte-popover-actions">
-              <button type="button" class="rte-btn-sm" @click="closeImageInput">取消</button>
-              <button type="button" class="rte-btn-sm rte-btn-primary" @click="insertImage">插入</button>
+              <button type="button" class="rte-btn-sm" @click="closeImageInput">{{ t('common.cancel') }}</button>
+              <button type="button" class="rte-btn-sm rte-btn-primary" @click="insertImage">{{ t('skills.richText.insert') }}</button>
             </div>
           </div>
         </div>
@@ -275,7 +280,7 @@ function isBtn(name, attrs = undefined) {
         <button
           type="button"
           class="rte-btn"
-          data-tip="撤销"
+          :data-tip="t('skills.richText.undo')"
           :disabled="!editor.can().undo()"
           @click="editor.chain().focus().undo().run()"
         >
@@ -284,7 +289,7 @@ function isBtn(name, attrs = undefined) {
         <button
           type="button"
           class="rte-btn"
-          data-tip="重做"
+          :data-tip="t('skills.richText.redo')"
           :disabled="!editor.can().redo()"
           @click="editor.chain().focus().redo().run()"
         >

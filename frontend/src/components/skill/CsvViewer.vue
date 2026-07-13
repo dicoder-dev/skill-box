@@ -12,6 +12,10 @@
 
 import { computed, ref } from 'vue'
 import Papa from 'papaparse'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:CsvViewer 文案走 i18n(plainT 兜底)。
+const t = (key, values) => plainT(key, values)
 
 const props = defineProps({
   content: { type: String, default: '' },
@@ -43,9 +47,9 @@ const COLUMN_WIDTH = 160
 <template>
   <div class="cv-csv">
     <div v-if="parsed.truncated" class="cv-csv-banner">
-      文件共 {{ parsed.total }} 行,仅预览前 {{ PREVIEW_LIMIT }} 行;编辑模式(monaco)看完整内容。
+      {{ t('skills.fileBrowser.csvPreviewLimit', { total: parsed.total, preview: PREVIEW_LIMIT }) }}
     </div>
-    <div v-else-if="parsed.total === 0" class="cv-csv-empty">空文件或无可解析行</div>
+    <div v-else-if="parsed.total === 0" class="cv-csv-empty">{{ t('skills.fileBrowser.csvEmpty') }}</div>
     <div v-else class="cv-csv-table-wrap">
       <table class="cv-csv-table">
         <thead>

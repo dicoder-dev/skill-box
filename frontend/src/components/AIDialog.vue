@@ -163,7 +163,7 @@ function startTranslate() {
   }
   if (!(customPrompt.value || '').trim()) {
     translateBusy.value = false
-    translateErr.value = '提示词为空,请填写或点「重置为默认」'
+    translateErr.value = t('skills.aiDialog.translate.promptEmpty')
     return
   }
 
@@ -185,7 +185,7 @@ function startTranslate() {
       provider: effectiveProviderName.value,
       messages: [
         { role: 'system', content: effectiveSystem },
-        { role: 'user', content: '请按系统提示里的规则开始翻译。' },
+        { role: 'user', content: t('skills.aiDialog.translate.startInstruction') },
       ],
     },
     {

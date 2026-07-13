@@ -44,9 +44,9 @@ const createErrMsg = ref('')
 const editErrMsg = ref('')
 
 const KIND_OPTIONS = [
-  { value: 'openai', label: 'OpenAI 官方' },
-  { value: 'anthropic', label: 'Anthropic 官方' },
-  { value: 'openai_compat', label: 'OpenAI 兼容(DeepSeek / 硅基 等)' },
+  { value: 'openai', labelKey: 'settings.ai.kindOpenAI' },
+  { value: 'anthropic', labelKey: 'settings.ai.kindAnthropic' },
+  { value: 'openai_compat', labelKey: 'settings.ai.kindOpenAICompat' },
 ]
 
 async function refresh() {
@@ -240,7 +240,7 @@ watch(editId, () => { editTestResult.value = null })
         <label>
           <span>{{ t('settings.ai.fieldKind') }}</span>
           <select v-model="createForm.kind">
-            <option v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">{{ k.label }}</option>
+            <option v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">{{ t(k.labelKey) }}</option>
           </select>
         </label>
         <label class="span2">
@@ -310,7 +310,7 @@ watch(editId, () => { editTestResult.value = null })
         <label>
           <span>{{ t('settings.ai.fieldKind') }}</span>
           <select v-model="editForm.kind">
-            <option v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">{{ k.label }}</option>
+            <option v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">{{ t(k.labelKey) }}</option>
           </select>
         </label>
         <label class="span2">

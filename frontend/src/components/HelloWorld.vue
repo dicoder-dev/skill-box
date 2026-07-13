@@ -5,6 +5,10 @@ import { http } from '@/core/utils/requests'
 import { platform } from '../platform/index.js'
 import { useAppStore } from '@/core/store/app.js'
 import { dlog, derr, enableDebug, isDebug } from '@/core/utils/debug.js'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:HelloWorld 调试页文案走 i18n(plainT 兜底)。
+const t = (key, values) => plainT(key, values)
 
 defineProps({
   msg: String,
@@ -66,7 +70,7 @@ onMounted(async () => {
   if (storeIsDesktop.value) {
     try { serverPort.value = String(await platform.app.getServerPort()) } catch (_) {}
   } else {
-    serverPort.value = '(web 模式,无本地端口)'
+    serverPort.value = `(${t('helloWorld.webNoLocalPort')})`
   }
 })
 </script>
@@ -74,30 +78,30 @@ onMounted(async () => {
 <template>
   <h1>{{ msg }}</h1>
 
-  <div class="result">双部署:Web + 桌面端,业务统一走 HTTP。</div>
+  <div class="result">{{ t('helloWorld.dualDeployment') }}</div>
 
   <div class="card">
-    <p>部署形态:<b>{{ deployLabel }}</b>(runMode={{ runMode }}, needAuth={{ needAuth }})</p>
-    <p>应用名:<b>{{ appName || '(未配置)' }}</b></p>
-    <p>本地后端端口:<b>{{ serverPort }}</b></p>
-    <p>baseURL:<code>{{ baseURL || '(空=同源)' }}</code></p>
-    <p>健康检查:<b>{{ healthStatus }}</b></p>
+    <p>{{ t('helloWorld.deploymentMode') }}:<b>{{ deployLabel }}</b>(runMode={{ runMode }}, needAuth={{ needAuth }})</p>
+    <p>{{ t('helloWorld.appName') }}:<b>{{ appName || `(${t('common.notConfigured')})` }}</b></p>
+    <p>{{ t('helloWorld.localBackendPort') }}:<b>{{ serverPort }}</b></p>
+    <p>baseURL:<code>{{ baseURL || `(${t('helloWorld.sameOrigin')})` }}</code></p>
+    <p>{{ t('helloWorld.healthCheck') }}:<b>{{ healthStatus }}</b></p>
     <div class="input-box">
       <input aria-label="input" class="input" v-model="name" type="text" autocomplete="off"/>
-      <button class="btn" @click="doPing">Ping 后端</button>
-      <button class="btn" @click="toggleDebug" v-if="!isDebug()">开 Debug 日志</button>
+      <button class="btn" @click="doPing">{{ t('helloWorld.pingBackend') }}</button>
+      <button class="btn" @click="toggleDebug" v-if="!isDebug()">{{ t('helloWorld.enableDebugLog') }}</button>
     </div>
   </div>
 
   <div class="state-card">
-    <h3>应用 store 状态</h3>
+    <h3>{{ t('helloWorld.storeStatus') }}</h3>
     <div class="state-section-title">state</div>
     <div class="state-grid">
       <span class="k">runMode</span><span class="v">{{ runMode }}</span>
       <span class="k">needAuth</span><span class="v">{{ needAuth }}</span>
-      <span class="k">appName</span><span class="v">{{ appName || '(未配置)' }}</span>
+      <span class="k">appName</span><span class="v">{{ appName || `(${t('common.notConfigured')})` }}</span>
       <span class="k">isDesktop</span><span class="v">{{ storeIsDesktop }}</span>
-      <span class="k">baseURL</span><span class="v code">{{ baseURL || '(空=同源)' }}</span>
+      <span class="k">baseURL</span><span class="v code">{{ baseURL || `(${t('helloWorld.sameOrigin')})` }}</span>
     </div>
     <div class="state-section-title">getters</div>
     <div class="state-grid">
@@ -108,7 +112,7 @@ onMounted(async () => {
   </div>
 
   <div class="footer">
-    <p>HTTP 接口样板,业务继续按 controller 写,Gin 路由自动注册。</p>
+    <p>{{ t('helloWorld.httpScaffoldHint') }}</p>
   </div>
 </template>
 

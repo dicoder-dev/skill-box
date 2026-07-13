@@ -16,7 +16,7 @@
 //   - Frontmatter / CodeViewer / FileTreeView 已是独立子组件,不重写
 
 import { computed, nextTick, onMounted, onUnmounted, onUpdated, reactive, ref, onErrorCaptured } from 'vue'
-import { plainT, messages } from '@/core/i18n/index.js'
+import { plainT } from '@/core/i18n/index.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
@@ -38,51 +38,57 @@ console.log('[SkillFileInlinePanel v6] loaded at', new Date().toISOString(), 'no
 const DEBUG_EDIT_MODE = true
 const dlog = (...args) => { if (DEBUG_EDIT_MODE) console.log(...args) }
 
-// 2026-07-07 v4:不再尝试从 vue-i18n 拿 t,直接读 messages 对象兜底。
-// 但为了避免"再抛"再次发生,这里完全不再调 plainT()。template 内所有
-// 用户可见文案一律用常量字符串(下方 LABEL_* 常量)。
-// 仅 messages 在 <script> 中以 import 形式留存,供未来读 key 用,
-// 这里就当 unused import 处理。
-void messages
-void plainT
+// 2026-07-13 改:为 SkillFileInlinePanel 提供一个**绕开 vue-i18n** 的 t()
+// 函数,直接复用 core/i18n/plainT()(messages 对象兜底读,带当前 locale 解析,
+// 失败回退 zh-CN,再失败返 key 字符串;支持 {n} / {name} 等简单占位符)。
+//
+// 为什么不用 useI18n():SkillFileInlinePanel 在 v-if 懒挂载 / 切 skill 重建
+// 场景下,useI18n 暴露的 t 经常被 Proxy 包装成 ProxyObject,render function
+// 拿它当函数调用 → "t is not a function" 把整段 component update 弄崩。
+// plainT 走 messages[key] 直接取字符串,绝不会抛 — 这是同 v4 重写时一样的
+// 兜底策略,只是从"完全硬编码"升级到"走 i18n key"。
+function t(key, values) {
+  return plainT(key, values)
+}
 
-// ===== 常量文案(原 i18n key,直接写中文) =====
-const LABEL_NO_FILE = '未选择文件'
-const LABEL_EDIT = '编辑'
-const LABEL_PICK = '请选择一个文件开始浏览'
-const LABEL_DIRTY = '● 未保存'
-const LABEL_DISCARD = '放弃修改'
-const LABEL_SAVE = '保存'
-const LABEL_SAVING = '保存中...'
-const LABEL_FILES = 'files'
-const LABEL_FRONTMATTER_TITLE = '查看 frontmatter'
-const LABEL_RENDER_ERROR_TITLE = '技能详情加载出错'
-const LABEL_RETRY = '重试'
+// ===== 文案常量(i18n key 形式)=====
+const LABEL_NO_FILE = 'skills.fileBrowser.noFile'
+const LABEL_EDIT = 'common.edit'
+const LABEL_PICK = 'skills.fileBrowser.pickOneToBrowse'
+const LABEL_DIRTY = 'skills.fileBrowser.modifiedShort'
+const LABEL_DISCARD = 'skills.fileBrowser.discardChanges'
+const LABEL_SAVE = 'common.save'
+const LABEL_SAVING = 'skills.fileBrowser.saving'
+const LABEL_FILES = 'skills.fileBrowser.files'
+const LABEL_FRONTMATTER_TITLE = 'skills.fileBrowser.viewFrontmatter'
+const LABEL_RENDER_ERROR_TITLE = 'skills.fileBrowser.renderError'
+const LABEL_RETRY = 'common.retry'
 
 // 2026-07-10 增:大纲面板显隐(全局状态,localStorage 持久化,跨文件保留)。
 // CodeViewer 内部大纲渲染也读同一个 composable 状态,这里顶栏按钮和大纲
 // header 内的 toggle 是同一份状态,两边都能控制。
-const LABEL_OUTLINE_SHOW = '显示大纲'
-const LABEL_OUTLINE_HIDE = '隐藏大纲'
+const LABEL_OUTLINE_SHOW = 'skills.fileBrowser.showOutline'
+const LABEL_OUTLINE_HIDE = 'skills.fileBrowser.hideOutline'
 const { outlineVisible, toggleOutline } = useMdOutlineVisible()
 
 // 2026-07-11 增:文件树右键菜单 + 文件/目录 CRUD 弹窗文案(组件内 0 t(),统一常量)
-const LABEL_CTX_NEW_FILE = '新建文件'
-const LABEL_CTX_NEW_DIR = '新建文件夹'
-const LABEL_CTX_RENAME_FILE = '重命名文件'
-const LABEL_CTX_RENAME_FOLDER = '重命名文件夹'
-const LABEL_CTX_DELETE_FILE = '删除文件'
-const LABEL_CTX_OPEN_FOLDER = '在文件浏览器中打开'
-const LABEL_NEW_FILE_PROMPT = '新建文件(将在指定目录下创建)'
-const LABEL_NEW_DIR_PROMPT = '新建文件夹(将在指定目录下创建)'
-const LABEL_RENAME_FILE_PROMPT = '重命名文件'
-const LABEL_RENAME_FOLDER_PROMPT = '重命名文件夹'
-const LABEL_DELETE_FILE_PROMPT = '删除文件'
-const LABEL_DELETE_FILE_CONFIRM = '确定要删除 "{name}" 吗?此操作无法撤销。'
+const LABEL_CTX_NEW_FILE = 'skills.fileBrowser.ctxNewFile'
+const LABEL_CTX_NEW_DIR = 'skills.fileBrowser.ctxNewFolder'
+const LABEL_CTX_RENAME_FILE = 'skills.fileBrowser.ctxRenameFile'
+const LABEL_CTX_RENAME_FOLDER = 'skills.fileBrowser.ctxRenameFolder'
+const LABEL_CTX_DELETE_FILE = 'skills.fileBrowser.ctxDeleteFile'
+const LABEL_CTX_DELETE_FOLDER = 'skills.fileBrowser.ctxDeleteFolder'
+const LABEL_CTX_OPEN_FOLDER = 'skills.fileBrowser.openInExplorer'
+const LABEL_NEW_FILE_PROMPT = 'skills.fileBrowser.newFileTitle'
+const LABEL_NEW_DIR_PROMPT = 'skills.fileBrowser.newFolderTitle'
+const LABEL_RENAME_FILE_PROMPT = 'skills.fileBrowser.renameFileTitle'
+const LABEL_RENAME_FOLDER_PROMPT = 'skills.fileBrowser.renameFolderTitle'
+const LABEL_DELETE_FILE_PROMPT = 'skills.fileBrowser.deleteFileTitle'
+const LABEL_DELETE_FILE_CONFIRM = 'skills.fileBrowser.deleteFileConfirm'
 
 // 2026-07-12 增:触发词改为可选(对应"可选 + 空态"两个文案)
-const LABEL_TRIGGERS_OPTIONAL = '可选'
-const LABEL_TRIGGERS_EMPTY_HINT = '未填写触发词,skill 不会按关键词自动触发'
+const LABEL_TRIGGERS_OPTIONAL = 'common.optional'
+const LABEL_TRIGGERS_EMPTY_HINT = 'skills.editor.triggersEmptyHint'
 
 const toast = useToastStore()
 
@@ -595,9 +601,9 @@ async function saveFrontmatterForm() {
   const name = String(fmForm.name || '').trim()
   const version = String(fmForm.version || '').trim()
   const desc = String(fmForm.description || '').trim()
-  if (!name) { fmFormError.value = 'name 不能为空'; return }
-  if (!version) { fmFormError.value = 'version 不能为空'; return }
-  if (!desc) { fmFormError.value = 'description 不能为空'; return }
+  if (!name) { fmFormError.value = t('skills.editor.errNameEmpty'); return }
+  if (!version) { fmFormError.value = t('skills.editor.errVersionEmpty'); return }
+  if (!desc) { fmFormError.value = t('skills.editor.errDescriptionEmpty'); return }
   const triggers = normalizeFmTriggers()
   // 2026-07-12 改:触发词改为可选,不再要求至少 1 个。
   // - fmDict.triggers 处已经只在 triggers.length>0 时写入,所以空数组不会在
@@ -676,7 +682,7 @@ async function saveFrontmatterForm() {
       // ===== 编辑模式 =====
       const sk = skill.value
       if (!sk || !sk.name) {
-        fmFormError.value = '当前未选中 skill'
+        fmFormError.value = t('skills.fileBrowser.noSkillSelected')
         fmFormSaving.value = false
         return
       }
@@ -775,7 +781,7 @@ async function saveCurrent() {
   if (!path) return
   const sk = props.skill
   if (!sk || !sk.name) {
-    saveError.value = '当前未选中 skill'
+    saveError.value = t('skills.fileBrowser.noSkillSelected')
     return
   }
   saving.value = true
@@ -806,7 +812,7 @@ async function saveCurrent() {
         ? { path: 'SKILL.md', content: rebuildSkillMd() }
         : { path, content: localFiles.get(path) || '' }
       incomingFiles.push(fallback)
-      saveError.value = '提示:文件列表为空,只提交了当前文件,保存后其他文件会丢失 — 请等待目录加载完成后再保存。'
+      saveError.value = t('skills.fileBrowser.incompleteFilesWarning')
     }
     await updateSkill({
       scope: sk.scope || 'global',
@@ -836,7 +842,7 @@ async function saveCurrent() {
     emit('saved', { path, content: savedContent })
   } catch (e) {
     saveError.value = e?.message || String(e)
-    toast.error(`保存失败: ${saveError.value}`)
+    toast.error(t('skills.fileBrowser.saveFailed', { msg: saveError.value }))
   } finally {
     saving.value = false
   }
@@ -1028,7 +1034,7 @@ function onCtxFolder({ dir, event }) {
     {
       // 2026-07-12 增:删除文件夹 — 复用现有 deleteFile 弹窗(支持 kind='dir')
       key: 'delete-folder',
-      label: '删除文件夹',
+      label: t(LABEL_CTX_DELETE_FOLDER),
       icon: 'mdi:folder-remove-outline',
       danger: true,
       onClick: () => openDeleteFolderDialog(dir),
@@ -1096,10 +1102,10 @@ function closeNewFileDialog() {
 // (SKILL.md 由 manifest 重新生成,前端不能直接创建)。
 function validateFsName(name, kind) {
   const v = (name || '').trim()
-  if (!v) return '名称不能为空'
-  if (v.includes('/') || v.includes('\\')) return '名称不能含 / 或 \\'
-  if (v === '.' || v === '..') return '名称不能为 . 或 ..'
-  if (kind === 'file' && v === 'SKILL.md') return 'SKILL.md 由系统管理,不能直接新建'
+  if (!v) return t('skills.fileBrowser.validation.nameRequired')
+  if (v.includes('/') || v.includes('\\')) return t('skills.fileBrowser.validation.invalidSeparator')
+  if (v === '.' || v === '..') return t('skills.fileBrowser.validation.invalidDotName')
+  if (kind === 'file' && v === 'SKILL.md') return t('skills.fileBrowser.validation.invalidSKILL')
   return ''
 }
 async function submitNewFile() {
@@ -1112,7 +1118,7 @@ async function submitNewFile() {
   // 重复检测:同路径文件已存在 → 拒
   const existing = (props.files || []).find((f) => f.path === fullPath)
   if (existing) {
-    newFileError.value = '已存在同名文件/目录'
+    newFileError.value = t('skills.fileBrowser.validation.duplicateName')
     return
   }
   newFileBusy.value = true
@@ -1146,7 +1152,9 @@ async function submitNewFile() {
       const created = (props.files || []).find((f) => f.path === fullPath)
       if (created) selectFileByPath(fullPath)
     }
-    toast.success(`已新建${newFileKind.value === 'dir' ? '目录' : '文件'}「${name}」`)
+    toast.success(newFileKind.value === 'dir'
+      ? t('skills.fileBrowser.createdDir', { name })
+      : t('skills.fileBrowser.createdFile', { name }))
   } catch (e) {
     newFileError.value = e?.message || String(e)
   } finally {
@@ -1195,7 +1203,7 @@ async function submitRenameFile() {
   const newPath = parent ? `${parent}/${newName}` : newName
   // 重复检测
   const dup = (props.files || []).find((f) => f.path === newPath && f.path !== renameFileOldPath.value)
-  if (dup) { renameFileError.value = '同目录下已存在同名文件'; return }
+  if (dup) { renameFileError.value = t('skills.fileBrowser.validation.duplicateFile'); return }
   renameFileBusy.value = true
   try {
     const next = (props.files || []).map((f) =>
@@ -1204,7 +1212,7 @@ async function submitRenameFile() {
     await persistFiles(next)
     renameFileOpen.value = false
     selectFileByPath(newPath)
-    toast.success(`已重命名为「${newName}」`)
+    toast.success(t('skills.fileBrowser.renamed', { name: newName }))
   } catch (e) {
     renameFileError.value = e?.message || String(e)
   } finally {
@@ -1250,7 +1258,7 @@ async function submitRenameFolder() {
     })
     await persistFiles(next)
     renameFolderOpen.value = false
-    toast.success(`已重命名为「${newName}」`)
+    toast.success(t('skills.fileBrowser.renamed', { name: newName }))
   } catch (e) {
     renameFolderError.value = e?.message || String(e)
   } finally {
@@ -1304,7 +1312,7 @@ async function submitDeleteFile() {
     if (target.kind === 'file') {
       // 保护 SKILL.md(由后端按 manifest 重建,前端不能"删")
       if (target.path === 'SKILL.md') {
-        toast.error('SKILL.md 由系统管理,不能删除')
+        toast.error(t('skills.fileBrowser.validation.invalidSKILL'))
         deleteFileOpen.value = false
         deleteFileTarget.value = null
         return
@@ -1322,7 +1330,7 @@ async function submitDeleteFile() {
     if (selectedFile.value && selectedFile.value.path === target.path) {
       selectFileByPath('SKILL.md')
     }
-    toast.success(`已删除「${target.name}」`)
+    toast.success(t('skills.fileBrowser.deletedItem', { name: target.name }))
   } catch (e) {
     toast.error(e?.message || String(e))
   } finally {
@@ -1424,7 +1432,7 @@ async function openFolderInExplorer(dirPath) {
     }
   }
   if (!srcDir) {
-    toast.error('无法定位到磁盘目录,缺少 source_dir')
+    toast.error(t('skills.fileBrowser.sourceDirMissing'))
     return
   }
   const abs = dirPath ? `${srcDir}/${dirPath}` : srcDir
@@ -1434,7 +1442,7 @@ async function openFolderInExplorer(dirPath) {
       platform.platform.openExternal(r.fallbackUrl)
     }
   } catch (e) {
-    toast.error(`打开失败: ${e?.message || String(e)}`)
+    toast.error(t('common.openFailed', { msg: e?.message || String(e) }))
   }
 }
 
@@ -1463,11 +1471,11 @@ defineExpose({
   <!-- 渲染异常时的降级 UI -->
   <div v-if="renderError" class="sfip-error">
     <IconPark icon="mdi:alert-circle-outline" width="22" height="22" />
-    <h4>{{ LABEL_RENDER_ERROR_TITLE }}</h4>
+    <h4>{{ t(LABEL_RENDER_ERROR_TITLE) }}</h4>
     <p class="sfip-error-msg">{{ renderError }}</p>
     <button class="primary sm" @click="safeReload">
       <IconPark icon="mdi:refresh" width="14" height="14" />
-      {{ LABEL_RETRY }}
+      {{ t(LABEL_RETRY) }}
     </button>
   </div>
   <div v-else class="sfip">
@@ -1489,7 +1497,7 @@ defineExpose({
           <div class="sfip-name-row">
             <span class="sfip-name">{{ skill?.name || '' }}</span>
             <span v-if="skillVersion" class="sfip-version">@{{ skillVersion }}</span>
-            <span class="sfip-count">{{ (files || []).length }} {{ LABEL_FILES }}</span>
+            <span class="sfip-count">{{ (files || []).length }} {{ t(LABEL_FILES, { n: (files || []).length }) }}</span>
             <!-- 2026-07-12 改:badge 之前显示 v{version} 跟 @version 重复;用户反馈
                  "版本号重复显示了,编辑前面的版本号就要显示了",去掉 v{version} badge。
                  留 name-actions 编辑按钮组,无中间 badge 占位,标题行更紧凑。 -->
@@ -1527,8 +1535,8 @@ defineExpose({
       <button
         v-if="hasFrontmatter"
         class="sfip-fm-btn"
-        :data-tip="LABEL_FRONTMATTER_TITLE"
-        :aria-label="LABEL_FRONTMATTER_TITLE"
+        :data-tip="t(LABEL_FRONTMATTER_TITLE)"
+        :aria-label="t(LABEL_FRONTMATTER_TITLE)"
         @click="openFrontmatter"
       >
         <IconPark icon="Info" width="15" height="15" />
@@ -1547,8 +1555,8 @@ defineExpose({
             <!-- 2026-07-08 改:PascalCase 直传 FileCabinet(避免 mdi 映射兜底导致的"看不见"
                  现象)。多文件柜图标跟"skill 目录树"语义贴合(文件夹集合)。 -->
             <IconPark icon="FileCabinet" width="13" height="13" />
-            <span>skill 目录</span>
-            <span class="sfip-tree-header-count">{{ (files || []).length }} 个</span>
+            <span>{{ t('skills.fileBrowser.skillDirectory') }}</span>
+            <span class="sfip-tree-header-count">{{ (files || []).length }} {{ t('common.count') }}</span>
           </header>
           <FileTreeView
             v-if="(files || []).length"
@@ -1574,8 +1582,8 @@ defineExpose({
           <button
             v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
-            :data-tip="LABEL_EDIT"
-            :aria-label="LABEL_EDIT"
+            :data-tip="t(LABEL_EDIT)"
+            :aria-label="t(LABEL_EDIT)"
             @click="setMode(props.skill?.name, selectedFile.path, 'edit')"
           >
             <IconPark icon="Edit" width="14" height="14" />
@@ -1588,8 +1596,8 @@ defineExpose({
           <button
             v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile"
             class="sfip-mode-btn"
-            :data-tip="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
-            :aria-label="outlineVisible ? LABEL_OUTLINE_HIDE : LABEL_OUTLINE_SHOW"
+            :data-tip="outlineVisible ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
+            :aria-label="outlineVisible ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
             :class="{ 'sfip-mode-btn-active': outlineVisible }"
             @click="toggleOutline"
           >
@@ -1603,26 +1611,26 @@ defineExpose({
                 用户没改东西也能放弃(回到 view 模式,等于"取消编辑")。
                "保存" 只在 isDirty 时显示,避免空保存(没改任何东西调 saveCurrent
                 是浪费一次 HTTP)。同时 dirty 标签 ● 未保存 也只在 isDirty 时显示。 -->
-          <span v-if="isDirty" class="sfip-viewer-dirty">{{ LABEL_DIRTY }}</span>
+          <span v-if="isDirty" class="sfip-viewer-dirty">{{ t(LABEL_DIRTY) }}</span>
           <button
             v-if="currentMode === 'edit' || isDirty"
             class="sfip-btn"
             :disabled="saving"
-            :data-tip="LABEL_DISCARD"
-            :aria-label="LABEL_DISCARD"
+            :data-tip="t(LABEL_DISCARD)"
+            :aria-label="t(LABEL_DISCARD)"
             @click="resetCurrent"
-          >{{ LABEL_DISCARD }}</button>
+          >{{ t(LABEL_DISCARD) }}</button>
           <button
             v-if="isDirty"
             class="sfip-btn sfip-btn-primary"
             :disabled="saving"
-            :data-tip="saving ? LABEL_SAVING : LABEL_SAVE"
-            :aria-label="LABEL_SAVE"
+            :data-tip="saving ? t(LABEL_SAVING) : t(LABEL_SAVE)"
+            :aria-label="t(LABEL_SAVE)"
             @click="saveCurrent"
           >
             <span v-if="saving" class="sfip-spinner"></span>
             <IconPark v-else icon="Save" width="13" height="13" />
-            {{ saving ? LABEL_SAVING : LABEL_SAVE }}
+            {{ saving ? t(LABEL_SAVING) : t(LABEL_SAVE) }}
           </button>
         </header>
         <CodeViewer
@@ -1638,7 +1646,7 @@ defineExpose({
         />
         <div v-else class="sfip-empty">
           <IconPark icon="mdi:file-outline" width="48" height="48" />
-          <p>{{ LABEL_PICK }}</p>
+          <p>{{ t(LABEL_PICK) }}</p>
         </div>
       </main>
     </div>
@@ -1668,10 +1676,10 @@ defineExpose({
             </tr>
           </tbody>
         </table>
-        <p v-else class="sfip-fm-empty">无 frontmatter</p>
+        <p v-else class="sfip-fm-empty">{{ t('skills.fileBrowser.noFrontmatter') }}</p>
       </div>
       <template #footer>
-        <button class="primary" @click="closeFrontmatter">关闭</button>
+        <button class="primary" @click="closeFrontmatter">{{ t('common.close') }}</button>
       </template>
     </Modal>
 
@@ -1682,7 +1690,7 @@ defineExpose({
     <Modal
       v-model="editFmOpen"
       size="md"
-      :title="(newSkillInitial ? '新建 skill · frontmatter' : '编辑 frontmatter')"
+      :title="(newSkillInitial ? t('skills.editor.frontmatterDialogTitle') : t('skills.editor.frontmatterDialogTitle'))"
       :close-on-mask="!fmFormSaving"
       @close="closeFrontmatterEditor"
     >
@@ -1716,7 +1724,7 @@ defineExpose({
               :disabled="fmFormSaving"
               rows="2"
               spellcheck="false"
-              placeholder="技能说明(必填)"
+              :placeholder="t('skills.editor.descriptionRequiredPlaceholder')"
             />
           </div>
           <div class="sfip-fm-row sfip-fm-row-author">
@@ -1725,7 +1733,7 @@ defineExpose({
               v-model="fmForm.author"
               class="sfip-fm-input"
               :disabled="fmFormSaving"
-              placeholder="(可选)"
+              :placeholder="t('common.optional')"
               spellcheck="false"
             />
           </div>
@@ -1735,14 +1743,14 @@ defineExpose({
               v-model="fmForm.license"
               class="sfip-fm-input"
               :disabled="fmFormSaving"
-              placeholder="(可选,例如 MIT)"
+              :placeholder="t('skills.editor.licensePlaceholder')"
               spellcheck="false"
             />
           </div>
           <div class="sfip-fm-row sfip-fm-row-triggers">
             <label class="sfip-fm-label">
               triggers
-              <span class="sfip-fm-label-hint">触发词(列表)</span>
+              <span class="sfip-fm-label-hint">{{ t('skills.editor.triggersList') }}</span>
               <!-- 2026-07-12 改:触发词改为可选,label 加 "(可选)" 角标 -->
               <span class="sfip-fm-label-badge">{{ LABEL_TRIGGERS_OPTIONAL }}</span>
             </label>
@@ -1750,7 +1758,7 @@ defineExpose({
               <!-- 2026-07-12 增:触发词为可选,空数组时显示一行虚线占位文案 -->
               <div v-if="!fmForm.triggers.length" class="sfip-fm-trigger-empty">
                 <IconPark icon="mdi:lightbulb-on-outline" width="14" height="14" />
-                <span>{{ LABEL_TRIGGERS_EMPTY_HINT }}</span>
+                <span>{{ t(LABEL_TRIGGERS_EMPTY_HINT) }}</span>
               </div>
               <div
                 v-for="(_, idx) in fmForm.triggers"
@@ -1761,15 +1769,15 @@ defineExpose({
                   v-model="fmForm.triggers[idx]"
                   class="sfip-fm-input sfip-fm-trigger-input"
                   :disabled="fmFormSaving"
-                  :placeholder="`触发词 #${idx + 1}`"
+                  :placeholder="t('skills.editor.triggerPlaceholder', { idx: idx + 1 })"
                   spellcheck="false"
                 />
                 <button
                   type="button"
                   class="sfip-fm-trigger-del"
                   :disabled="fmFormSaving"
-                  :title="`删除第 ${idx + 1} 个`"
-                  :aria-label="`删除第 ${idx + 1} 个`"
+                  :title="t('skills.editor.deleteTrigger', { idx: idx + 1 })"
+                  :aria-label="t('skills.editor.deleteTrigger', { idx: idx + 1 })"
                   @click="removeTrigger(idx)"
                 >
                   <IconPark icon="mdi:close" width="13" height="13" />
@@ -1782,7 +1790,7 @@ defineExpose({
                 @click="addTrigger"
               >
                 <IconPark icon="mdi:plus" width="13" height="13" />
-                添加触发词
+                {{ t('skills.editor.addTrigger') }}
               </button>
             </div>
           </div>
@@ -1795,7 +1803,7 @@ defineExpose({
       <template #footer>
         <button type="button" class="ghost" :disabled="fmFormSaving" @click="closeFrontmatterEditor">
           <IconPark icon="mdi:close" width="13" height="13" />
-          取消
+          {{ t('common.cancel') }}
         </button>
         <button
           type="button"
@@ -1805,7 +1813,7 @@ defineExpose({
         >
           <span v-if="fmFormSaving" class="sfip-spinner"></span>
           <IconPark v-else icon="mdi:content-save" width="13" height="13" />
-          {{ fmFormSaving ? '保存中...' : '保存' }}
+          {{ fmFormSaving ? t('skills.editor.saving') : t('common.save') }}
         </button>
       </template>
     </Modal>
@@ -1816,21 +1824,21 @@ defineExpose({
     <Modal
       v-model="discardOpen"
       size="sm"
-      title="文件已修改"
+      :title="t('skills.fileBrowser.modifiedTitleDirty')"
       :close-on-mask="false"
     >
       <p class="sfip-discard-msg">
-        文件 <code>{{ discardFileName }}</code> 已被修改,切换前请选择如何处理:
+        文件 <code>{{ discardFileName }}</code> {{ t('skills.fileBrowser.discardPrompt') }}
       </p>
       <ul class="sfip-discard-tips">
-        <li><strong>保存修改</strong>:写盘后再切换</li>
-        <li><strong>放弃修改</strong>:丢弃本地编辑,加载目标 skill / 文件</li>
-        <li><strong>取消</strong>:留在当前页面继续编辑</li>
+        <li><strong>{{ t('common.save') }}</strong>:{{ t('skills.fileBrowser.discardSaveHint') }}</li>
+        <li><strong>{{ t('skills.fileBrowser.discardChanges') }}</strong>:{{ t('skills.fileBrowser.discardDropHint') }}</li>
+        <li><strong>{{ t('common.cancel') }}</strong>:{{ t('skills.fileBrowser.discardCancelHint') }}</li>
       </ul>
       <template #footer>
-        <button type="button" class="ghost" @click="onDiscardCancel">取消</button>
-        <button type="button" class="danger" @click="onDiscardDrop">放弃修改</button>
-        <button type="button" class="primary" @click="onDiscardSave">保存修改</button>
+        <button type="button" class="ghost" @click="onDiscardCancel">{{ t('common.cancel') }}</button>
+        <button type="button" class="danger" @click="onDiscardDrop">{{ t('skills.fileBrowser.discardChanges') }}</button>
+        <button type="button" class="primary" @click="onDiscardSave">{{ t('skills.fileBrowser.saveChanges') }}</button>
       </template>
     </Modal>
 
@@ -1856,17 +1864,17 @@ defineExpose({
             :icon="newFileKind === 'dir' ? 'mdi:folder-plus-outline' : 'mdi:file-document-plus-outline'"
             width="18" height="18"
           />
-          {{ newFileKind === 'dir' ? LABEL_CTX_NEW_DIR : LABEL_CTX_NEW_FILE }}
+          {{ newFileKind === 'dir' ? t(LABEL_CTX_NEW_DIR) : t(LABEL_CTX_NEW_FILE) }}
         </h3>
       </template>
       <div class="editor-field-full">
         <p class="muted small-hint">
-          {{ newFileKind === 'dir' ? LABEL_NEW_DIR_PROMPT : LABEL_NEW_FILE_PROMPT }}
+          {{ newFileKind === 'dir' ? t(LABEL_NEW_DIR_PROMPT) : t(LABEL_NEW_FILE_PROMPT) }}
         </p>
         <input
           v-model="newFileInput"
           class="group-input"
-          :placeholder="newFileKind === 'dir' ? '目录名(如 examples)' : '文件名(如 notes.md)'"
+          :placeholder="newFileKind === 'dir' ? t('skills.fileBrowser.newFolderPlaceholder') : t('skills.fileBrowser.newFilePlaceholder')"
           :disabled="newFileBusy"
           autofocus
           @keyup.enter="submitNewFile"
@@ -1883,7 +1891,7 @@ defineExpose({
         </p>
       </div>
       <template #footer>
-        <button type="button" class="ghost" :disabled="newFileBusy" @click="closeNewFileDialog">取消</button>
+        <button type="button" class="ghost" :disabled="newFileBusy" @click="closeNewFileDialog">{{ t('common.cancel') }}</button>
         <button
           type="button"
           class="primary"
@@ -1892,7 +1900,7 @@ defineExpose({
         >
           <span v-if="newFileBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
-          确定
+          {{ t('common.confirm') }}
         </button>
       </template>
     </Modal>
@@ -1902,7 +1910,7 @@ defineExpose({
       <template #header>
         <h3 class="modal-title">
           <IconPark icon="mdi:rename-outline" width="18" height="18" />
-          {{ LABEL_RENAME_FILE_PROMPT }}
+          {{ t(LABEL_RENAME_FILE_PROMPT) }}
         </h3>
       </template>
       <div class="editor-field-full">
@@ -1926,7 +1934,7 @@ defineExpose({
         </p>
       </div>
       <template #footer>
-        <button type="button" class="ghost" :disabled="renameFileBusy" @click="closeRenameFileDialog">取消</button>
+        <button type="button" class="ghost" :disabled="renameFileBusy" @click="closeRenameFileDialog">{{ t('common.cancel') }}</button>
         <button
           type="button"
           class="primary"
@@ -1935,7 +1943,7 @@ defineExpose({
         >
           <span v-if="renameFileBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
-          保存
+          {{ t('common.save') }}
         </button>
       </template>
     </Modal>
@@ -1945,7 +1953,7 @@ defineExpose({
       <template #header>
         <h3 class="modal-title">
           <IconPark icon="mdi:rename-outline" width="18" height="18" />
-          {{ LABEL_RENAME_FOLDER_PROMPT }}
+          {{ t(LABEL_RENAME_FOLDER_PROMPT) }}
         </h3>
       </template>
       <div class="editor-field-full">
@@ -1969,7 +1977,7 @@ defineExpose({
         </p>
       </div>
       <template #footer>
-        <button type="button" class="ghost" :disabled="renameFolderBusy" @click="closeRenameFolderDialog">取消</button>
+        <button type="button" class="ghost" :disabled="renameFolderBusy" @click="closeRenameFolderDialog">{{ t('common.cancel') }}</button>
         <button
           type="button"
           class="primary"
@@ -1978,7 +1986,7 @@ defineExpose({
         >
           <span v-if="renameFolderBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
-          保存
+          {{ t('common.save') }}
         </button>
       </template>
     </Modal>
@@ -1991,27 +1999,27 @@ defineExpose({
             :icon="deleteFileTarget?.kind === 'dir' ? 'mdi:folder-remove-outline' : 'mdi:delete'"
             width="18" height="18"
           />
-          {{ LABEL_DELETE_FILE_PROMPT }}
+          {{ t(LABEL_DELETE_FILE_PROMPT) }}
         </h3>
       </template>
       <p class="confirm-message">
         <template v-if="deleteFileTarget?.kind === 'dir'">
-          确定要删除目录「{{ deleteFileTarget.name }}」吗?
+          {{ t('skills.fileBrowser.deleteFolderConfirm', { name: deleteFileTarget.name }) }}
           <template v-if="deleteFileTarget.childCount > 0">
             <br /><br />
-            该目录下还有 <strong>{{ deleteFileTarget.childCount }}</strong> 个文件会被一并删除,此操作无法撤销。
+            {{ t('skills.fileBrowser.deleteFolderChildrenWarning', { n: deleteFileTarget.childCount }) }}
           </template>
         </template>
         <template v-else>
-          {{ LABEL_DELETE_FILE_CONFIRM.replace('{name}', deleteFileTarget?.name || '') }}
+          {{ t(LABEL_DELETE_FILE_CONFIRM, { name: deleteFileTarget?.name || '' }) }}
         </template>
       </p>
       <template #footer>
-        <button type="button" class="ghost" :disabled="deleteFileBusy" @click="closeDeleteFileDialog">取消</button>
+        <button type="button" class="ghost" :disabled="deleteFileBusy" @click="closeDeleteFileDialog">{{ t('common.cancel') }}</button>
         <button type="button" class="danger" :disabled="deleteFileBusy" @click="submitDeleteFile">
           <span v-if="deleteFileBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:delete" width="14" height="14" />
-          删除
+          {{ t('common.delete') }}
         </button>
       </template>
     </Modal>

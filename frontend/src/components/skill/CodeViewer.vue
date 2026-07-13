@@ -375,13 +375,13 @@ const lineNumbers = computed(() => {
       >
         <header class="cv-md-outline-header">
           <IconPark icon="mdi:format-list-bulleted" width="13" height="13" />
-          <span>大纲</span>
+          <span>{{ t('skills.fileBrowser.outline') }}</span>
           <span class="cv-md-outline-count">{{ mdHeadings.length }}</span>
           <button
             type="button"
             class="cv-md-outline-toggle"
-            data-tip="收起大纲"
-            aria-label="收起大纲"
+            :data-tip="t('skills.fileBrowser.hideOutline')"
+            :aria-label="t('skills.fileBrowser.hideOutline')"
             @click="toggleOutline"
           >
             <IconPark icon="mdi:chevron-right" width="14" height="14" />

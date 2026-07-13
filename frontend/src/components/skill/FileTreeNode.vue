@@ -15,6 +15,10 @@
 
 import { computed } from 'vue'
 import IconPark from '@/components/IconPark.vue'
+import { plainT } from '@/core/i18n/index.js'
+
+// 2026-07-13 增:FileTreeNode 文案走 i18n(plainT 兜底)。
+const t = (key, values) => plainT(key, values)
 
 defineOptions({ name: 'FileTreeNode' })
 
@@ -188,8 +192,8 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
         <span
           v-if="(dir.children || []).length + (dir.files || []).length === 0"
           class="file-count file-count-empty"
-          title="空文件夹"
-        >空</span>
+          :title="t('skills.fileBrowser.emptyFolder')"
+        >{{ t('skills.fileBrowser.emptyShort') }}</span>
         <span v-else-if="(dir.children || []).length + (dir.files || []).length" class="file-count">
           {{ (dir.children || []).length + (dir.files || []).length }}
         </span>
@@ -229,8 +233,8 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
         <span class="file-caret-placeholder" />
         <IconPark :icon="fileIcon(file.name)" width="16" height="16" class="file-file-icon" />
         <span class="file-name">{{ file.name }}</span>
-        <span v-if="isLargeFile(file.size)" class="file-large-tip" :title="`${file.size} bytes`">大</span>
-        <span v-if="isDirty(file.path)" class="file-dirty-dot" :title="'有未保存的修改'" />
+        <span v-if="isLargeFile(file.size)" class="file-large-tip" :title="`${file.size} bytes`">{{ t('skills.fileBrowser.largeShort') }}</span>
+        <span v-if="isDirty(file.path)" class="file-dirty-dot" :title="t('skills.fileBrowser.unsavedChanges')" />
       </div>
     </li>
   </ul>

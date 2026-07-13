@@ -58,6 +58,10 @@ const messages = {
     dash: '—',
     confirm: '确认',
     loading: '加载中…',
+    retry: '重试',
+    optional: '可选',
+    count: '个',
+    notConfigured: '未配置',
     // 2026-07-01 改:去 1000 上限后 total 数字不代表全网真数,误导。
     // 改为只显示"第 X / Y 页",Y 是 totalPages 由 size 推算出来(可能 = 实际页数 / ctx 超时后是个偏小的估计)。
     pageOf: '第 {page} / {total} 页 · 共 {count} 条',
@@ -67,6 +71,7 @@ const messages = {
     noData: '该作用域下还没有技能',
     noDataHint: '点右上角"新建"开始,或去首次配置从已装工具导入',
     deleted: '已删除 {name}',
+    openFailed: '打开失败:{msg}',
   },
 
   skills: {
@@ -127,8 +132,23 @@ const messages = {
       syncPartialFailed: '{ok}/{total} 个生效位置同步成功',
       syncNone: '「{name}」已保存,但还没在任何工具/项目上启用,需要时去作用域区启用',
       errNameEmpty: '名称不能为空',
+      errVersionEmpty: '版本不能为空',
+      errDescriptionEmpty: '描述不能为空',
       errDescShort: '描述至少 10 个字符',
       errTriggersEmpty: '触发词至少填一个',
+      // 2026-07-13 增:frontmatter 表单 + InlinePanel 编辑保存相关
+      notReady: '编辑器尚未就绪,请稍候再试',
+      saveOk: '已保存 {name}',
+      created: '已创建 {name}@{version}',
+      createdRefreshFailed: '新建完成但刷新失败:{msg}',
+      frontmatterDialogTitle: '编辑 / 新建 frontmatter',
+      triggerPlaceholder: '触发词 #{idx}',
+      deleteTrigger: '删除第 {idx} 个',
+      addTrigger: '添加触发词',
+      descriptionRequiredPlaceholder: '技能说明(必填)',
+      licensePlaceholder: '(可选,例如 MIT)',
+      triggersList: '触发词(列表)',
+      saving: '保存中...',
     },
 
     // 2026-07-03 增:apply / batch 响应的统一判定 toast 文案(全文件复用)。
@@ -328,6 +348,72 @@ const messages = {
       openInFolder: '在文件夹打开',
       // 2026-07-05 增:磁盘文件损坏提示(后端 corrupted_file 错误时弹)
       corruptedHint: '技能「{name}」的 SKILL.md 文件已损坏({hint})。请检查磁盘文件内容,或从备份恢复。',
+      // 2026-07-13 增:补齐 SkillFileInlinePanel + SkillScopePanel 用到的所有文案
+      skillDirectory: 'skill 目录',
+      files: '{n} 个文件',
+      pickOneToBrowse: '请选择一个文件开始浏览',
+      renderError: '技能详情加载出错',
+      showOutline: '显示大纲',
+      hideOutline: '隐藏大纲',
+      outline: '大纲',
+      viewFrontmatter: '查看 frontmatter',
+      ariaLabel: '文件浏览器',
+      ctxNewFile: '新建文件',
+      ctxNewFolder: '新建文件夹',
+      ctxRenameFile: '重命名文件',
+      ctxRenameFolder: '重命名文件夹',
+      ctxDeleteFile: '删除文件',
+      ctxDeleteFolder: '删除文件夹',
+      openInExplorer: '在文件浏览器中打开',
+      newFileTitle: '新建文件(将在指定目录下创建)',
+      newFolderTitle: '新建文件夹(将在指定目录下创建)',
+      renameFileTitle: '重命名文件',
+      renameFolderTitle: '重命名文件夹',
+      deleteFileTitle: '删除文件',
+      deleteFileConfirm: '确定要删除「{name}」吗?此操作无法撤销。',
+      deleteFolderConfirm: '确定要删除目录「{name}」吗?',
+      deleteFolderChildrenWarning: '该目录下还有 {n} 个文件会被一并删除,此操作无法撤销。',
+      newFilePlaceholder: '文件名(如 notes.md)',
+      newFolderPlaceholder: '目录名(如 examples)',
+      modifiedTitle: '文件已修改',
+      discardPrompt: '文件已被修改,切换前请选择如何处理:',
+      discardSaveHint: '保存修改:写盘后再切换',
+      discardDropHint: '放弃修改:丢弃本地编辑,加载目标 skill / 文件',
+      discardCancelHint: '取消:留在当前页面继续编辑',
+      discardChanges: '放弃修改',
+      saveChanges: '保存修改',
+      modifiedTitleDirty: '文件已被修改',
+      incompleteFilesWarning: '提示:文件列表为空,只提交了当前文件,保存后其他文件会丢失 — 请等待目录加载完成后再保存。',
+      noSkillSelected: '当前未选中技能',
+      noFrontmatter: '无 frontmatter',
+      modifiedState: '● 未保存',
+      modifiedShort: '● 未保存',
+      // 文件名 / 目录名校验
+      validation: {
+        nameRequired: '名称不能为空',
+        invalidSeparator: '名称不能含 / 或 \\',
+        invalidDotName: '名称不能为 . 或 ..',
+        invalidSKILL: 'SKILL.md 由系统管理,不能直接新建',
+        duplicateName: '已存在同名文件/目录',
+        duplicateFile: '同目录下已存在同名文件',
+      },
+      createdFile: '已新建文件「{name}」',
+      createdDir: '已新建目录「{name}」',
+      renamed: '已重命名为「{name}」',
+      deletedItem: '已删除「{name}」',
+      sourceDirMissing: '无法定位到磁盘目录,缺少 source_dir',
+      skillDirFolder: '技能目录',
+      // CsvViewer
+      csvPreviewLimit: '文件共 {total} 行,仅预览前 {preview} 行;编辑模式看完整内容',
+      csvEmpty: '空文件或无可解析行',
+      // OfficeViewer
+      officeParseFailed: '文档解析失败',
+      officeParseHint: '文件可能已损坏,或二进制内容还原不完整。请用在文件夹中打开在原生应用查看。',
+      // FileTreeNode
+      emptyFolder: '空文件夹',
+      emptyShort: '空',
+      largeShort: '大',
+      unsavedChanges: '有未保存的修改',
     },
 
     ai: {
@@ -350,6 +436,59 @@ const messages = {
 
       // 2026-07-12 增:AI 操作弹窗(全局,与下方 aiDialog.* 共享)。AIPanel 仍可能在用,
       // aiDialog.* 是新弹窗专用 key。
+    },
+
+    // 2026-07-13 增:SkillScopePanel 作用域区文案(从组件内 LABEL_* 常量迁移过来)。
+    scope: {
+      title: 'skill 作用域',
+      global: '全局',
+      projectPrefix: '项目 #',
+      empty: '该技能尚未写入任何工具/位置',
+      loading: '加载中...',
+      enable: '启用作用域',
+      disable: '停用作用域',
+      loadError: '作用域加载出错',
+      retry: '重试',
+      enabled: '已启用',
+      disabled: '已停用',
+      partialFailed: '部分失败',
+      enableFailed: '启用失败',
+      disableFailed: '停用失败',
+      enableSuccess: '已启用 {tool} · {scope}',
+      disableSuccess: '已停用 {tool} · {scope}',
+      disableConfirm: '确定要从 {tool} · {scope} 删除 skill「{name}」?',
+      enableConfirm: '确定要把 skill「{name}」复制到 {tool} · {scope}?',
+      toolCount: '{n} 个工具',
+      toolCountShort: '{n} 个工具',
+      globalEnabledTip: '已启用全局作用域',
+      globalAgent: '全局 Agent Skill',
+      globalAgentTip: '同步到 ~/.agents/skills/ 共享池(所有工具均可读取)',
+      globalAgentInfoTip: '查看全局 Agent 说明',
+      globalAgentFolderTip: '在文件浏览器中打开 ~/.agents/skills/',
+      globalAgentInfoTitle: '全局 Agent Skill',
+      globalAgentInfoDesc: '把 skill 写入 ~/.agents/skills/ 后,所有声明该目录作为个人级 skills 池的 AI 工具都能自动读取(无需复制到每个工具的目录)。',
+      globalAgentCompatibleToolsTitle: '适配 ~/.agents/skills/ 的工具(2026-07-12)',
+      globalAgentSupported: '已支持',
+      globalAgentPartial: '部分支持',
+      globalAgentEmpty: '暂未发现适配工具。',
+      globalAgentEnabled: '已同步到 ~/.agents/skills/{name}/',
+      globalAgentDisabled: '已从 ~/.agents/skills/{name}/ 移除',
+      globalAgentToggleFailed: '切换全局 Agent 失败:{msg}',
+      globalAgentPathFailed: '无法获取 ~/.agents/skills/ 路径',
+      openFolderFailed: '打开文件夹失败:{msg}',
+      globalAgentDirToast: '全局 Agent 目录: {url}',
+      // 各工具支持备注(给 info 弹窗用)
+      toolNotes: {
+        vscode: '文档明确支持个人级',
+        antigravity: '官方支持',
+        claude: '项目级支持,个人级实际走其他目录',
+        codex: '命令行沿用开放标准',
+        qwen: '官方支持技能标准',
+        cursor: '主要走其他目录,个人级路径尚未官方文档化',
+        opencode: '官方文档未明确支持个人级路径',
+        other: '官方文档未提及该路径',
+      },
+      dirToast: '全局 Agent 目录: {path}',
     },
 
     // 2026-07-12 增:AI 弹窗(全局独立弹窗,替代旧 AIPanel 嵌入)。
@@ -378,6 +517,9 @@ const messages = {
         promptCustomized: '已自定义',
         // 把自定义内容改回默认模板
         promptReset: '重置为默认',
+        // 2026-07-13 增:翻译面板相关提示
+        promptEmpty: '提示词为空,请填写或点重置为默认',
+        startInstruction: '请按系统提示里的规则开始翻译',
         // 内置的"原始提示词"模板(含 {target_lang} 占位符,弹窗实时替换 + 显示)。
         // 这段是「给用户看的预览」 — 真正发给 LLM 的 system prompt 由后端 preset 注入,
         // 这里展示出来只是让用户对翻译质量心里有数(可点击「复制提示词」拿去别处 debug)。
@@ -422,6 +564,68 @@ const messages = {
       },
       providerMissing: '尚未配置 AI 模型,请先到「设置 → AI 模型」里配一个。',
       providerMissingTitle: '需要先配置 AI 模型',
+    },
+
+    // 2026-07-13 增:AI 应用 / 翻译相关(toast / 错误提示)
+    aiApply: {
+      noSkill: '应用失败:当前未选中技能',
+      empty: '应用失败:AI 输出为空',
+      applied: '已应用(已写回 {scope}/{name})',
+      failed: '应用失败:{msg}',
+    },
+
+    // 2026-07-13 增:RichTextEditor(详情区正文的所见即所得编辑器)文案
+    richText: {
+      placeholder: '开始输入内容',
+      heading1: '标题',
+      heading2: '标题',
+      heading3: '标题',
+      bold: '加粗',
+      italic: '斜体',
+      strike: '删除线',
+      inlineCode: '行内代码',
+      bulletList: '无序列表',
+      orderedList: '有序列表',
+      blockquote: '引用',
+      codeBlock: '代码块',
+      link: '链接',
+      unlink: '取消链接',
+      insertImageTip: '插入图片,填地址',
+      imageUrl: '图片地址',
+      imageAlt: '替代文本,可选',
+      insert: '插入',
+      undo: '撤销',
+      redo: '重做',
+    },
+
+    // 2026-07-13 增:HelloWorld 调试页(根路由)文案
+    helloWorld: {
+      webNoLocalPort: 'Web 模式,无本地端口',
+      dualDeployment: '双部署:桌面端 + Web',
+      deploymentMode: '部署形态',
+      appName: '应用名',
+      localBackendPort: '本地后端端口',
+      sameOrigin: '空,同源',
+      healthCheck: '健康检查',
+      pingBackend: 'ping 后端',
+      enableDebugLog: '开日志',
+      storeStatus: '应用状态',
+      httpScaffoldHint: '接口样板,业务继续按写,路由自动注册',
+    },
+
+    // 2026-07-13 增:AISettingsPanel(AI 模型设置)供应商类型文案
+    aiProvider: {
+      official: '官方',
+      openAI: '官方',
+      anthropic: '官方',
+      openAICompat: '兼容、硅基等',
+    },
+
+    // 2026-07-13 增:TreeNode 首页树节点的全局 Agent badge
+    treeNode: {
+      globalAgentBadge: '全局 Agent',
+      globalAgentTip: '该技能位于全局 agents 目录,所有工具可自动读取',
+      dropHere: '放到此处',
     },
   },
 
@@ -555,6 +759,9 @@ const messages = {
       // 2026-07-09 增:前端 timeout 单独提示
       errTimeout: '请求超时(后端下载慢):{msg}。可以重试,或去浏览器手动下好后从「本地导入」装入。',
       errGeneric: '安装失败:{msg}',
+      // 2026-07-13 增:补充
+      clickToFill: '点击填入',
+      rateLimitHint: '疑似限流。等几分钟再点重试,或去浏览器手动下载后从首页本地导入',
     },
     progress: {
       resolve: '解析输入…',
@@ -737,6 +944,10 @@ const messages = {
       fieldName: '名称',
       fieldNameHint: '唯一标识,英文或中文',
       fieldKind: '厂商类型',
+      // 2026-07-13 增:厂商类型下拉项的展示文案
+      kindOpenAI: '官方',
+      kindAnthropic: '官方',
+      kindOpenAICompat: '兼容、硅基等',
       fieldBaseURL: '接口地址',
       fieldBaseURLHint: '留空走厂商默认;OpenAI 兼容型必须填',
       fieldModel: '模型名',
