@@ -677,14 +677,14 @@ onUnmounted(() => {
 .topbar-logo-img {
   /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,视觉对齐。
      2026-07-13 改:24→20→22(最终选 22,跟文字同尺寸);
-     加 vertical-align: middle + align-self: center 解决 img 与 span
-     baseline 错位问题(img 默认按 baseline 对齐,inline-block span
-     按 middle,两者会上下错开几像素)。 */
+     顶部对齐/中线对齐都看着别扭(img 比文字略低/略高几像素),
+     改用底部对齐 (vertical-align: text-bottom) 让 img 下边沿跟
+     文字 x-height 下边沿对齐,视觉上像「贴在一起」的两个独立元素。 */
   width: 22px;
   height: 22px;
   display: block;
-  vertical-align: middle;
-  align-self: center;
+  vertical-align: text-bottom;
+  align-self: flex-end;
   user-select: none;
   -webkit-user-drag: none;
 }
