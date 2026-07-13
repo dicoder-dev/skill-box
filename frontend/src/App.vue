@@ -633,10 +633,11 @@ onUnmounted(() => {
   padding-left: 80px;        /* macOS 左侧让位红绿灯水平位置(0~80px) */
 }
 .topbar.mac-desktop .topbar-logo-img {
-  /* 2026-07-13 改:.topbar.mac-desktop 的 padding-left: 80px 在某些布局下
-     会被 .topbar-left 的 flex 布局吃掉,这里给 logo img 单独加 margin-left
-     兜底,确保 logo 离红绿灯足够远(80px 红绿灯 + 16px 安全间距 = 96px)。 */
-  margin-left: 16px;
+  /* 2026-07-13 改:margin-left 从 16px 减到 8px,wordmark 整体往左移一点,
+     跟红绿灯保持安全距离即可,不再额外推远。
+     (.topbar.mac-desktop 仍设 padding-left: 80px 让位红绿灯,
+     这里 8px 是 wordmark 在红绿灯右边的额外安全距离)。 */
+  margin-left: 8px;
 }
 .topbar.mac-desktop .topbar-logo-text {
   margin-top: 6px;          /* 把 logo 视觉中心下移,对齐红绿灯圆心(~25px) */
