@@ -670,20 +670,18 @@ onUnmounted(() => {
    border-right(图标分隔用的样式不再需要)。 */
 .topbar-logo {
   display: flex;
-  align-items: baseline;     /* 2026-07-13 改:baseline 让两个子项按 baseline 对齐 */
+  align-items: center;       /* 2026-07-13 改回:水平居中对齐 */
   flex-shrink: 0;
-  gap: 4px;                  /* logo 图与文字的间距(2026-07-13 改:8→4→2→4,稍回弹) */
+  gap: 4px;                  /* logo 图与文字的间距 */
 }
 .topbar-logo-img {
-  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,视觉对齐。
-     2026-07-13 改:24→20→22;
-     关键修复:之前 display: block 让 vertical-align 失效,
-     改回 display: inline 让 vertical-align: bottom 真正生效,
-     img 底部对齐文字 baseline。 */
+  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,水平居中对齐。
+     2026-07-13 改回:display: inline-block + vertical-align: middle
+     跟 flex 容器 align-items: center 双重保险。 */
   width: 22px;
   height: 22px;
   display: inline-block;
-  vertical-align: bottom;
+  vertical-align: middle;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -703,11 +701,7 @@ onUnmounted(() => {
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1;              /* 锁住行高,让 margin-top 精准控制位置 */
-  /* 2026-07-13 改:加 margin-top: -2px 微调,补偿 logo 图底部
-     透明 padding 导致的视觉错位 — img 是 22×22 PNG 但主体实际
-     占据像素可能不到 22px,底部有几像素空白,导致 logo 看起来
-     比文字略低。文字上移 2px 让两者视觉底部齐平。*/
-  margin-top: -2px;
+  /* 2026-07-13 改:删 margin-top: -2px,改回水平居中对齐。 */
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;
