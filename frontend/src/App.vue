@@ -223,12 +223,10 @@ onUnmounted(() => {
         <!-- 2026-07-12 改:logo 固定在顶栏最左侧(0 起),盖住侧栏 64px 区域。
              这里 topbar-left 仍占位,但视觉上由 absolute 子层把 logo 推出来,
              不再受 sidebar 64px 宽度影响。
-             2026-07-13 增:logo 文字前加 app icon 图片(对齐文字基线,作为视觉锚点)。
-             图源 frontend/public/skill-box-logo.png(1024×1024 透明背景),
-             跟 build/appicon.png / desktop/appicon.png 保持一致。 -->
+             2026-07-13 改:换成整图 wordmark(704×169,已含文本),
+             删掉 span,只保留 img。CSS 用 height 固定 + width auto 保持宽高比。 -->
         <div class="topbar-logo">
-          <img class="topbar-logo-img" src="/skill-box-logo.png" alt="" />
-          <span class="topbar-logo-text">{{ t('app.brand') }}</span>
+          <img class="topbar-logo-img" src="/skill-box-logo.png" alt="SkillBox" />
         </div>
       </div>
 
@@ -670,18 +668,17 @@ onUnmounted(() => {
    border-right(图标分隔用的样式不再需要)。 */
 .topbar-logo {
   display: flex;
-  align-items: baseline;     /* 2026-07-13 改:底部对齐(baseline) */
+  align-items: center;       /* 2026-07-13 改:整图 wordmark 不需要 baseline 对齐,居中即可 */
   flex-shrink: 0;
-  gap: 4px;                  /* logo 图与文字的间距 */
 }
 .topbar-logo-img {
-  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,底部对齐。
-     2026-07-13 改回底部对齐:
-     display: inline-block + vertical-align: bottom 双重保险。 */
-  width: 22px;
-  height: 22px;
-  display: inline-block;
-  vertical-align: bottom;
+  /* 顶栏高 48px,wordmark(图+文本一体的横向图)取高 28px,
+     宽度按原图 704:169 比例自动算出(~117px)。
+     2026-07-13 改:整图 wordmark 替换之前 22×22 图标+span 文字组合;
+     原宽高比 1:1 改成 width:auto + height:28px,保持原图宽高比。*/
+  height: 28px;
+  width: auto;
+  display: block;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -701,11 +698,11 @@ onUnmounted(() => {
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1;              /* 锁住行高,让 margin-top 精准控制位置 */
-  /* 2026-07-13 改:加 margin-top: -2px 微调,
+  /* 2026-07-13 改:加 margin-top: -3px 微调,
      水平居中对齐基础上让文字视觉上提一点,
      让 'S' 字母中线略高于 logo 中线,补偿 logo PNG 底部的
      透明 padding 导致的视觉下沉感。 */
-  margin-top: -2px;
+  margin-top: -3px;
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;
