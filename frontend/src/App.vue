@@ -670,7 +670,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 4px;                  /* logo 图与文字的间距(2026-07-13 改:8→4,贴紧) */
+  gap: 2px;                  /* logo 图与文字的间距(2026-07-13 改:8→4→2,几乎贴紧) */
 }
 .topbar-logo-img {
   /* 顶栏高 48px,文字 22px 行高;logo 图取 24px,视觉权重跟文字相当
