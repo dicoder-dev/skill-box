@@ -222,8 +222,12 @@ onUnmounted(() => {
 
         <!-- 2026-07-12 改:logo 固定在顶栏最左侧(0 起),盖住侧栏 64px 区域。
              这里 topbar-left 仍占位,但视觉上由 absolute 子层把 logo 推出来,
-             不再受 sidebar 64px 宽度影响。 -->
+             不再受 sidebar 64px 宽度影响。
+             2026-07-13 增:logo 文字前加 app icon 图片(对齐文字基线,作为视觉锚点)。
+             图源 frontend/public/skill-box-logo.png(1024×1024 透明背景),
+             跟 build/appicon.png / desktop/appicon.png 保持一致。 -->
         <div class="topbar-logo">
+          <img class="topbar-logo-img" src="/skill-box-logo.png" alt="" />
           <span class="topbar-logo-text">{{ t('app.brand') }}</span>
         </div>
       </div>
@@ -660,6 +664,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  gap: 8px;                  /* logo 图与文字的间距 */
+}
+.topbar-logo-img {
+  /* 顶栏高 48px,文字 22px 行高;logo 图取 24px,视觉权重跟文字相当
+     (略偏小,避免抢文字风头),透明 PNG 直接放,顶栏背景透出。 */
+  width: 24px;
+  height: 24px;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .topbar-logo-text {
   /* 2026-07-11 v10:字号 15→20,加粗到 700,作为主要视觉锚点
