@@ -419,7 +419,7 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           type="button"
           @click="clearHistory"
         >
-          <IconPark icon="mdi:broom" width="13" height="13" />
+          <IconPark icon="mdi:delete-outline" width="13" height="13" />
         </button>
         <button
           class="airp-icon-btn"

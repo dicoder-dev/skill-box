@@ -197,6 +197,11 @@ export const MDI_TO_ICONPARK = {
   'robot':                        'Robot',
   'robot-outline':                'RobotOne',
   'translate':                    'Translate',
+  // 2026-07-13 增:用户头像占位 + 清空对话图标 fallback 修复。
+  // 之前 mdi:account / mdi:broom 在 iconparkMap 没映射,fallback Help(问号),用户视觉上不显示。
+  // iconpark 里有 User / DeleteOne,分别贴合「用户头像」和「清空记录」语义。
+  'account':                      'User',
+  'broom':                        'DeleteOne',
   'leaf':                         'Leaf',
   'cursor-default-click-outline': 'Cursor',
   'script-text-outline':          'FileCode',
