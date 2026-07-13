@@ -642,7 +642,9 @@ onUnmounted(() => {
 }
 .topbar.mac-desktop .topbar-logo-text {
   margin-top: 6px;          /* 把 logo 视觉中心下移,对齐红绿灯圆心(~25px) */
-  margin-left: 12px;        /* logo 离红绿灯远一点,避免视觉粘连 */
+  /* 2026-07-13 改:删 margin-left: 12px(历史遗留,当时没 logo img,
+     是为了让 logo 文字整体离红绿灯远一点;现在 img 已独立 margin-left: 16px
+     兜底,这个 12px 变成 img↔text 之间的额外间距让两者看着远。)*/
 }
 
 .topbar-left {
