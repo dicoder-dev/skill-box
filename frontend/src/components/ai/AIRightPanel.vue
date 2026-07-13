@@ -442,7 +442,7 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
     <!-- 消息列表 -->
     <div ref="listEl" class="airp-list">
       <p v-if="!messages.length" class="airp-empty">
-        <IconPark icon="mdi:lightbulb-on-outline" width="20" height="20" />
+        <IconPark icon="mdi:chat-outline" width="20" height="20" />
         <span>{{ t('skills.aiPanel.emptyHint') }}</span>
       </p>
       <div
@@ -520,17 +520,6 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         </button>
       </div>
       <div class="airp-input-row">
-        <!-- 全屏编辑按钮:点击弹出全屏 Modal -->
-        <button
-          class="airp-icon-btn airp-fullscreen-btn"
-          type="button"
-          :data-tip="t('skills.aiPanel.fullscreenEdit')"
-          :aria-label="t('skills.aiPanel.fullscreenEdit')"
-          :disabled="inputDisabled && !fullscreenOpen"
-          @click="openFullscreen"
-        >
-          <IconPark icon="mdi:arrow-expand" width="14" height="14" />
-        </button>
         <textarea
           ref="inputEl"
           v-model="inputText"
@@ -542,6 +531,16 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         />
       </div>
       <div class="airp-actions">
+        <!-- 全屏编辑按钮:放在发送按钮左侧,避免挤占输入框宽度 -->
+        <button
+          class="airp-icon-btn airp-fullscreen-btn"
+          type="button"
+          :data-tip="t('skills.aiPanel.fullscreenEdit')"
+          :aria-label="t('skills.aiPanel.fullscreenEdit')"
+          @click="openFullscreen"
+        >
+          <IconPark icon="mdi:arrow-expand" width="13" height="13" />
+        </button>
         <button
           v-if="busy"
           class="airp-stop"
@@ -883,31 +882,6 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   gap: 4px;
   align-items: stretch;
 }
-.airp-input-row .airp-input { flex: 1; min-width: 0; }
-.airp-fullscreen-btn {
-  flex-shrink: 0;
-  align-self: stretch;
-  width: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.airp-fullscreen-btn:hover:not(:disabled) {
-  background: var(--primary-dim, rgba(59, 130, 246, 0.08));
-  border-color: var(--primary);
-  color: var(--primary);
-}
-.airp-fullscreen-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
 .airp-fullscreen-textarea {
   width: 100%;
@@ -955,7 +929,29 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
 
 .airp-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 6px;
+}
+.airp-fullscreen-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.airp-fullscreen-btn:hover {
+  background: var(--primary-dim, rgba(59, 130, 246, 0.08));
+  border-color: var(--primary);
+  color: var(--primary);
 }
 .airp-send,
 .airp-stop {

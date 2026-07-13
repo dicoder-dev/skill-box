@@ -143,6 +143,24 @@ export const MDI_TO_ICONPARK = {
   'chevron-down':                 'ArrowDown',
   'chevron-up':                   'ArrowUp',
 
+  // 全屏
+  // 2026-07-13 增:iconpark 里没有直接的 arrow-expand,改用 FullScreen(标准全屏图标)。
+  // AIRightPanel 输入框的「全屏编辑」按钮此前映射缺失,fallback 到 Help(问号),
+  // 用户看不到图标。FullScreen 是 iconpark 里的标准全屏入口图标,语义最贴合。
+  'arrow-expand':                 'FullScreen',
+  'arrow-expand-all':             'FullScreen',
+  'fullscreen':                   'FullScreen',
+  'fullscreen-exit':              'FullScreenTwo',
+
+  // 灯泡 / 灵感
+  // 2026-07-13 增:iconpark 里没有 Lightbulb / Idea / Bulb 类名,最近语义是 Lamp(台灯)。
+  // AIRightPanel 空态「点上方标签…」前的图标此前缺失,fallback 到 Help。
+  // Lamp 在视觉上能传达"灵感/提示"语义,可接受。
+  'lightbulb':                    'Lamp',
+  'lightbulb-on':                 'Lamp',
+  'lightbulb-on-outline':         'Lamp',
+  'lightbulb-outline':            'Lamp',
+
   // 主题 / 明暗
   'weather-sunny':                'Sunny',
   'weather-night':                'Moon',
