@@ -587,32 +587,77 @@ const messages = {
         cancel: 'Cancel',
       },
       translatePromptTemplate:
-`Translate the following Markdown document into {target_lang}.
+`You are a Skill file translator. Translate the following Markdown document into {target_lang}.
 
 Rules:
 1) Keep frontmatter field names in English.
 2) Code blocks, shell commands and file names must stay as-is.
 3) Keep Markdown structure (headings, lists, links) — only translate the human text.
-4) No preface, no explanation — output ONLY the translated markdown.
+4) No preface, no explanation.
 
 Document to translate:
 \`\`\`
 {skill_md}
-\`\`\``,
+\`\`\`
+
+# Output format (strict)
+Return exactly one JSON code block:
+\`\`\`json
+{{
+  "needs_apply": true,
+  "content": "the full translated markdown document (including frontmatter)",
+  "reason": "Translated the full document into {target_lang}"
+}}
+\`\`\`
+- needs_apply MUST be true (the translation replaces the original file).
+- content is the complete translated markdown document.
+- Output nothing outside the JSON code block.`,
       reviewPromptTemplate:
-`Carefully review the following Markdown document (a Skill file) and list problems across these dimensions:
+`You are a Skill file reviewer. Carefully review the following Markdown document (Claude / Codex Skill) and list problems across these dimensions:
 1) Grammar / spelling errors
 2) Ambiguous or unclear wording
 3) Inconsistencies with the frontmatter (description / triggers)
 4) Missing or redundant sections
 5) Deviations from Claude / Codex Skill best practices
 
-Output: Markdown bullet list. Each item: location (line number or section name) + suggested fix. If everything looks fine, just say "No obvious issues found." No greetings.
-
 Document to review:
 \`\`\`
 {skill_md}
-\`\`\``,
+\`\`\`
+
+# Output format (strict)
+Return exactly one JSON code block:
+\`\`\`json
+{{
+  "needs_apply": false,
+  "content": "",
+  "reason": "Review findings:\\n- **Section X**: issue description\\n- **Section Y**: issue description"
+}}
+\`\`\`
+- needs_apply MUST be false (a review is advisory, not a replacement).
+- content is an empty string.
+- reason contains the full Markdown bullet list of issues (use \\n for newlines); if nothing is wrong say "No obvious issues found." No greetings.`,
+      retrying: 'Regenerating… ({left} retries left)',
+      parseFailed: 'AI response was malformed after 3 retries — shown as-is, no Apply button',
+      truncated: 'AI output was too long, truncated',
+      fullscreenEdit: 'Fullscreen edit',
+      fullscreenEditTitle: 'Fullscreen editor',
+      fullscreenSave: 'Save and return',
+      customPromptHint:
+`When the user's request is to translate / rewrite / optimize / complete / fix the file:
+- needs_apply: true
+- content: the full modified file content (to replace the original)
+When the user is just chatting / asking a question / requesting a review:
+- needs_apply: false
+- content: empty string
+- reason: a detailed answer to the user's question
+
+# Output format (strict)
+Return exactly one \`\`\`json code block:
+\`\`\`json
+{"needs_apply": boolean, "content": "string", "reason": "string"}
+\`\`\`
+Booleans use true / false (not the strings "true" / "false"). Output nothing outside the JSON code block.`,
     },
 
     // 2026-07-13 new: AI apply / translate toasts (used by SkillsView.onAIApply)

@@ -469,33 +469,84 @@ const messages = {
         confirm: '确定',
         cancel: '取消',
       },
+      // 2026-07-13 增 v2:要求 AI 返回结构化 JSON,前端按 needs_apply 决定是否显示
+      // "应用"按钮。content 仅在 needs_apply=true 时有效。reason 永远显示。
       translatePromptTemplate:
-`请把下面的 Markdown 文档翻译成 {target_lang}。
+`你是一个 Skill 文件翻译助手。请把下面的 Markdown 文档翻译成 {target_lang}。
 
 要求:
 1) frontmatter 字段名保留英文,不翻译字段名。
 2) 代码块、命令、文件名原样保留,完全不翻译。
 3) 标题层级、列表、链接、表格结构保留,只翻译里面的文字。
-4) 不要任何开场白、不要解释、不要寒暄,只输出翻译后的完整 markdown。
+4) 不要任何开场白、不要解释、不要寒暄。
 
 待翻译文档:
 \`\`\`
 {skill_md}
-\`\`\``,
+\`\`\`
+
+# 输出格式(严格遵守)
+必须返回且只返回一个 JSON 代码块,格式如下:
+\`\`\`json
+{{
+  "needs_apply": true,
+  "content": "翻译后的完整 markdown 文档(整篇,含 frontmatter)",
+  "reason": "已翻译全文,目标语言 {target_lang_label}"
+}}
+\`\`\`
+- needs_apply 必须是 true(翻译结果是用来替换原文件的)
+- content 是整篇翻译后的 markdown 文档
+- 不输出任何 JSON 之外的内容`,
       reviewPromptTemplate:
-`请仔细审阅下面的 Markdown 文档(Claude / Codex Skill 文件),按下面维度给出问题列表:
+`你是一个 Skill 文件审阅助手。请仔细审阅下面的 Markdown 文档(Claude / Codex Skill 文件),按下面维度给出问题列表:
 1) 语法 / 拼写错误
 2) 表述不清或歧义
 3) 与 frontmatter 中 description / triggers 的一致性问题
 4) 缺失或冗余的章节
 5) 与 Claude / Codex Skill 最佳实践的偏差
 
-输出格式:Markdown bullet list,每条标注问题位置(行号或章节名)和修改建议;无明显问题就说「未发现明显问题」。不要寒暄。
-
 待审阅文档:
 \`\`\`
 {skill_md}
-\`\`\``,
+\`\`\`
+
+# 输出格式(严格遵守)
+必须返回且只返回一个 JSON 代码块,格式如下:
+\`\`\`json
+{{
+  "needs_apply": false,
+  "content": "",
+  "reason": "以下是审阅结果:\\n- **第 X 节** 问题描述...\\n- **第 Y 节** 问题描述..."
+}}
+\`\`\`
+- needs_apply 必须是 false(检测报告是建议,不是替换)
+- content 留空字符串
+- reason 字段里写完整的 Markdown bullet list 问题清单(用 \\n 换行);
+  无明显问题就说「未发现明显问题」。不要寒暄`,
+      // 2026-07-13 增 v2:JSON 解析失败兜底 + 全屏编辑相关文案
+      retrying: '正在重新生成…({left} 次剩余)',
+      parseFailed: 'AI 返回格式异常,已重试 3 次仍未成功,仅作展示无法应用',
+      truncated: 'AI 输出过长,已截断',
+      fullscreenEdit: '全屏编辑',
+      fullscreenEditTitle: '全屏编辑输入内容',
+      fullscreenSave: '保存并返回',
+      // 2026-07-13 增 v2:自定义输入的通用 system prompt,告诉 AI 自行判断 needs_apply
+      // 并返回严格 JSON 代码块格式。
+      customPromptHint:
+`当用户的请求是「翻译 / 改写 / 优化 / 补全 / 修复」等需要修改原文件时:
+- needs_apply: true
+- content: 修改后的完整文件内容(用于替换)
+当用户的问题属于闲聊 / 解释 / 检测 / 提问等不需要替换文件时:
+- needs_apply: false
+- content: 留空字符串
+- reason: 详细回答用户的问题
+
+# 输出格式(必须严格遵守)
+返回且只返回一个 \`\`\`json 代码块:
+\`\`\`json
+{"needs_apply": boolean, "content": "string", "reason": "string"}
+\`\`\`
+布尔值用 true / false(不要用 "true" / "false" 字符串),除代码块外不要输出任何内容。`,
     },
 
     // 2026-07-13 增:SkillScopePanel 作用域区文案(从组件内 LABEL_* 常量迁移过来)。

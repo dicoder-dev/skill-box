@@ -145,6 +145,74 @@ function sendOrStop() {
   sendMessage()
 }
 
+// 2026-07-13 增 v2:system prompt 中加入「customPromptHint」前缀,告诉 AI 自行判断 needs_apply。
+//   翻译/检测标签:在 confirmTranslate/onReviewClick 里已经拼上了对应 promptTemplate(自带 JSON 格式要求)
+//   自定义输入(用户直接打字):用这个 hint 包一层,让 AI 也能返回结构化 JSON
+function buildUserPrompt(text) {
+  // 如果用户在输入框里已经有内容(翻译/检测标签已经填好完整 prompt),直接发
+  // 否则加上 customPromptHint 引导 AI 自行判断 needs_apply
+  if (text.includes('```json') || text.includes('"needs_apply"')) {
+    return text
+  }
+  return `${t('skills.aiPanel.customPromptHint')}\n\n${text}`
+}
+
+// ===== JSON 解析与 retry =====
+//
+// AI 返回结构化 JSON,前端剥离 ```json ... ``` 代码块标记后 parse。
+// 解析失败 → 自动 retry(让 AI 重新生成),最多 3 次。3 次后兜底:
+//   - needs_apply: false
+//   - content: ''
+//   - reason: 原始 AI 输出(让用户能看到 AI 说了什么)
+// 这种情况下不显示"应用"按钮(纯展示,用户可手动复制)。
+const MAX_PARSE_RETRIES = 3
+
+function extractJsonBlock(raw) {
+  if (!raw) return null
+  // 匹配 ```json ... ``` 或 ``` ... ```
+  const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (!m) {
+    // 退而求其次:整段当 JSON 试
+    const trimmed = raw.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed
+    return null
+  }
+  return m[1].trim()
+}
+
+function parseAiJson(raw) {
+  const blk = extractJsonBlock(raw)
+  if (!blk) return { ok: false, raw }
+  try {
+    const obj = JSON.parse(blk)
+    if (typeof obj !== 'object' || obj === null) return { ok: false, raw }
+    const needsApply = obj.needs_apply === true
+    const content = typeof obj.content === 'string' ? obj.content : ''
+    const reason = typeof obj.reason === 'string' ? obj.reason : ''
+    return { ok: true, needsApply, content, reason, raw }
+  } catch (_) {
+    return { ok: false, raw }
+  }
+}
+
+// 兜底对象:解析失败时使用
+function fallbackResult(raw) {
+  return { ok: true, needsApply: false, content: '', reason: raw || '', raw }
+}
+
+// 真正发起一次 chat 流式调用,挂到指定 aiMsg 上,完成后回调 finalText
+async function runChatStream({ provider, messages, onChunk, signal }) {
+  return await chatStream(
+    { provider, messages },
+    {
+      onEvent: (ev) => {
+        if (ev.kind === 'chunk') onChunk(ev.text || '')
+      },
+      // onDone / onError 由外层 sendMessage 处理
+    },
+  )
+}
+
 async function sendMessage() {
   const text = (inputText.value || '').trim()
   if (!text || busy.value) return
@@ -155,55 +223,113 @@ async function sendMessage() {
 
   // 截断过长内容(避免单次请求 token 超限)
   const safeText = text.length > 16000 ? text.slice(0, 16000) + '\n\n...(已截断)' : text
+  const userText = buildUserPrompt(safeText)
 
   const userMsg = { id: uid(), role: 'user', content: safeText, ts: Date.now() }
-  const aiMsg = { id: uid(), role: 'assistant', content: '', pending: true, ts: Date.now() }
   messages.value.push(userMsg)
-  messages.value.push(aiMsg)
   inputText.value = ''
   busy.value = true
-  // 流式消息 id 锁定给回调用
   let pendingBuf = ''
   let capped = false
   const MAX_AI_BYTES = 50 * 1024
 
   const provider = (providers.value.find((p) => p.enabled && p.has_key) || {}).name || ''
-  abort.value = await chatStream(
-    { provider, messages: [{ role: 'user', content: safeText }] },
-    {
-      onEvent: (ev) => {
-        if (ev.kind === 'chunk') {
-          pendingBuf += ev.text || ''
-          if (pendingBuf.length > MAX_AI_BYTES) {
-            pendingBuf = pendingBuf.slice(0, MAX_AI_BYTES) + '\n\n...(已截断)'
+  // 第一轮:先用一个 placeholder aiMsg 让用户看到流式过程
+  const aiMsg = { id: uid(), role: 'assistant', content: '', pending: true, ts: Date.now(), canApply: false, retriesLeft: 0 }
+  messages.value.push(aiMsg)
+
+  // 复用同一个 aiMsg,每次 retry 覆盖 content
+  const baseMessages = [{ role: 'user', content: userText }]
+  const systemHint = t('skills.aiPanel.customPromptHint')
+
+  for (let attempt = 0; attempt <= MAX_PARSE_RETRIES; attempt++) {
+    if (attempt > 0) {
+      // retry 时:重置 pendingBuf,aiMsg 显示「重新生成中…」
+      pendingBuf = ''
+      capped = false
+      aiMsg.content = ''
+      aiMsg.pending = true
+      aiMsg.retriesLeft = MAX_PARSE_RETRIES - attempt + 1
+      aiMsg.retrying = true
+      // 把上一轮失败的输出 + 修正指令追加到 messages,让 AI 自我纠正
+      baseMessages.push({
+        role: 'assistant',
+        content: aiMsg.rawLast || '',
+      })
+      baseMessages.push({
+        role: 'user',
+        content: `你上一轮返回的数据无法被前端正确解析为 JSON。请严格按照下面的 schema 重新输出,且只输出一个 \`\`\`json 代码块:\n\`\`\`json\n{"needs_apply": boolean, "content": "string", "reason": "string"}\n\`\`\`\n注意:必须用 \`\`\`json 代码块包裹,布尔值是 true/false 不是字符串。`,
+      })
+    }
+
+    let attemptBuf = ''
+    let attemptErr = ''
+    try {
+      const ctrl = await runChatStream({
+        provider,
+        messages: baseMessages,
+        onChunk: (chunk) => {
+          attemptBuf += chunk
+          if (attemptBuf.length > MAX_AI_BYTES) {
+            attemptBuf = attemptBuf.slice(0, MAX_AI_BYTES) + '\n\n...(已截断)'
             capped = true
             abort.value?.abort?.()
           }
-          aiMsg.content = pendingBuf
-        } else if (ev.kind === 'error') {
-          aiMsg.error = ev.err || 'unknown'
-        }
-      },
-      onDone: () => {
-        aiMsg.pending = false
-        aiMsg.canApply = !aiMsg.error && !!pendingBuf.trim() && !capped
-        busy.value = false
-        abort.value = null
-        persistSession()
-      },
-      onError: (e) => {
-        aiMsg.error = e?.message || String(e)
-        aiMsg.pending = false
-        busy.value = false
-        persistSession()
-      },
-    },
-  )
+          aiMsg.content = attemptBuf
+          aiMsg.pending = true
+        },
+      })
+      abort.value = ctrl
+    } catch (e) {
+      attemptErr = e?.message || String(e)
+    }
+
+    // 流结束,检查解析结果
+    aiMsg.pending = false
+    aiMsg.retrying = false
+    if (attemptErr) {
+      aiMsg.error = attemptErr
+      break
+    }
+    if (capped) {
+      aiMsg.error = t('skills.aiPanel.truncated')
+      break
+    }
+
+    const parsed = parseAiJson(attemptBuf)
+    if (parsed.ok) {
+      aiMsg.needsApply = parsed.needsApply
+      aiMsg.content = parsed.content
+      aiMsg.reason = parsed.reason
+      aiMsg.canApply = parsed.needsApply && !!parsed.content.trim()
+      aiMsg.parseFailed = false
+      aiMsg.retriesLeft = 0
+      break
+    }
+    aiMsg.rawLast = attemptBuf
+    if (attempt >= MAX_PARSE_RETRIES) {
+      // 3 次都失败 → 兜底:不显示应用按钮
+      const fb = fallbackResult(attemptBuf)
+      aiMsg.needsApply = false
+      aiMsg.content = ''
+      aiMsg.reason = fb.reason
+      aiMsg.canApply = false
+      aiMsg.parseFailed = true
+      aiMsg.retriesLeft = 0
+      break
+    }
+    // 继续下一轮 retry
+  }
+
+  busy.value = false
+  abort.value = null
+  persistSession()
 }
 
 // ===== 应用 / 拒绝 =====
 function applyMessage(m) {
   if (m.applied || m.rejected) return
+  if (!m.needsApply) return
   const text = m.content || ''
   if (!text.trim()) return
   m.applied = true
@@ -217,6 +343,22 @@ function rejectMessage(m) {
   m.rejected = true
   m.canApply = false
   persistSession()
+}
+
+// ===== 全屏编辑 =====
+const fullscreenOpen = ref(false)
+const fullscreenText = ref('')
+function openFullscreen() {
+  fullscreenText.value = inputText.value || ''
+  fullscreenOpen.value = true
+}
+function saveFullscreen() {
+  inputText.value = fullscreenText.value
+  fullscreenOpen.value = false
+  nextTick(() => inputEl.value?.focus())
+}
+function cancelFullscreen() {
+  fullscreenOpen.value = false
 }
 
 // ===== 文件切换 =====
@@ -312,31 +454,46 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           <span class="airp-msg-role">
             {{ m.role === 'user' ? t('skills.aiPanel.roleYou') : t('skills.aiPanel.roleAI') }}
           </span>
+          <!-- retry 提示 -->
+          <span v-if="m.retrying" class="airp-msg-retry">
+            <IconPark icon="mdi:refresh" width="10" height="10" />
+            {{ t('skills.aiPanel.retrying', { left: m.retriesLeft }) }}
+          </span>
         </div>
-        <pre v-if="m.role === 'assistant'" class="airp-msg-text">{{ m.content }}<span v-if="m.pending" class="airp-cursor">▍</span></pre>
-        <div v-else class="airp-msg-text airp-msg-text-user">{{ m.content }}</div>
 
-        <p v-if="m.error" class="airp-msg-error">[{{ t('skills.aiPanel.roleAI') }}] {{ m.error }}</p>
+        <!-- 用户消息 -->
+        <div v-if="m.role === 'user'" class="airp-msg-text airp-msg-text-user">{{ m.content }}</div>
 
-        <!-- 应用 / 拒绝(只在 AI 消息且未应用/拒绝且非 pending 时显示) -->
-        <div v-if="m.role === 'assistant' && !m.pending && !m.applied && !m.rejected" class="airp-msg-actions">
-          <button class="primary sm" type="button" @click="applyMessage(m)">
-            <IconPark icon="mdi:check" width="12" height="12" />
-            {{ t('skills.aiPanel.apply') }}
-          </button>
-          <button class="sm" type="button" @click="rejectMessage(m)">
-            <IconPark icon="mdi:close" width="12" height="12" />
-            {{ t('skills.aiPanel.reject') }}
-          </button>
-        </div>
-        <p v-else-if="m.applied" class="airp-msg-hint airp-msg-hint-ok">
-          <IconPark icon="mdi:check-circle-outline" width="11" height="11" />
-          {{ t('skills.aiPanel.applied') }}
-        </p>
-        <p v-else-if="m.rejected" class="airp-msg-hint airp-msg-hint-mute">
-          <IconPark icon="mdi:close-circle-outline" width="11" height="11" />
-          {{ t('skills.aiPanel.rejected') }}
-        </p>
+        <!-- AI 消息:reason 是给用户看的;content 仅在 needsApply 时是替换用的全文 -->
+        <template v-else>
+          <div v-if="m.parseFailed" class="airp-msg-warn">
+            <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
+            {{ t('skills.aiPanel.parseFailed') }}
+          </div>
+          <pre v-if="m.reason && !m.pending" class="airp-msg-reason">{{ m.reason }}</pre>
+          <pre v-else-if="m.pending || m.retrying" class="airp-msg-text">{{ m.content }}<span class="airp-cursor">▍</span></pre>
+          <p v-if="m.error" class="airp-msg-error">[{{ t('skills.aiPanel.roleAI') }}] {{ m.error }}</p>
+
+          <!-- 应用 / 拒绝:仅在 AI 明确返回 needs_apply=true 且未应用/拒绝时显示 -->
+          <div v-if="!m.pending && !m.applied && !m.rejected && m.needsApply && m.canApply" class="airp-msg-actions">
+            <button class="primary sm" type="button" @click="applyMessage(m)">
+              <IconPark icon="mdi:check" width="12" height="12" />
+              {{ t('skills.aiPanel.apply') }}
+            </button>
+            <button class="sm" type="button" @click="rejectMessage(m)">
+              <IconPark icon="mdi:close" width="12" height="12" />
+              {{ t('skills.aiPanel.reject') }}
+            </button>
+          </div>
+          <p v-else-if="m.applied" class="airp-msg-hint airp-msg-hint-ok">
+            <IconPark icon="mdi:check-circle-outline" width="11" height="11" />
+            {{ t('skills.aiPanel.applied') }}
+          </p>
+          <p v-else-if="m.rejected" class="airp-msg-hint airp-msg-hint-mute">
+            <IconPark icon="mdi:close-circle-outline" width="11" height="11" />
+            {{ t('skills.aiPanel.rejected') }}
+          </p>
+        </template>
       </div>
     </div>
 
@@ -362,15 +519,28 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           {{ t('skills.aiPanel.tagReview') }}
         </button>
       </div>
-      <textarea
-        ref="inputEl"
-        v-model="inputText"
-        class="airp-input"
-        :placeholder="t('skills.aiPanel.inputPlaceholder')"
-        :disabled="inputDisabled"
-        rows="3"
-        @keydown.enter.exact.prevent="sendOrStop"
-      />
+      <div class="airp-input-row">
+        <!-- 全屏编辑按钮:点击弹出全屏 Modal -->
+        <button
+          class="airp-icon-btn airp-fullscreen-btn"
+          type="button"
+          :data-tip="t('skills.aiPanel.fullscreenEdit')"
+          :aria-label="t('skills.aiPanel.fullscreenEdit')"
+          :disabled="inputDisabled && !fullscreenOpen"
+          @click="openFullscreen"
+        >
+          <IconPark icon="mdi:arrow-expand" width="14" height="14" />
+        </button>
+        <textarea
+          ref="inputEl"
+          v-model="inputText"
+          class="airp-input"
+          :placeholder="t('skills.aiPanel.inputPlaceholder')"
+          :disabled="inputDisabled"
+          rows="3"
+          @keydown.enter.exact.prevent="sendOrStop"
+        />
+      </div>
       <div class="airp-actions">
         <button
           v-if="busy"
@@ -393,6 +563,28 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         </button>
       </div>
     </div>
+
+    <!-- 全屏编辑 Modal:让用户在大面板里编辑输入文本(避免 70-160px 限制) -->
+    <Modal
+      v-model="fullscreenOpen"
+      size="full"
+      :title="t('skills.aiPanel.fullscreenEditTitle')"
+    >
+      <textarea
+        v-model="fullscreenText"
+        class="airp-fullscreen-textarea"
+        :placeholder="t('skills.aiPanel.inputPlaceholder')"
+        spellcheck="false"
+      />
+      <div class="airp-dialog-actions">
+        <button type="button" @click="cancelFullscreen">
+          {{ t('skills.aiPanel.translateDialog.cancel') }}
+        </button>
+        <button class="primary" type="button" @click="saveFullscreen">
+          {{ t('skills.aiPanel.fullscreenSave') }}
+        </button>
+      </div>
+    </Modal>
 
     <!-- 翻译弹窗 -->
     <Modal
@@ -570,6 +762,42 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   border-radius: 4px;
 }
 
+.airp-msg-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.10);
+  border-radius: 4px;
+}
+
+.airp-msg-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-size: 10.5px;
+  color: var(--accent-blue);
+  font-weight: 500;
+}
+
+.airp-msg-reason {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
 .airp-msg-actions {
   display: flex;
   gap: 6px;
@@ -648,6 +876,56 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
 .airp-tag-pill:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.airp-input-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.airp-input-row .airp-input { flex: 1; min-width: 0; }
+.airp-fullscreen-btn {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.airp-fullscreen-btn:hover:not(:disabled) {
+  background: var(--primary-dim, rgba(59, 130, 246, 0.08));
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.airp-fullscreen-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.airp-fullscreen-textarea {
+  width: 100%;
+  min-height: 70vh;
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+.airp-fullscreen-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-dim, rgba(59, 130, 246, 0.15));
 }
 
 .airp-input {

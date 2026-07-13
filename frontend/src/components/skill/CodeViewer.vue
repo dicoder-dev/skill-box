@@ -43,6 +43,9 @@ const props = defineProps({
   // 2026-07-13 增:右侧面板模式。'outline' = 大纲(默认),'ai' = AI 对话,'none' = 不显示。
   // 由父级 SkillFileInlinePanel 通过 useRightPanelMode composable 注入并响应用户切换。
   rightPanelMode: { type: String, default: 'outline' },
+  // 2026-07-13 增 v3:应用闪烁触发器。当父级 emit('apply-*') 成功后,+1 该值,
+  // CodeViewer 给根容器加 cv-just-applied class,触发 1.5s 黄色边框闪烁动画。
+  applyFlash: { type: Number, default: 0 },
 })
 
 // 2026-07-13 改:增加右侧面板模式双向绑定(由父级 v-model 接管),以及 AI 应用的两条转发:
@@ -337,7 +340,9 @@ const lineNumbers = computed(() => {
 </script>
 
 <template>
-  <div class="code-viewer">
+  <!-- 2026-07-13 增 v3:applyFlash > 0 时给根加 cv-just-applied class,触发 1.5s 黄色边框闪烁动画,
+       让用户直观看到「文件被改了」 -->
+  <div :class="['code-viewer', { 'cv-just-applied': applyFlash > 0 }]" :data-apply-flash="applyFlash">
     <!-- 2026-07-08 增:office 文档(.docx / .pdf / .xlsx / .xls / .pptx)走 vue-office 在线预览 -->
     <OfficeViewer
       v-if="isOffice"
@@ -527,6 +532,17 @@ const lineNumbers = computed(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  transition: box-shadow 200ms ease;
+}
+/* 2026-07-13 增 v3:AI 应用成功后,CodeViewer 根容器黄色边框闪烁 1.5s,让用户看到文件被改了 */
+.cv-just-applied {
+  animation: cv-flash 1.5s ease-out 1;
+}
+@keyframes cv-flash {
+  0%   { box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.85); }
+  40%  { box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.65); }
+  100% { box-shadow: inset 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 /* 2026-07-08 增:office 预览区占满 CodeViewer */
 .cv-office {
@@ -572,11 +588,12 @@ const lineNumbers = computed(() => {
   flex-direction: column;
 }
 
-/* 2026-07-13 增:md 文件 AI 对话面板 aside。沿用 .cv-md-outline 的 box model,
-   宽度 280px(比大纲 220px 稍宽,容纳气泡)。 */
+/* 2026-07-13 改 v3:md 文件 AI 对话面板 aside。沿用 .cv-md-outline 的 box model,
+   宽度 360px(用户反馈 280px 太窄,360 容纳气泡+输入框更舒适)。
+   用 CSS 变量 --ai-panel-w,后续 cv-text-ai / 等都引用同一份,改一处生效。 */
 .cv-md-ai {
   flex-shrink: 0;
-  width: 280px;
+  width: var(--ai-panel-w, 360px);
   border-left: 1px solid var(--border);
   background: var(--bg-card);
   display: flex;
@@ -824,13 +841,13 @@ const lineNumbers = computed(() => {
 
 /* 2026-07-13 增:非 md 文件 AI 面板(嵌入 cv-text-wrap 右侧)。
    cv-text-wrap 是纵向布局,aside 用 absolute 定位叠在右侧,不破坏原代码视图布局。
-   AIRightPanel 内部是 height:100% 自适应容器高度。 */
+   AIRightPanel 内部是 height:100% 自适应容器高度。宽度跟 .cv-md-ai 同步 360px。 */
 .cv-text-ai {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 280px;
+  width: var(--ai-panel-w, 360px);
   border-left: 1px solid var(--border);
   background: var(--bg-card);
   display: flex;

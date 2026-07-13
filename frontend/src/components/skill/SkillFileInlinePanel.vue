@@ -71,16 +71,31 @@ const LABEL_RETRY = 'common.retry'
 // header 内的 toggle 是同一份状态,两边都能控制。
 const LABEL_OUTLINE_SHOW = 'skills.fileBrowser.showOutline'
 const LABEL_OUTLINE_HIDE = 'skills.fileBrowser.hideOutline'
-// 2026-07-13 改:右侧面板状态改用 useRightPanelMode。
-const { mode: rightMode, aiActive, showAI, showOutline, hidePanel } = useRightPanelMode()
+// 2026-07-13 改 v3:右侧面板由两个独立按钮控制,不再走单一 mode 状态:
+//   - 大纲按钮:点击切换 outline 面板(仅对 md 文件显示,且 view 模式 + 有标题)
+//   - AI 按钮:点击切换 AI 面板(所有文件 + view 模式)
+// 两个面板互斥(点开一个会自动隐藏另一个),而不是 3 态 toggle,
+// 这样两个按钮始终可见且语义独立,符合用户「大纲 / AI 想看哪个点哪个」的直觉。
+const {
+  mode: rightMode, aiActive, outlineActive,
+  showAI, showOutline, hidePanel,
+} = useRightPanelMode()
 
-// 2026-07-13 增:工具栏 AI 按钮文案 + 点击行为(ai ↔ none)。
-const LABEL_AI_OPEN = '打开 AI 助手'
-const LABEL_AI_CLOSE = '关闭 AI 助手'
+// 2026-07-13 改 v3:点击大纲按钮 → 显示大纲(若已在显示则隐藏);
+// 点击 AI 按钮 → 显示 AI(若已在显示则隐藏)。
+// 同一时刻只能有一个面板打开,互斥逻辑封装在这里。
+function onClickOutline() {
+  if (outlineActive.value) hidePanel()
+  else showOutline()
+}
 function onClickAi() {
   if (aiActive.value) hidePanel()
   else showAI()
 }
+
+// 2026-07-13 增:AI 按钮文案 + 大纲按钮文案常量(template 里直接读,避开 i18n Proxy 坑)
+const LABEL_AI_OPEN = '打开 AI 助手'
+const LABEL_AI_CLOSE = '关闭 AI 助手'
 
 // 2026-07-13 增:CodeViewer 内 AI aside emit 转发。
 //   - onAiApplySkill(text):SKILL.md 路径 → 透传到父级 SkillsView.onAIApply(updateSkill)
@@ -90,6 +105,8 @@ function onClickAi() {
 //     (outline aside 收起按钮 / AI aside 关闭按钮 / 切换大纲按钮)。
 function onAiApplySkill(text) {
   emit('ai-apply-skill', text)
+  // 2026-07-13 增 v3:应用后 CodeViewer 闪烁,让用户感知文件已变
+  flashApplied()
 }
 
 function onAiApplyLocal(text) {
@@ -101,6 +118,8 @@ function onAiApplyLocal(text) {
   s.add(path)
   dirtyPaths.value = s
   toast.success('AI 输出已写入,请点保存(Ctrl+S / Cmd+S)落盘')
+  // 2026-07-13 增 v3:应用后 CodeViewer 闪烁,即使文件还没落盘也让用户看到内容变了
+  flashApplied()
 }
 
 function onSetRightPanelMode(m) {
@@ -136,6 +155,17 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['saved', 'ai-apply-skill'])
+
+// 2026-07-13 增 v3:AI 应用成功后,CodeViewer 根容器黄色边框闪烁 1.5s 让用户看到文件被改了。
+// 每次应用 +1,CodeViewer 通过动画响应变化;1.5s 后我们把 applyFlash 重置回 0,
+// 这样下一次应用能再次触发 +1(从 0 变 1,1 变 2 这种数字变化才能让 Vue watch 检测到)。
+const applyFlash = ref(0)
+let _flashTimer = null
+function flashApplied() {
+  applyFlash.value += 1
+  if (_flashTimer) clearTimeout(_flashTimer)
+  _flashTimer = setTimeout(() => { applyFlash.value = 0 }, 1600)
+}
 
 // ====== File selection state ======
 const selectedFile = ref(null)
@@ -1626,13 +1656,24 @@ defineExpose({
           >
             <IconPark icon="Edit" width="14" height="14" />
           </button>
-          <!-- 2026-07-13 改:把原大纲图标位置换成 AI 图标。原大纲图标删除 —— 大纲入口
-               改由 CodeViewer 内 outline aside header 右上角的小 X 按钮控制(已在
-               CodeViewer 中通过 emit('update:right-panel-mode', 'none') 实现)。
-               AI 图标显示条件:有选中文件 + view 模式(不限制 md,所有文件都支持)。
-               - 展开时显示 robot(mdi:robot) + sfip-mode-btn-active 高亮
-               - 收起时显示 robot-outline
-               与 CodeViewer 共享 useRightPanelMode 同一份状态,两边操作一致。 -->
+          <!-- 2026-07-13 改 v3:大纲 + AI 两个按钮并存,各自独立控制右侧面板。
+               两个按钮始终可见(各自 v-if 条件),点击哪个就显示哪个面板,
+               再点同一个按钮会隐藏(同 toggle 语义)。不再三态互玩"消失"。
+               - 大纲按钮:仅对 md 文件显示(原始 outline 行为,view 模式)
+               - AI 按钮:所有文件 + view 模式(用户决策) -->
+          <!-- 大纲按钮:恢复原 ListView 图标,显示条件:md + view(没有标题时点开会进空态,
+               用户至少能看到"该文件无标题大纲"的反馈) -->
+          <button
+            v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile"
+            class="sfip-mode-btn"
+            :data-tip="outlineActive ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
+            :aria-label="outlineActive ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
+            :class="{ 'sfip-mode-btn-active': outlineActive }"
+            @click="onClickOutline"
+          >
+            <IconPark icon="ListView" width="14" height="14" />
+          </button>
+          <!-- AI 按钮:view 模式下始终可见 -->
           <button
             v-if="selectedFile?.path && currentMode === 'view'"
             class="sfip-mode-btn"
@@ -1682,6 +1723,7 @@ defineExpose({
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
           :right-panel-mode="rightMode"
+          :apply-flash="applyFlash"
           @update:content="onContentChange"
           @dirty-change="onDirtyChange"
           @update:right-panel-mode="onSetRightPanelMode"
