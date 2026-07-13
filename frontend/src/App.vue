@@ -703,6 +703,11 @@ onUnmounted(() => {
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1;              /* 锁住行高,让 margin-top 精准控制位置 */
+  /* 2026-07-13 改:加 margin-top: -2px 微调,补偿 logo 图底部
+     透明 padding 导致的视觉错位 — img 是 22×22 PNG 但主体实际
+     占据像素可能不到 22px,底部有几像素空白,导致 logo 看起来
+     比文字略低。文字上移 2px 让两者视觉底部齐平。*/
+  margin-top: -2px;
   color: var(--text);
   background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
   -webkit-background-clip: text;
