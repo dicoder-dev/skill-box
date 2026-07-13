@@ -634,6 +634,12 @@ onUnmounted(() => {
 .topbar.mac-desktop {
   padding-left: 80px;        /* macOS 左侧让位红绿灯水平位置(0~80px) */
 }
+.topbar.mac-desktop .topbar-logo-img {
+  /* 2026-07-13 改:.topbar.mac-desktop 的 padding-left: 80px 在某些布局下
+     会被 .topbar-left 的 flex 布局吃掉,这里给 logo img 单独加 margin-left
+     兜底,确保 logo 离红绿灯足够远(80px 红绿灯 + 16px 安全间距 = 96px)。 */
+  margin-left: 16px;
+}
 .topbar.mac-desktop .topbar-logo-text {
   margin-top: 6px;          /* 把 logo 视觉中心下移,对齐红绿灯圆心(~25px) */
   margin-left: 12px;        /* logo 离红绿灯远一点,避免视觉粘连 */
@@ -664,7 +670,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 8px;                  /* logo 图与文字的间距 */
+  gap: 4px;                  /* logo 图与文字的间距(2026-07-13 改:8→4,贴紧) */
 }
 .topbar-logo-img {
   /* 顶栏高 48px,文字 22px 行高;logo 图取 24px,视觉权重跟文字相当
