@@ -670,18 +670,18 @@ onUnmounted(() => {
    border-right(图标分隔用的样式不再需要)。 */
 .topbar-logo {
   display: flex;
-  align-items: center;       /* 2026-07-13 改回:水平居中对齐 */
+  align-items: baseline;     /* 2026-07-13 改:底部对齐(baseline) */
   flex-shrink: 0;
   gap: 4px;                  /* logo 图与文字的间距 */
 }
 .topbar-logo-img {
-  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,水平居中对齐。
-     2026-07-13 改回:display: inline-block + vertical-align: middle
-     跟 flex 容器 align-items: center 双重保险。 */
+  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,底部对齐。
+     2026-07-13 改回底部对齐:
+     display: inline-block + vertical-align: bottom 双重保险。 */
   width: 22px;
   height: 22px;
   display: inline-block;
-  vertical-align: middle;
+  vertical-align: bottom;
   user-select: none;
   -webkit-user-drag: none;
 }
