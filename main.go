@@ -79,8 +79,8 @@ func main() {
 			WidthRatio:  0.9,
 			HeightRatio: 0.9,
 			AspectRatio: "16:9", // 宽高比锁 16:9,无论屏幕如何窗口都是 16:9
-			MinWidth:    960,
-			MinHeight:   540,
+			MinWidth:    1440,
+			MinHeight:   820,
 		},
 		// 老顶层字段(Width/Height/AutoSizeByScreen)继续兼容,但 Size 配置过时被忽略。
 		FrontendURL: desktop.NewFrontendURLFromEnv("", 0),
