@@ -675,10 +675,11 @@ onUnmounted(() => {
   gap: 2px;                  /* logo 图与文字的间距(2026-07-13 改:8→4→2,几乎贴紧) */
 }
 .topbar-logo-img {
-  /* 顶栏高 48px,文字 22px 行高;logo 图取 24px,视觉权重跟文字相当
-     (略偏小,避免抢文字风头),透明 PNG 直接放,顶栏背景透出。 */
-  width: 24px;
-  height: 24px;
+  /* 顶栏高 48px,文字 22px;logo 图 20px 跟文字视觉权重相当(略小一档,
+     不抢文字风头),透明 PNG 直接放,顶栏背景透出。
+     2026-07-13 改:24→20,跟文字更协调。 */
+  width: 20px;
+  height: 20px;
   display: block;
   user-select: none;
   -webkit-user-drag: none;
