@@ -700,18 +700,24 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   padding: 10px 10px 6px;
   scrollbar-width: thin;
   scrollbar-color: #d4d4d8 transparent;
+  /* 空态需要在面板中央显示;把 list 当成 flex column,空态 flex:1 撑满高度再内部居中 */
+  display: flex;
+  flex-direction: column;
 }
 .airp-list::-webkit-scrollbar { width: 6px; height: 6px; }
 .airp-list::-webkit-scrollbar-track { background: transparent; }
 .airp-list::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
 
 .airp-empty {
+  /* 撑满 .airp-list 整个高度,让 flex 内容(图片+文字)相对面板中央居中 */
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin: 30px 8px;
+  margin: 0 8px;
   text-align: center;
   color: var(--text-faint);
   font-size: 12.5px;
