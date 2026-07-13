@@ -455,50 +455,64 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         :key="m.id"
         :class="['airp-msg', m.role === 'user' ? 'airp-msg-user' : 'airp-msg-ai']"
       >
-        <div class="airp-msg-meta">
-          <span class="airp-msg-role">
-            {{ m.role === 'user' ? t('skills.aiPanel.roleYou') : t('skills.aiPanel.roleAI') }}
-          </span>
-          <!-- retry 提示 -->
-          <span v-if="m.retrying" class="airp-msg-retry">
-            <IconPark icon="mdi:refresh" width="10" height="10" />
-            {{ t('skills.aiPanel.retrying', { left: m.retriesLeft }) }}
-          </span>
+        <!-- 头像:AI 在左、用户在右 -->
+        <img
+          v-if="m.role === 'ai' || m.role === 'assistant'"
+          class="airp-msg-avatar"
+          src="/images/agent-dog-avatar.png"
+          :alt="t('skills.aiPanel.roleAI')"
+          draggable="false"
+        />
+        <div v-else class="airp-msg-avatar airp-msg-avatar-placeholder">
+          <IconPark icon="mdi:account" width="18" height="18" />
         </div>
 
-        <!-- 用户消息 -->
-        <div v-if="m.role === 'user'" class="airp-msg-text airp-msg-text-user">{{ m.content }}</div>
-
-        <!-- AI 消息:reason 是给用户看的;content 仅在 needsApply 时是替换用的全文 -->
-        <template v-else>
-          <div v-if="m.parseFailed" class="airp-msg-warn">
-            <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
-            {{ t('skills.aiPanel.parseFailed') }}
+        <div class="airp-msg-body">
+          <div class="airp-msg-meta">
+            <span class="airp-msg-role">
+              {{ m.role === 'user' ? t('skills.aiPanel.roleYou') : t('skills.aiPanel.roleAI') }}
+            </span>
+            <!-- retry 提示 -->
+            <span v-if="m.retrying" class="airp-msg-retry">
+              <IconPark icon="mdi:refresh" width="10" height="10" />
+              {{ t('skills.aiPanel.retrying', { left: m.retriesLeft }) }}
+            </span>
           </div>
-          <pre v-if="m.reason && !m.pending" class="airp-msg-reason">{{ m.reason }}</pre>
-          <pre v-else-if="m.pending || m.retrying" class="airp-msg-text">{{ m.content }}<span class="airp-cursor">▍</span></pre>
-          <p v-if="m.error" class="airp-msg-error">[{{ t('skills.aiPanel.roleAI') }}] {{ m.error }}</p>
 
-          <!-- 应用 / 拒绝:仅在 AI 明确返回 needs_apply=true 且未应用/拒绝时显示 -->
-          <div v-if="!m.pending && !m.applied && !m.rejected && m.needsApply && m.canApply" class="airp-msg-actions">
-            <button class="primary sm" type="button" @click="applyMessage(m)">
-              <IconPark icon="mdi:check" width="12" height="12" />
-              {{ t('skills.aiPanel.apply') }}
-            </button>
-            <button class="sm" type="button" @click="rejectMessage(m)">
-              <IconPark icon="mdi:close" width="12" height="12" />
-              {{ t('skills.aiPanel.reject') }}
-            </button>
-          </div>
-          <p v-else-if="m.applied" class="airp-msg-hint airp-msg-hint-ok">
-            <IconPark icon="mdi:check-circle-outline" width="11" height="11" />
-            {{ t('skills.aiPanel.applied') }}
-          </p>
-          <p v-else-if="m.rejected" class="airp-msg-hint airp-msg-hint-mute">
-            <IconPark icon="mdi:close-circle-outline" width="11" height="11" />
-            {{ t('skills.aiPanel.rejected') }}
-          </p>
-        </template>
+          <!-- 用户消息 -->
+          <div v-if="m.role === 'user'" class="airp-bubble airp-bubble-user">{{ m.content }}</div>
+
+          <!-- AI 消息:reason 是给用户看的;content 仅在 needsApply 时是替换用的全文 -->
+          <template v-else>
+            <div v-if="m.parseFailed" class="airp-msg-warn">
+              <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
+              {{ t('skills.aiPanel.parseFailed') }}
+            </div>
+            <pre v-if="m.reason && !m.pending" class="airp-bubble airp-bubble-ai">{{ m.reason }}</pre>
+            <pre v-else-if="m.pending || m.retrying" class="airp-bubble airp-bubble-ai">{{ m.content }}<span class="airp-cursor">▍</span></pre>
+            <p v-if="m.error" class="airp-msg-error">[{{ t('skills.aiPanel.roleAI') }}] {{ m.error }}</p>
+
+            <!-- 应用 / 拒绝:仅在 AI 明确返回 needs_apply=true 且未应用/拒绝时显示 -->
+            <div v-if="!m.pending && !m.applied && !m.rejected && m.needsApply && m.canApply" class="airp-msg-actions">
+              <button class="primary sm" type="button" @click="applyMessage(m)">
+                <IconPark icon="mdi:check" width="12" height="12" />
+                {{ t('skills.aiPanel.apply') }}
+              </button>
+              <button class="sm" type="button" @click="rejectMessage(m)">
+                <IconPark icon="mdi:close" width="12" height="12" />
+                {{ t('skills.aiPanel.reject') }}
+              </button>
+            </div>
+            <p v-else-if="m.applied" class="airp-msg-hint airp-msg-hint-ok">
+              <IconPark icon="mdi:check-circle-outline" width="11" height="11" />
+              {{ t('skills.aiPanel.applied') }}
+            </p>
+            <p v-else-if="m.rejected" class="airp-msg-hint airp-msg-hint-mute">
+              <IconPark icon="mdi:close-circle-outline" width="11" height="11" />
+              {{ t('skills.aiPanel.rejected') }}
+            </p>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -697,7 +711,7 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 10px 6px;
+  padding: 12px 12px 6px;
   scrollbar-width: thin;
   scrollbar-color: #d4d4d8 transparent;
   /* 空态需要在面板中央显示;把 list 当成 flex column,空态 flex:1 撑满高度再内部居中 */
@@ -738,43 +752,91 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   align-self: center;
 }
 
+/* ===== 聊天风格消息列表 ===== */
 .airp-msg {
-  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
   font-size: 12.5px;
   line-height: 1.55;
   word-break: break-word;
 }
+/* AI 在左(默认),用户在右(整列反转) */
+.airp-msg-user {
+  flex-direction: row-reverse;
+}
+.airp-msg-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-subtle);
+  /* 头像自带黑色背景,加 1px 浅边让它在浅色面板里不突兀 */
+  border: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.airp-msg-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  background: var(--primary-dim, rgba(59, 130, 246, 0.08));
+  border: 1px solid var(--border);
+}
+.airp-msg-body {
+  display: flex;
+  flex-direction: column;
+  /* body 自适应宽度,但不超过容器;max-width 85% 避免贴边 */
+  max-width: calc(100% - 32px - 8px);
+  min-width: 0;
+}
+.airp-msg-user .airp-msg-body {
+  align-items: flex-end;
+}
+
 .airp-msg-meta {
-  margin-bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-size: 10.5px;
 }
 .airp-msg-role {
-  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
 }
 .airp-msg-user .airp-msg-role { color: var(--accent-blue); }
 .airp-msg-ai .airp-msg-role { color: var(--primary); }
 
-.airp-msg-text {
+.airp-bubble {
   margin: 0;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  max-width: 100%;
 }
-.airp-msg-ai .airp-msg-text {
+/* 用户气泡:蓝底白字,右上角略圆(模拟对话框尖角) */
+.airp-bubble-user {
+  background: var(--primary);
+  color: var(--bg-card);
+  border-top-right-radius: 4px;
+}
+/* AI 气泡:浅底深字,左上角略圆 */
+.airp-bubble-ai {
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text);
-}
-.airp-msg-text-user {
-  background: var(--primary-dim, rgba(59, 130, 246, 0.08));
-  border: 1px solid var(--border);
-  color: var(--text);
+  border-top-left-radius: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
 }
 
 .airp-cursor {
