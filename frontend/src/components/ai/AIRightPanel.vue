@@ -532,10 +532,12 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
       </div>
       <div class="airp-actions">
         <!-- 全屏编辑按钮:放在发送按钮左侧,避免挤占输入框宽度 -->
+        <!-- data-tip-top:tooltip 显示在按钮上方(底部边缘按钮下方易被裁切) -->
         <button
           class="airp-icon-btn airp-fullscreen-btn"
           type="button"
           :data-tip="t('skills.aiPanel.fullscreenEdit')"
+          data-tip-top="true"
           :aria-label="t('skills.aiPanel.fullscreenEdit')"
           @click="openFullscreen"
         >
@@ -545,6 +547,9 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           v-if="busy"
           class="airp-stop"
           type="button"
+          data-tip-top="true"
+          :data-tip="t('skills.aiPanel.stop')"
+          :aria-label="t('skills.aiPanel.stop')"
           @click="abort?.abort?.()"
         >
           <IconPark icon="mdi:stop" width="12" height="12" />
@@ -554,6 +559,9 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           v-else
           class="airp-send"
           type="button"
+          data-tip-top="true"
+          :data-tip="t('skills.aiPanel.send')"
+          :aria-label="t('skills.aiPanel.send')"
           :disabled="sendDisabled"
           @click="sendMessage"
         >

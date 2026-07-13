@@ -498,6 +498,18 @@ table.grid tbody tr:hover {
 }
 [data-tip]:disabled::after { display: none; }
 
+/* data-tip-top:tooltip 显示在元素上方(默认在下方,当按钮在底栏/边缘时下方易被父容器裁切)
+   用法:在 data-tip 基础上再加 data-tip-top="true" 即可 */
+[data-tip-top]::after {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%) translateY(2px);
+}
+[data-tip-top]:hover:not(:disabled)::after,
+[data-tip-top]:focus-visible:not(:disabled)::after {
+  transform: translateX(-50%) translateY(0);
+}
+
 /* ============================================
    动画过渡
    ============================================ */
