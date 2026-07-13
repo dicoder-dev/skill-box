@@ -81,9 +81,10 @@ func NewTrayManager(app *application.App, cb TrayCallbacks, notifier *Notifier) 
 			// macOS 上 SetTemplateIcon 与 SetIcon 互斥(systemtray_darwin.go
 			// 的 setIcon 会读 isTemplateIcon 标记,两个都调会污染),所以只调
 			// SetTemplateIcon;label 留空避免图标+文字挤在一起。
-			// DEBUG: 改用 wails 官方 DefaultMacTemplateIcon 验证 SetTemplateIcon 流程
-			log.Printf("tray: DEBUG darwin SetTemplateIcon - tmpl=%d bytes, official=%d bytes", len(tmpl), len(trayOfficialTemplatePNG))
-			t.SetTemplateIcon(trayOfficialTemplatePNG)
+			// tmpl 是 generateTrayIcons 从嵌入的 build/appicon.png 源图缩放
+			// 出来的 64×64 单色 + alpha 图;RGB 压黑,系统会随亮/暗模式自动反色。
+			log.Printf("tray: darwin SetTemplateIcon - tmpl=%d bytes", len(tmpl))
+			t.SetTemplateIcon(tmpl)
 			t.SetLabel("")
 		default:
 			// windows / linux
