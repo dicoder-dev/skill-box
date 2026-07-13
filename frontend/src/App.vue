@@ -675,12 +675,16 @@ onUnmounted(() => {
   gap: 2px;                  /* logo 图与文字的间距(2026-07-13 改:8→4→2,几乎贴紧) */
 }
 .topbar-logo-img {
-  /* 顶栏高 48px,文字 22px;logo 图 20px 跟文字视觉权重相当(略小一档,
-     不抢文字风头),透明 PNG 直接放,顶栏背景透出。
-     2026-07-13 改:24→20,跟文字更协调。 */
-  width: 20px;
-  height: 20px;
+  /* 顶栏高 48px,文字 22px;logo 图 22px 跟文字同高,视觉对齐。
+     2026-07-13 改:24→20→22(最终选 22,跟文字同尺寸);
+     加 vertical-align: middle + align-self: center 解决 img 与 span
+     baseline 错位问题(img 默认按 baseline 对齐,inline-block span
+     按 middle,两者会上下错开几像素)。 */
+  width: 22px;
+  height: 22px;
   display: block;
+  vertical-align: middle;
+  align-self: center;
   user-select: none;
   -webkit-user-drag: none;
 }
