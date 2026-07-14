@@ -114,6 +114,13 @@ hdiutil create \
   "$DMG_STAGING"
 echo "  → staging: $DMG_STAGING ($(du -h "$DMG_STAGING" | cut -f1))"
 
+# hdiutil create -srcfolder 默认会自动把 dmg 挂到 /Volumes/<volname>,
+# 让用户能在 Finder 里看到。但我们要立刻弹出来,因为:
+#   1) 后面步骤 3 会用 -mountpoint /tmp/... 重新挂,自动挂的位置跟我们不一致
+#   2) 如果不弹,LaunchServices 会路由 /Applications/skill-box.app 到 /Volumes/Skill Box,
+#      用户后续从 dmg 拖到 /Applications 后双击没反应(本项目踩过的坑)
+hdiutil detach "/Volumes/$VOLNAME" 2>/dev/null || true
+
 # ---- 步骤 3:挂载 staging ----
 echo "=== 3. MOUNT staging ==="
 # macOS 不允许非交互进程把可写 dmg 挂到 /Volumes/<volname> 路径下(会报
