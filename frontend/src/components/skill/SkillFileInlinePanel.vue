@@ -151,6 +151,10 @@ const toast = useToastStore()
 
 const props = defineProps({
   files: { type: Array, default: () => [] },
+  // 2026-07-14 v2 增:磁盘绝对 source_path,由 SkillsView 传过来,沿 prop 链给到 AIRightPanel。
+  // 让 AIRightPanel 能把 AI 历史写到正确的 .skill-box/history/ 目录,
+  // 不再误用文件相对路径(filePath)。
+  sourcePath: { type: String, default: '' },
   skill: { type: Object, default: () => ({}) },
 })
 
@@ -1722,6 +1726,7 @@ defineExpose({
           :mode="currentMode"
           :store-root="storeRoot"
           :skill-rel-path="skillRelPath"
+          :source-path="sourcePath"
           :right-panel-mode="rightMode"
           :apply-flash="applyFlash"
           @update:content="onContentChange"

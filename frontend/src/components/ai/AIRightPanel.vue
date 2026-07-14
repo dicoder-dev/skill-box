@@ -37,6 +37,9 @@ import { useToastStore } from '@/core/store/toast'
 const props = defineProps({
   filePath: { type: String, required: true },
   fileContent: { type: String, default: '' },
+  // 2026-07-14 v2 增:磁盘绝对 source_path(沿 4 层 prop chain 传来),
+  // 让 ai store 用作 sessions key 与后端 source_path(v1 误用 filePath 永远 404)。
+  sourcePath: { type: String, default: '' },
   isSkillMd: { type: Boolean, default: false },
   readOnly: { type: Boolean, default: false },
 })
@@ -76,12 +79,21 @@ function langLabelOf(code) {
   return langOptions.value.find((l) => l.value === code)?.label || code
 }
 
-function clearHistory() {
+// 2026-07-14 v2 改:把当前活跃会话"新建对话"——
+// 后端 upsert 单条 .skill-box/history/<conv-id>.json,然后清空本地活跃。
+// 失败 toast 提示(用户决策:先清本地,后写后端,失败不静默)。
+async function newConversation() {
   if (busy.value) {
     abort.value?.abort?.()
     busy.value = false
   }
-  ai.clearCurrent()
+  // 空会话 no-op,不创建空对话,不弹 toast
+  if (!ai.hasCurrentContent) return
+  try {
+    await ai.archiveCurrent()
+  } catch (e) {
+    toast.error(t('skills.aiPanel.archiveFailed', '保存到历史失败'))
+  }
 }
 
 // ===== Providers =====
@@ -370,19 +382,25 @@ function cancelFullscreen() {
 }
 
 // ===== 文件切换 =====
-// 2026-07-14 改:数据源切到 store。切换 filePath 时,把旧的 source_path 显式标好,让
-// store 自动用新 source_path;旧 source_path 里的数据不动,保留在 sessions 中以备回切。
-watch(() => props.filePath, () => {
+// 2026-07-14 v2 改:用 props.sourcePath(磁盘绝对路径)做 store key。
+// 切换 sourcePath(切 skill)才换会话;同 skill 不同文件共享同一会话。
+watch(() => props.sourcePath, (sp) => {
   if (busy.value) abort.value?.abort?.()
   busy.value = false
   abort.value = null
-  ai.setCurrentSource(props.filePath)
+  ai.setCurrentSource(sp || '')
+}, { immediate: true })
+
+// 切 filePath(同 sourcePath 下)只更新当前显示文件,不动会话。
+watch(() => props.filePath, () => {
+  // filePath 是单条 AI 消息上下文(apply-skill vs apply-local 判定),不参与会话 key。
 })
 
 // ===== 生命周期 =====
 onMounted(async () => {
+  // hydrate 已在 sourcePath immediate watcher 里跑(也可能跑在前面),
+  // 这里补一下保险(若 immediate 已经触发,sessions 已有,再 hydrate 是幂等)。
   ai.hydrate()
-  ai.setCurrentSource(props.filePath)
   await loadProviders()
 })
 
@@ -439,14 +457,15 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           <IconPark icon="mdi:format-list-bulleted" width="13" height="13" />
         </button>
         <button
-          v-if="messages.length"
+          v-if="ai.hasCurrentContent"
           class="airp-icon-btn"
-          :data-tip="t('skills.aiPanel.clearHistory')"
-          :aria-label="t('skills.aiPanel.clearHistory')"
+          :data-tip="t('skills.aiPanel.newConv', '新建对话')"
+          :aria-label="t('skills.aiPanel.newConv', '新建对话')"
           type="button"
-          @click="clearHistory"
+          :disabled="ai.savingConv"
+          @click="newConversation"
         >
-          <IconPark icon="mdi:delete-outline" width="13" height="13" />
+          <IconPark icon="mdi:plus-circle-outline" width="13" height="13" />
         </button>
         <button
           class="airp-icon-btn"

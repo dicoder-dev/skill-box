@@ -40,6 +40,8 @@ const props = defineProps({
   mode: { type: String, default: 'view' },
   skillRelPath: { type: String, default: '' },
   storeRoot: { type: String, default: '' },
+  // 2026-07-14 v2 增:磁盘绝对 source_path,沿链给 AIRightPanel(AI 历史目录定位)。
+  sourcePath: { type: String, default: '' },
   // 2026-07-13 增:右侧面板模式。'outline' = 大纲(默认),'ai' = AI 对话,'none' = 不显示。
   // 由父级 SkillFileInlinePanel 通过 useRightPanelMode composable 注入并响应用户切换。
   rightPanelMode: { type: String, default: 'outline' },
@@ -440,6 +442,7 @@ const lineNumbers = computed(() => {
         <AIRightPanel
           :file-path="path"
           :file-content="content"
+          :source-path="sourcePath"
           :is-skill-md="path === 'SKILL.md'"
           :read-only="editable"
           @close="$emit('update:right-panel-mode', 'none')"
@@ -513,6 +516,7 @@ const lineNumbers = computed(() => {
         <AIRightPanel
           :file-path="path"
           :file-content="content"
+          :source-path="sourcePath"
           :is-skill-md="path === 'SKILL.md'"
           :read-only="editable"
           @close="$emit('update:right-panel-mode', 'none')"

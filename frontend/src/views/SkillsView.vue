@@ -213,6 +213,16 @@ function toolIcon(toolID) {
 // currentFiles 仍保留(供 SkillFileInlinePanel 用)。
 const currentFiles = ref([])
 
+// 2026-07-14 v2 增:把当前 skill 的磁盘绝对 source_path(EvalSymlinks 后由后端
+// get_skill?full=true 注入)沿 prop 链透传到 AIRightPanel,让 AI 历史能落到正确路径。
+// 兜底链:_full.canonical.source_path(虽然 canonical.SourceDir 在后端是 json:"-",
+// 保留兜底) → _full.source_path(实际入口)。
+const currentSkillSourcePath = computed(() => {
+  const c = current.value?._full
+  if (!c) return ''
+  return c.canonical?.source_path || c.source_path || ''
+})
+
 // 2026-07-07 改 v2:不依赖 vue 的 watch(wails webview ESM chunk 偶发 ReferenceError: watch,
 // 跟 SkillFileInlinePanel v6 修复同源)。改用 onUpdated + 手动引用比较。
 let _lastFullRef = null
@@ -1810,6 +1820,7 @@ onUnmounted(() => {
           :key="currentIdentity"
           ref="inlinePanelRef"
           :files="currentFiles"
+          :source-path="currentSkillSourcePath"
           :skill="{
             name: current?.name || '',
             version: current?.version || '',
