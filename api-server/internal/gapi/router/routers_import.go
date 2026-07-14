@@ -3,6 +3,7 @@ package router
 //显式导入：来确保它的 init 函数被调用
 import (
 	_ "ginp-api/internal/gapi/controller/skillbox/caiprovider"
+	_ "ginp-api/internal/gapi/controller/skillbox/caisession" // 2026-07-14 增:补 import,否则 4 个 ai/history 路由没注册,Gin 默认 404
 	_ "ginp-api/internal/gapi/controller/skillbox/cdesktop"
 	_ "ginp-api/internal/gapi/controller/skillbox/cmarket"
 	_ "ginp-api/internal/gapi/controller/skillbox/conboarding"
