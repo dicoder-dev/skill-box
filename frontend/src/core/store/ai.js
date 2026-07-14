@@ -1,46 +1,54 @@
-// core/store/ai.js - AI 对话持久化 store(2026-07-14 增)
+// core/store/ai.js - AI 对话持久化 store(2026-07-14 v2)
 //
-// 跨组件共享当前活跃会话 + 跨刷新持久化到 localStorage +
-// 跨设备/双写到后端 .skill-box/history.json。
-//
-// 设计要点:
-//   - 按 sourcePath 维度切分多个会话(同一个 AI 面板会切不同文件)
-//   - currentSourcePath 为空时,所有 push/patch no-op + 历史按钮禁用
-//   - 写盘是双份:localStorage 立刻同步;后端 800ms debounce
-//   - historyDialogOpen / historyItems 由 AIRightPanel 直接绑定,避免引入额外 dispatcher
+// v2 改动要点(从 v1 升):
+//   - key 用磁盘绝对路径(source_path),不是文件相对路径(filePath) —— 修 v1 双源 bug。
+//   - 活跃会话只走 localStorage(草稿);"+ 新建对话" 才触发 archiveCurrent
+//     → 后端 .skill-box/history/<conv-id>.json 单条 upsert(权威)。
+//   - 列表用 ConvMeta(metadata-only);点开条目再 async getHistory 拉完整 messages 装填。
+//   - 删除单条直接 deleteHistory(API v2)。
 //
 // 用法:
 //   import { useAiStore } from '@/core/store/ai'
 //   const ai = useAiStore()
 //   ai.hydrate()
-//   ai.setCurrentSource(props.filePath)
+//   ai.setCurrentSource(props.sourcePath)        // 绝对路径!
 //   const user = ai.pushUser(text)
 //   const aiMsg = ai.pushAssistantPlaceholder()
 //   ai.patchAssistant(aiMsg.id, { content, status: 'streaming' })
-//   ai.openHistory(); ai.closeHistory()
+//
+//   // 显式归档(用户点 "+ 新建对话" 时):
+//   try { await ai.archiveCurrent() } catch (e) { toast.error(...) }
+//   // 选历史条目:
+//   await ai.pickHistoryItem(meta)
+//   // 删单条:
+//   await ai.deleteHistoryItem(convId)
 import { defineStore } from 'pinia'
 import * as api from '@/api/skillbox/ai-history'
 
 const STORAGE_KEY = 'skillbox.ai.v2.sessions'
 
-let _uid = 0
+let _msgSeq = 0
+let _convSeq = 0
+
 function uid(prefix = 'm') {
-  _uid += 1
-  return `${prefix}_${Date.now()}_${_uid}`
+  // 唯一 id:prefix_<ts>_<seq>;单纯 Date.now() 同毫秒下可能撞 id
+  const seq = prefix === 'conv' ? _convSeq++ : _msgSeq++
+  return `${prefix}_${Date.now()}_${seq}`
 }
 
 export const useAiStore = defineStore('ai', {
   state: () => ({
-    // 按 sourcePath(磁盘绝对路径)分组的会话
+    // 按 source_path(磁盘绝对路径)分组的活跃会话。
+    // 每条是 { items: Msg[], convId: string, updatedAt: number }。
+    // convId 用于归档时复用 id(同一会话多次 archiveCurrent 会 upsert 同一文件)。
     sessions: {},
-    // 当前 sourcePath('' = 没有文件,所有写操作 no-op)
+    // 当前 source_path('' = 没选 skill 或 AIRightPanel 还没挂上,所有写 no-op)
     currentSourcePath: '',
-    // 防抖写盘 timer
-    saving: false,
-    // 历史 Modal 相关
+    // 历史 Modal
     historyDialogOpen: false,
-    historyItems: [],
+    historyItems: [], // ConvMeta[] (metadata-only)
     loadingList: false,
+    savingConv: false, // archiveCurrent 进行中
   }),
   getters: {
     currentMessages(s) {
@@ -49,9 +57,14 @@ export const useAiStore = defineStore('ai', {
     hasSession(s) {
       return !!s.currentSourcePath
     },
+    hasCurrentContent(s) {
+      return (s.sessions[s.currentSourcePath]?.items || []).length > 0
+    },
   },
   actions: {
-    // 从 localStorage 水合(模块加载时或 onMounted 时调用一次)。
+    // ===================== 本地草稿(localStorage) =====================
+
+    // hydrate 启动水合一次。
     hydrate() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY)
@@ -65,12 +78,13 @@ export const useAiStore = defineStore('ai', {
         // localStorage 不可用时静默
       }
     },
-    // 写回 localStorage;quota exceeded 时静默。
+
+    // persistLocal 写回 localStorage;quota exceeded 时静默。
     persistLocal() {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.sessions))
       } catch (_) {
-        // 静默 — 写盘失败不影响 UI
+        /* 静默 */
       }
     },
 
@@ -78,14 +92,9 @@ export const useAiStore = defineStore('ai', {
       this.currentSourcePath = p || ''
     },
 
-    openHistory() {
-      this.historyDialogOpen = true
-    },
-    closeHistory() {
-      this.historyDialogOpen = false
-    },
+    // ===================== 消息构造(本组件) =====================
 
-    // pushUser 把用户消息塞入当前会话。
+    // pushUser 把用户消息塞入当前活跃会话(items),返回完整 msg。
     pushUser(text) {
       if (!this.currentSourcePath) return null
       const msg = {
@@ -98,8 +107,7 @@ export const useAiStore = defineStore('ai', {
       return msg
     },
 
-    // pushAssistantPlaceholder 创建一个 streaming 占位的 AI 消息。
-    // 返回的 msg.id 后续 patchAssistant 用。
+    // pushAssistantPlaceholder 创建一个 streaming 占位的 AI 消息,返回 msg。
     pushAssistantPlaceholder() {
       if (!this.currentSourcePath) return null
       const msg = {
@@ -118,16 +126,16 @@ export const useAiStore = defineStore('ai', {
       return msg
     },
 
-    // patchAssistant 把字段增量更新到指定 AI 消息上。
+    // patchAssistant 把字段增量更新到指定 AI 消息上(自动 persistLocal)。
     patchAssistant(id, patch) {
       if (!this.currentSourcePath) return
-      const list = this.sessions[this.currentSourcePath]?.items
-      if (!list) return
-      const m = list.find((x) => x.id === id)
+      const sess = this.sessions[this.currentSourcePath]
+      if (!sess) return
+      const m = sess.items.find((x) => x.id === id)
       if (!m) return
       Object.assign(m, patch)
+      sess.updatedAt = Date.now()
       this.persistLocal()
-      this._scheduleBackendSave()
     },
 
     setMessageApplied(id, v) {
@@ -136,30 +144,66 @@ export const useAiStore = defineStore('ai', {
     setMessageRejected(id) {
       this.patchAssistant(id, { rejected: true, canApply: false })
     },
-    setMessageRetrying(id, v) {
-      this.patchAssistant(id, { retrying: v })
-    },
 
-    // 追加一条消息(私有)。
     _append(msg) {
       const k = this.currentSourcePath
-      if (!this.sessions[k]) this.sessions[k] = { items: [], updatedAt: 0 }
+      if (!this.sessions[k]) {
+        this.sessions[k] = { items: [], convId: uid('conv'), updatedAt: 0 }
+      }
       this.sessions[k].items.push(msg)
       this.sessions[k].updatedAt = Date.now()
       this.persistLocal()
-      this._scheduleBackendSave()
     },
 
-    // 清空当前活跃会话(消息全部删,前端 + 后端)。
-    clearCurrent() {
-      if (!this.currentSourcePath) return
-      delete this.sessions[this.currentSourcePath]
+    // ===================== v2 历史 API(archive / list / pick / delete) =====================
+
+    // archiveCurrent ★v2 新增 — 把当前活跃会话序列化成一条 HistoryItem,
+    // upsert 到后端 .skill-box/history/<conv-id>.json,然后清空本地活跃。
+    //
+    // 行为契约(用户已确认 2026-07-14):
+    //   - 当前会话为空 → no-op,不创建空文件
+    //   - 无 source_path → no-op
+    //   - 先本地清空 sessions[k](UI 立即空白)→ 再请求后端;失败 → 抛错,调用点 toast
+    //
+    // async,失败抛错(caller 用 try/catch + toast)。
+    async archiveCurrent() {
+      const k = this.currentSourcePath
+      if (!k) return
+      const sess = this.sessions[k]
+      const items = sess?.items || []
+      if (items.length === 0) return
+
+      const firstUser = items.find((m) => m.role === 'user')
+      const convId = sess.convId || uid('conv')
+      // 优先从最近一条 assistant 拿 provider/model(若有)。
+      const lastAi = [...items].reverse().find((m) => m.role === 'assistant')
+      const item = {
+        id: convId,
+        title: (firstUser?.content || '').slice(0, 30).trim() || 'untitled',
+        preview: '', // 后端 previewFromMessages 自动算
+        ts: Date.now(),
+        provider: lastAi?.provider || '',
+        model: lastAi?.model || '',
+        messages: JSON.parse(JSON.stringify(items)), // 深拷贝完整字段
+      }
+      // ★ 先本地清(决策已确认)
+      delete this.sessions[k]
       this.persistLocal()
-      this._scheduleBackendSave({ clear: true })
+
+      this.savingConv = true
+      try {
+        await api.saveHistory({ source_path: k, item })
+      } catch (e) {
+        // 失败:本地已清,云端未存,抛给调用点 toast。
+        // 状态:无补回,用户后续手动重新建会话或重试。
+        throw e
+      } finally {
+        this.savingConv = false
+      }
     },
 
-    // 从后端拉历史列表,塞到 historyItems。
-    // 失败返空(静默不弹 toast)。
+    // loadFromBackend 拉远端 metadata 列表 → historyItems。
+    // 失败静默:把 loadingList 关闭,historyItems 留空(UI 不阻塞)。
     async loadFromBackend() {
       if (!this.currentSourcePath) {
         this.historyItems = []
@@ -176,62 +220,53 @@ export const useAiStore = defineStore('ai', {
       }
     },
 
-    // 把选中的历史条目注入当前会话(覆盖式)。
-    pickHistoryItem(item) {
-      if (!this.currentSourcePath || !item) return
-      const k = this.currentSourcePath
-      this.sessions[k] = {
-        items: Array.isArray(item.messages) ? JSON.parse(JSON.stringify(item.messages)) : [],
-        updatedAt: Date.now(),
-      }
-      this.persistLocal()
-      this.historyDialogOpen = false
-    },
-
-    // ----------------- 后端防抖写入 -----------------
-
-    _saveTimer: null,
-    _scheduleBackendSave({ clear } = {}) {
-      if (this._saveTimer) clearTimeout(this._saveTimer)
-      this._saveTimer = setTimeout(() => this.flushBackend({ clear }), 800)
-    },
-    async flushBackend({ clear } = {}) {
-      this._saveTimer = null
-      const k = this.currentSourcePath
-      if (!k) return
-      this.saving = true
+    // pickHistoryItem ★v2 异步 — meta 是 metadata-only,
+    // 先 GET 单条拉完整 messages,再装填到当前活跃 sessions。
+    // 抛错给调用点 toast。
+    async pickHistoryItem(meta) {
+      if (!this.currentSourcePath || !meta?.id) return
+      this.savingConv = true
       try {
-        const items = clear ? [] : this.sessions[k]?.items || []
-        // 转成 HistoryItem 形态给后端:每条需要 id/title/preview/ts/provider/model/messages。
-        const out = items.map((m) => ({
-          id: m.id,
-          title: m.title || defaultTitle(m),
-          preview: m.preview || defaultPreview(m),
-          ts: m.ts || Date.now(),
-          provider: m.provider || '',
-          model: m.model || '',
-          messages: Array.isArray(messagesOf(m)) ? messagesOf(m) : [],
-        }))
-        await api.saveHistory({ source_path: k, items: out })
-      } catch (_) {
-        // 写盘失败不弹 toast,UI 不阻塞
+        const r = await api.getHistory({
+          source_path: this.currentSourcePath,
+          conv_id: meta.id,
+        })
+        const item = r?.item
+        if (!item || !Array.isArray(item.messages)) {
+          throw new Error('empty or malformed conv')
+        }
+        this.sessions[this.currentSourcePath] = {
+          items: JSON.parse(JSON.stringify(item.messages)),
+          convId: item.id,
+          updatedAt: Date.now(),
+        }
+        this.persistLocal()
+        this.historyDialogOpen = false
+      } catch (e) {
+        throw e
       } finally {
-        this.saving = false
+        this.savingConv = false
       }
+    },
+
+    // deleteHistoryItem 按 conv_id 删单条;成功则 historyItems 移除该 conv。
+    // 失败抛错给调用点 toast。
+    async deleteHistoryItem(convId) {
+      if (!this.currentSourcePath || !convId) return
+      await api.deleteHistory({
+        source_path: this.currentSourcePath,
+        conv_id: convId,
+      })
+      this.historyItems = this.historyItems.filter((it) => it.id !== convId)
+    },
+
+    // ===================== Modal helpers =====================
+
+    openHistory() {
+      this.historyDialogOpen = true
+    },
+    closeHistory() {
+      this.historyDialogOpen = false
     },
   },
 })
-
-function defaultTitle(m) {
-  const txt = (m.content || '').slice(0, 40).trim()
-  return txt || m.id || 'untitled'
-}
-function defaultPreview(m) {
-  return (m.content || '').slice(0, 120).trim()
-}
-function messagesOf(m) {
-  // 简化:把单条 AI 消息也包成 messages:[];前端后续可读全。
-  return [
-    { id: m.id, role: m.role, content: m.content, ts: m.ts },
-  ]
-}
