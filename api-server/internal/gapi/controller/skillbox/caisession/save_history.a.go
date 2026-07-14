@@ -1,10 +1,9 @@
 // Package caisession - save_history.a.go
 // POST /api/skillbox/ai/history/save
 //
-// 把当前活跃 AI 会话条目列表写入 "<source_path>/.skill-box/history.json",
-// 作为前端 localStorage 的"权威副本"。
-//
-// 2026-07-14 增。
+// v2(2026-07-14 改):单条 upsert 到 <source_path>/.skill-box/history/<conv-id>.json。
+// 替代 v1 的"批量写 history.json"。
+// body: { source_path, item: HistoryItem };每次写入是 upsert,同 conv_id 会覆盖。
 package caisession
 
 import (
@@ -19,26 +18,26 @@ import (
 	"ginp-api/pkg/logger"
 )
 
-// RequestSaveHistory 历史保存请求。
+// RequestSaveHistory v2:单条 HistoryItem。
 //
-// SourcePath: 磁盘绝对路径(skillstore 通过 EvalSymlinks 后的相对目录);
-// 必须位于 skillstore.root 之下 + 含 SKILL.md,否则 404。
-//
-// Items: 历史条目列表(空数组 = 清空)。
-// 单条 HistoryItem 字段定义见 skillboxdata.HistoryItem。
+// Item 内嵌 skillboxdata.HistoryItem;反序列化时 Messages 作为 json.RawMessage 透传。
+// 本接口对 messages 内容形状无要求,前端可传任何 user/assistant 完整字段;
+// 上层 preview 自动从首条 assistant content 算(skillboxdata.WriteConv 兜底)。
 type RequestSaveHistory struct {
-	SourcePath string                     `json:"source_path"`
-	Items      []skillboxdata.HistoryItem  `json:"items"`
+	SourcePath string                 `json:"source_path"`
+	Item       skillboxdata.HistoryItem `json:"item"`
 }
 
 // ResponseSaveHistory 写盘结果。
 type ResponseSaveHistory struct {
-	Ok     bool `json:"ok"`
-	Count  int  `json:"count"`
-	Truncated bool `json:"truncated"` // 写盘时是否触发 FIFO 截断
+	Ok    bool   `json:"ok"`
+	ConvID string `json:"conv_id"`
 }
 
-// SaveHistory POST /api/skillbox/ai/history/save
+// ErrConvTooLargeHTTPCode 单对话 > 2MB 时返 400(2026-07-14 增)。
+const ErrConvTooLargeHTTPCode = 400
+
+// SaveHistory POST /api/skillbox/ai/history/save(单条)
 func SaveHistory(c *ginp.ContextPlus, req *RequestSaveHistory) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	eng := sai.NewEngine(st)
@@ -48,22 +47,25 @@ func SaveHistory(c *ginp.ContextPlus, req *RequestSaveHistory) {
 		c.JSON(400, gin.H{"error": "source_path is required"})
 		return
 	}
-	// 截断与否:简单做法 — 写完后读,对比 len。
-	// 在 svc.SaveHistory 里没暴露截断信号前,以"成功且 0 ≤ count ≤ len(req.Items)"为 OK,
-	// truncated 始终 false(MVP;真要标记应在 skillboxdata.WriteHistory 返 truncated 信息)。
-	if err := svc.SaveHistory(req.SourcePath, req.Items); err != nil {
+	if req.Item.ID == "" {
+		c.JSON(400, gin.H{"error": "item.id is required"})
+		return
+	}
+	if err := svc.SaveConv(req.SourcePath, req.Item); err != nil {
 		logger.Error("ai history save: %v", err)
 		switch {
-		case errors.Is(err, sai.ErrEmptySourcePath):
+		case errors.Is(err, sai.ErrEmptySourcePath),
+			errors.Is(err, sai.ErrSourcePathNotInStore),
+			errors.Is(err, skillboxdata.ErrInvalidConvID):
 			c.JSON(400, gin.H{"error": err.Error()})
-		case errors.Is(err, sai.ErrSourcePathNotInStore):
-			c.JSON(404, gin.H{"error": err.Error()})
+		case errors.Is(err, skillboxdata.ErrConvTooLarge):
+			c.JSON(ErrConvTooLargeHTTPCode, gin.H{"error": err.Error(), "code": "conv_too_large"})
 		default:
 			c.JSON(500, gin.H{"error": err.Error()})
 		}
 		return
 	}
-	c.JSON(200, ResponseSaveHistory{Ok: true, Count: len(req.Items)})
+	c.JSON(200, ResponseSaveHistory{Ok: true, ConvID: req.Item.ID})
 }
 
 func init() {
@@ -76,7 +78,7 @@ func init() {
 		PermissionName: "skillbox.ai.history.save",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "ai.history.save",
-			Description:   "保存 AI 历史对话到 <source_path>/.skill-box/history.json;source_path 必须在 skillstore.root 下且是合法 skill",
+			Description:   "单条 upsert AI 对话到 <source_path>/.skill-box/history/<conv-id>.json;source_path 必须在 store.root 下且含 SKILL.md;超 2MB 返 400 conv_too_large",
 			RequestParams:  RequestSaveHistory{},
 		},
 	})
