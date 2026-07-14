@@ -24,6 +24,7 @@ import (
 	"ginp-api/internal/settings"
 	"ginp-api/internal/skillboxdata"
 	"ginp-api/internal/skillstore"
+	"ginp-api/pkg/logger"
 	"ginp-api/pkg/where"
 
 	"gorm.io/gorm"
@@ -432,6 +433,7 @@ func (s *Service) resolveSkillDirBySourcePath(sourcePath string) (string, error)
 	// 解析 symlink 真实路径(source_path 可能被外层再 symlink 包了一层)。
 	real, err := filepath.EvalSymlinks(sourcePath)
 	if err != nil {
+		// 2026-07-14 增:eval 失败不静默,留给 caller 弹日志(诊断使用率高的字段)
 		real = sourcePath
 	}
 	store, err := skillstore.New()
@@ -444,10 +446,13 @@ func (s *Service) resolveSkillDirBySourcePath(sourcePath string) (string, error)
 	}
 	// 必须在 root 之下(real 路径前缀匹配,避免 prefix-bug)
 	if real != rootReal && !strings.HasPrefix(real, rootReal+string(filepath.Separator)) {
+		// 2026-07-14 增:返错前打日志,便于前端排错
+		logger.Warn("ai.history: source_path not in store: source=%q real=%q root=%q", sourcePath, real, rootReal)
 		return "", ErrSourcePathNotInStore
 	}
 	// 必须含 SKILL.md
 	if _, err := os.Stat(filepath.Join(real, "SKILL.md")); err != nil {
+		logger.Warn("ai.history: SKILL.md missing: source=%q real=%q err=%v", sourcePath, real, err)
 		return "", ErrSourcePathNotInStore
 	}
 	return real, nil
