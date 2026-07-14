@@ -2,9 +2,10 @@
 # run-wails - 交互式启动 wails3 任务
 # 用法: ./run-wails
 # 选项:
-#   1) dev   -> wails3 task dev
-#   2) web   -> wails3 task web
+#   1) dev  -> wails3 task dev
+#   2) web  -> wails3 task web
 #   3) build -> wails3 task build
+#   4) app  -> 直接启动 /Applications/skill-box.app(绕过 Gatekeeper)
 # 默认(直接回车) -> 1) dev
 # 启动前会先调用 ./kill_port.sh 释放 9245 端口
 
@@ -21,8 +22,9 @@ echo "请选择要执行的任务:"
 echo "  1) dev   (wails3 task dev)"
 echo "  2) web   (wails3 task web)"
 echo "  3) build (wails3 task build)"
+echo "  4) app   (直接启动已装好的 /Applications/skill-box.app)"
 echo "─────────────────────────────────"
-read -r -p "请输入选项 [1/2/3] (默认 1): " CHOICE
+read -r -p "请输入选项 [1/2/3/4] (默认 1): " CHOICE
 
 # 默认值: 空输入 -> 1
 if [ -z "$CHOICE" ]; then
@@ -39,8 +41,44 @@ case "$CHOICE" in
   3)
     TASK="build"
     ;;
+  4)
+    # macOS 26 (Tahoe) Gatekeeper 拒绝 ad-hoc 签名 app 通过 LaunchServices 启动,
+    # 双击 .app 静默无反应。这里直接 exec binary 绕过 Gatekeeper,wails webview 窗口会正常弹出。
+    APP_BIN="/Applications/skill-box.app/Contents/MacOS/skill-box"
+    if [ ! -x "$APP_BIN" ]; then
+      echo "❌ 找不到 $APP_BIN,先选 3) build 或 wails3 task dmg 装一下"
+      exit 1
+    fi
+    echo "✅ 已选择 app (直接启动 binary,绕过 Gatekeeper)"
+    echo "🧹 准备释放端口 ${PORT} ..."
+    # 复用下面的 kill_port 逻辑
+    if [ -f "./kill_port.sh" ]; then
+      bash ./kill_port.sh "${PORT}"
+    else
+      PIDS=""
+      if command -v lsof >/dev/null 2>&1; then
+        PIDS=$(lsof -ti tcp:"${PORT}" 2>/dev/null || true)
+      fi
+      if [ -n "$PIDS" ] && command -v fuser >/dev/null 2>&1; then
+        PIDS=$(fuser "${PORT}/tcp" 2>/dev/null | tr -d ' ' || true)
+      fi
+      if [ -n "$PIDS" ]; then
+        echo "🔍 端口 ${PORT} 被以下进程占用: ${PIDS}"
+        for PID in ${PIDS}; do
+          if [ "${PID}" != "$$" ] && [ "${PID}" != "${PPID}" ]; then
+            PNAME=$(ps -p "${PID}" -o comm= 2>/dev/null || echo "unknown")
+            echo "💀 杀掉进程 ${PID} (${PNAME})"
+            kill -9 "${PID}" 2>/dev/null || true
+          fi
+        done
+        sleep 1
+      fi
+    fi
+    echo "▶️  执行: $APP_BIN"
+    exec "$APP_BIN"
+    ;;
   *)
-    echo "❌ 无效选项: $CHOICE (仅支持 1/2/3)"
+    echo "❌ 无效选项: $CHOICE (仅支持 1/2/3/4)"
     exit 1
     ;;
 esac
