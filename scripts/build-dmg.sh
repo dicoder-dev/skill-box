@@ -17,10 +17,10 @@ set -euo pipefail
 
 # ---- 默认值 ----
 ARCH="universal"
-OUTPUT="bin/skill-box.dmg"
+OUTPUT="bin/Skill-Box.dmg"
 SKIP_BUILD=0
-VOLNAME="Skill Box"
-APP_NAME="skill-box"
+VOLNAME="Skill-Box"
+APP_NAME="Skill-Box"
 
 # 临时状态(trap 清理用)
 DMG_STAGING=""
@@ -46,6 +46,19 @@ while [ $# -gt 0 ]; do
 done
 
 APP_PATH="bin/${APP_NAME}.app"
+# 如果 --output 是带架构后缀的(如 bin/skill-box-arm64.dmg),自动切到对应 .app。
+# 解决 dmg-arm64 / dmg-amd64 任务的产物路径约定:
+#   bin/skill-box-arm64.dmg  ← 源: bin/skill-box-arm64.app
+#   bin/skill-box-amd64.dmg  ← 源: bin/skill-box-amd64.app
+#   bin/skill-box.dmg        ← 源: bin/skill-box.app  (universal 默认)
+case "$OUTPUT" in
+  *-arm64.dmg|*-arm64.dmg.*)
+    APP_PATH="bin/${APP_NAME}-arm64.app" ;;
+  *-amd64.dmg|*-amd64.dmg.*)
+    APP_PATH="bin/${APP_NAME}-amd64.app" ;;
+esac
+# AppleScript 写布局时要找的 .app 文件夹名(去掉 bin/ 前缀)。
+APP_FOLDER_NAME="$(basename "$APP_PATH")"
 
 # ---- 平台守卫 ----
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -141,8 +154,10 @@ echo "  → 已建 /Applications 软链"
 # 因为我们 dmg 是本地 ad-hoc 签名的 .app,macOS 26 (Tahoe) 拒绝 open / Finder 双击,
 # 用户必须在「系统设置 → 隐私与安全性」里点"仍要打开"才能跑。
 # 这个 README 让用户在 dmg 里就看到指引,不用瞎猜。
-cat > "$MOUNT_POINT/首次打开说明.txt" <<'README_EOF'
-Skill Box — 首次打开说明(适用于 macOS 26 Tahoe)
+# 用 <<'README_EOF' (带引号) 避免 shell 展开,APP_NAME 等占位
+# 在 heredoc 内用 sed 替换,保持通用。
+cat > "$MOUNT_POINT/首次打开说明.txt" <<README_EOF
+${APP_NAME} — 首次打开说明(适用于 macOS 26 Tahoe)
 
 本应用是本地 ad-hoc 签名版本,不是 Apple 公证版本,所以 macOS 26 默认会拒绝
 open / Finder 双击启动。**这是正常现象,不是 bug。**
@@ -150,24 +165,24 @@ open / Finder 双击启动。**这是正常现象,不是 bug。**
 首次打开的两种方法(选一种):
 
 方法一:右键打开(最快)
-  1. 在 Finder 里打开本 dmg,把 skill-box.app 拖到 /Applications
-  2. 弹出 dmg(把 dmg 拖到废纸篓,或在终端 hdiutil detach "/Volumes/Skill Box")
-  3. 在 /Applications 找到 skill-box.app,**右键点它 → 选「打开」**
+  1. 在 Finder 里打开本 dmg,把 ${APP_FOLDER_NAME} 拖到 /Applications
+  2. 弹出 dmg(把 dmg 拖到废纸篓,或在终端 hdiutil detach "/Volumes/${VOLNAME}")
+  3. 在 /Applications 找到 ${APP_FOLDER_NAME},**右键点它 → 选「打开」**
   4. 系统弹"无法验证开发者"对话框,点「打开」
   5. 之后双击就能正常启动
 
 方法二:系统设置放行
   1. 拖完 app 后,**先双击一次**(会失败、无任何提示)
   2. 打开「系统设置 → 隐私与安全性」
-  3. 滚到页面底部,看到"已阻止使用 skill-box.app,因为它来自身份不明的开发者"
+  3. 滚到页面底部,看到"已阻止使用 ${APP_NAME},因为它来自身份不明的开发者"
   4. 点右边的「仍要打开」按钮
-  5. 再双击 skill-box.app,正常启动
+  5. 再双击 ${APP_FOLDER_NAME},正常启动
 
 注意:
 - 如果想从命令行启动,绕过 Gatekeeper,跑:
-    nohup /Applications/skill-box.app/Contents/MacOS/skill-box > /tmp/skill-box.log 2>&1 &
+    nohup /Applications/${APP_FOLDER_NAME}/Contents/MacOS/${APP_NAME} > /tmp/${APP_NAME}.log 2>&1 &
 - 想要"双击直接启动",需要走 Apple Developer ID 签名 + 公证流程
-  (需要 Apple 开发者账号 $99/年,这是发布前的最后一步,不在本 dmg 脚本范围)
+  (需要 Apple 开发者账号 \$99/年,这是发布前的最后一步,不在本 dmg 脚本范围)
 README_EOF
 echo "  → 已写首次打开说明.txt"
 
@@ -207,8 +222,9 @@ tell application "Finder"
   set arrangement of icon view options of winOpts to not arranged
   set background color of icon view options of winOpts to {65535, 65535, 65535}
 
-  -- 两图标坐标
-  set position of item "${APP_NAME}.app" of winOpts to {170, 190}
+  -- 两图标坐标。APP_FOLDER_NAME 跟着 .app 真实名字走
+  -- (universal 是 skill-box.app,arm64-only 是 skill-box-arm64.app)。
+  set position of item "$APP_FOLDER_NAME" of winOpts to {170, 190}
   set position of item "Applications" of winOpts to {410, 190}
 
   -- 关键:close 触发 Finder flush .DS_Store 到 dmg 根

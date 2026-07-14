@@ -7,13 +7,15 @@
             <!-- 必须跟 .app 文件名一致(去掉 .app 后缀)。
                  CFBundleName 与文件名不一致时,LaunchServices 静默拒绝 open/finder 双击启动,
                  表现为双击无反应、无任何报错。-->
-            <string>skill-box</string>
+            <string>Skill-Box</string>
         <key>CFBundleDisplayName</key>
             <!-- Finder 菜单栏/启动台/Dock 用的展示名;跟 CFBundleName 不一致也没关系,
-                 这里用 skill-box 保持简洁。-->
-            <string>skill-box</string>
+                 这里用 Skill-Box 保持一致。-->
+            <string>Skill-Box</string>
         <key>CFBundleExecutable</key>
-            <string>skill-box</string>
+            <!-- 必须跟 Contents/MacOS/ 下的 binary 文件名一致,
+                 macOS 启动 app 时按这个字段找 binary。-->
+            <string>Skill-Box</string>
         <key>CFBundleIdentifier</key>
             <!-- 真实反向域,占位 com.example.* 在 LaunchServices 里会冲突,
                  而且系统会告警"无法验证开发者"。改成项目实际占位

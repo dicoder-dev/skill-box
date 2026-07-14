@@ -413,7 +413,7 @@ type App struct {
 // 调用方应保证 backend 已经在 NewApp 之前通过 bootstrap.Boot 启动。
 func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 	if cfg.Name == "" {
-		cfg.Name = "skill-box"
+		cfg.Name = "Skill-Box"
 	}
 	if cfg.Description == "" {
 		cfg.Description = "桌面端 + Web 端双部署"

@@ -73,7 +73,7 @@ func main() {
 	// 上一次"两次不生效"的原因已经定位为 alpha.60 Window.SetSize 不可靠;
 	// 现在用 system_profiler 同步拿屏在 NewApp 阶段直接灌大尺寸,完全不依赖 SetSize。
 	app := desktop.NewApp(desktop.AppConfig{
-		Name: "Skill Box",
+		Name: "Skill-Box",
 		Size: desktop.WindowSizeConfig{
 			Mode:        desktop.WindowSizeModeFixed,
 			WidthRatio:  0.9,

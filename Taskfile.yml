@@ -9,7 +9,7 @@ includes:
   android: ./build/android/Taskfile.yml
 
 vars:
-  APP_NAME: "skill-box"
+  APP_NAME: "Skill-Box"
   BIN_DIR: "bin"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
   # Web 单进程二进制输出路径（Windows 自动追加 .exe）。

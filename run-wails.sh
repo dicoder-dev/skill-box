@@ -44,7 +44,8 @@ case "$CHOICE" in
   4)
     # macOS 26 (Tahoe) Gatekeeper 拒绝 ad-hoc 签名 app 通过 LaunchServices 启动,
     # 双击 .app 静默无反应。这里直接 exec binary 绕过 Gatekeeper,wails webview 窗口会正常弹出。
-    APP_BIN="/Applications/skill-box.app/Contents/MacOS/skill-box"
+    # APP_NAME 必须跟 Taskfile.yml 里的 APP_NAME 一致(Skill-Box)。
+    APP_BIN="/Applications/Skill-Box.app/Contents/MacOS/Skill-Box"
     if [ ! -x "$APP_BIN" ]; then
       echo "❌ 找不到 $APP_BIN,先选 3) build 或 wails3 task dmg 装一下"
       exit 1

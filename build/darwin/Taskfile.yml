@@ -177,8 +177,14 @@ tasks:
       and is not an object file"。这里在 dmg build 链之前强制清一遍。
     cmds:
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}.dmg.staging.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg.staging.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg.staging.dmg"
       - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app"
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app"
 
   dmg:
     summary: 把 `.app` 包成可拖拽 DMG(默认 universal)
@@ -203,26 +209,46 @@ tasks:
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
 
   dmg-arm64:
-    summary: 把 arm64 `.app` 包成可拖拽 DMG
+    summary: 把 arm64 `.app` 包成可拖拽 DMG(Apple Silicon Mac 用)
+    desc: |
+      单独打 arm64-only dmg。Apple Silicon Mac 上启动用本架构 native,
+      避免 universal binary 在 arm Mac 上偶尔走 x86_64 slice 走 Rosetta 的问题。
+      产物 {{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg。
     deps:
       - task: clean:stale
-      - task: package
-        vars:
-          ARCH: arm64
+      - task: common:build:frontend
+      - task: common:generate:icons
     cmds:
+      - GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" MACOSX_DEPLOYMENT_TARGET="10.15" go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app/Contents/Resources"
+      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app/Contents/Resources"
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}-arm64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app/Contents/MacOS"
+      - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app/Contents"
+      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.app"
       - bash scripts/build-dmg.sh --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
-      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
 
   dmg-amd64:
-    summary: 把 amd64 `.app` 包成可拖拽 DMG
+    summary: 把 amd64 `.app` 包成可拖拽 DMG(Intel Mac 用)
+    desc: |
+      单独打 x86_64-only dmg。Intel Mac 上启动用本架构 native,
+      用户可能没装 Rosetta,这种 dmg 能保证启动。
+      产物 {{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg。
     deps:
       - task: clean:stale
-      - task: package
-        vars:
-          ARCH: amd64
+      - task: common:build:frontend
+      - task: common:generate:icons
     cmds:
+      - GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" MACOSX_DEPLOYMENT_TARGET="10.15" go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app/Contents/MacOS"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app/Contents/Resources"
+      - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app/Contents/Resources"
+      - cp "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app/Contents/MacOS"
+      - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app/Contents"
+      - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app"
       - bash scripts/build-dmg.sh --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
-      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
 
   dmg-skip-build:
     summary: 假设 `.app` 已存在,只重写 dmg 布局(快速迭代)
