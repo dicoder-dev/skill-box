@@ -127,15 +127,30 @@ export const useAiStore = defineStore('ai', {
     },
 
     // patchAssistant 把字段增量更新到指定 AI 消息上(自动 persistLocal)。
+    //
+    // 2026-07-14 v2 增:当 status 从非 done → done 时,触发自动归档。
+    // 这是用户原话"发消息后自动保存"的实现点 —— AI 完整回复后,
+    // 1.5s debounce → archiveCurrent() 把整段会话写到 history/<conv-id>.json。
+    // 注意:retry 期间会反复 patch status='streaming' / 'done',我们只在
+    // 上一帧 != done 且新帧 == done 才触发一次,避免重复归档。
     patchAssistant(id, patch) {
       if (!this.currentSourcePath) return
       const sess = this.sessions[this.currentSourcePath]
       if (!sess) return
       const m = sess.items.find((x) => x.id === id)
       if (!m) return
+      const prevStatus = m.status
       Object.assign(m, patch)
       sess.updatedAt = Date.now()
       this.persistLocal()
+      // 自动归档触发:done 状态到达(初版/重试完成都覆盖)
+      if (
+        patch.status === 'done' &&
+        prevStatus !== 'done' &&
+        !this.savingConv
+      ) {
+        this._scheduleAutoArchive()
+      }
     },
 
     setMessageApplied(id, v) {
@@ -267,6 +282,72 @@ export const useAiStore = defineStore('ai', {
     },
     closeHistory() {
       this.historyDialogOpen = false
+    },
+
+    // ===================== 自动归档(2026-07-14 v2 增) =====================
+    //
+    // 用户反馈:"应该是发消息后自动保存"。patchAssistant 看到 status 变 done 时
+    // 调此 schedule,1.5s debounce 合并同会话多次 done(retry / 流帧到位),最后
+    // 调 archiveCurrent() upsert 整段会话到 .skill-box/history/<conv-id>.json。
+    //
+    // 设计要点:
+    //   - 1.5s debounce 是为了"等所有 patch 落定",不是流式触发;
+    //     retry 完成时,最后一次 status=done 也会 schedule,所以 archive 仍能跑一次。
+    //   - 失败抛到 _archiveError(组件层若订阅,可 toast);当前不弹 toast,因为
+    //     即便 archive 失败,localStorage 还有草稿,刷新不丢 —— 跟用户决策
+    //     "先清本地后写后端" 不冲突,因为 archive 失败不会清空本地(已经改设计)。
+    //   - 同一 sourcePath 上的 active 会话,archive 后会保留为空,但用户发了新消息
+    //     又会增加 items,新消息会被归档到 history/<新 conv-id>.json(不再是旧 id)。
+    //     这符合"每轮对话一个文件"的语义。
+
+    _autoArchiveTimer: null,
+    _archiveError: null, // 上次自动归档错误,组件可以 watch 它做 toast
+    _scheduleAutoArchive() {
+      if (!this.currentSourcePath) return
+      if (!this.hasCurrentContent) return
+      if (this._autoArchiveTimer) clearTimeout(this._autoArchiveTimer)
+      this._autoArchiveTimer = setTimeout(() => this._runAutoArchive(), 1500)
+    },
+    async _runAutoArchive() {
+      this._autoArchiveTimer = null
+      const k = this.currentSourcePath
+      if (!k) return
+      if (!this.hasCurrentContent) return
+      this.savingConv = true
+      try {
+        // ★ 自动归档不主动清空本地(发消息后还在继续聊,清空会丢上下文)。
+        // archiveCurrent 内部是先清后写,但我们想要"写但不立即清"
+        // —— 把逻辑重构成只写不清的内部 helper:
+        const sess = this.sessions[k]
+        const items = sess?.items || []
+        if (items.length === 0) return
+        const firstUser = items.find((x) => x.role === 'user')
+        const convId = sess.convId || uid('conv')
+        const lastAi = [...items].reverse().find((m) => m.role === 'assistant')
+        const item = {
+          id: convId,
+          title: (firstUser?.content || '').slice(0, 30).trim() || 'untitled',
+          preview: '',
+          ts: Date.now(),
+          provider: lastAi?.provider || '',
+          model: lastAi?.model || '',
+          messages: JSON.parse(JSON.stringify(items)),
+        }
+        await api.saveHistory({ source_path: k, item })
+        // 成功后:把 convId 落回 sessions(k)以便后续 archiveCurrent 复用同 id(upsert)
+        sess.convId = convId
+        this.persistLocal()
+      } catch (e) {
+        // 失败不静默 —— 存到 _archiveError,让组件 watch 后 toast
+        this._archiveError = e
+      } finally {
+        this.savingConv = false
+      }
+    },
+    // 暴露给组件读最近一次自动归档错误
+    archiveError(s) {
+      if (s !== undefined) this._archiveError = s
+      return this._archiveError
     },
   },
 })
