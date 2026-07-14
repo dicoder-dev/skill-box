@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"ginp-api/configs"
@@ -213,26 +215,47 @@ func subFS(root fs.FS, dir string) (fs.FS, error) {
 }
 
 // runtimePayload 描述下发给前端的运行时配置。
+//
+// 不变量:字段顺序与历史值必须向后兼容。新字段一律追加在末尾,缺失时前端
+// 走 `window.__APP_RUNTIME__?.version` 兜底到 platform.app.getVersion()。
 type runtimePayload struct {
 	RunMode  string `json:"runMode"`
 	NeedAuth bool   `json:"needAuth"`
 	AppName  string `json:"appName"`
+	// 2026-07-14 增:App 版本(桌面端由 services.Version 注入,Web 端兜底 web-<git short sha>)。
+	// 前端用此项判断"是否需要展示升级角标 / 检查更新按钮"是否触发。
+	Version string `json:"version"`
+	// 2026-07-14 增:升级渠道 stable / beta(由 desktop.bootstrap 期间注入,Web 端走 stable)。
+	Channel string `json:"channel"`
+	// 2026-07-14 增:当前运行 OS(go runtime 值),前端用此项决定 UI 上的"自动重启升级"等按钮文案。
+	Platform string `json:"platform"`
+	// 2026-07-14 增:架构;前端升级逻辑按 (Platform, Arch) 选 manifest.assets[]。
+	Arch string `json:"arch"`
 }
 
 // buildRuntimeScript 从当前 system 配置生成要注入的 <script>...</script> 片段。
 //
-// 只读一次 configs.System,在 mountFrontRoot 启动时调用,后续请求复用。
+// 只读一次 configs.System + 当前进程 env 在 mountFrontRoot 启动时调用,后续请求复用。
 // 字段缺失时给出安全默认值(runMode=web、needAuth=true)。
+//
+// 2026-07-14 增:version / channel / platform / arch 由 env 提供(SKILLBOX_VERSION 等),
+// desktop 端在 main.go 启动期 export;Web 单进程 binary 由 release 脚本注入(或保持 "0.0.0+web")。
 func buildRuntimeScript(runMode string) []byte {
 	cfg := configs.System
 	if cfg == nil {
 		// bootstrap 早期出错时可能为 nil,这里兜底
 		cfg = &configs.SystemConfig{NeedAuth: true, AppName: "skill-box"}
 	}
+	version := defaultStr(os.Getenv("SKILLBOX_VERSION"), "0.0.0-dev")
+	channel := defaultStr(os.Getenv("SKILLBOX_CHANNEL"), "stable")
 	payload := runtimePayload{
 		RunMode:  defaultStr(runMode, "web"),
 		NeedAuth: cfg.NeedAuth,
 		AppName:  defaultStr(cfg.AppName, "skill-box"),
+		Version:  version,
+		Channel:  channel,
+		Platform: runtime.GOOS,
+		Arch:     runtime.GOARCH,
 	}
 	js, err := json.Marshal(payload)
 	if err != nil {

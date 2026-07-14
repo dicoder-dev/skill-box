@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import AISettingsPanel from '@/components/AISettingsPanel.vue'
+import UpdatePanel from '@/components/update/UpdatePanel.vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
 import { setLocale, getLocale } from '@/core/i18n'
@@ -389,6 +390,20 @@ function onWindowTabChange(e) {
         <IconPark icon="mdi:information" width="14" height="14" class="hint-icon" />
         <span style="white-space: pre-line">{{ applyModeHint }}</span>
       </div>
+    </section>
+
+    <!-- 2026-07-14 增:应用自身升级卡片。
+         全形态可见;桌面端"立即升级"按钮触发下载 + 替身脚本接管;
+         Web 端跳外链。 -->
+    <section class="card" data-card="update">
+      <header class="card-header">
+        <h3>
+          <IconPark icon="mdi:update" width="18" height="18" />
+          软件更新
+          <span class="card-sub">— 检查新版本并安全升级</span>
+        </h3>
+      </header>
+      <UpdatePanel />
     </section>
 
     <!-- 2026-07-12 增:AI 模型配置(独立 card,可见即可用,不分 Web / 桌面端) -->

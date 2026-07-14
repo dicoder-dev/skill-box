@@ -98,4 +98,25 @@ type BootstrapHooks struct {
 	ShortcutUnregister         func(combo string) error
 	ShortcutList               func() []string
 	AppQuit                    func()
+	// UpdaterSpawnHelper (2026-07-14 增,应用自身升级)
+	//
+	// 桌面端实现:fork 替身脚本 + exec.Cmd.Start() **不 Wait**,
+	// 父进程立刻 Start 完后退出 Wails 主循环(helper 已经 detached)。
+	// cdesktop 的 PostUpdateDownload 调用顺序:
+	//   1. SpawnHelper(...) 成功 → AppQuit()
+	//   2. SpawnHelper(...) 失败 → 返 500,**不调 AppQuit**(避免应用死但二进制没换)
+	//
+	// Web 端不注入,cdesktop.PostUpdateDownload 检测到 nil 即返 501。
+	UpdaterSpawnHelper func(args []string) error
+	// UpdaterDownloadPath 桌面端实现:返回下载目标目录(典型 ~/.cache/skill-box/updater/)。
+	// Web 端走默认 UserCacheDir 兜底。
+	UpdaterDownloadPath func() string
+	// UpdaterInstallDir 桌面端实现:返回"应用安装目录"(macOS: /Applications/SkillBox.app;
+	// Windows: 与 wails app.exe 同目录;Linux: ~/.local/bin/skill-box)。
+	UpdaterInstallDir func() string
+	// LocalVersion 桌面端实现:返回 ldflags 注入的 services.Version;Web 端可以不注入。
+	LocalVersion func() string
+	// UpdaterManifestURLs 桌面端实现:返回 manifest 的多源 urls(数组顺序就是降级顺序);
+	// 没注入则 cdesktop 默认走 build/updater/manifest.example.json 的 sample 模式。
+	UpdaterManifestURLs func() []string
 }

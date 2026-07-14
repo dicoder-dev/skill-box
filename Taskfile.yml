@@ -122,7 +122,9 @@ tasks:
       - mkdir -p {{.BIN_DIR}}
       - go build {{.BUILD_FLAGS}} -o {{.WEB_BIN}} ./api-server/cmd/web
     vars:
-      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
+      WEB_VERSION: '{{.VERSION | default "0.0.0-dev"}}'
+      WEB_COMMIT: '{{.COMMIT | default "0"}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s -X ''skill-box/desktop/services.Version={{.WEB_VERSION}}'' -X ''skill-box/desktop/services.Commit={{.WEB_COMMIT}}''"{{end}}'
 
   # 启动 Web 单进程二进制。未构建/源码已更新时，会自动先跑 web:build。
   run:web:
@@ -186,3 +188,16 @@ tasks:
     cmds:
       - rm -f {{.WEB_BIN}}
       - rm -rf {{.WEB_EMBED_DIR}}
+
+  # ---- 2026-07-14 增:release 任务 ----
+  # 让 scripts/release.sh 与 task 体系打通。VERSION 必传,DRY_RUN 等可选。
+  release:
+    summary: 打包当前版本(VERSION 必传;支持 DRY_RUN=1 / NO_PUSH=1)
+    cmds:
+      - bash scripts/release.sh
+    env:
+      VERSION: '{{.VERSION | default ""}}'
+      CHANNEL: '{{.CHANNEL | default "stable"}}'
+      ARCHS: '{{.ARCHS | default "amd64,arm64"}}'
+      DRY_RUN: '{{.DRY_RUN | default "0"}}'
+      NO_PUSH: '{{.NO_PUSH | default "0"}}'

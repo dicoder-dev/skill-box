@@ -14,9 +14,14 @@ import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { getOnboardingStatus } from '@/api/skillbox/onboarding'
 import { useAppStore } from '@/core/store/app.js'
+import { useUpdateStore } from '@/core/store/update.js'
 
 const { t } = useI18n()
 const { runMode } = storeToRefs(useAppStore())
+// 2026-07-14 增:升级 store,顶栏角标 + App 启动时调一次 check()。
+const updateStore = useUpdateStore()
+// 启动期异步检查,失败也只是不亮角标,不阻塞 UI。
+updateStore.check()
 
 const tab = ref('skills')
 
@@ -246,6 +251,20 @@ onUnmounted(() => {
           <span>{{ t('app.toolsLabel') }}</span>
           <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
         </div>
+
+        <!-- 2026-07-14 增:升级角标(只在 hasUpdate=true 时出现)。点击直接跳到 settings
+             的"软件更新"卡片;颜色走 var(--danger),不踩紫色禁条。 -->
+        <button
+          v-if="updateStore.hasUpdate"
+          class="update-badge"
+          data-tip="有新版本,点击查看"
+          data-tip-top="true"
+          @click="switchTab('settings')"
+        >
+          <IconPark icon="mdi:arrow-up-circle" width="14" height="14" />
+          <span class="update-badge-text">v{{ updateStore.remoteVersion }}</span>
+          <span class="update-dot-pulse"></span>
+        </button>
       </div>
     </header>
 
@@ -764,6 +783,53 @@ onUnmounted(() => {
 }
 .stat-badge-emerald :deep(.iconify),
 .stat-badge-emerald strong { color: var(--accent-emerald); }
+
+/* 2026-07-14 增:升级角标(顶栏右侧 stat-badge 之后)。
+ * 风格延续 stat-badge 风格,但:
+ *   - 红/橙主色,显示紧迫(不踩紫色禁条);
+ *   - 红点 pulse 用 box-shadow 模拟,不闪烁不打扰;
+ *   - 默认 background 透明 + border,与 stat-badge 一组;
+ *   - 点击跳到 settings 卡片,真正的"立即升级"在卡片里做。
+ */
+.update-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger, #ef4444);
+  background: var(--danger-dim, #fef2f2);
+  border: 1px solid var(--danger, #ef4444);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.update-badge:hover {
+  filter: brightness(0.95);
+}
+
+.update-badge-text {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.update-dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger, #ef4444);
+  box-shadow: 0 0 0 0 var(--danger, #ef4444);
+  animation: update-pulse 1.6s infinite;
+}
+
+@keyframes update-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70%  { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
 
 /* 内容区域 - 内部滚动,让 sticky 侧栏相对 app-container 锁定
    而不跟随 body/html 一起滚 */

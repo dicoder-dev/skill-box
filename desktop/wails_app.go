@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -635,10 +636,23 @@ func NewApp(cfg AppConfig, backend *bootstrap.Backend) *App {
 			ShortcutUnregister: shortcut.Unregister,
 			ShortcutList:       shortcut.List,
 			AppQuit:            quitApp,
+			// 2026-07-14 增:应用自身升级钩子(cdesktop.update.a.go 调)。
+			// SpawnHelper.Start() 不 Wait;父进程随后 AppQuit;helper 已 detached。
+			UpdaterSpawnHelper: services.UpdaterSpawnHelper,
+			UpdaterDownloadPath: func() string {
+				base, err := os.UserCacheDir()
+				if err != nil || base == "" {
+					base = os.TempDir()
+				}
+				return filepath.Join(base, "skill-box", "updater")
+			},
+			UpdaterInstallDir:  services.UpdaterInstallDir,
+			LocalVersion:       func() string { return services.Version },
+			UpdaterManifestURLs: services.UpdaterManifestURLs,
 		}
 		backend.SetDesktopHooks(hooks)
-		log.Printf("desktop: SetDesktopHooks installed (Notify=%v, ClipboardText=%v, OpenExternal=%v)",
-			hooks.Notify != nil, hooks.ClipboardText != nil, hooks.OpenExternal != nil)
+		log.Printf("desktop: SetDesktopHooks installed (Notify=%v, ClipboardText=%v, OpenExternal=%v, UpdaterSpawnHelper=%v)",
+			hooks.Notify != nil, hooks.ClipboardText != nil, hooks.OpenExternal != nil, hooks.UpdaterSpawnHelper != nil)
 	} else {
 		log.Printf("desktop: backend is nil, skipping SetDesktopHooks (all cdesktop endpoints will 501)")
 	}
@@ -835,6 +849,17 @@ func (a *App) startupAsync(autoResize bool, aspectW, aspectH int) {
 		if startMinimized {
 			if w := a.app.Window.Current(); w != nil {
 				w.Hide()
+			}
+		}
+
+		// 5) 2026-07-14 增:升级结果通知(env SKILLBOX_UPDATER_FROM 由 helper 写入)。
+		//    单独的步骤,不与上面 4 步耦合,失败也只是少一条通知。
+		if from, ok := os.LookupEnv("SKILLBOX_UPDATER_FROM"); ok && from != "" && from != services.Version {
+			failed, _ := os.LookupEnv("SKILLBOX_UPDATER_FAILED")
+			if failed == "1" {
+				_ = a.notifier.Notify("upgrade-result", "升级失败", "已回滚到 "+from+",当前 "+services.Version)
+			} else {
+				_ = a.notifier.Notify("upgrade-result", "升级成功", "已升级到 "+services.Version)
 			}
 		}
 	}()
