@@ -22,6 +22,13 @@ SKIP_BUILD=0
 VOLNAME="Skill-Box"
 APP_NAME="Skill-Box"
 
+# ---- PATH 兜底:wails3 在 $HOME/go/bin,但 wails3 task 的子进程 bash 不一定继承
+# 完整 PATH(尤其 /Users/brody 的 zshenv 没把 go/bin 加进 PATH 时)。手动补一下。----
+case ":$PATH:" in
+  *":$HOME/go/bin:"*) ;;
+  *) export PATH="$HOME/go/bin:$PATH" ;;
+esac
+
 # 临时状态(trap 清理用)
 DMG_STAGING=""
 MOUNT_POINT=""
@@ -46,17 +53,10 @@ while [ $# -gt 0 ]; do
 done
 
 APP_PATH="bin/${APP_NAME}.app"
-# 如果 --output 是带架构后缀的(如 bin/skill-box-arm64.dmg),自动切到对应 .app。
-# 解决 dmg-arm64 / dmg-amd64 任务的产物路径约定:
-#   bin/skill-box-arm64.dmg  ← 源: bin/skill-box-arm64.app
-#   bin/skill-box-amd64.dmg  ← 源: bin/skill-box-amd64.app
-#   bin/skill-box.dmg        ← 源: bin/skill-box.app  (universal 默认)
-case "$OUTPUT" in
-  *-arm64.dmg|*-arm64.dmg.*)
-    APP_PATH="bin/${APP_NAME}-arm64.app" ;;
-  *-amd64.dmg|*-amd64.dmg.*)
-    APP_PATH="bin/${APP_NAME}-amd64.app" ;;
-esac
+# 不再根据 dmg 文件名后缀切 .app 路径 —— dmg-arm64 / dmg-amd64 任务里 .app 文件夹
+# 统一叫 Skill-Box.app(用户拖到 /Applications 后看到的就是干净的名字,没有
+# -arm64 / -amd64 后缀)。架构区分只体现在产物 dmg 文件名上。
+# 如果未来要 universal dmg,产物就叫 Skill-Box.dmg,内部也是 Skill-Box.app。
 # AppleScript 写布局时要找的 .app 文件夹名(去掉 bin/ 前缀)。
 APP_FOLDER_NAME="$(basename "$APP_PATH")"
 
@@ -95,6 +95,11 @@ trap cleanup EXIT INT TERM
 
 # ---- 步骤 1:可选触发 build ----
 echo "=== 1. BUILD .app (arch=$ARCH) ==="
+# SKIP_BUILD 也接受外部环境变量(直接命令行调用 build-dmg.sh 时可设,
+# Taskfile dmg-arm64 / dmg-amd64 走 --skip-build 参数,更稳)。
+if [ -n "${SKIP_BUILD:-}" ] && [ "${SKIP_BUILD}" != "0" ]; then
+  SKIP_BUILD=1
+fi
 if [ "$SKIP_BUILD" -eq 0 ]; then
   case "$ARCH" in
     arm64|amd64) wails3 task darwin:package ;;
