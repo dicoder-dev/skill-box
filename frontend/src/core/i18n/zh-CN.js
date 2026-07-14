@@ -451,6 +451,13 @@ const messages = {
       closeBtn: '关闭',
       switchToOutline: '切换到大纲',
       clearHistory: '清空对话',
+      // 2026-07-14 增:历史对话相关
+      history: '历史对话',
+      historyDialog: {
+        title: '历史对话',
+        loading: '加载中…',
+        empty: '暂无历史对话',
+      },
       roleYou: '我',
       roleAI: 'Agent Dog',
       emptyHint: '我是 agent dog,点击下方标签快速调用噢',

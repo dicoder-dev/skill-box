@@ -11,17 +11,27 @@
 //   - AI 消息支持"应用 / 拒绝":
 //     - SKILL.md: emit apply-skill → 父级走 SkillsView.onAIApply 落盘
 //     - 其它文件: emit apply-local → 父级 (SkillFileInlinePanel) 写 localFiles + 标 dirty
-//   - 历史按 filePath 维度持久化到 sessionStorage,跨文件保留
+//   - 状态机:m.status ∈ 'idle' | 'sending' | 'streaming' | 'done' | 'error' | 'stopped'
+//     (与 m.pending 兼容,后者保留布尔判断的便利,内部以 status 单一真源)
+//   - 历史对话框:顶栏"历史"按钮 → AIHistoryDialog 弹窗,支持点选注入。
+//   - 持久化(2026-07-14 改):
+//     - 跨刷新:localStorage(通过 useAiStore 内部 hydrate / persistLocal)
+//     - 跨设备:双写到 <source_path>/.skill-box/history.json(800ms 防抖)
 //
 // 复用:
 //   - chatStream / listProviders from '@/api/skillbox/ai'
+//   - saveHistory / listHistory from '@/api/skillbox/ai-history'
 //   - Modal from '@/components/Modal.vue'
 //   - IconPark + MDI_TO_ICONPARK(translate → Translate / robot-outline → RobotOne 等)
+//   - markdown 渲染:core/utils/markdown_view.js#renderMarkdownView
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
+import AIHistoryDialog from './AIHistoryDialog.vue'
 import { chatStream, listProviders } from '@/api/skillbox/ai'
+import { useAiStore } from '@/core/store/ai'
+import { renderMarkdownView } from '@/core/utils/markdown_view'
 import { useToastStore } from '@/core/store/toast'
 
 const props = defineProps({
@@ -34,14 +44,26 @@ const emit = defineEmits(['close', 'switch-outline', 'apply-skill', 'apply-local
 
 const { t } = useI18n()
 const toast = useToastStore()
+const ai = useAiStore()
 
 // ===== 状态 =====
-const messages = ref([])
+const messages = computed(() => ai.currentMessages)
 const inputText = ref('')
 const busy = ref(false)
 const abort = ref(null)
 const providers = ref([])
 const hasProvider = ref(false)
+
+// markdown 渲染:每条消息做缓存(id+content 长度 唯一化 key),流式期直接不渲染避免 markdown-it 抖动
+function renderContent(m) {
+  if (!m || !m.content) return ''
+  if (m.status === 'sending' || m.status === 'streaming') return ''
+  return renderMarkdownView(m.content)
+}
+function renderReason(m) {
+  if (!m || !m.reason) return ''
+  return renderMarkdownView(m.reason)
+}
 
 // 翻译弹窗
 const translateDialogOpen = ref(false)
@@ -54,33 +76,12 @@ function langLabelOf(code) {
   return langOptions.value.find((l) => l.value === code)?.label || code
 }
 
-// sessionStorage key(按文件维度隔离)
-function sessionKey(path) {
-  return `skillbox.aiSession.${path || '__none__'}`
-}
-
-function loadSession() {
-  try {
-    const raw = sessionStorage.getItem(sessionKey(props.filePath))
-    messages.value = raw ? JSON.parse(raw) : []
-  } catch (_) {
-    messages.value = []
-  }
-}
-
-function persistSession() {
-  try {
-    sessionStorage.setItem(sessionKey(props.filePath), JSON.stringify(messages.value))
-  } catch (_) { /* sessionStorage 不可用时静默 */ }
-}
-
 function clearHistory() {
   if (busy.value) {
     abort.value?.abort?.()
     busy.value = false
   }
-  messages.value = []
-  try { sessionStorage.removeItem(sessionKey(props.filePath)) } catch (_) {}
+  ai.clearCurrent()
 }
 
 // ===== Providers =====
@@ -134,8 +135,7 @@ function onReviewClick() {
 }
 
 // ===== 发送 / 取消 =====
-let _uid = 0
-function uid() { _uid += 1; return `m_${Date.now()}_${_uid}` }
+// 2026-07-14 改:消息 id 由 useAiStore 内部生成,这里不再维护 _uid / uid()。
 
 function sendOrStop() {
   if (busy.value) {
@@ -225,8 +225,8 @@ async function sendMessage() {
   const safeText = text.length > 16000 ? text.slice(0, 16000) + '\n\n...(已截断)' : text
   const userText = buildUserPrompt(safeText)
 
-  const userMsg = { id: uid(), role: 'user', content: safeText, ts: Date.now() }
-  messages.value.push(userMsg)
+  // 2026-07-14 改:消息落 store,不再直接 push ref;保留 userMsg 给 UI 滚动用。
+  const userMsg = ai.pushUser(safeText)
   inputText.value = ''
   busy.value = true
   let pendingBuf = ''
@@ -234,11 +234,15 @@ async function sendMessage() {
   const MAX_AI_BYTES = 50 * 1024
 
   const provider = (providers.value.find((p) => p.enabled && p.has_key) || {}).name || ''
-  // 第一轮:先用一个 placeholder aiMsg 让用户看到流式过程
-  const aiMsg = { id: uid(), role: 'assistant', content: '', pending: true, ts: Date.now(), canApply: false, retriesLeft: 0 }
-  messages.value.push(aiMsg)
+  // 2026-07-14 改:走 store 的占位 AI 消息(自带 status='sending' + pending=true + id 返回)
+  const aiMsg = ai.pushAssistantPlaceholder()
+  if (!aiMsg) {
+    // 无 source,直接放弃
+    busy.value = false
+    return
+  }
 
-  // 复用同一个 aiMsg,每次 retry 覆盖 content
+  // 复用同一个 aiMsg id 多次 patch(每次 patchAssistant 都自动 persistLocal)
   const baseMessages = [{ role: 'user', content: userText }]
   const systemHint = t('skills.aiPanel.customPromptHint')
 
@@ -247,15 +251,17 @@ async function sendMessage() {
       // retry 时:重置 pendingBuf,aiMsg 显示「重新生成中…」
       pendingBuf = ''
       capped = false
-      aiMsg.content = ''
-      aiMsg.pending = true
-      aiMsg.retriesLeft = MAX_PARSE_RETRIES - attempt + 1
-      aiMsg.retrying = true
-      // 把上一轮失败的输出 + 修正指令追加到 messages,让 AI 自我纠正
-      baseMessages.push({
-        role: 'assistant',
-        content: aiMsg.rawLast || '',
+      ai.patchAssistant(aiMsg.id, {
+        content: '', pending: true,
+        retriesLeft: MAX_PARSE_RETRIES - attempt + 1,
+        retrying: true,
+        status: 'streaming',
       })
+      // 用最新的 rawLast 拼修正指令;注意 baseMessages 引用的 aiMsg.rawLast 仍在
+      // store.sessions[filePath].items[…] 同一对象上,因为 store patch 内部 Object.assign
+      // 改变了引用,但 messages.value (computed) 重新指向了同一份源,字段读取没问题。
+      const rawLast = messages.value.find((x) => x.id === aiMsg.id)?.rawLast || ''
+      baseMessages.push({ role: 'assistant', content: rawLast })
       baseMessages.push({
         role: 'user',
         content: `你上一轮返回的数据无法被前端正确解析为 JSON。请严格按照下面的 schema 重新输出,且只输出一个 \`\`\`json 代码块:\n\`\`\`json\n{"needs_apply": boolean, "content": "string", "reason": "string"}\n\`\`\`\n注意:必须用 \`\`\`json 代码块包裹,布尔值是 true/false 不是字符串。`,
@@ -275,8 +281,9 @@ async function sendMessage() {
             capped = true
             abort.value?.abort?.()
           }
-          aiMsg.content = attemptBuf
-          aiMsg.pending = true
+          ai.patchAssistant(aiMsg.id, {
+            content: attemptBuf, pending: true, status: 'streaming',
+          })
         },
       })
       abort.value = ctrl
@@ -285,37 +292,42 @@ async function sendMessage() {
     }
 
     // 流结束,检查解析结果
-    aiMsg.pending = false
-    aiMsg.retrying = false
+    ai.patchAssistant(aiMsg.id, { pending: false, retrying: false })
     if (attemptErr) {
-      aiMsg.error = attemptErr
+      ai.patchAssistant(aiMsg.id, { error: attemptErr, status: 'error' })
       break
     }
     if (capped) {
-      aiMsg.error = t('skills.aiPanel.truncated')
+      ai.patchAssistant(aiMsg.id, { error: t('skills.aiPanel.truncated'), status: 'error' })
       break
     }
 
     const parsed = parseAiJson(attemptBuf)
     if (parsed.ok) {
-      aiMsg.needsApply = parsed.needsApply
-      aiMsg.content = parsed.content
-      aiMsg.reason = parsed.reason
-      aiMsg.canApply = parsed.needsApply && !!parsed.content.trim()
-      aiMsg.parseFailed = false
-      aiMsg.retriesLeft = 0
+      ai.patchAssistant(aiMsg.id, {
+        needsApply: parsed.needsApply,
+        content: parsed.content,
+        reason: parsed.reason,
+        canApply: parsed.needsApply && !!parsed.content.trim(),
+        parseFailed: false,
+        retriesLeft: 0,
+        status: 'done',
+      })
       break
     }
-    aiMsg.rawLast = attemptBuf
+    ai.patchAssistant(aiMsg.id, { rawLast: attemptBuf })
     if (attempt >= MAX_PARSE_RETRIES) {
       // 3 次都失败 → 兜底:不显示应用按钮
       const fb = fallbackResult(attemptBuf)
-      aiMsg.needsApply = false
-      aiMsg.content = ''
-      aiMsg.reason = fb.reason
-      aiMsg.canApply = false
-      aiMsg.parseFailed = true
-      aiMsg.retriesLeft = 0
+      ai.patchAssistant(aiMsg.id, {
+        needsApply: false,
+        content: '',
+        reason: fb.reason,
+        canApply: false,
+        parseFailed: true,
+        retriesLeft: 0,
+        status: 'done', // 也算结束态,只是没可用输出
+      })
       break
     }
     // 继续下一轮 retry
@@ -323,7 +335,6 @@ async function sendMessage() {
 
   busy.value = false
   abort.value = null
-  persistSession()
 }
 
 // ===== 应用 / 拒绝 =====
@@ -332,17 +343,14 @@ function applyMessage(m) {
   if (!m.needsApply) return
   const text = m.content || ''
   if (!text.trim()) return
-  m.applied = true
   if (props.isSkillMd) emit('apply-skill', text)
   else emit('apply-local', text)
-  persistSession()
+  ai.setMessageApplied(m.id, true)
 }
 
 function rejectMessage(m) {
   if (m.applied || m.rejected) return
-  m.rejected = true
-  m.canApply = false
-  persistSession()
+  ai.setMessageRejected(m.id)
 }
 
 // ===== 全屏编辑 =====
@@ -362,19 +370,27 @@ function cancelFullscreen() {
 }
 
 // ===== 文件切换 =====
+// 2026-07-14 改:数据源切到 store。切换 filePath 时,把旧的 source_path 显式标好,让
+// store 自动用新 source_path;旧 source_path 里的数据不动,保留在 sessions 中以备回切。
 watch(() => props.filePath, () => {
   if (busy.value) abort.value?.abort?.()
   busy.value = false
   abort.value = null
-  persistSession() // 旧 filePath 在切走前持久化一次(保险)
-  loadSession()
+  ai.setCurrentSource(props.filePath)
 })
 
 // ===== 生命周期 =====
 onMounted(async () => {
-  loadSession()
+  ai.hydrate()
+  ai.setCurrentSource(props.filePath)
   await loadProviders()
 })
+
+// ===== 历史对话框(2026-07-14 增) =====
+async function openHistoryDialog() {
+  ai.openHistory()
+  await ai.loadFromBackend()
+}
 
 onBeforeUnmount(() => {
   if (busy.value) abort.value?.abort?.()
@@ -402,6 +418,17 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         {{ t('skills.aiPanel.roleAI') }}
       </span>
       <div class="airp-header-actions">
+        <!-- 2026-07-14 增:历史对话按钮(齿轮状),无 sourcePath 时禁用 -->
+        <button
+          class="airp-icon-btn"
+          :data-tip="t('skills.aiPanel.history', '历史对话')"
+          :aria-label="t('skills.aiPanel.history', '历史对话')"
+          type="button"
+          :disabled="!ai.hasSession"
+          @click="openHistoryDialog"
+        >
+          <IconPark icon="mdi:history" width="13" height="13" />
+        </button>
         <button
           class="airp-icon-btn"
           :data-tip="t('skills.aiPanel.switchToOutline')"
@@ -488,8 +515,21 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
               <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
               {{ t('skills.aiPanel.parseFailed') }}
             </div>
-            <pre v-if="m.reason && !m.pending" class="airp-bubble airp-bubble-ai">{{ m.reason }}</pre>
-            <pre v-else-if="m.pending || m.retrying" class="airp-bubble airp-bubble-ai">{{ m.content }}<span class="airp-cursor">▍</span></pre>
+            <!-- 2026-07-14 改:
+                 流式期(status=sending/streaming)→ 纯文本 <pre> + 光标,避免每帧 markdown 解析;
+                 流结束后(status=done/error/stopped)→ markdown 渲染 -->
+            <pre v-if="m.status === 'sending' || m.status === 'streaming' || m.retrying"
+                 class="airp-bubble airp-bubble-ai"
+            >{{ m.content }}<span v-if="m.status !== 'done' && !m.error" class="airp-cursor">▍</span></pre>
+            <div v-else-if="m.content" class="airp-bubble airp-bubble-ai airp-md-body" v-html="renderContent(m)" />
+            <!-- reason:AI 一次性输出后渲染,流式期跟 content 一样走 pre -->
+            <pre v-else-if="m.reason && (m.status === 'sending' || m.status === 'streaming')"
+                 class="airp-bubble airp-bubble-ai airp-bubble-reason"
+            >{{ m.reason }}<span class="airp-cursor">▍</span></pre>
+            <div v-else-if="m.reason"
+                 class="airp-bubble airp-bubble-ai airp-bubble-reason airp-md-body"
+                 v-html="renderReason(m)"
+            />
             <p v-if="m.error" class="airp-msg-error">[{{ t('skills.aiPanel.roleAI') }}] {{ m.error }}</p>
 
             <!-- 应用 / 拒绝:仅在 AI 明确返回 needs_apply=true 且未应用/拒绝时显示 -->
@@ -634,6 +674,14 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         </button>
       </div>
     </Modal>
+
+    <!-- 2026-07-14 增:历史对话 Modal -->
+    <AIHistoryDialog
+      v-model="ai.historyDialogOpen"
+      :items="ai.historyItems"
+      :loading="ai.loadingList"
+      @pick="ai.pickHistoryItem"
+    />
   </div>
 </template>
 
@@ -837,6 +885,41 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   border-top-left-radius: 4px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 12px;
+}
+
+/* 2026-07-14 增:markdown 渲染形态,不再强 mono。
+   复用项目 core/utils/markdown_view.js#renderMarkdownView 输出,
+   配色与 .md-body / SkillFileInlinePanel 兼容。 */
+.airp-md-body {
+  font-family: inherit; /* 覆盖 mono */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.55;
+}
+.airp-md-body :deep(p) { margin: 0 0 6px; }
+.airp-md-body :deep(p:last-child) { margin-bottom: 0; }
+.airp-md-body :deep(pre) {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+.airp-md-body :deep(code):not(:deep(pre code)) {
+  padding: 1px 5px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+}
+.airp-md-body :deep(ul),
+.airp-md-body :deep(ol) { margin: 6px 0; padding-left: 22px; }
+.airp-md-body :deep(a.md-external-link) {
+  color: var(--accent-blue);
+  text-decoration: underline;
 }
 
 .airp-cursor {

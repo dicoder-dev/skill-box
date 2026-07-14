@@ -568,6 +568,13 @@ const messages = {
       closeBtn: 'Close',
       switchToOutline: 'Switch to outline',
       clearHistory: 'Clear chat',
+      // 2026-07-14 added: chat history
+      history: 'Chat history',
+      historyDialog: {
+        title: 'Chat history',
+        loading: 'Loading…',
+        empty: 'No chat history yet',
+      },
       roleYou: 'Me',
       roleAI: 'Agent Dog',
       emptyHint: "I'm agent dog — tap a tag below to get started.",
