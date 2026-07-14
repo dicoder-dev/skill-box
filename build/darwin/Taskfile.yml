@@ -157,6 +157,57 @@ tasks:
     cmds:
       - 'echo "Skipping codesign (not available on {{OS}}). Sign the .app on macOS before distribution."'
 
+  # ---- DMG 打包(零第三方依赖,只 hdiutil + osascript) ----
+  # scripts/build-dmg.sh 内会调 `wails3 task darwin:package[:universal]`,
+  # 但这里仍显式声明 deps,让 task 的增量判断工作正常。
+  # 注意:wails3 task 不支持 task 名里再带 ':' (会被解析成嵌套 key),
+  # 所以变体用 '-' 分隔(dmg-universal / dmg-arm64 / dmg-amd64 / dmg-skip-build)。
+  dmg:
+    summary: 把 `.app` 包成可拖拽 DMG(默认 universal)
+    desc: |
+      调用 scripts/build-dmg.sh 生成 Finder 可拖拽布局的 DMG。
+      零三方依赖,只用 macOS 自带 hdiutil + osascript。
+      产物默认 {{.BIN_DIR}}/{{.APP_NAME}}.dmg。
+    deps:
+      - task: package
+    cmds:
+      - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+
+  dmg-universal:
+    summary: 把 universal `.app` 包成可拖拽 DMG
+    deps:
+      - task: package:universal
+    cmds:
+      - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+
+  dmg-arm64:
+    summary: 把 arm64 `.app` 包成可拖拽 DMG
+    deps:
+      - task: package
+        vars:
+          ARCH: arm64
+    cmds:
+      - bash scripts/build-dmg.sh --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
+
+  dmg-amd64:
+    summary: 把 amd64 `.app` 包成可拖拽 DMG
+    deps:
+      - task: package
+        vars:
+          ARCH: amd64
+    cmds:
+      - bash scripts/build-dmg.sh --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
+
+  dmg-skip-build:
+    summary: 假设 `.app` 已存在,只重写 dmg 布局(快速迭代)
+    desc: |
+      跳过 wails3 build,只重写 dmg 内 Finder 布局。
+      调 AppleScript 改布局时用这个任务,比 dmg 快很多。
+    deps:
+      - task: package
+    cmds:
+      - bash scripts/build-dmg.sh --arch universal --skip-build --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+
   run:
     cmds:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
