@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +22,8 @@ import (
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
 	"ginp-api/internal/settings"
+	"ginp-api/internal/skillboxdata"
+	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/where"
 
 	"gorm.io/gorm"
@@ -396,4 +400,80 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// =====================================================================
+// AI 历史对话持久化(2026-07-14 增)。
+//
+// 把每个 skill 的 AI 对话历史保存到 "<source_path>/.skill-box/history.json",
+// 既给前端"历史对话"Modal 一个跨设备/跨刷新持久化通道,也是 user-mode /
+// link-mode 共享同一份源端。
+//
+// 安全性:source_path 必须位于 skillstore.root 之下 + 包含 SKILL.md,避免
+// 任意磁盘路径被写入。
+// =====================================================================
+
+// ErrEmptySourcePath source_path 缺失或非法(2026-07-14 增)。
+var ErrEmptySourcePath = errors.New("ai.history: source_path is required")
+
+// ErrSourcePathNotInStore source_path 不在 skillstore.root 之下,或不含 SKILL.md(2026-07-14 增)。
+var ErrSourcePathNotInStore = errors.New("ai.history: source_path is not a skill in this store")
+
+// resolveSkillDirBySourcePath 把前端传的 disk 绝对 source_path 解析为 skill 目录,
+// 并校验它"在 store.root 之下 + 是合法 skill"。
+//
+// source_path 前端来源:`node.skill_meta?.source_path` 是 skillstore 通过
+// EvalSymlinks 后的绝对目录(可能含 symlink)。这里也再 EvalSymlinks 一次,处理
+// source_path 处于 symlink 链上的情况。
+func (s *Service) resolveSkillDirBySourcePath(sourcePath string) (string, error) {
+	if strings.TrimSpace(sourcePath) == "" {
+		return "", ErrEmptySourcePath
+	}
+	// 解析 symlink 真实路径(source_path 可能被外层再 symlink 包了一层)。
+	real, err := filepath.EvalSymlinks(sourcePath)
+	if err != nil {
+		real = sourcePath
+	}
+	store, err := skillstore.New()
+	if err != nil {
+		return "", fmt.Errorf("ai.history: open store: %w", err)
+	}
+	rootReal, err := filepath.EvalSymlinks(store.Root())
+	if err != nil {
+		rootReal = store.Root()
+	}
+	// 必须在 root 之下(real 路径前缀匹配,避免 prefix-bug)
+	if real != rootReal && !strings.HasPrefix(real, rootReal+string(filepath.Separator)) {
+		return "", ErrSourcePathNotInStore
+	}
+	// 必须含 SKILL.md
+	if _, err := os.Stat(filepath.Join(real, "SKILL.md")); err != nil {
+		return "", ErrSourcePathNotInStore
+	}
+	return real, nil
+}
+
+// SaveHistory 把 items 写入 source_path/.skill-box/history.json。
+// items 由前端 POST 过来,每条含 id/title/preview/ts/provider/model/messages。
+//
+// 空 items 视为"清空本地历史",仍会写一份空文件(便于前端显示)。
+func (s *Service) SaveHistory(sourcePath string, items []skillboxdata.HistoryItem) error {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return err
+	}
+	if err := skillboxdata.Ensure(dir); err != nil {
+		return err
+	}
+	return skillboxdata.WriteHistory(dir, items)
+}
+
+// ListHistory 读 source_path/.skill-box/history.json;
+// 不存在返空 History(由 ReadHistory 兜底),不算 error。
+func (s *Service) ListHistory(sourcePath string) (*skillboxdata.History, error) {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	return skillboxdata.ReadHistory(dir)
 }
