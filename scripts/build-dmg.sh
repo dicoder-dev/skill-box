@@ -132,10 +132,44 @@ MOUNT_POINT="$MOUNT_BASE"
 [ -d "$MOUNT_POINT" ] || { echo "❌ 挂载失败: $ATTACH_OUTPUT"; exit 1; }
 echo "  → 挂载点: $MOUNT_POINT"
 
-# ---- 步骤 4:准备布局(建 /Applications 软链)----
+# ---- 步骤 4:准备布局(建 /Applications 软链 + 写 README)----
 echo "=== 4. PREPARE layout ==="
 ln -sfn /Applications "$MOUNT_POINT/Applications"
 echo "  → 已建 /Applications 软链"
+
+# 在 dmg 根放一个 README,告诉用户 macOS 26 Gatekeeper 首次打开流程。
+# 因为我们 dmg 是本地 ad-hoc 签名的 .app,macOS 26 (Tahoe) 拒绝 open / Finder 双击,
+# 用户必须在「系统设置 → 隐私与安全性」里点"仍要打开"才能跑。
+# 这个 README 让用户在 dmg 里就看到指引,不用瞎猜。
+cat > "$MOUNT_POINT/首次打开说明.txt" <<'README_EOF'
+Skill Box — 首次打开说明(适用于 macOS 26 Tahoe)
+
+本应用是本地 ad-hoc 签名版本,不是 Apple 公证版本,所以 macOS 26 默认会拒绝
+open / Finder 双击启动。**这是正常现象,不是 bug。**
+
+首次打开的两种方法(选一种):
+
+方法一:右键打开(最快)
+  1. 在 Finder 里打开本 dmg,把 skill-box.app 拖到 /Applications
+  2. 弹出 dmg(把 dmg 拖到废纸篓,或在终端 hdiutil detach "/Volumes/Skill Box")
+  3. 在 /Applications 找到 skill-box.app,**右键点它 → 选「打开」**
+  4. 系统弹"无法验证开发者"对话框,点「打开」
+  5. 之后双击就能正常启动
+
+方法二:系统设置放行
+  1. 拖完 app 后,**先双击一次**(会失败、无任何提示)
+  2. 打开「系统设置 → 隐私与安全性」
+  3. 滚到页面底部,看到"已阻止使用 skill-box.app,因为它来自身份不明的开发者"
+  4. 点右边的「仍要打开」按钮
+  5. 再双击 skill-box.app,正常启动
+
+注意:
+- 如果想从命令行启动,绕过 Gatekeeper,跑:
+    nohup /Applications/skill-box.app/Contents/MacOS/skill-box > /tmp/skill-box.log 2>&1 &
+- 想要"双击直接启动",需要走 Apple Developer ID 签名 + 公证流程
+  (需要 Apple 开发者账号 $99/年,这是发布前的最后一步,不在本 dmg 脚本范围)
+README_EOF
+echo "  → 已写首次打开说明.txt"
 
 # ---- 步骤 5:AppleScript 写 Finder 布局 ----
 echo "=== 5. WRITE Finder layout (osascript) ==="
