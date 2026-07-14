@@ -186,6 +186,8 @@ MOUNT_POINT=""   # 标记已移交,trap 不再处理
 echo "=== 7. CONVERT → final UDZO ==="
 # UDZO = compressed read-only,体积比 UDRO 小 30%~50%。
 # 转完后 staging 使命完成,trap 会删它(此时 DMG_STAGING 还没置空)。
+# hdiutil convert 的 -o 拒绝覆盖已存在文件,所以先删旧 dmg。
+rm -f "$OUTPUT"
 hdiutil convert "$DMG_STAGING" -format UDZO -o "$OUTPUT"
 DMG_STAGING=""   # 标记已移交,trap 不再删
 echo "  → 最终: $OUTPUT"
