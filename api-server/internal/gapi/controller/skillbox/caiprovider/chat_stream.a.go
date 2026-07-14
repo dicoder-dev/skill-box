@@ -30,13 +30,63 @@ import (
 
 // RequestChat 流式对话入参。
 // Provider 留空时由 engine 按 priority 选默认;PresetID + Vars 触发预设。
-// Messages 直接是 blades 原生格式:每条 { role, parts:[{text:...}] }。
+//
+// Messages 兼容两种格式(都是 Message 的合法子集):
+//   1) 标准: { role, parts:[{text:...}] }           ← 喂给 ModelProvider
+//   2) 简化: { role, content: "..." }                ← 前端 chatStream 走这个
+//
+// 2026-07-14 加:实测前端发的是简化格式(只填 content 不填 parts)。
+// *blades.Message 直接 JSON 反序列化会把 content 字段丢掉(没有 json tag),
+// 导致传入 Anthropic SDK 后 messages[0].content 为空,
+// 国产 anthropic 兼容端点(MiniMax 等)校验失败,返 400 "input json is empty"。
+// 修复:用中间结构 ChatMessage 接收入参,再手工转 *blades.Message。
 type RequestChat struct {
 	Provider string            `json:"provider"`
 	Model    string            `json:"model"`
-	Messages []*blades.Message  `json:"messages"`
+	Messages []ChatMessage      `json:"messages"`
 	PresetID string            `json:"preset_id"`
 	Vars     map[string]string `json:"vars"`
+}
+
+// ChatMessage 中间结构,兼容"标准"和"简化"两种入参。
+type ChatMessage struct {
+	Role    string          `json:"role"`
+	Content string          `json:"content"`
+	Parts   []ChatMessagePart `json:"parts,omitempty"`
+}
+
+// ChatMessagePart parts 的简化接收(只关心 text 字段)。
+type ChatMessagePart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// toBladesMessages 把入参统一转成 *blades.Message。
+// 优先用 parts(标准格式),否则用 content(简化格式),都没有就给个空 TextPart 兜底。
+func toBladesMessages(in []ChatMessage) []*blades.Message {
+	out := make([]*blades.Message, 0, len(in))
+	for _, m := range in {
+		role := m.Role
+		if role == "" {
+			role = string(blades.RoleUser)
+		}
+		var parts []blades.Part
+		if len(m.Parts) > 0 {
+			for _, p := range m.Parts {
+				parts = append(parts, blades.TextPart{Text: p.Text})
+			}
+		} else if m.Content != "" {
+			parts = []blades.Part{blades.TextPart{Text: m.Content}}
+		} else {
+			parts = []blades.Part{blades.TextPart{Text: ""}}
+		}
+		msg := &blades.Message{
+			Role:  blades.Role(role),
+			Parts: parts,
+		}
+		out = append(out, msg)
+	}
+	return out
 }
 
 // ChatStream POST /api/skillbox/ai/chat(SSE)
@@ -59,7 +109,7 @@ func ChatStream(c *gin.Context) {
 	if req.PresetID != "" {
 		chat, err = svc.ChatWithPreset(ctx, req.PresetID, req.Provider, req.Vars)
 	} else {
-		chat, err = svc.Chat(ctx, req.Messages, req.Provider)
+		chat, err = svc.Chat(ctx, toBladesMessages(req.Messages), req.Provider)
 	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
