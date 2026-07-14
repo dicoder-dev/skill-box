@@ -162,10 +162,24 @@ tasks:
   # 但这里仍显式声明 deps,让 task 的增量判断工作正常。
   # 注意:wails3 task 不支持 task 名里再带 ':' (会被解析成嵌套 key),
   # 所以变体用 '-' 分隔(dmg-universal / dmg-arm64 / dmg-amd64 / dmg-skip-build)。
-  # ⚠️ dmg 跑完会清掉 bin/skill-box,因为它已经拷进 .app/Contents/MacOS/skill-box,
-  # 留着会污染 `wails3 build DEV=true`(wails3 alpha.60 看到 bin/skill-box 已存在
-  # 会报 "build output already exists and is not an object file")。dmg 是发布动作,
-  # 不该改变日常 dev 链的起点状态。
+  #
+  # ⚠️ wails3 alpha.60 build 看 bin/skill-box 已存在会报
+  # "build output already exists and is not an object file",所以 dmg 任务
+  # deps 第一项必须是 clean:stale(清掉上一次残留的 binary + .app + staging.dmg),
+  # 否则 build:native 在 deps 阶段就挂,dmg 的 cmds 跑不到 rm。
+  #
+  # dmg 跑完会再清一次 bin/skill-box(已拷进 .app),保证日常 dev 链起点干净。
+  clean:stale:
+    summary: 清 dmg / build 残留产物(bin/skill-box / .app / staging.dmg)
+    desc: |
+      上一次 dmg 跑挂时 trap 没机会清 staging,bin/skill-box 残留会让
+      wails3 alpha.60 build DEV=true 报 "build output already exists
+      and is not an object file"。这里在 dmg build 链之前强制清一遍。
+    cmds:
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}.dmg.staging.dmg"
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+
   dmg:
     summary: 把 `.app` 包成可拖拽 DMG(默认 universal)
     desc: |
@@ -173,6 +187,7 @@ tasks:
       零三方依赖,只用 macOS 自带 hdiutil + osascript。
       产物默认 {{.BIN_DIR}}/{{.APP_NAME}}.dmg。
     deps:
+      - task: clean:stale
       - task: package
     cmds:
       - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
@@ -181,6 +196,7 @@ tasks:
   dmg-universal:
     summary: 把 universal `.app` 包成可拖拽 DMG
     deps:
+      - task: clean:stale
       - task: package:universal
     cmds:
       - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
@@ -189,6 +205,7 @@ tasks:
   dmg-arm64:
     summary: 把 arm64 `.app` 包成可拖拽 DMG
     deps:
+      - task: clean:stale
       - task: package
         vars:
           ARCH: arm64
@@ -199,6 +216,7 @@ tasks:
   dmg-amd64:
     summary: 把 amd64 `.app` 包成可拖拽 DMG
     deps:
+      - task: clean:stale
       - task: package
         vars:
           ARCH: amd64
