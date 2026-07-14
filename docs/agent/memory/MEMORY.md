@@ -18,3 +18,4 @@
 - [skillbox:scope-refresh 自递归派发](scope-refresh-self-dispatch-loop.md) — SkillsView.onScopeChange 收到自己 dispatch 的事件后又 dispatch 自己,N 次操作引发 N 次 GET skills + scope-status
 - [ScopePanel window listener 漏 onUnmounted](scope-panel-listener-cleanup.md) — addEventListener 没 removeEventListener,InlinePanel :key 重 mount 时旧 instance 残留监听,dispatchEvent 触发幽灵 skill 的 scope-status
 - [md 文件大纲导航](fe-md-outline-nav.md) — md-it heading_open 重写 + extractHeadings 抽 title + CodeViewer .cv-md-wrap 改两列
+- [隐藏段过滤 HasHiddenSegment](hidden-segment-filter.md) — skilladapter 统一 hidden 段规则,Apply/ReadFiles/AI prompt/ChatStream system 四点同源
