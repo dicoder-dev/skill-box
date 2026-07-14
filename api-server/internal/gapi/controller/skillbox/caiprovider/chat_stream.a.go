@@ -97,6 +97,13 @@ func ChatStream(c *gin.Context) {
 		return
 	}
 
+	// 2026-07-14 增:护栏 system。
+	// 防止 AI 主动读取 .skill-box/ 目录下的运行时数据(chat history 等)并泄露给用户。
+	// 仅在用户没显式带 system role 且没用 preset 时追加,不覆盖用户配置;
+	// preset 路径走 ChatWithPreset,内部已经过 buildSkillMDForPrompt 过滤 hidden,
+	// 这里不用重复加。
+	guardSkillBoxSystem(&req.Messages)
+
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	eng := sai.NewEngine(st)
 	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
@@ -193,6 +200,30 @@ func writeSSEError(w http.ResponseWriter, err error) {
 	b, _ := json.Marshal(map[string]any{"kind": "error", "err": err.Error()})
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(b))
 	logger.Warn("ai chat: stream error: %v", err)
+}
+
+// skillboxSystemGuard 追加到 messages 顶部的 system prompt。
+// 告诉 AI 不要读取 .skill-box/ 目录(2026-07-14 增)。
+//
+// 用字符串拼接而非 raw string,避免文本里的目录名需要转义反引号。
+const skillboxSystemGuard = "You MUST NOT read, quote, summarize, or otherwise reference " +
+	"files under any '.skill-box/' directory. '.skill-box/' is Skill Box " +
+	"runtime data (local chat history, caches, etc.) that is NOT part of " +
+	"the skill's instruction. Treat it as opaque to you. If the user asks " +
+	"about it, decline politely."
+
+// guardSkillBoxSystem 仅在 user 没显式带 system role 时,把 skillboxSystemGuard
+// 追加到 messages 前面。保留用户配置优先。
+func guardSkillBoxSystem(messages *[]ChatMessage) {
+	if messages == nil {
+		return
+	}
+	for _, m := range *messages {
+		if m.Role == "system" {
+			return
+		}
+	}
+	*messages = append([]ChatMessage{{Role: "system", Content: skillboxSystemGuard}}, *messages...)
 }
 
 func init() {

@@ -173,6 +173,13 @@ func buildSkillMDForPrompt(c skilladapter.Canonical) string {
 	}
 	b.WriteString("\n---\n\n")
 	for _, f := range c.Files {
+		// 2026-07-14 增:hidden 段(.skill-box/、.DS_Store 等)绝不能喂给 AI。
+		// 防御性兜底 —— skillstore.walkFiles 已知会过滤,但 importer.readDirFiles
+		// 历史不过滤(skillstore 路径天然不会命中),这里再加一层确保任何来源的
+		// c.Files 都安全。
+		if skilladapter.HasHiddenSegment(f.Path) {
+			continue
+		}
 		fmt.Fprintf(&b, "## File: %s\n```\n%s\n```\n\n", f.Path, f.Content)
 	}
 	return b.String()

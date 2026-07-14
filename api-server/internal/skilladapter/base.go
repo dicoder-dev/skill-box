@@ -302,8 +302,17 @@ func (b *BaseAdapter) Apply(c Canonical, targetDir string) error {
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("%s: mkdir %s: %w", b.ID, targetDir, err)
 	}
+	// 写盘过滤(2026-07-14 增):
+	//   .skill-box/、.git/ 等隐藏路径不应写进目标工具目录。两条额外防线的兜底:
+	//     1) skillstore.walkFiles 加载 ~/.skill-box/skills/<name>/ 时已过滤;
+	//     2) readDirFiles 加载外部 skill 时也已过滤(见下面 readDirFiles);
+	//   这里再叠一层是为了兼容从其它路径直接构造 Canonical 的代码(importer 旧版本、
+	//   远程导入等),命中 hidden 一律不写。
 	for _, f := range c.Files {
 		if f.Path == "" {
+			continue
+		}
+		if HasHiddenSegment(f.Path) {
 			continue
 		}
 		dst := filepath.Join(targetDir, f.Path)
@@ -381,12 +390,25 @@ func readDirFiles(dir string) ([]File, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			return nil
-		}
 		rel, err := filepath.Rel(realDir, path)
 		if err != nil {
 			return err
+		}
+		if d.IsDir() {
+			// 隐藏目录整子树跳过(2026-07-14 增),与 skillstore.walkFiles / listEmptyDirs 对齐。
+			// 这保证 importer 扫外部 skill 目录时,.skill-box/、.git/ 等不会被读进 c.Files。
+			if rel != "" && rel != "." {
+				for _, seg := range strings.Split(filepath.ToSlash(rel), "/") {
+					if strings.HasPrefix(seg, ".") {
+						return filepath.SkipDir
+					}
+				}
+			}
+			return nil
+		}
+		// 隐藏文件兜底(防御 WalkDir 顺序或别处复用场景)
+		if HasHiddenSegment(rel) {
+			return nil
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
