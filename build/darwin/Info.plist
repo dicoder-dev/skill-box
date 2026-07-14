@@ -4,24 +4,43 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>My Product</string>
+            <!-- 必须跟 .app 文件名一致(去掉 .app 后缀)。
+                 CFBundleName 与文件名不一致时,LaunchServices 静默拒绝 open/finder 双击启动,
+                 表现为双击无反应、无任何报错。-->
+            <string>skill-box</string>
+        <key>CFBundleDisplayName</key>
+            <!-- Finder 菜单栏/启动台/Dock 用的展示名;跟 CFBundleName 不一致也没关系,
+                 这里用 skill-box 保持简洁。-->
+            <string>skill-box</string>
         <key>CFBundleExecutable</key>
             <string>skill-box</string>
         <key>CFBundleIdentifier</key>
-            <string>com.example.skillbox</string>
+            <!-- 真实反向域,占位 com.example.* 在 LaunchServices 里会冲突,
+                 而且系统会告警"无法验证开发者"。改成项目实际占位
+                 com.dicoder.skillbox,正式发版前再换成真实 ID。-->
+            <string>com.dicoder.skillbox</string>
         <key>CFBundleVersion</key>
             <string>0.1.0</string>
         <key>CFBundleGetInfoString</key>
-            <string>This is a comment</string>
+            <string>Skill Box - AI Agent Skills Manager</string>
         <key>CFBundleShortVersionString</key>
             <string>0.1.0</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
         <key>LSMinimumSystemVersion</key>
             <string>10.15.0</string>
         <key>NSHighResolutionCapable</key>
-            <string>true</string>
+            <true/>
         <key>NSHumanReadableCopyright</key>
-            <string>© 2026, My Company</string>
+            <string>© 2026, dicoder</string>
+        <!-- 让 LaunchServices / Dock 把它当 GUI app,不弹命令行窗口。
+             没设这个,wails alpha.60 在某些 macOS 上 open 时会黑屏/不弹窗。-->
+        <key>LSUIElement</key>
+            <false/>
+        <!-- 分类:开发工具。LaunchServices 不强制要求,但有的话 Dock 启动台会正确分组。-->
+        <key>LSApplicationCategoryType</key>
+            <string>public.app-category.developer-tools</string>
     </dict>
 </plist>
