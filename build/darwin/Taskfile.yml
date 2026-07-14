@@ -162,6 +162,10 @@ tasks:
   # 但这里仍显式声明 deps,让 task 的增量判断工作正常。
   # 注意:wails3 task 不支持 task 名里再带 ':' (会被解析成嵌套 key),
   # 所以变体用 '-' 分隔(dmg-universal / dmg-arm64 / dmg-amd64 / dmg-skip-build)。
+  # ⚠️ dmg 跑完会清掉 bin/skill-box,因为它已经拷进 .app/Contents/MacOS/skill-box,
+  # 留着会污染 `wails3 build DEV=true`(wails3 alpha.60 看到 bin/skill-box 已存在
+  # 会报 "build output already exists and is not an object file")。dmg 是发布动作,
+  # 不该改变日常 dev 链的起点状态。
   dmg:
     summary: 把 `.app` 包成可拖拽 DMG(默认 universal)
     desc: |
@@ -172,6 +176,7 @@ tasks:
       - task: package
     cmds:
       - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"   # 已拷进 .app,留着会污染 wails3 dev 起点
 
   dmg-universal:
     summary: 把 universal `.app` 包成可拖拽 DMG
@@ -179,6 +184,7 @@ tasks:
       - task: package:universal
     cmds:
       - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
 
   dmg-arm64:
     summary: 把 arm64 `.app` 包成可拖拽 DMG
@@ -188,6 +194,7 @@ tasks:
           ARCH: arm64
     cmds:
       - bash scripts/build-dmg.sh --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
 
   dmg-amd64:
     summary: 把 amd64 `.app` 包成可拖拽 DMG
@@ -197,6 +204,7 @@ tasks:
           ARCH: amd64
     cmds:
       - bash scripts/build-dmg.sh --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"
 
   dmg-skip-build:
     summary: 假设 `.app` 已存在,只重写 dmg 布局(快速迭代)
@@ -207,6 +215,7 @@ tasks:
       - task: package
     cmds:
       - bash scripts/build-dmg.sh --arch universal --skip-build --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+      # skip-build 不依赖 package:universal,这里 bin/skill-box 可能是用户手动 build 的产物,不删
 
   run:
     cmds:
