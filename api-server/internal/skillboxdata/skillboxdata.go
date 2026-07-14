@@ -16,12 +16,32 @@ package skillboxdata
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// ---------------------------------------------------------------------
+// v2 错误(单对话文件粒度,2026-07-14 v2 引入;v1 通用 errors 仍兼容)。
+// ---------------------------------------------------------------------
+
+// ErrInvalidConvID conv_id 不合法(空 / 含 / 等不安全字符),防目录穿越(2026-07-14 增)。
+var ErrInvalidConvID = errors.New("skillboxdata: invalid conv_id")
+
+// ErrConvTooLarge 单对话文件超过 MaxConvSize,上层返 400(2026-07-14 增)。
+var ErrConvTooLarge = errors.New("skillboxdata: conv file exceeds MaxConvSize")
+
+// MaxConvSize 单个对话文件上限 2MB(2026-07-14 增,v1 是全局 5MB)。
+// 单对话很少能撑到这个量,主要是防止恶意/异常超大输入。
+const MaxConvSize = 2 * 1024 * 1024
+
+// HistoryDir 单对话文件目录(2026-07-14 增 v2)。
+// v2 把"一个对话 = 一个文件"放进这里;.skill-box/history.json(v1 单文件)保留作 legacy,
+// 但前端已切到 v2 接口,旧文件不会被新代码读也不会被新代码生成。
+const HistoryDir = "history"
 
 // 目录与文件名。
 const (
@@ -219,6 +239,186 @@ func atomicWrite(p string, b []byte) error {
 	if err := os.Rename(tmpName, p); err != nil {
 		cleanup()
 		return fmt.Errorf("skillboxdata: rename: %w", err)
+	}
+	return nil
+}
+
+// =====================================================================
+// v2:每个对话 = 单文件(2026-07-14 增)
+//
+// 取代 v1 的"全部历史塞一份 .skill-box/history.json"。
+// 设计动机:
+//   - 一个对话 = 一份 .skill-box/history/<conv-id>.json,完整上下文自包含;
+//   - 列表 API 只返 metadata 不读 messages,带宽友好;
+//   - 单条 upsert / 删除粒度细,不串扰;
+//
+// 兼容:v1 函数(HistoryFile / ReadHistory / WriteHistory)保留未删;
+// 服务层已切到 v2,旧接口走 legacy,前端不再调。
+// =====================================================================
+
+// ConvMeta 对话元数据(metadata-only,供列表展示)。
+type ConvMeta struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Preview  string `json:"preview"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Ts       int64  `json:"ts"`
+	Size     int64  `json:"size"`
+}
+
+// sanitizeConvID 严格白名单 [A-Za-z0-9_-],其它任何字符(包括 . / / / 控制字符)都拒,防目录穿越(2026-07-14 增)。
+func sanitizeConvID(id string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("%w: empty", ErrInvalidConvID)
+	}
+	// 单段最大长度,防 fat 文件名
+	if len(id) > 128 {
+		return "", fmt.Errorf("%w: too long", ErrInvalidConvID)
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'A' && r <= 'Z':
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return "", fmt.Errorf("%w: contains %q", ErrInvalidConvID, r)
+		}
+	}
+	return id, nil
+}
+
+// ConvFile 拼出 <skillDir>/.skill-box/history/<safe-conv-id>.json 绝对路径。
+// convID 不合法返 ErrInvalidConvID(不写盘外)。
+func ConvFile(skillDir, convID string) (string, error) {
+	safe, err := sanitizeConvID(convID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(Dir(skillDir), HistoryDir, safe+".json"), nil
+}
+
+// ListConvs 列出 .skill-box/history/ 下全部对话的 metadata,不读 messages(2026-07-14 增)。
+//
+// 行为:
+//   - 目录不存在 → 返空 slice + nil error(空历史合法);
+//   - 单文件损坏 / JSON 解析失败 → skip(整体不失败);
+//   - 缺失 ID 字段 → 用文件名去后缀顶替;
+//   - 按 ts desc 排(新的在前)。
+func ListConvs(skillDir string) ([]ConvMeta, error) {
+	dir := filepath.Join(Dir(skillDir), HistoryDir)
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ConvMeta{}, nil
+		}
+		return nil, fmt.Errorf("skillboxdata: readdir %s: %w", dir, err)
+	}
+	out := make([]ConvMeta, 0, len(ents))
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Preview  string `json:"preview"`
+			Provider string `json:"provider"`
+			Model    string `json:"model"`
+			Ts       int64  `json:"ts"`
+		}
+		if err := json.Unmarshal(b, &meta); err != nil {
+			continue // 坏文件跳过,不整体失败
+		}
+		if meta.ID == "" {
+			meta.ID = strings.TrimSuffix(e.Name(), ".json")
+		}
+		var size int64
+		if fi, err := e.Info(); err == nil {
+			size = fi.Size()
+		}
+		out = append(out, ConvMeta{
+			ID:       meta.ID,
+			Title:    meta.Title,
+			Preview:  meta.Preview,
+			Provider: meta.Provider,
+			Model:    meta.Model,
+			Ts:       meta.Ts,
+			Size:     size,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Ts > out[j].Ts })
+	return out, nil
+}
+
+// ReadConv 读单条对话完整(2026-07-14 增)。
+// 不存在返 (nil, nil),让上层判 404(source_path 校验由 service 层做)。
+func ReadConv(skillDir, convID string) (*HistoryItem, error) {
+	p, err := ConvFile(skillDir, convID)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("skillboxdata: read %s: %w", p, err)
+	}
+	var item HistoryItem
+	if err := json.Unmarshal(b, &item); err != nil {
+		return nil, fmt.Errorf("skillboxdata: parse %s: %w", p, err)
+	}
+	return &item, nil
+}
+
+// WriteConv 写单条对话,upsert;超 MaxConvSize 返 ErrConvTooLarge(2026-07-14 增)。
+//
+// 流程:算 preview(若 caller 没填)→ 序列化 → 检 size → atomic rename
+func WriteConv(skillDir string, item HistoryItem) error {
+	if _, err := sanitizeConvID(item.ID); err != nil {
+		return err
+	}
+	if err := Ensure(skillDir); err != nil {
+		return err
+	}
+	// v2 还需要 history/ 子目录(write path 可能在 Ensure 只建了 .skill-box/ 后立刻调,
+	// 而 ListConvs 找不到目录会返空,但写这一步需要目录存在)。
+	p, err := ConvFile(skillDir, item.ID)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return fmt.Errorf("skillboxdata: mkdir history dir: %w", err)
+	}
+	// 算 preview(若没填)
+	if item.Preview == "" {
+		item.Preview = previewFromMessages(item.Messages)
+	}
+	b, err := json.MarshalIndent(&item, "", "  ")
+	if err != nil {
+		return fmt.Errorf("skillboxdata: marshal: %w", err)
+	}
+	if len(b) > MaxConvSize {
+		return fmt.Errorf("%w: %d > %d bytes", ErrConvTooLarge, len(b), MaxConvSize)
+	}
+	return atomicWrite(p, b)
+}
+
+// DeleteConv 删单条;不存在不报错(幂等,2026-07-14 增)。
+func DeleteConv(skillDir, convID string) error {
+	p, err := ConvFile(skillDir, convID)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(p)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("skillboxdata: remove %s: %w", p, err)
 	}
 	return nil
 }

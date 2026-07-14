@@ -2,6 +2,8 @@ package skillboxdata
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,5 +145,184 @@ func TestDir(t *testing.T) {
 	want := filepath.Join("/a/b", DirName)
 	if got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
+	}
+}
+
+// =====================================================================
+// v2 单 conv 文件测试(2026-07-14 增)
+// =====================================================================
+
+// TestWriteReadConv_RoundTrip 写一条完整字段,读回字段一致。
+func TestWriteReadConv_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	if err := Ensure(dir); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	item := HistoryItem{
+		ID:       "conv_2026_test",
+		Title:    "测试",
+		Ts:       1700000000,
+		Provider: "openai",
+		Model:    "gpt-4o",
+		Messages: json.RawMessage(`[{"id":"u1","role":"user","content":"hi"},{"id":"a1","role":"assistant","content":"hello","reason":"因为 ..."}]`),
+	}
+	if err := WriteConv(dir, item); err != nil {
+		t.Fatalf("WriteConv: %v", err)
+	}
+	got, err := ReadConv(dir, "conv_2026_test")
+	if err != nil {
+		t.Fatalf("ReadConv: %v", err)
+	}
+	if got == nil {
+		t.Fatal("ReadConv 返 nil")
+	}
+	if got.ID != item.ID || got.Title != item.Title || got.Ts != item.Ts {
+		t.Errorf("field mismatch: %+v vs %+v", got, item)
+	}
+	// preview 自动从首条 assistant content 算
+	if !strings.Contains(got.Preview, "hello") {
+		t.Errorf("preview = %q, want contains 'hello'", got.Preview)
+	}
+}
+
+// TestWriteConv_Upsert 同 conv_id 两次写,后者覆盖。
+func TestWriteConv_Upsert(t *testing.T) {
+	dir := t.TempDir()
+	_ = Ensure(dir)
+	a := HistoryItem{ID: "x", Title: "A", Ts: 100, Messages: json.RawMessage(`[{"role":"assistant","content":"first"}]`)}
+	b := HistoryItem{ID: "x", Title: "B", Ts: 200, Messages: json.RawMessage(`[{"role":"assistant","content":"second"}]`)}
+	if err := WriteConv(dir, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteConv(dir, b); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := ReadConv(dir, "x")
+	if got.Title != "B" {
+		t.Errorf("upsert 失败: title = %q, want B", got.Title)
+	}
+	// 只剩一个文件
+	ents, _ := os.ReadDir(filepath.Join(Dir(dir), HistoryDir))
+	if len(ents) != 1 {
+		t.Errorf("期望 1 个文件,实际 %d", len(ents))
+	}
+}
+
+// TestWriteConv_TooLarge 超 MaxConvSize 返 ErrConvTooLarge + 盘外无残留。
+func TestWriteConv_TooLarge(t *testing.T) {
+	dir := t.TempDir()
+	_ = Ensure(dir)
+	// 单条 message 内容填到 ~2.5MB
+	big := strings.Repeat("X", 2_500_000)
+	item := HistoryItem{
+		ID:       "too_big",
+		Ts:       1,
+		Messages: json.RawMessage(fmt.Sprintf(`[{"role":"user","content":%q}]`, big)),
+	}
+	err := WriteConv(dir, item)
+	if !errors.Is(err, ErrConvTooLarge) {
+		t.Errorf("err = %v, want ErrConvTooLarge", err)
+	}
+	// 盘外无文件
+	if _, err := os.Stat(filepath.Join(Dir(dir), HistoryDir, "too_big.json")); err == nil {
+		t.Errorf("不应创建文件,但还是创建了")
+	}
+}
+
+// TestListConvs 列表:0/1/N / 坏 json 跳过 / ts desc / size>0。
+func TestListConvs(t *testing.T) {
+	dir := t.TempDir()
+
+	// 目录不存在 → 返空
+	got, err := ListConvs(dir)
+	if err != nil {
+		t.Fatalf("ListConvs 空目录: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("空目录列表非空: %d", len(got))
+	}
+
+	_ = Ensure(dir)
+	// 写 3 条:ts 100/200/300
+	for i, ts := range []int64{100, 300, 200} {
+		_ = WriteConv(dir, HistoryItem{
+			ID: fmt.Sprintf("c%d", i), Ts: ts,
+			Messages: json.RawMessage(`[{"role":"assistant","content":"x"}]`),
+		})
+	}
+	// 加一个坏 json
+	badsDir := filepath.Join(Dir(dir), HistoryDir)
+	if err := os.WriteFile(filepath.Join(badsDir, "garbage.json"), []byte("not json{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 一个非 json 后缀
+	if err := os.WriteFile(filepath.Join(badsDir, "README"), []byte("h"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := ListConvs(dir)
+	if err != nil {
+		t.Fatalf("ListConvs: %v", err)
+	}
+	if len(list) != 3 {
+		t.Errorf("列表条数 = %d, want 3(坏文件被跳过)", len(list))
+	}
+	// ts desc:300 / 200 / 100
+	for i := 0; i < len(list)-1; i++ {
+		if list[i].Ts < list[i+1].Ts {
+			t.Errorf("ts 不降序: %v", []int64{list[0].Ts, list[1].Ts, list[2].Ts})
+		}
+	}
+	// size > 0
+	for _, m := range list {
+		if m.Size <= 0 {
+			t.Errorf("size = %d, want > 0", m.Size)
+		}
+	}
+}
+
+// TestDeleteConv 幂等。
+func TestDeleteConv(t *testing.T) {
+	dir := t.TempDir()
+	_ = Ensure(dir)
+	_ = WriteConv(dir, HistoryItem{ID: "del_me", Ts: 1, Messages: json.RawMessage(`[{"role":"user","content":"x"}]`)})
+	if err := DeleteConv(dir, "del_me"); err != nil {
+		t.Fatalf("DeleteConv: %v", err)
+	}
+	if err := DeleteConv(dir, "del_me"); err != nil {
+		// 不存在 → nil,幂等
+		t.Errorf("DeleteConv (不存在): %v", err)
+	}
+	if err := DeleteConv(dir, "../etc"); err == nil {
+		t.Errorf("非法 conv_id 应返 error")
+	}
+}
+
+// TestSanitizeConvID 各种非法输入。
+func TestSanitizeConvID(t *testing.T) {
+	cases := []struct {
+		in    string
+		valid bool
+	}{
+		{"", false},
+		{"valid_abc-123", true},
+		{"../etc", false},
+		{"a/b", false},
+		{".json", false},
+		{".", false},
+		{"with space", false},
+		{"with/slash", false},
+		{"with.dot.x", false}, // 中间有点也算非法(只有开头 . 才拒?这里我们严格 —— 看实现)
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			_, err := sanitizeConvID(c.in)
+			if c.valid && err != nil {
+				t.Errorf("sanitizeConvID(%q) = %v, want valid", c.in, err)
+			}
+			if !c.valid && err == nil {
+				t.Errorf("sanitizeConvID(%q) 应返 error", c.in)
+			}
+		})
 	}
 }
