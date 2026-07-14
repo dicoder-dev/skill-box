@@ -30,8 +30,8 @@ type RequestCreateProvider struct {
 // CreateProvider POST /api/skillbox/ai/providers/create
 func CreateProvider(c *ginp.ContextPlus, req *RequestCreateProvider) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	in := &entity.AIProvider{
 		Name:     req.Name,
 		Kind:     req.Kind,

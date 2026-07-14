@@ -27,8 +27,8 @@ type RequestSetKey struct {
 // SetKey POST /api/skillbox/ai/providers/key
 func SetKey(c *ginp.ContextPlus, req *RequestSetKey) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	if _, err := svc.GetByName(req.Name); err != nil {
 		if errors.Is(err, sai.ErrNotFound) {
 			c.JSON(404, gin.H{"error": "provider not found"})

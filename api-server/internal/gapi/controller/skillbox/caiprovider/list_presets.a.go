@@ -23,8 +23,8 @@ type RespondPreset = aiengine.Preset
 // ListPresets GET /api/skillbox/ai/presets
 func ListPresets(c *ginp.ContextPlus, _ *RequestListPresets) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	c.JSON(200, gin.H{"items": svc.Presets()})
 }
 

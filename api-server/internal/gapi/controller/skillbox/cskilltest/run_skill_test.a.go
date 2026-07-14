@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/aiengine"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skilltester/sskilltest"
@@ -38,10 +37,8 @@ func RunSkillTest(c *ginp.ContextPlus, req *RequestRunSkillTest) {
 		return
 	}
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := aiengine.NewManager(nil)
-	_ = mgr
-	mgr = sskilltest.NewManagerForTester(st)
-	svc := sskilltest.New(dbs.GetWriteDb(), dbs.GetReadDb(), store, st, mgr)
+	eng := sskilltest.NewEngineForTester(st)
+	svc := sskilltest.New(dbs.GetWriteDb(), dbs.GetReadDb(), store, st, eng)
 
 	opts := skilltester.Options{}
 	if req.Options != nil {

@@ -3,17 +3,19 @@
 // 设计要点(见 docs/project/需求规划.md 第 7.3 节):
 //   - AIProvider 表只放元数据(name / kind / model / base_url / priority / enabled)
 //   - 真实 API key 放 settings KV,key 约定 "ai:<provider_name>:api_key"(v1 明文,P1 换 keychain)
-//   - Chat 不落库,只把流式事件转发给 controller 的 SSE
-//   - Preset 渲染 + 选 provider 一并做,controller 只传"我要用哪个 preset + 替换变量"
+//   - Chat 直接走 blades 原生 *Message / ModelProvider,controller 拿到 Generator
+//   - Preset 渲染走 aiengine.RenderPreset(用 blades.Prompt 占位符)
 package sai
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"strings"
 	"time"
 
+	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
@@ -35,14 +37,14 @@ var (
 
 // Service 业务服务。
 type Service struct {
-	dbWrite *gorm.DB
-	dbRead  *gorm.DB
+	dbWrite  *gorm.DB
+	dbRead   *gorm.DB
 	settings *settings.Service
-	manager  *aiengine.Manager
+	engine   *aiengine.Engine
 }
 
-func New(dbWrite, dbRead *gorm.DB, st *settings.Service, mgr *aiengine.Manager) *Service {
-	return &Service{dbWrite: dbWrite, dbRead: dbRead, settings: st, manager: mgr}
+func New(dbWrite, dbRead *gorm.DB, st *settings.Service, engine *aiengine.Engine) *Service {
+	return &Service{dbWrite: dbWrite, dbRead: dbRead, settings: st, engine: engine}
 }
 
 // 业务层用的 settings 实现 aiengine.SecretStore。
@@ -53,9 +55,9 @@ func (a *secretAdapter) Resolve(providerName string) (string, error) {
 	return v, err
 }
 
-// NewManager 工厂方法:用 settings 构造 SecretStore 后包出 Manager。
-func NewManager(st *settings.Service) *aiengine.Manager {
-	return aiengine.NewManager(&secretAdapter{s: st})
+// NewEngine 工厂方法:用 settings 构造 SecretStore 后包出 Engine。
+func NewEngine(st *settings.Service) *aiengine.Engine {
+	return aiengine.NewEngine(&secretAdapter{s: st})
 }
 
 func (s *Service) model() *maiprovider.Model {
@@ -196,39 +198,46 @@ func (s *Service) Presets() []aiengine.Preset {
 	return out
 }
 
-// Chat 选 provider + 启动流。返回 aiengine.StreamEvent channel,controller 透传给 SSE。
-// providerName 留空 = 由 Manager 按 priority 选。
-func (s *Service) Chat(ctx context.Context, req aiengine.ChatRequest, providerName string) (<-chan aiengine.StreamEvent, error) {
+// ChatResult 流式 chat 一次的结果(model + 选中的 provider 元数据)。
+// controller 拿到这个后,只需把 Generator 转 SSE 推给前端。
+type ChatResult struct {
+	Model     blades.ModelProvider
+	Provider  string // 选中的 provider 名字(显示用)
+	ModelName string
+	Stream    iter.Seq2[*blades.ModelResponse, error]
+}
+
+// Chat 选 provider + 启动流。返回 model + 流,controller 透传给 SSE。
+// providerName 留空 = 由 Engine 按 priority 选。
+func (s *Service) Chat(ctx context.Context, messages []*blades.Message, providerName string) (*ChatResult, error) {
 	rows, _, err := s.model().FindList(nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("ai: list providers: %w", err)
 	}
-	row, err := s.manager.Select(rows, providerName)
+	row, err := s.engine.Select(rows, providerName)
 	if err != nil {
 		return nil, err
 	}
-	prov, key, err := s.manager.Build(row)
+	model, _, err := s.engine.Build(row)
 	if err != nil {
 		return nil, err
 	}
-	if req.Model == "" {
-		req.Model = row.Model
-	}
-	out := make(chan aiengine.StreamEvent, 32)
-	go func() {
-		_ = prov.Chat(ctx, req, key, out)
-	}()
-	return out, nil
+	req := &blades.ModelRequest{Messages: messages}
+	return &ChatResult{
+		Model:     model,
+		Provider:  row.Name,
+		ModelName: row.Model,
+		Stream:    model.NewStreaming(ctx, req),
+	}, nil
 }
 
 // ChatWithPreset:preset + 变量一次性合成。
-func (s *Service) ChatWithPreset(ctx context.Context, presetID, providerName string, vars map[string]string) (<-chan aiengine.StreamEvent, error) {
+func (s *Service) ChatWithPreset(ctx context.Context, presetID, providerName string, vars map[string]string) (*ChatResult, error) {
 	preset, ok := findPreset(presetID)
 	if !ok {
 		return nil, fmt.Errorf("ai: unknown preset %q", presetID)
 	}
-	req := aiengine.ChatRequest{Messages: aiengine.RenderPreset(preset, vars)}
-	return s.Chat(ctx, req, providerName)
+	return s.Chat(ctx, aiengine.RenderPreset(preset, vars), providerName)
 }
 
 func findPreset(id string) (aiengine.Preset, bool) {
@@ -278,7 +287,7 @@ type TestResult struct {
 //
 // 行为:
 //   - kind 不合法 / API key 空 → 立即返 ok=false + 清晰错误
-//   - 用最小 prompt + max_tokens=8 探测,只要拿到任意 chunk 就视为"成功"
+//   - 用最小 prompt 探测,只要拿到任意 chunk 就视为"成功"
 //   - 30s 兜底超时,防止 provider 卡死拖死 controller
 //   - 拿到 provider 真实错误原文(状态码 + body)原样回传,设置界面直接展示
 func (s *Service) TestConnection(p TestParams) (*TestResult, error) {
@@ -321,8 +330,8 @@ func (s *Service) TestConnection(p TestParams) (*TestResult, error) {
 		cfg.Model = defaultTestModel(cfg.Kind)
 	}
 
-	// 3) 构造 provider
-	prov, err := s.manager.BuildFromConfig(cfg)
+	// 3) 构造 model
+	model, err := s.engine.BuildFromConfig(cfg, strings.TrimSpace(apiKey))
 	if err != nil {
 		return &TestResult{OK: false, Message: err.Error()}, nil
 	}
@@ -330,55 +339,43 @@ func (s *Service) TestConnection(p TestParams) (*TestResult, error) {
 	// 4) 探测:发一条极短 user prompt,只关心能不能拿到任意 chunk
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	mt := 8
-	req := aiengine.ChatRequest{
-		Model:     cfg.Model,
-		Messages:  []aiengine.Message{{Role: aiengine.RoleUser, Content: "hi"}},
-		MaxTokens: &mt,
+	req := &blades.ModelRequest{
+		Messages: []*blades.Message{blades.UserMessage("hi")},
 	}
-	ch := make(chan aiengine.StreamEvent, 8)
+	stream := model.NewStreaming(ctx, req)
 	start := time.Now()
-	go func() { _ = prov.Chat(ctx, req, strings.TrimSpace(apiKey), ch) }()
 
 	var (
 		sample strings.Builder
 		gotAny bool
 		gotErr string
 	)
-	for {
-		// 先做超时兜底:30s 内没收到任何东西或 provider 卡死
-		select {
-		case <-ctx.Done():
-			return &TestResult{OK: false, Message: fmt.Sprintf("30s 超时未回应: %v", ctx.Err()), LatencyMS: time.Since(start).Milliseconds()}, nil
-		case ev, ok := <-ch:
-			if !ok {
-				// channel 关闭 = provider 自己收了尾
-				if gotErr != "" {
-					return &TestResult{OK: false, Message: gotErr, LatencyMS: time.Since(start).Milliseconds()}, nil
-				}
-				if gotAny {
-					return &TestResult{OK: true, Message: "测试成功", Sample: truncate(sample.String(), 80), LatencyMS: time.Since(start).Milliseconds()}, nil
-				}
-				return &TestResult{OK: false, Message: "provider 已关闭 stream,但没有任何事件(dial 成功但未给出内容)", LatencyMS: time.Since(start).Milliseconds()}, nil
-			}
-			switch ev.Kind {
-			case "chunk":
-				gotAny = true
-				if sample.Len() < 80 {
-					sample.WriteString(ev.Text)
-				}
-			case "error":
-				gotErr = ev.Err
-			case "done":
-				if gotErr != "" {
-					return &TestResult{OK: false, Message: gotErr, LatencyMS: time.Since(start).Milliseconds()}, nil
-				}
-				if gotAny {
-					return &TestResult{OK: true, Message: "测试成功", Sample: truncate(sample.String(), 80), LatencyMS: time.Since(start).Milliseconds()}, nil
-				}
+	for resp, err := range stream {
+		if err != nil {
+			gotErr = err.Error()
+			break
+		}
+		if resp == nil {
+			continue
+		}
+		if text := resp.Message.Text(); text != "" {
+			gotAny = true
+			if sample.Len() < 80 {
+				sample.WriteString(text)
 			}
 		}
 	}
+	latency := time.Since(start).Milliseconds()
+	if ctx.Err() != nil {
+		return &TestResult{OK: false, Message: fmt.Sprintf("30s 超时未回应: %v", ctx.Err()), LatencyMS: latency}, nil
+	}
+	if gotErr != "" {
+		return &TestResult{OK: false, Message: gotErr, LatencyMS: latency}, nil
+	}
+	if gotAny {
+		return &TestResult{OK: true, Message: "测试成功", Sample: truncate(sample.String(), 80), LatencyMS: latency}, nil
+	}
+	return &TestResult{OK: false, Message: "provider 已关闭 stream,但没有任何事件(dial 成功但未给出内容)", LatencyMS: latency}, nil
 }
 
 // defaultTestModel 给没填 model 的探测兜底(各 kind 用主流默认)。

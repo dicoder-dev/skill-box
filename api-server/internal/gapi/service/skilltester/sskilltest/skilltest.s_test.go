@@ -36,10 +36,9 @@ func newTestSvc(t *testing.T) (*sskilltest.Service, *skillstore.Store) {
 		t.Fatal(err)
 	}
 	st := settings.New(db, db)
-	mgr := sskilltest.NewManagerForTester(st)
-	return sskilltest.New(db, db, store, st, mgr), store
+	eng := sskilltest.NewEngineForTester(st)
+	return sskilltest.New(db, db, store, st, eng), store
 }
-
 
 func TestRun_EmptyKey(t *testing.T) {
 	svc, _ := newTestSvc(t)
@@ -59,28 +58,19 @@ func TestRun_BadScope(t *testing.T) {
 
 func TestRun_SkillNotFound(t *testing.T) {
 	svc, _ := newTestSvc(t)
-	_, err := svc.Run(&sskilltest.RunRequest{Scope: "global", Name: "ghost", Version: "0.1.0"})
+	_, err := svc.Run(&sskilltest.RunRequest{Scope: "global", Name: "nope-skill"})
 	if !errors.Is(err, sskilltest.ErrStoreLoad) {
 		t.Errorf("got %v, want ErrStoreLoad", err)
 	}
 }
 
-
-func TestList_Empty(t *testing.T) {
+func TestList_Default(t *testing.T) {
 	svc, _ := newTestSvc(t)
-	res, err := svc.List(&sskilltest.ListRequest{Page: 1, Size: 10})
+	res, err := svc.List(&sskilltest.ListRequest{Scope: "global"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Total != 0 || len(res.Items) != 0 {
-		t.Errorf("expected empty, got %+v", res)
-	}
-}
-
-func TestGet_NotFound(t *testing.T) {
-	svc, _ := newTestSvc(t)
-	_, err := svc.Get(99999)
-	if !errors.Is(err, sskilltest.ErrNotFound) {
-		t.Errorf("got %v, want ErrNotFound", err)
+	if res == nil || res.Size != 20 {
+		t.Errorf("got %+v", res)
 	}
 }

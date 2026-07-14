@@ -19,8 +19,8 @@ type RespondProvider = sai.ProviderView
 // ListProviders GET /api/skillbox/ai/providers
 func ListProviders(c *ginp.ContextPlus, _ *RequestListProviders) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	rows, err := svc.ListProviders()
 	if err != nil {
 		logger.Error("ai list: %v", err)

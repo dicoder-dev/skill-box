@@ -2,11 +2,16 @@
 //
 // 设计要点(见 docs/project/需求规划.md 第 6.4 节):
 //   - 一次 run = 一次 SkillTestRun 记录 + 若干 SkillTestResult(3 个 check)
-//   - AI 走查走 aiengine.Manager + 注入的 SecretStore(沿用 sai 同款实现)
+//   - AI 走查走 aiengine.Engine + 注入的 SecretStore(沿用 sai 同款实现)
 //   - store 物理文件读不出来 = errored,DB 写失败 = 回滚
 //
 // 2026-06-24 改造:不再走 mskill 表(已弃用),直接用 store.Load(name) 拿 canonical;
 // skill_id 关联键用 0 占位(下游表 scope+name 才是真正的定位键)。
+//
+// 2026-07-14 改造:aiengine 切到 go-kratos/blades,
+//   - manager → engine
+//   - Provider → ModelProvider
+//   - buildForAI 闭包现场取 settings 里的 key 直接喂给 blades
 package sskilltest
 
 import (
@@ -14,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
@@ -36,17 +42,17 @@ var (
 	ErrDBPersist = errors.New("skilltest: db persist failed")
 )
 
-// Service 测试服务。dbWrite / dbRead / store / settings / aiEngine 全套依赖。
+// Service 测试服务。dbWrite / dbRead / store / settings / engine 全套依赖。
 type Service struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
 	store   *skillstore.Store
 	st      *settings.Service
-	mgr     *aiengine.Manager
+	eng     *aiengine.Engine
 }
 
-func New(dbWrite, dbRead *gorm.DB, store *skillstore.Store, st *settings.Service, mgr *aiengine.Manager) *Service {
-	return &Service{dbWrite: dbWrite, dbRead: dbRead, store: store, st: st, mgr: mgr}
+func New(dbWrite, dbRead *gorm.DB, store *skillstore.Store, st *settings.Service, eng *aiengine.Engine) *Service {
+	return &Service{dbWrite: dbWrite, dbRead: dbRead, store: store, st: st, eng: eng}
 }
 
 func (s *Service) runModel() *mskilltestrun.Model {
@@ -221,7 +227,7 @@ func (s *Service) Get(id uint) (*Detail, error) {
 
 // buildWalker 准备 AI 走查所需的闭包:把 ai_providers 行转成 aiengine.Config,按 priority 排序。
 func (s *Service) buildWalker(providerName string) *skilltester.AIWalker {
-	if s.mgr == nil || s.st == nil {
+	if s.eng == nil || s.st == nil {
 		return nil
 	}
 	rows, _, err := s.aiModel().FindList(nil, nil)
@@ -264,23 +270,27 @@ func (s *Service) secretForAI() func(string) (string, error) {
 	}
 }
 
-// buildForAI 走 aiengine.Manager 构造 Provider。
-func (s *Service) buildForAI() func(aiengine.Config) (aiengine.Provider, error) {
-	return func(cfg aiengine.Config) (aiengine.Provider, error) {
-		if s.mgr == nil {
-			return nil, errors.New("aiengine: manager is nil")
+// buildForAI 走 aiengine.Engine 构造 ModelProvider。
+// ai_walker 在 Build 之后会再调 walker.Secret 拿 key,所以这里我们也
+// 现场取一次 settings 里的 key,直接喂给 ModelProvider(blades.NewModel 时已注入),
+// 保证流式调用不需要再回头取 key。
+func (s *Service) buildForAI() func(aiengine.Config) (blades.ModelProvider, error) {
+	return func(cfg aiengine.Config) (blades.ModelProvider, error) {
+		if s.eng == nil {
+			return nil, errors.New("aiengine: engine is nil")
 		}
-		return s.mgr.BuildFromConfig(cfg)
+		key, _, _ := s.st.Get("ai:" + cfg.Name + ":api_key")
+		return s.eng.BuildFromConfig(cfg, key)
 	}
 }
 
-// NewManagerForTester 构造一个绑定了 settings SecretStore 的 aiengine.Manager。
+// NewEngineForTester 构造一个绑定了 settings SecretStore 的 aiengine.Engine。
 // 给 cskilltest 在没有完整 sai 依赖时复用。
-func NewManagerForTester(st *settings.Service) *aiengine.Manager {
+func NewEngineForTester(st *settings.Service) *aiengine.Engine {
 	if st == nil {
-		return aiengine.NewManager(nil)
+		return aiengine.NewEngine(nil)
 	}
-	return aiengine.NewManager(secretAdapterForTester{s: st})
+	return aiengine.NewEngine(secretAdapterForTester{s: st})
 }
 
 type secretAdapterForTester struct{ s *settings.Service }

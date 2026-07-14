@@ -21,8 +21,8 @@ type RequestGetProvider struct {
 // GetProvider GET /api/skillbox/ai/providers/get?id=
 func GetProvider(c *ginp.ContextPlus, req *RequestGetProvider) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	row, err := svc.GetByID(req.ID)
 	if err != nil {
 		if errors.Is(err, sai.ErrNotFound) {

@@ -29,8 +29,8 @@ type RequestUpdateProvider struct {
 // UpdateProvider POST /api/skillbox/ai/providers/update
 func UpdateProvider(c *ginp.ContextPlus, req *RequestUpdateProvider) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	in := &entity.AIProvider{
 		Name:     req.Name,
 		Kind:     req.Kind,

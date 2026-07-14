@@ -9,6 +9,9 @@
 // 入参两种风格(任选其一):
 //   1) { provider?, model?, messages:[...], temperature?, max_tokens? }
 //   2) { provider?, preset_id, vars:{...} }  ← 自动渲染 prompt
+//
+// 2026-07-14 改造:aiengine 全量切到 go-kratos/blades。
+// controller 不再关心 aiengine 内部实现,只把 *blades.ModelResponse 转 SSE。
 package caiprovider
 
 import (
@@ -17,7 +20,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/aiengine"
+	"github.com/go-kratos/blades"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
@@ -26,15 +29,14 @@ import (
 )
 
 // RequestChat 流式对话入参。
-// Provider / Model 留空时由 manager 按 priority 选默认;PresetID + Vars 触发预设。
+// Provider 留空时由 engine 按 priority 选默认;PresetID + Vars 触发预设。
+// Messages 直接是 blades 原生格式:每条 { role, parts:[{text:...}] }。
 type RequestChat struct {
-	Provider    string             `json:"provider"`
-	Model       string             `json:"model"`
-	Messages    []aiengine.Message `json:"messages"`
-	PresetID    string             `json:"preset_id"`
-	Vars        map[string]string  `json:"vars"`
-	Temperature *float32           `json:"temperature,omitempty"`
-	MaxTokens   *int               `json:"max_tokens,omitempty"`
+	Provider string            `json:"provider"`
+	Model    string            `json:"model"`
+	Messages []*blades.Message  `json:"messages"`
+	PresetID string            `json:"preset_id"`
+	Vars     map[string]string `json:"vars"`
 }
 
 // ChatStream POST /api/skillbox/ai/chat(SSE)
@@ -46,24 +48,18 @@ func ChatStream(c *gin.Context) {
 	}
 
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 
 	ctx := c.Request.Context()
 	var (
-		ch  <-chan aiengine.StreamEvent
-		err error
+		chat *sai.ChatResult
+		err  error
 	)
 	if req.PresetID != "" {
-		ch, err = svc.ChatWithPreset(ctx, req.PresetID, req.Provider, req.Vars)
+		chat, err = svc.ChatWithPreset(ctx, req.PresetID, req.Provider, req.Vars)
 	} else {
-		ch, err = svc.Chat(ctx, aiengine.ChatRequest{
-			Provider:    req.Provider,
-			Model:       req.Model,
-			Messages:    req.Messages,
-			Temperature: req.Temperature,
-			MaxTokens:   req.MaxTokens,
-		}, req.Provider)
+		chat, err = svc.Chat(ctx, req.Messages, req.Provider)
 	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -84,48 +80,69 @@ func ChatStream(c *gin.Context) {
 		flusher.Flush()
 	}
 
-	for ev := range ch {
+	for resp, err := range chat.Stream {
 		if ctx.Err() != nil {
 			return
 		}
-		switch ev.Kind {
-		case "chunk":
-			writeSSE(c.Writer, ev)
-		case "error":
-			writeSSE(c.Writer, ev)
+		if err != nil {
+			writeSSEError(c.Writer, err)
 			if flusher != nil {
 				flusher.Flush()
 			}
 			return
-		case "done":
-			writeSSE(c.Writer, ev)
+		}
+		if resp == nil || resp.Message == nil {
+			continue
+		}
+		// 增量文本
+		if text := resp.Message.Text(); text != "" {
+			writeSSEChunk(c.Writer, text)
+		}
+		// 最终帧:status == completed 表示流自然结束
+		if resp.Message.Status == blades.StatusCompleted {
+			writeSSEDone(c.Writer, resp.Message.TokenUsage)
 			if flusher != nil {
 				flusher.Flush()
 			}
-			// 协议约定:写 [DONE] 终止
 			_, _ = c.Writer.WriteString("data: [DONE]\n\n")
 			if flusher != nil {
 				flusher.Flush()
 			}
 			return
-		default:
-			logger.Warn("ai chat: unknown event kind=%q", ev.Kind)
 		}
 		if flusher != nil {
 			flusher.Flush()
 		}
 	}
+	// provider 自己把 generator 关闭,没遇到 StatusCompleted 兜底写 done
+	writeSSEDone(c.Writer, blades.TokenUsage{})
+	_, _ = c.Writer.WriteString("data: [DONE]\n\n")
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
-// writeSSE 把 StreamEvent 序列化为 SSE 帧。Err 字段已被 StreamEvent 自身序列化,
-// 这里直接走 json.Marshal(已经在 struct tag 上有 json tag)。
-func writeSSE(w http.ResponseWriter, ev aiengine.StreamEvent) {
-	b, err := json.Marshal(ev)
-	if err != nil {
-		_, _ = fmt.Fprintf(w, "data: {\"kind\":\"error\",\"err\":\"marshal failed: %s\"}\n\n", err.Error())
-		return
-	}
+// writeSSEChunk 写一条 chunk 帧。旧 aiengine 的 SSE 协议约定
+// { kind:"chunk", text:"..." },前端 chatStream 解析按这个来,所以我们保留。
+func writeSSEChunk(w http.ResponseWriter, text string) {
+	b, _ := json.Marshal(map[string]any{"kind": "chunk", "text": text})
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(b))
+}
+
+// writeSSEDone 写 done 帧(带 token usage)。
+func writeSSEDone(w http.ResponseWriter, usage blades.TokenUsage) {
+	b, _ := json.Marshal(map[string]any{
+		"kind":  "done",
+		"usage": usage,
+	})
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(b))
+}
+
+// writeSSEError 写 error 帧。
+func writeSSEError(w http.ResponseWriter, err error) {
+	b, _ := json.Marshal(map[string]any{"kind": "error", "err": err.Error()})
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(b))
+	logger.Warn("ai chat: stream error: %v", err)
 }
 
 func init() {

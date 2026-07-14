@@ -37,8 +37,8 @@ type RequestTestProvider struct {
 // TestProvider POST /api/skillbox/ai/test
 func TestProvider(c *ginp.ContextPlus, req *RequestTestProvider) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	result, err := svc.TestConnection(sai.TestParams{
 		ProviderID: req.ProviderID,
 		Name:       req.Name,

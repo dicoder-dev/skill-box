@@ -21,8 +21,8 @@ type RequestDeleteProvider struct {
 // DeleteProvider POST /api/skillbox/ai/providers/delete
 func DeleteProvider(c *ginp.ContextPlus, req *RequestDeleteProvider) {
 	st := settings.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	mgr := sai.NewManager(st)
-	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, mgr)
+	eng := sai.NewEngine(st)
+	svc := sai.New(dbs.GetWriteDb(), dbs.GetReadDb(), st, eng)
 	if err := svc.Delete(req.ID); err != nil {
 		if errors.Is(err, sai.ErrNotFound) {
 			c.JSON(404, gin.H{"error": "not found"})

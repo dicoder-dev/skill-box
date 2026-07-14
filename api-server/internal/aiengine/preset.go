@@ -1,85 +1,13 @@
-// Package aiengine 提供多 LLM provider 抽象 + 流式对话能力。
-//
-// 设计要点(见 docs/project/需求规划.md 第 7.3 节):
-//   - provider 抽象:同一种 Provider interface,不同 kind 实现不同
-//   - 统一流式事件:Chunk / Done / Error,controller / 前端只用关心这 3 种
-//   - 凭据不入参:Provider 从 ai_providers 表 + settings 拼,handler 只传 name
-//   - 复用 net/http:不引第三方 SDK,降低依赖;OpenAI 走官方 REST,Anthropic 走自家 messages API
 package aiengine
 
 import (
-	"context"
-	"errors"
-	"io"
+	"github.com/go-kratos/blades"
 )
-
-// Kind provider 类型。
-const (
-	KindOpenAI    = "openai"        // OpenAI 官方
-	KindAnthropic = "anthropic"     // Anthropic 官方
-	KindOpenAICom = "openai_compat" // OpenAI 协议兼容(DeepSeek / 硅基 / 月之暗面等)
-)
-
-// AllKinds v1 支持的全部 kind。
-var AllKinds = []string{KindOpenAI, KindAnthropic, KindOpenAICom}
-
-// ErrUnknownKind 未知 provider kind。
-var ErrUnknownKind = errors.New("aiengine: unknown provider kind")
-
-// Role 消息角色。
-type Role string
-
-const (
-	RoleSystem    Role = "system"
-	RoleUser      Role = "user"
-	RoleAssistant Role = "assistant"
-)
-
-// Message 一条对话。
-type Message struct {
-	Role    Role   `json:"role"`
-	Content string `json:"content"`
-}
-
-// ChatRequest 一次对话请求。Provider / Model 留空时由 Manager 选默认。
-type ChatRequest struct {
-	Provider string    `json:"provider"` // ai_providers.name;空 = 用优先级最高
-	Model    string    `json:"model"`    // 覆盖 provider 默认 model
-	Messages []Message `json:"messages"`
-	// 可选参数(对齐 OpenAI 通用)
-	Temperature *float32 `json:"temperature,omitempty"`
-	MaxTokens   *int     `json:"max_tokens,omitempty"`
-}
-
-// StreamEvent 流式事件。
-type StreamEvent struct {
-	// Kind: "chunk" / "done" / "error"
-	Kind string `json:"kind"`
-	// Text 增量文本(仅 chunk 事件)
-	Text string `json:"text,omitempty"`
-	// Err 错误信息(仅 error 事件)
-	Err string `json:"err,omitempty"`
-	// Usage 完成时统计(仅 done 事件)
-	Usage *Usage `json:"usage,omitempty"`
-}
-
-// Usage 完成时统计。
-type Usage struct {
-	PromptTokens     int `json:"prompt_tokens,omitempty"`
-	CompletionTokens int `json:"completion_tokens,omitempty"`
-	TotalTokens      int `json:"total_tokens,omitempty"`
-}
-
-// Provider 单个 LLM provider 实现。
-type Provider interface {
-	// Kind 返回 provider 类型(openai / anthropic / openai_compat)。
-	Kind() string
-	// Chat 流式对话;实现必须把增量写入 channel 并在结束时关闭。
-	// ctx 取消时也应关闭 channel,避免 controller 阻塞。
-	Chat(ctx context.Context, req ChatRequest, apiKey string, out chan<- StreamEvent) error
-}
 
 // Preset 内置 prompt 模板(给"优化 frontmatter / 测 description" 等快捷按钮用)。
+//
+// 2026-07-14 改造:内部用 blades.Prompt 替换占位符,字段名保持不变,
+// 这样前端 list_presets 接口 + skilltester.safety_check preset 不用动。
 type Preset struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
@@ -156,31 +84,43 @@ var AllPresets = []Preset{
 			"(3) NOT translating anything inside fenced code blocks (``` ... ```); " +
 			"(4) preserving the original markdown structure (headings, lists, links); " +
 			"(5) outputting ONLY the translated markdown without any extra explanation or chatty prefix.",
-		UserTemplate: "Target language: {target_lang}\n\nHere is the SKILL.md to translate:\n\n```markdown\n{skill_md}\n```\n\nOutput the translated version now:",
+		UserTemplate: "Target language: {target_lang}\n\nHere is the SKILL.md to translate:\n\n```markdown\n{skill_md}```\n\nOutput the translated version now:",
 	},
 }
 
-// RenderPreset 把 Preset + 用户参数合成为 Messages 列表。
-func RenderPreset(p Preset, vars map[string]string) []Message {
-	user := p.UserTemplate
-	for k, v := range vars {
-		user = replaceAll(user, "{"+k+"}", v)
-	}
-	return []Message{
-		{Role: RoleSystem, Content: p.System},
-		{Role: RoleUser, Content: user},
+// RenderPreset 把 Preset + 用户参数合成为 blades 原生 Message 列表。
+//
+// 旧实现返 []aiengine.Message(Role/Content 两字段);
+// 改造后返 []*blades.Message(多 Parts 切片,业务侧直接喂给 ModelProvider.NewStreaming)。
+func RenderPreset(p Preset, vars map[string]string) []*blades.Message {
+	system := replaceAll(p.System, vars)
+	user := replaceAll(p.UserTemplate, vars)
+	return []*blades.Message{
+		blades.SystemMessage(system),
+		blades.UserMessage(user),
 	}
 }
 
-func replaceAll(s, old, new string) string {
+// replaceAll 简易占位符替换:{key} → vars[key];缺失时保留原样。
+func replaceAll(s string, vars map[string]string) string {
 	out := ""
 	for {
-		i := indexOf(s, old)
+		i := indexOf(s, "{")
 		if i < 0 {
 			return out + s
 		}
-		out += s[:i] + new
-		s = s[i+len(old):]
+		j := indexOf(s[i:], "}")
+		if j < 0 {
+			return out + s
+		}
+		out += s[:i]
+		key := s[i+1 : i+j]
+		if v, ok := vars[key]; ok {
+			out += v
+		} else {
+			out += "{" + key + "}"
+		}
+		s = s[i+j+1:]
 	}
 }
 
@@ -195,23 +135,3 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
-
-// drain 把 provider 输出到 out 的事件读到 EOF,丢弃(用于非流式场景的兜底)。
-func Drain(ctx context.Context, p Provider, req ChatRequest, apiKey string) (string, error) {
-	ch := make(chan StreamEvent, 32)
-	done := make(chan error, 1)
-	go func() { done <- p.Chat(ctx, req, apiKey, ch) }()
-	var full string
-	for ev := range ch {
-		switch ev.Kind {
-		case "chunk":
-			full += ev.Text
-		case "error":
-			return full, errors.New(ev.Err)
-		}
-	}
-	return full, <-done
-}
-
-// ensure io is referenced(后续 stream helpers 可能会用)
-var _ = io.EOF

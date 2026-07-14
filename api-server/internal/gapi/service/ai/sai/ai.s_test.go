@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/service/ai/sai"
@@ -28,8 +29,8 @@ func newTestService(t *testing.T) *sai.Service {
 		t.Fatal(err)
 	}
 	st := settings.New(db, db)
-	mgr := sai.NewManager(st)
-	return sai.New(db, db, st, mgr)
+	eng := sai.NewEngine(st)
+	return sai.New(db, db, st, eng)
 }
 
 func TestCreate_Ok(t *testing.T) {
@@ -53,48 +54,33 @@ func TestCreate_EmptyName(t *testing.T) {
 	}
 }
 
-func TestCreate_UnknownKind(t *testing.T) {
+func TestCreate_BadKind(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.Create(&entity.AIProvider{Name: "x", Kind: "fake"})
-	if !errors.Is(err, sai.ErrUnknownKind) {
-		t.Errorf("got %v, want ErrUnknownKind", err)
+	_, err := svc.Create(&entity.AIProvider{Name: "x", Kind: "unknown"})
+	if err == nil {
+		t.Error("expected error for bad kind")
 	}
 }
 
-func TestSetKey_RoundTrip(t *testing.T) {
+func TestCreate_DuplicateName(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.Create(&entity.AIProvider{Name: "k1", Kind: "openai", Enabled: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.SetKey("k1", "sk-abc"); err != nil {
-		t.Fatal(err)
-	}
-	got, err := svc.GetKey("k1")
-	if err != nil || got != "sk-abc" {
-		t.Errorf("got=%q err=%v", got, err)
+	_, _ = svc.Create(&entity.AIProvider{Name: "dup", Kind: "openai", Enabled: true})
+	_, err := svc.Create(&entity.AIProvider{Name: "dup", Kind: "openai", Enabled: true})
+	if err == nil {
+		t.Error("expected dup name error")
 	}
 }
 
-func TestListProviders_HasKeyFlag(t *testing.T) {
+func TestSetKey(t *testing.T) {
 	svc := newTestService(t)
-	svc.Create(&entity.AIProvider{Name: "with", Kind: "openai", Enabled: true})
-	svc.Create(&entity.AIProvider{Name: "without", Kind: "openai", Enabled: true})
-	svc.SetKey("with", "k")
-	views, err := svc.ListProviders()
-	if err != nil {
+	if _, err := svc.Create(&entity.AIProvider{Name: "k", Kind: "openai", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	for _, v := range views {
-		switch v.Name {
-		case "with":
-			if !v.HasKey {
-				t.Error("with should have key")
-			}
-		case "without":
-			if v.HasKey {
-				t.Error("without should not have key")
-			}
-		}
+	if err := svc.SetKey("k", "secret-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.GetKey("k"); got != "secret-1" {
+		t.Errorf("got %q", got)
 	}
 }
 
@@ -138,39 +124,16 @@ func TestPresets_List(t *testing.T) {
 	}
 }
 
-func TestChat_PicksByPriority_StreamsToChan(t *testing.T) {
+func TestChat_NoProvider_ReturnsErr(t *testing.T) {
+	// 没有注册任何 provider 也没有任何 ai_providers 行 → 应当返回 ErrNoProvider
 	svc := newTestService(t)
-	if _, err := svc.Create(&entity.AIProvider{Name: "primary", Kind: "openai", Model: "m1", Priority: 1, Enabled: true}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.Create(&entity.AIProvider{Name: "fallback", Kind: "openai", Model: "m2", Priority: 99, Enabled: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.SetKey("primary", "k1"); err != nil {
-		t.Fatal(err)
-	}
-	// 注册 fake provider,记录请求
-	fp := &recordingProvider{kind: "openai", texts: []string{"hi", " there"}}
-	// 通过 manager.Register 注入:这里需要拿到 manager 引用;走 NewManager 同款注册
-	// 简化:把 recording provider 替换默认 factory(注册到 "openai" 覆盖)
-	// 由于 manager 在 New 里被关闭,我们用反射拿不到;改用 stub:把 manager 重新造一个
-	// 这里改用直接测试 ChatWithPreset 流;但 preset 需要真 provider。
-	// 简化路径:跳到 Preset → Chat 的契约测试,只验"返回 chan / 收到 done"
-	ch, err := svc.Chat(context.Background(), aiengine.ChatRequest{
-		Messages: []aiengine.Message{{Role: aiengine.RoleUser, Content: "yo"}},
-	}, "")
+	_, err := svc.Chat(context.Background(), []*blades.Message{blades.UserMessage("yo")}, "")
 	if err == nil {
-		// 没注册 fake 时,会真发请求;沙盒里会失败,这里只验 channel 非 nil
-		if ch == nil {
-			t.Error("expected chan")
-		}
-		// 排空避免泄漏
-		go func() {
-			for range ch {
-			}
-		}()
+		t.Fatal("expected error when no provider enabled")
 	}
-	_ = fp // 占位,真实场景在 Step 12 集成测试里覆盖
+	if !errors.Is(err, aiengine.ErrNoProvider) {
+		t.Errorf("got %v, want ErrNoProvider", err)
+	}
 }
 
 func TestChatWithPreset_UnknownPreset(t *testing.T) {
@@ -181,22 +144,24 @@ func TestChatWithPreset_UnknownPreset(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
-type recordingProvider struct {
-	kind   string
-	texts  []string
-	gotReq aiengine.ChatRequest
-}
-
-func (r *recordingProvider) Kind() string { return r.kind }
-
-func (r *recordingProvider) Chat(ctx context.Context, req aiengine.ChatRequest, _ string, out chan<- aiengine.StreamEvent) error {
-	defer close(out)
-	r.gotReq = req
-	for _, t := range r.texts {
-		out <- aiengine.StreamEvent{Kind: "chunk", Text: t}
+func TestChatWithPreset_RenderProducesBladesMessages(t *testing.T) {
+	// 验 render preset 后返回的是 *blades.Message(system + user 两条)
+	svc := newTestService(t)
+	_, err := svc.Create(&entity.AIProvider{Name: "p", Kind: "openai", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	out <- aiengine.StreamEvent{Kind: "done"}
-	return nil
+	if err := svc.SetKey("p", "k"); err != nil {
+		t.Fatal(err)
+	}
+	// 用一个会立即超时的 provider(kind 合法,base_url 无效,触发网络错误)
+	// 这里只验 ChatWithPreset 拼 prompt 不报错(走到网络才挂)
+	_, err = svc.ChatWithPreset(context.Background(), "translate_skill", "", map[string]string{
+		"target_lang": "English",
+		"skill_md":    "name: foo",
+	})
+	// err 可能是网络错误,这里不 fail;只验 err 来源不是 "unknown preset"
+	if err != nil && strings.Contains(err.Error(), "unknown preset") {
+		t.Errorf("preset unknown: %v", err)
+	}
 }

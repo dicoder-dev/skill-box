@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/skilladapter"
 )
 
-// AI 走查:走 aiengine + 内置 preset。Manager / Provider 由 caller 注入。
+// AI 走查:走 aiengine + 内置 preset。Provider 注入由 caller 负责。
 //
 // 降级策略:
 //   - 没有可用 provider -> skipped
@@ -31,15 +32,16 @@ type AISummary struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
-// AIWalker 注入 aiengine.Manager(以及 SecretStore 拼出的 provider 列表)。
-// caller 负责构造,这里只拿现成对象消费。
+// AIWalker 注入 aiengine.Config 列表 + Secret + Build 闭包。
+// Build 返回的是 blades.ModelProvider(2026-07-14 切到 blades 后);
+// skilltester 不再依赖 aiengine.Provider 接口。
 type AIWalker struct {
 	// Providers 是 ai_providers 表的当前快照,由 service 层查询后传入。
 	Providers []*aiengine.Config
 	// Secret 凭据解析(provider_name -> api_key)。
 	Secret func(name string) (string, error)
-	// Build 拿到 (provider, key, err);func 由 service 层闭包注入(避免 skilltester 反向依赖 sai)。
-	Build func(cfg aiengine.Config) (aiengine.Provider, error)
+	// Build 拿到 Config 返回 blades.ModelProvider;func 由 service 层闭包注入(避免 skilltester 反向依赖 sai)。
+	Build func(cfg aiengine.Config) (blades.ModelProvider, error)
 }
 
 // RunAIWalk 默认走 safety_check preset。无 provider / 无 key 时 skipped。
@@ -79,48 +81,43 @@ func RunAIWalk(c skilladapter.Canonical, walker *AIWalker, opts Options) CheckRe
 
 	// 拼 skill 全文(把所有 file 拼成 markdown)
 	skillMD := buildSkillMDForPrompt(c)
-	req := aiengine.ChatRequest{
-		Provider: cfg.Name,
-		Model:    cfg.Model,
-		Messages: aiengine.RenderPreset(preset, map[string]string{"skill_md": skillMD}),
-	}
+	messages := aiengine.RenderPreset(preset, map[string]string{"skill_md": skillMD})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	ch := make(chan aiengine.StreamEvent, 32)
-	runErrCh := make(chan error, 1)
-	go func() { runErrCh <- prov.Chat(ctx, req, key, ch) }()
+	// 构造 ModelRequest。apiKey 在 model 实例化时已注入,这里只传 messages。
+	req := &blades.ModelRequest{Messages: messages}
+	stream := prov.NewStreaming(ctx, req)
 
-	var out strings.Builder
-	timeout := false
-	for ev := range ch {
-		switch ev.Kind {
-		case "chunk":
-			out.WriteString(ev.Text)
-		case "error":
-			summary := AISummary{Preset: presetID, Provider: cfg.Name, Model: cfg.Model, Reason: ev.Err}
+	var (
+		out      strings.Builder
+		timedOut bool
+	)
+	for resp, err := range stream {
+		if err != nil {
+			summary := AISummary{Preset: presetID, Provider: cfg.Name, Model: cfg.Model, Reason: err.Error()}
 			b, _ := json.Marshal(summary)
-			return CheckResult{Check: CheckAI, Status: StatusErrored, Message: "ai error: " + ev.Err, Detail: string(b)}
-		case "done":
-			// 收尾
+			return CheckResult{Check: CheckAI, Status: StatusErrored, Message: "ai error: " + err.Error(), Detail: string(b)}
+		}
+		if resp == nil || resp.Message == nil {
+			continue
+		}
+		if text := resp.Message.Text(); text != "" {
+			out.WriteString(text)
 		}
 	}
 	if ctx.Err() != nil {
-		timeout = true
+		timedOut = true
 	}
-	runErr := <-runErrCh
 
 	summary := AISummary{Preset: presetID, Provider: cfg.Name, Model: cfg.Model, Output: out.String()}
 	b, _ := json.Marshal(summary)
 	res := CheckResult{Check: CheckAI, Detail: string(b)}
 	switch {
-	case timeout:
+	case timedOut:
 		res.Status = StatusErrored
 		res.Message = "ai walkthrough timeout"
-	case runErr != nil && !errors.Is(runErr, context.Canceled):
-		res.Status = StatusErrored
-		res.Message = "ai chat: " + runErr.Error()
 	case out.Len() == 0:
 		// 没产出但没报错:也算 skipped(避免被当 failed 吓到用户)
 		res.Status = StatusSkipped
