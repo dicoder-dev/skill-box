@@ -229,6 +229,19 @@ export const MDI_TO_ICONPARK = {
   'table-column-plus-after':      'Plus',
   'bug-outline':                  'Bug',
   'help':                         'Help',
+
+  // 2026-07-14 增:AI 面板头部图标 fallback 修复。mdi:history / mdi:plus-circle-outline
+  // 在 iconparkMap 没映射,fallback Help(问号),用户视觉上不显示。
+  // iconpark 原生导出有 History / AddOne,贴近期望语义。
+  'history':                      'History',
+  'history-clock':                'History',         // 别名
+  'history-query':                'HistoryQuery',     // 历史查询(纯描边版,与 History 区别)
+  'plus-circle':                  'AddOne',
+  'plus-circle-outline':          'AddOne',          // 新建对话按钮
+  'comment-outline':              'Comment',
+  'application-menu':             'ApplicationMenu',
+  'file-text-outline':            'FileText',
+  'list-view':                    'ListView',
 }
 
 export default MDI_TO_ICONPARK

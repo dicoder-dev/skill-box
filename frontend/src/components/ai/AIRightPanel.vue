@@ -396,6 +396,15 @@ watch(() => props.filePath, () => {
   // filePath 是单条 AI 消息上下文(apply-skill vs apply-local 判定),不参与会话 key。
 })
 
+// 2026-07-14 增:自动归档失败时 toast(不再静默)。
+// store._archiveError 是 Error 对象或 null;每次变化 → toast(仅 error 状态)。
+watch(
+  () => ai._archiveError,
+  (err) => {
+    if (err) toast.error(t('skills.aiPanel.archiveFailed', '保存到历史失败'))
+  },
+)
+
 // ===== 生命周期 =====
 onMounted(async () => {
   // hydrate 已在 sourcePath immediate watcher 里跑(也可能跑在前面),
@@ -436,7 +445,7 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
         {{ t('skills.aiPanel.roleAI') }}
       </span>
       <div class="airp-header-actions">
-        <!-- 2026-07-14 增:历史对话按钮(齿轮状),无 sourcePath 时禁用 -->
+        <!-- 2026-07-14 改:历史 / 新建对话 两个按钮;删掉"切换大纲"按钮(用户反馈)。 -->
         <button
           class="airp-icon-btn"
           :data-tip="t('skills.aiPanel.history', '历史对话')"
@@ -446,15 +455,6 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
           @click="openHistoryDialog"
         >
           <IconPark icon="mdi:history" width="13" height="13" />
-        </button>
-        <button
-          class="airp-icon-btn"
-          :data-tip="t('skills.aiPanel.switchToOutline')"
-          :aria-label="t('skills.aiPanel.switchToOutline')"
-          type="button"
-          @click="emit('switch-outline')"
-        >
-          <IconPark icon="mdi:format-list-bulleted" width="13" height="13" />
         </button>
         <button
           v-if="ai.hasCurrentContent"
