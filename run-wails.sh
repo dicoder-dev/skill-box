@@ -74,8 +74,10 @@ case "$CHOICE" in
         sleep 1
       fi
     fi
-    echo "▶️  执行: $APP_BIN"
-    exec "$APP_BIN"
+    echo "▶️  执行: arch -arm64 $APP_BIN"
+    # 用 `arch -arm64` 强制 arm64 native slice(Apple Silicon Mac 上),
+    # 绕过 LaunchServices / Gatekeeper,直接拉起 wails 主循环。
+    exec arch -arm64 "$APP_BIN"
     ;;
   *)
     echo "❌ 无效选项: $CHOICE (仅支持 1/2/3/4)"
