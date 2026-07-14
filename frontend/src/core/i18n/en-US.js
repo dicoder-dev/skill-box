@@ -570,6 +570,12 @@ const messages = {
       clearHistory: 'Clear chat',
       // 2026-07-14 added: chat history
       history: 'Chat history',
+      // 2026-07-14 v2: rename "clear" to "new conversation" (archive current to history)
+      newConv: 'New conversation',
+      archiveFailed: 'Failed to save to history',
+      deleteConv: 'Delete conversation',
+      deleteFailed: 'Failed to delete',
+      loadFailed: 'Failed to load',
       historyDialog: {
         title: 'Chat history',
         loading: 'Loading…',

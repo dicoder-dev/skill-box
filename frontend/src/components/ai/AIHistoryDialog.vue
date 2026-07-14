@@ -1,10 +1,15 @@
 <script setup>
-// AIHistoryDialog - 历史对话列表弹窗(2026-07-14 增)
+// AIHistoryDialog - 历史对话列表弹窗(2026-07-14 v2 增)
 //
-// 复用 components/Modal.vue,列表项显示 title / preview / ts,点击 inject 当前会话。
+// v2 改动:
+//   - 列表项加 "删除" 按钮(右上方),mdi:trash-can-outline;调用 ai.deleteHistoryItem(convId)。
+//   - 整个列表项的 click 触发 pickHistoryItem(异步,失败 toast)。
+//   - pick 进行中按 savingConv 渲染 loading。
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Modal from '@/components/Modal.vue'
+import { useAiStore } from '@/core/store/ai'
+import { useToastStore } from '@/core/store/toast'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -14,13 +19,30 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'pick'])
 
 const { t } = useI18n()
+const ai = useAiStore()
+const toast = useToastStore()
 
 function close() {
   emit('update:modelValue', false)
 }
-function pick(it) {
-  emit('pick', it)
+
+async function pick(it) {
+  try {
+    await ai.pickHistoryItem(it)
+  } catch (e) {
+    toast.error(t('skills.aiPanel.loadFailed', '加载失败'))
+  }
 }
+
+async function remove(it, ev) {
+  ev.stopPropagation() // 不触发 pick
+  try {
+    await ai.deleteHistoryItem(it.id)
+  } catch (e) {
+    toast.error(t('skills.aiPanel.deleteFailed', '删除对话失败'))
+  }
+}
+
 function fmtTs(ts) {
   if (!ts) return ''
   try {
@@ -29,10 +51,15 @@ function fmtTs(ts) {
     return ''
   }
 }
-// 给列表项的预览一个简单的 markdown-strip,把反引号去掉
 function cleanPreview(p) {
   if (!p) return ''
   return p.replace(/[`*_#>\[\]]/g, '').trim()
+}
+function fmtSize(b) {
+  if (!b || b <= 0) return ''
+  if (b < 1024) return `${b} B`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
+  return `${(b / (1024 * 1024)).toFixed(2)} MB`
 }
 
 const cItems = computed(() => props.items || [])
@@ -58,14 +85,25 @@ const cItems = computed(() => props.items || [])
           v-for="it in cItems"
           :key="it.id"
           class="ai-hist-item"
+          :class="{ 'ai-hist-item-saving': ai.savingConv }"
           @click="pick(it)"
         >
           <div class="ai-hist-title">{{ it.title || it.id }}</div>
           <div class="ai-hist-preview">{{ cleanPreview(it.preview) }}</div>
           <div class="ai-hist-meta">
             <span class="ai-hist-ts">{{ fmtTs(it.ts) }}</span>
+            <span class="ai-hist-size" v-if="it.size">{{ fmtSize(it.size) }}</span>
             <span v-if="it.provider" class="ai-hist-prov">{{ it.provider }}{{ it.model ? '/' + it.model : '' }}</span>
           </div>
+          <button
+            type="button"
+            class="ai-hist-del"
+            :data-tip="t('skills.aiPanel.deleteConv', '删除对话')"
+            :aria-label="t('skills.aiPanel.deleteConv', '删除对话')"
+            @click="remove(it, $event)"
+          >
+            <span>✕</span>
+          </button>
         </li>
       </ul>
     </div>
@@ -88,7 +126,8 @@ const cItems = computed(() => props.items || [])
   max-height: 60vh; overflow-y: auto;
 }
 .ai-hist-item {
-  padding: 10px 12px;
+  position: relative;
+  padding: 10px 36px 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 8px;
@@ -99,6 +138,10 @@ const cItems = computed(() => props.items || [])
 .ai-hist-item:hover {
   border-color: var(--primary);
   background: var(--bg-subtle);
+}
+.ai-hist-item-saving {
+  opacity: 0.7;
+  pointer-events: none;
 }
 .ai-hist-title {
   font-weight: 600; font-size: 13px;
@@ -116,14 +159,35 @@ const cItems = computed(() => props.items || [])
 }
 .ai-hist-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 12px;
   margin-top: 4px;
   font-size: 11px;
   color: var(--text-faint);
 }
+.ai-hist-size {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
 .ai-hist-prov {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.ai-hist-del {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 22px; height: 22px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-hist-del:hover {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--bg-subtle);
 }
 .ai-hist-btn {
   padding: 6px 14px;

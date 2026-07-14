@@ -453,6 +453,12 @@ const messages = {
       clearHistory: '清空对话',
       // 2026-07-14 增:历史对话相关
       history: '历史对话',
+      // 2026-07-14 v2 改:清空改名"新建对话"(归档当前会话到历史)
+      newConv: '新建对话',
+      archiveFailed: '保存到历史失败',
+      deleteConv: '删除对话',
+      deleteFailed: '删除对话失败',
+      loadFailed: '加载失败',
       historyDialog: {
         title: '历史对话',
         loading: '加载中…',
