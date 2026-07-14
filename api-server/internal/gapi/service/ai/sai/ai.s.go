@@ -477,3 +477,48 @@ func (s *Service) ListHistory(sourcePath string) (*skillboxdata.History, error) 
 	}
 	return skillboxdata.ReadHistory(dir)
 }
+
+// =====================================================================
+// v2 单 conv 文件 API(2026-07-14 增,替代 v1 单文件 history.json 粒度)
+//
+// 设计:一个对话 = 一份 .skill-box/history/<conv-id>.json。
+// 列表只返 metadata,按需 GET 单条 messages;
+// SAVE 单条 upsert;DELETE 按 id 删。
+// =====================================================================
+
+// ListConvs metadata-only 列表;目录不存在返空(nil);source_path 非法走 v1 错误流(2026-07-14 增)。
+func (s *Service) ListConvs(sourcePath string) ([]skillboxdata.ConvMeta, error) {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	return skillboxdata.ListConvs(dir)
+}
+
+// GetConv 按 conv_id 拉单条完整;不存在返 (nil, nil),让上层判 404(2026-07-14 增)。
+func (s *Service) GetConv(sourcePath, convID string) (*skillboxdata.HistoryItem, error) {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	return skillboxdata.ReadConv(dir, convID)
+}
+
+// SaveConv 单条 upsert;source_path 非法 / conv_id 不合法 / 文件超 2MB
+// 分别返 ErrEmptySourcePath / ErrSourcePathNotInStore / ErrInvalidConvID / ErrConvTooLarge(2026-07-14 增)。
+func (s *Service) SaveConv(sourcePath string, item skillboxdata.HistoryItem) error {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return err
+	}
+	return skillboxdata.WriteConv(dir, item)
+}
+
+// DeleteConv 按 id 删单条;不存在幂等返 nil(2026-07-14 增)。
+func (s *Service) DeleteConv(sourcePath, convID string) error {
+	dir, err := s.resolveSkillDirBySourcePath(sourcePath)
+	if err != nil {
+		return err
+	}
+	return skillboxdata.DeleteConv(dir, convID)
+}
