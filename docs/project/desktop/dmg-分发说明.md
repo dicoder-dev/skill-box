@@ -37,7 +37,28 @@
 4. 点右边的「仍要打开」按钮
 5. 再双击 `Skill-Box.app`,正常启动
 
-### 方法三:命令行绕过(开发期 / 脚本)
+### 方法三:命令行一键(开发者/CLI 用户,最快)
+
+dmg 内附带 `install.sh`,免去手动 xattr + open:
+
+```bash
+# 双击 dmg 后,在弹出的 Finder 窗口右键 install.sh → 在终端打开
+# 或在终端执行:
+bash /Volumes/Skill-Box/install.sh
+# 自动:
+#   1. 拷 Skill-Box.app 到 /Applications
+#   2. xattr -cr 清除 quarantine(解决 "已损坏" 报错)
+#   3. open 启动
+```
+
+如果不方便跑 install.sh,直接一行复制粘贴:
+```bash
+xattr -cr /Applications/Skill-Box.app && open /Applications/Skill-Box.app
+```
+
+`xattr -cr` 是 macOS 社区对付 ad-hoc/local build .app 的**最常用一招** —— GitHub issue **electron-builder/electron-builder#8191**、Tauri 文档、RustDesk issues 都用它绕过 Gatekeeper。
+
+### 方法四:命令行绕过(开发期 / 脚本)
 
 ```bash
 # 跳过 LaunchServices 和 Gatekeeper,直接 exec binary
@@ -178,6 +199,28 @@ vars:
 | codesign: `bundle format is ambiguous` | binary 被 `cp` 后未 strip | `go build -ldflags="-w -s"` 已 strip |
 | `Apple partition list` 而不是 `zlib compressed` | dmg 转 UDZO 失败 | 检查 `hdiutil convert` 输出 |
 
+## 开源项目常见做法对比
+
+调研 GitHub Issues / Reddit / CSDN 后的总结(不申请 Apple Developer ID 也能让用户跑起来的方案):
+
+| 方案 | 适用场景 | 局限 | 我们采用 |
+|---|---|---|---|
+| **右键 → 打开 / 系统设置放行** | 普通用户单次放行 | macOS 15+ 唯一官方 GUI 路径 | ✅ 写在 dmg README 方法一 |
+| **`xattr -cr <app>` 清 quarantine** | CLI 用户 / 装一次到本机 | 不是普适,用户要知道这命令 | ✅ 写在 dmg README 方法二 + `install.sh` 自动执行 |
+| **`sudo spctl --master-disable`(任何来源)** | 全局放行所有 ad-hoc | macOS 15+ Apple 隐藏此开关,系统设置仍需二次确认 | ❌ 不推荐 |
+| **`hdiutil convert -format UDRO`(只读 staging)再 detach** | dmg 离线分发 | 不能 install.sh 这种交互 | ❌ 我们用 UDRW 才能 mount 后写 |
+| **Homebrew Cask `brew install --cask skill-box`** | 用户已有 Homebrew | Cask 自身走 Apple 公证链路(2024+),不能装未公证 | 后续 PR 单独做 |
+| **Apple Developer ID + notarize** | 正式发版 "双击即开" | 需要 $99/年 Apple Developer 账号 | 文档已写升级路径 |
+| **Tauri/RustDesk/GitHub Desktop 都走 Developer ID** | 大厂有预算 | 个人/小团队不现实 | 已知,我们走 ad-hoc + 提示方案 |
+
+**关键证据**(2026-07-15 验证过):
+- 我们 dmg 内 `.app` 和 binary **本身没有任何 xattr**(我们 build 阶段不写 quarantine)。
+- dmg 本身的 quarantine 是 **下载渠道**加的(浏览器/QQ 拖过来),build 链解不了。
+- 用户从 dmg 拖出 .app 后,LaunchServices 才标 quarantine → 这时候 `xattr -cr` 能清掉 → 真正"无法打开"提示就是因为 quarantine 在。
+- GitHub issue [electron-builder/electron-builder#8191](https://github.com/electron-userland/electron-builder/issues/8191) —— 跟我们现象完全一致,fix 主流就是 `xattr -cr`。
+
 ## 相关 commit
 
 - `3b1d68c` — dmg 内 .app 统一叫 Skill-Box.app + binary entitlements
+- `f8c059c` — dmg 分发说明文档
+- `TBD` — dmg 内新增 `install.sh`(一键 xattr -cr + open)+ README 加方法二 + docs 加开源做法对比

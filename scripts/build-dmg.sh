@@ -159,6 +159,7 @@ echo "  → 已建 /Applications 软链"
 # 因为我们 dmg 是本地 ad-hoc 签名的 .app,macOS 26 (Tahoe) 拒绝 open / Finder 双击,
 # 用户必须在「系统设置 → 隐私与安全性」里点"仍要打开"才能跑。
 # 这个 README 让用户在 dmg 里就看到指引,不用瞎猜。
+# 同时给开发者/CLI 用户一个一键 install.sh,自动跑 xattr 去隔离 + 拖到 /Applications。
 # 用 <<'README_EOF' (带引号) 避免 shell 展开,APP_NAME 等占位
 # 在 heredoc 内用 sed 替换,保持通用。
 cat > "$MOUNT_POINT/首次打开说明.txt" <<README_EOF
@@ -167,29 +168,72 @@ ${APP_NAME} — 首次打开说明(适用于 macOS 26 Tahoe)
 本应用是本地 ad-hoc 签名版本,不是 Apple 公证版本,所以 macOS 26 默认会拒绝
 open / Finder 双击启动。**这是正常现象,不是 bug。**
 
-首次打开的两种方法(选一种):
-
-方法一:右键打开(最快)
-  1. 在 Finder 里打开本 dmg,把 ${APP_FOLDER_NAME} 拖到 /Applications
-  2. 弹出 dmg(把 dmg 拖到废纸篓,或在终端 hdiutil detach "/Volumes/${VOLNAME}")
+方法一:右键打开(普通用户最简单,推荐)
+  1. 在 Finder 里打开本 dmg,把 ${APP_FOLDER_NAME} 拖到右侧 Applications 软链
+  2. 弹出 dmg(把 dmg 拖到废纸篓)
   3. 在 /Applications 找到 ${APP_FOLDER_NAME},**右键点它 → 选「打开」**
   4. 系统弹"无法验证开发者"对话框,点「打开」
   5. 之后双击就能正常启动
 
-方法二:系统设置放行
-  1. 拖完 app 后,**先双击一次**(会失败、无任何提示)
+方法二:命令行一键(开发者/CLI 用户,最快)
+  1. 打开终端(Terminal)
+  2. 执行(整段复制粘贴即可):
+       xattr -cr /Applications/${APP_FOLDER_NAME}.app && open /Applications/${APP_FOLDER_NAME}.app
+     第一条 xattr 递归清除隔离扩展属性(com.apple.quarantine),
+     这是 macOS 标"已损坏"的真正元凶——清掉就能正常启动。
+     open 自动触发 LaunchServices,如果还弹"无法验证开发者",
+     右键 /Applications/${APP_FOLDER_NAME}.app → 打开即可。
+
+方法三:系统设置放行(没有 Terminal 用)
+  1. 拖完 app 后,先双击一次(会失败、无任何提示)
   2. 打开「系统设置 → 隐私与安全性」
   3. 滚到页面底部,看到"已阻止使用 ${APP_NAME},因为它来自身份不明的开发者"
   4. 点右边的「仍要打开」按钮
   5. 再双击 ${APP_FOLDER_NAME},正常启动
 
-注意:
-- 如果想从命令行启动,绕过 Gatekeeper,跑:
-    nohup /Applications/${APP_FOLDER_NAME}/Contents/MacOS/${APP_NAME} > /tmp/${APP_NAME}.log 2>&1 &
-- 想要"双击直接启动",需要走 Apple Developer ID 签名 + 公证流程
-  (需要 Apple 开发者账号 \$99/年,这是发布前的最后一步,不在本 dmg 脚本范围)
+方法零(隐藏彩蛋):直接 exec binary,完全绕过 LaunchServices/Gatekeeper
+     nohup /Applications/${APP_FOLDER_NAME}/Contents/MacOS/${APP_NAME} > /tmp/${APP_NAME}.log 2>&1 &
+
+想要"双击即开",需要走 Apple Developer ID 签名 + Apple 公证流程
+(需要 Apple 开发者账号 \$99/年,这是发布前的最后一步,不在本 dmg 脚本范围)。
 README_EOF
 echo "  → 已写首次打开说明.txt"
+
+# 开发者/CLI 用户一键 install.sh:自动拷 .app 到 /Applications +
+# 清 quarantine + 启动。普通用户在 dmg 里直接看到 README,这个脚本是可选的。
+cat > "$MOUNT_POINT/install.sh" <<INSTALL_EOF
+#!/bin/bash
+# 一键安装 ${APP_NAME} 到 /Applications
+# 用法:在 dmg 根目录跑 bash install.sh
+set -e
+
+APP_NAME="${APP_NAME}"
+# APP_FOLDER_NAME 已经带 .app 后缀(由 basename bin/<name>.app 取出),
+# 直接当作 .app bundle 名用,不要再拼 .app,否则会变成 <name>.app.app
+APP_BUNDLE="${APP_FOLDER_NAME}"
+SRC_APP="\$(dirname "\$0")/\${APP_BUNDLE}"
+DST_APP="/Applications/\${APP_BUNDLE}"
+
+if [ ! -d "\$SRC_APP" ]; then
+  echo "❌ 找不到 \$SRC_APP(请确认本脚本在 dmg 根目录跑)" >&2
+  exit 1
+fi
+
+echo "📦 拷贝到 /Applications ..."
+rm -rf "\$DST_APP"
+cp -R "\$SRC_APP" "\$DST_APP"
+
+echo "🧹 清除 macOS 隔离属性 ..."
+xattr -cr "\$DST_APP"
+
+echo "🚀 启动 ..."
+open "\$DST_APP" || true
+
+echo ""
+echo "✅ 完成。如果出现'无法验证开发者',在 /Applications 右键 ${APP_FOLDER_NAME} → 打开 即可。"
+INSTALL_EOF
+chmod +x "$MOUNT_POINT/install.sh"
+echo "  → 已写 install.sh"
 
 # ---- 步骤 5:AppleScript 写 Finder 布局 ----
 echo "=== 5. WRITE Finder layout (osascript) ==="
