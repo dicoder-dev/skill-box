@@ -222,5 +222,5 @@ vars:
 ## 相关 commit
 
 - `3b1d68c` — dmg 内 .app 统一叫 Skill-Box.app + binary entitlements
-- `f8c059c` — dmg 分发说明文档
-- `TBD` — dmg 内新增 `install.sh`(一键 xattr -cr + open)+ README 加方法二 + docs 加开源做法对比
+- `f8c059c` — dmg 分发说明文档 + 官方 wails v3 对照
+- `e08aafc` — dmg 内新增 `install.sh`(一键 xattr -cr + open)+ 文档加开源做法对比
