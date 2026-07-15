@@ -223,8 +223,49 @@ vars:
 - 用户从 dmg 拖出 .app 后,LaunchServices 才标 quarantine → 这时候 `xattr -cr` 能清掉 → 真正"无法打开"提示就是因为 quarantine 在。
 - GitHub issue [electron-builder/electron-builder#8191](https://github.com/electron-userland/electron-builder/issues/8191) —— 跟我们现象完全一致,fix 主流就是 `xattr -cr`。
 
+## macOS 26 Tahoe「双击 .app 静默拒启动」的真凶:amfi -423
+
+**实测通过 `log show --last 1m --predicate 'process == "amfid"'` 拿到的真实报错**:
+
+```
+amfid: /Applications/Skill-Box.app/Contents/MacOS/Skill-Box not valid:
+  Error Domain=AppleMobileFileIntegrityError Code=-423
+  "The file is adhoc signed or signed by an unknown certificate chain"
+```
+
+macOS 26 Tahoe 的 AppleMobileFileIntegrity 对 **LaunchServices / amfi 派发链上的 ad-hoc signed binary 一律拒绝**(`launchedByLS=1` 路径)。MacOS `open` 命令走这条链,所以 `open /Applications/Skill-Box.app` 返回 0 但永远拉不起进程。
+
+**唯一能稳定跑 ad-hoc binary 的入口是 launchd / launchctl 直接派发**:实测 `launchctl asuser $(id -u) <binary>` 或 `~/Library/LaunchAgents/<label>.plist` 都走 launchd → 不触发 amfi 校验 → binary 正常起来。
+
+**所以 install.sh 现在做的事**:
+
+```bash
+📦 拷 .app 到 /Applications
+🧹 xattr -cr 清 quarantine
+🧽 lsregister -f 重注册 LaunchServices(给右键打开 / 系统设置放行留路径)
+🪪 注册 ~/Library/LaunchAgents/com.dicoder.skillbox.plist
+   - RunAtLoad=true  RunAtLoad 即拉起
+   - KeepAlive=true  死了立刻重启
+   - ProcessType=Interactive  让 launchd 把它当 GUI 进程跑
+   - WorkingDirectory=$HOME  避开 launchd 默认 cwd=/(只读)
+🚀 launchctl load -w 立即激活
+```
+
+**用户视角**:`bash /Volumes/Skill-Box/install.sh` 跑完 5 秒内,binary 起来,8082 LISTEN;**登出/重启后 LaunchAgent 自动拉起**——这就是 macOS 26 Tahoe 当前能给"双击即开"等价体验的方案。
+
+**实测**(2026-07-15):
+- PID 89374(`/Applications/Skill-Box.app/Contents/MacOS/Skill-Box`)
+- launchctl list:`89374  0  com.dicoder.skillbox`
+- 8082 LISTEN ✓
+- 后端起来 ✓
+
+**想完全"双击 .app 即开"(不靠 install.sh)**:必须 Apple Developer ID + notarize($99/年)。配 `build/darwin/Taskfile.yml` 顶部 SIGN_IDENTITY / KEYCHAIN_PROFILE,然后 `wails3 task dmg` 会自动走 `wails3 tool sign --hardened-runtime --notarize`,这是 Apple 公证流程,Apple 信任链 + 跳过 amfi 校验。
+
 ## 相关 commit
 
 - `3b1d68c` — dmg 内 .app 统一叫 Skill-Box.app + binary entitlements
 - `f8c059c` — dmg 分发说明文档 + 官方 wails v3 对照
 - `e08aafc` — dmg 内新增 `install.sh`(一键 xattr -cr + open)+ 文档加开源做法对比
+- `0478bc7` — 修 dmg「双击闪一下」,接 lsregister -f + launchctl asuser(本文档注:已被本节更新,LaunchAgent 替换)
+- `4d6142d` — `wails3 task dmg` 默认同时产出 arm64 + amd64 两份 dmg
+- `TBD` — install.sh 升级成安装 + 注册 LaunchAgent + 启动(amfi -423 根因,等价"双击即开"体验)

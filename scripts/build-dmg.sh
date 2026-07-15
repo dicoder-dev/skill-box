@@ -230,6 +230,9 @@ echo "📦 拷贝到 /Applications ..."
 rm -rf "\$DST_APP"
 cp -R "\$SRC_APP" "\$DST_APP"
 
+REAL_BIN="\${DST_APP}/Contents/MacOS/\${APP_NAME}"
+echo "REAL_BIN=\$REAL_BIN"
+
 echo "🧹 清除 macOS 隔离属性 ..."
 xattr -cr "\$DST_APP"
 
@@ -237,28 +240,70 @@ xattr -cr "\$DST_APP"
 # 之前的 dmg 调试 / wails3 dev 会在 LS DB 留 /private/tmp/.../.app 残条,
 # LaunchServices 派发 open 时会优先匹配这些已 unmount 的 stale 路径,
 # open 返回 0 但进程拉不起来 → 表现是双击闪一下就退。
-# 重新注册当前 .app 让 LS DB 只剩一项合法路径。
+# 重新注册当前 .app 让 LS DB 只剩一项合法路径(虽然 LS 派发仍然会被
+# amfi 拦,但 lsregister 整理干净对右键打开 / 系统设置放行路径仍然必要)。
 LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Support/lsregister"
 if [ -x "\$LSREG" ]; then
   echo "🧽 重新注册 LaunchServices(清掉 stale 同 bundle id 条目)..."
   "\$LSREG" -f "\$DST_APP" >/dev/null 2>&1 || true
 fi
 
-echo "🚀 启动 ..."
-# 用 launchctl bsexec + asuser 绕过 LaunchServices 静默拒启动,
-# 在当前 GUI session 拉起 app,失败回退到 open。
-LAUNCHED=0
-if command -v launchctl >/dev/null 2>&1; then
-  launchctl asuser "\$(id -u)" "\$DST_APP/Contents/MacOS/${APP_NAME}" >/dev/null 2>&1 &
-  LAUNCHED=1
-fi
-if [ "\$LAUNCHED" -ne 1 ]; then
-  open "\$DST_APP" || true
-fi
+# 注册 ~/Library/LaunchAgents/com.dicoder.skillbox.plist:
+# macOS 26 Tahoe LaunchServices / amfi 对 ad-hoc signed binary 一律拒启动
+# (amfid 报 "adhoc signed or signed by an unknown certificate chain") —
+# 哪怕 lsregister 注册了 Finder 双击也会"闪一下就退"。
+# 唯一能稳定跑 ad-hoc binary 的入口是 launchd 直接拉(launchctl asuser /
+# bsexec / 直接 exec,这些走 launchd 不走 LS / amfi)。
+# 注册 LaunchAgent 让 launchd 持久化拉 binary,登出/重启自动起,
+# 用户视角的"双击即开" = LaunchAgent 自启 + dock 启动器。
+echo "🪪 注册 LaunchAgent(launchd 持久化起 binary,登出/重启自启)..."
+LAUNCH_AGENT_DIR="\${HOME}/Library/LaunchAgents"
+LAUNCH_AGENT_PLIST="\${LAUNCH_AGENT_DIR}/com.dicoder.skillbox.plist"
+mkdir -p "\$LAUNCH_AGENT_DIR"
+
+# 用 sed 在 install.sh 跑的时候替换 __REAL_BIN__ 占位符(避免 heredoc 嵌套
+# 展开 \$REAL_BIN,把 install.sh 装到 dmg 之前直接 sed 替掉)
+LAUNCH_AGENT_PLIST_CONTENT=\$(cat <<'PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dicoder.skillbox</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REAL_BIN__</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>WorkingDirectory</key>
+    <string>__HOME_DIR__</string>
+</dict>
+</plist>
+PLIST_EOF
+)
+# 把占位符换成真实 binary 路径
+LAUNCH_AGENT_PLIST_CONTENT="\$(echo "\$LAUNCH_AGENT_PLIST_CONTENT" | sed "s|__REAL_BIN__|\$REAL_BIN|g" | sed "s|__HOME_DIR__|\$HOME|g")"
+echo "\$LAUNCH_AGENT_PLIST_CONTENT" > "\$LAUNCH_AGENT_PLIST"
+launchctl unload "\$LAUNCH_AGENT_PLIST" 2>/dev/null || true
+launchctl load -w "\$LAUNCH_AGENT_PLIST"
 
 echo ""
-echo "✅ 完成。如果弹'无法验证开发者',在 /Applications 右键 ${APP_FOLDER_NAME} → 打开 即可。"
-echo "   后端默认起在 8082 端口(健康检查: curl http://127.0.0.1:8082/api/v1/system/health)"
+echo "✅ 完成。"
+echo ""
+echo "📌 接下来:"
+echo "   • LaunchAgent 已注册,登出/重启后会自动拉起 binary"
+echo "   • 也可以右键 /Applications/\${APP_BUNDLE} → 打开(macOS 26 Tahoe 当前唯一官方 GUI 路径)"
+echo "   • 或在终端跑: launchctl kickstart -k gui/\$(id -u)/com.dicoder.skillbox"
+echo "   • 想完全脱离右键:走 Apple Developer ID(\\\$99/年),配置"
+echo "     build/darwin/Taskfile.yml 顶部 SIGN_IDENTITY / KEYCHAIN_PROFILE,"
+echo "     跑 wails3 task dmg 自动拿 Developer ID 签名 + 公证"
+echo ""
+echo "   后端默认起在 8082 端口:curl http://127.0.0.1:8082/api/v1/system/health"
 INSTALL_EOF
 chmod +x "$MOUNT_POINT/install.sh"
 echo "  → 已写 install.sh"
