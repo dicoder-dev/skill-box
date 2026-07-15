@@ -1,23 +1,26 @@
 #!/bin/bash
-# start-skillbox.sh — macOS 26 Tahoe 上「双击 .app 闪退」的临时拉起脚本
+# start-skillbox--dev.sh — 【DEV ONLY】开发者本地 debug 用,不是用户解法
 #
-# 背景:
-#   dmg 是 ad-hoc 签名的 Skill-Box.app。macOS 26 Tahoe 的 amfi 对
-#   LaunchServices / amfi 派发链上的 ad-hoc binary 报 Code=-423,
-#   open / Finder 双击进程会被静默杀掉,没有任何 GUI 提示。
+# ★ 用户解法不是这个脚本
+# dmg 分发给终端用户后,「双击闪退」的解法是 Apple GUI 路径:
+#   系统设置 → 隐私与安全性 → 滚到底 → 点「仍要打开」→ 再双击
+# 这是 Apple 给非 Developer ID 应用的唯一免费 fallback。
 #
-# 解法(实测 2026-07-15 通过):
-#   launchctl asuser <uid> <binary> 走 launchd 直派发(launchedByLS=0),
-#   不触发 amfi 校验,binary 能正常起来。
+# ★ 这个脚本是干什么的
+# 开发期 / 自测时,想绕过 GUI 手动点「仍要打开」,用 launchctl asuser 直派发
+# 拉起 binary(走 launchd 不走 LaunchServices,绕开 amfi Code=-423)。
+#
+# 位置刻意放在 scripts/dev/ 而不是 scripts/,文件名带 --dev 后缀,
+# 防止以后误以为是用户面向的功能。
 #
 # 用法:
-#   bash scripts/start-skillbox.sh            # 默认 /Applications/Skill-Box.app
-#   bash scripts/start-skillbox.sh --detach   # 用 nohup + disown 脱离当前 shell
+#   bash scripts/dev/start-skillbox--dev.sh
+#   bash scripts/dev/start-skillbox--dev.sh --detach   # nohup + disown
 #
 # 注意:
-#   - 不要把这脚本塞进 dmg(用户原话:不想要 install.sh)
-#   - 想彻底"双击即开"必须 Apple Developer ID + notarize($99/年),
-#     docs/project/desktop/dmg-分发说明.md 末尾有完整配置
+#   - 不进 dmg(用户原话:不想要 install.sh)
+#   - 用户文档(docs/project/desktop/dmg-分发说明.md)不引用本脚本
+#   - 想彻底「双击即开」必须 Apple Developer ID + notarize($99/年)
 set -euo pipefail
 
 APP_PATH="/Applications/Skill-Box.app"
