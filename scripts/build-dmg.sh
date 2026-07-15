@@ -254,9 +254,9 @@ fi
 # 哪怕 lsregister 注册了 Finder 双击也会"闪一下就退"。
 # 唯一能稳定跑 ad-hoc binary 的入口是 launchd 直接拉(launchctl asuser /
 # bsexec / 直接 exec,这些走 launchd 不走 LS / amfi)。
-# 注册 LaunchAgent 让 launchd 持久化拉 binary,登出/重启自动起,
-# 用户视角的"双击即开" = LaunchAgent 自启 + dock 启动器。
-echo "🪪 注册 LaunchAgent(launchd 持久化起 binary,登出/重启自启)..."
+# 注册 LaunchAgent 让 launchd 在用户登入时拉起 binary;
+# KeepAlive=false:跑完就放手,binary 退出不会再自启动。
+echo "🪪 注册 LaunchAgent(launchd 登入时拉 binary,不持久保活)..."
 LAUNCH_AGENT_DIR="\${HOME}/Library/LaunchAgents"
 LAUNCH_AGENT_PLIST="\${LAUNCH_AGENT_DIR}/com.dicoder.skillbox.plist"
 mkdir -p "\$LAUNCH_AGENT_DIR"
@@ -277,7 +277,7 @@ LAUNCH_AGENT_PLIST_CONTENT=\$(cat <<'PLIST_EOF'
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <false/>
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>WorkingDirectory</key>
@@ -296,9 +296,8 @@ echo ""
 echo "✅ 完成。"
 echo ""
 echo "📌 接下来:"
-echo "   • LaunchAgent 已注册,登出/重启后会自动拉起 binary"
-echo "   • 也可以右键 /Applications/\${APP_BUNDLE} → 打开(macOS 26 Tahoe 当前唯一官方 GUI 路径)"
-echo "   • 或在终端跑: launchctl kickstart -k gui/\$(id -u)/com.dicoder.skillbox"
+echo "   • LaunchAgent 已注册,登入电脑会拉一次 binary,跑完就不再自启"
+echo "   • 想再起一次,在终端跑: launchctl kickstart -k gui/\$(id -u)/com.dicoder.skillbox"
 echo "   • 想完全脱离右键:走 Apple Developer ID(\\\$99/年),配置"
 echo "     build/darwin/Taskfile.yml 顶部 SIGN_IDENTITY / KEYCHAIN_PROFILE,"
 echo "     跑 wails3 task dmg 自动拿 Developer ID 签名 + 公证"

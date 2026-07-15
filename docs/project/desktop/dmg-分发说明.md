@@ -251,7 +251,7 @@ macOS 26 Tahoe 的 AppleMobileFileIntegrity 对 **LaunchServices / amfi 派发�
 🚀 launchctl load -w 立即激活
 ```
 
-**用户视角**:`bash /Volumes/Skill-Box/install.sh` 跑完 5 秒内,binary 起来,8082 LISTEN;**登出/重启后 LaunchAgent 自动拉起**——这就是 macOS 26 Tahoe 当前能给"双击即开"等价体验的方案。
+**用户视角**:`bash /Volumes/Skill-Box/install.sh` 跑完 5 秒内,binary 起来,8082 LISTEN;**登入电脑 / 重启自动拉一次**(`RunAtLoad=true`),但**进程跑完不会自启**(`KeepAlive=false`,用户手动关掉就是真的关掉)。这就是 macOS 26 Tahoe 当前能给"双击即开"等价体验的方案。
 
 **实测**(2026-07-15):
 - PID 89374(`/Applications/Skill-Box.app/Contents/MacOS/Skill-Box`)
