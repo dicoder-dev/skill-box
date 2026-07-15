@@ -218,8 +218,19 @@ tasks:
       产物 {{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg(里面 .app 文件夹固定叫
       {{.APP_NAME}}.app,不带 -arm64 后缀 —— 拖到 /Applications 后用户在
       Finder/Dock 看到的就是干净的 Skill-Box.app)。
-      macOS 26 Gatekeeper 对纯 --sign - 签的 binary 报"损坏或不完整",
-      这里 binary + .app 两段签,都带 entitlements + --options runtime。
+
+      签名策略(自动检测 vars.SIGN_IDENTITY):
+      - 空(默认):本地 ad-hoc,二进制+包两段签(binary 加 entitlements,
+        macOS 26 LaunchServices 校验 binary 的 entitlements 段,空的话直接
+        报"损坏或不完整",LaunchServices 启动全部静默拒绝)
+      - 非空:走 wails3 task darwin:sign,Developer ID + entitlements +
+        (可选) --hardened-runtime + --notarize,需要 Apple Developer ID
+        账号配合 build/darwin/Taskfile.yml 顶部 SIGN_IDENTITY / ENTITLEMENTS /
+        KEYCHAIN_PROFILE 三个 vars 才生效
+
+      macOS 26 Gatekeeper 对纯 --sign - 签的 .app 默认拒 open / Finder 双击,
+      dmg 内 install.sh + 首次打开说明.txt 给用户三条绕过路径
+      (右键打开 / xattr -cr / 系统设置放行)。
     deps:
       - task: clean:stale
       - task: common:build:frontend
@@ -231,13 +242,17 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}-arm64" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
-      # 1) 先签 binary(binary 必须带 entitlements,macOS 26 Gatekeeper 在
-      #    LaunchServices 校验时会看 binary 的 entitlements 段,空的话直接
-      #    报"损坏或不完整",双击/LaunchServices 启动全部静默拒绝)
-      - codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
-      # 2) 再签 .app(--deep 把上面 binary 的签名带过去;不带 --options runtime,
-      #    ad-hoc + hardened runtime 在 macOS 26 上更严,反而触发"损坏"误报)
-      - codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      # 签名分支:有 SIGN_IDENTITY 走官方 wails3 task darwin:sign(Developer ID + notarize);
+      # 没有则 ad-hoc 两段签(binary 单独 + .app --deep,都不带 --options runtime)
+      - cmd: |
+          if [ -n "{{.SIGN_IDENTITY}}" ]; then
+            echo "🪪  Developer ID 签名: {{.SIGN_IDENTITY}}"
+            wails3 task darwin:sign
+          else
+            echo "🪪  ad-hoc 两段签(binary + .app,都带 entitlements)"
+            codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
+            codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+          fi
       - bash scripts/build-dmg.sh --skip-build --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg.staging.dmg"
@@ -249,7 +264,7 @@ tasks:
       用户可能没装 Rosetta,这种 dmg 能保证启动。
       产物 {{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg(里面 .app 文件夹固定叫
       {{.APP_NAME}}.app,不带 -amd64 后缀)。
-      macOS 26 Gatekeeper 处理同 dmg-arm64。
+      签名策略同 dmg-arm64(自动检测 SIGN_IDENTITY,空走 ad-hoc 两段签)。
     deps:
       - task: clean:stale
       - task: common:build:frontend
@@ -261,10 +276,15 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
-      # 1) 先签 binary
-      - codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
-      # 2) 再签 .app
-      - codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - cmd: |
+          if [ -n "{{.SIGN_IDENTITY}}" ]; then
+            echo "🪪  Developer ID 签名: {{.SIGN_IDENTITY}}"
+            wails3 task darwin:sign
+          else
+            echo "🪪  ad-hoc 两段签(binary + .app,都带 entitlements)"
+            codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
+            codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+          fi
       - bash scripts/build-dmg.sh --skip-build --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg.staging.dmg"

@@ -175,16 +175,23 @@ open / Finder 双击启动。**这是正常现象,不是 bug。**
   4. 系统弹"无法验证开发者"对话框,点「打开」
   5. 之后双击就能正常启动
 
-方法二:命令行一键(开发者/CLI 用户,最快)
+方法二:dmg 内 install.sh(最稳,一键)
+  1. 在 Finder 打开本 dmg
+  2. 双击 install.sh(系统问"是否在终端打开",确认)
+  3. 自动拷 .app + 清 quarantine + 重注册 LaunchServices + 启动
+  4. 失败的话看终端输出(常见还是右键打开)
+
+方法三:命令行一键(开发者/CLI 用户)
   1. 打开终端(Terminal)
   2. 执行(整段复制粘贴即可):
-       xattr -cr /Applications/${APP_FOLDER_NAME}.app && open /Applications/${APP_FOLDER_NAME}.app
-     第一条 xattr 递归清除隔离扩展属性(com.apple.quarantine),
-     这是 macOS 标"已损坏"的真正元凶——清掉就能正常启动。
-     open 自动触发 LaunchServices,如果还弹"无法验证开发者",
-     右键 /Applications/${APP_FOLDER_NAME}.app → 打开即可。
+       xattr -cr /Applications/${APP_FOLDER_NAME}.app && \
+         /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/${APP_FOLDER_NAME}.app && \
+         launchctl asuser "\$(id -u)" /Applications/${APP_FOLDER_NAME}/Contents/MacOS/${APP_NAME} &
+     xattr 递归清除隔离属性(解决 "已损坏" 提示)
+     lsregister -f 强制刷新 LaunchServices DB(解决 build 残留 stale 条目导致"双击闪一下")
+     launchctl asuser 在当前 GUI session 拉起 binary(Wails 主循环开始工作)
 
-方法三:系统设置放行(没有 Terminal 用)
+方法四:系统设置放行(没有 Terminal 用)
   1. 拖完 app 后,先双击一次(会失败、无任何提示)
   2. 打开「系统设置 → 隐私与安全性」
   3. 滚到页面底部,看到"已阻止使用 ${APP_NAME},因为它来自身份不明的开发者"
@@ -226,11 +233,32 @@ cp -R "\$SRC_APP" "\$DST_APP"
 echo "🧹 清除 macOS 隔离属性 ..."
 xattr -cr "\$DST_APP"
 
+# 清掉 LaunchServices 数据库里同 bundle id 的 stale 路径。
+# 之前的 dmg 调试 / wails3 dev 会在 LS DB 留 /private/tmp/.../.app 残条,
+# LaunchServices 派发 open 时会优先匹配这些已 unmount 的 stale 路径,
+# open 返回 0 但进程拉不起来 → 表现是双击闪一下就退。
+# 重新注册当前 .app 让 LS DB 只剩一项合法路径。
+LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Support/lsregister"
+if [ -x "\$LSREG" ]; then
+  echo "🧽 重新注册 LaunchServices(清掉 stale 同 bundle id 条目)..."
+  "\$LSREG" -f "\$DST_APP" >/dev/null 2>&1 || true
+fi
+
 echo "🚀 启动 ..."
-open "\$DST_APP" || true
+# 用 launchctl bsexec + asuser 绕过 LaunchServices 静默拒启动,
+# 在当前 GUI session 拉起 app,失败回退到 open。
+LAUNCHED=0
+if command -v launchctl >/dev/null 2>&1; then
+  launchctl asuser "\$(id -u)" "\$DST_APP/Contents/MacOS/${APP_NAME}" >/dev/null 2>&1 &
+  LAUNCHED=1
+fi
+if [ "\$LAUNCHED" -ne 1 ]; then
+  open "\$DST_APP" || true
+fi
 
 echo ""
-echo "✅ 完成。如果出现'无法验证开发者',在 /Applications 右键 ${APP_FOLDER_NAME} → 打开 即可。"
+echo "✅ 完成。如果弹'无法验证开发者',在 /Applications 右键 ${APP_FOLDER_NAME} → 打开 即可。"
+echo "   后端默认起在 8082 端口(健康检查: curl http://127.0.0.1:8082/api/v1/system/health)"
 INSTALL_EOF
 chmod +x "$MOUNT_POINT/install.sh"
 echo "  → 已写 install.sh"

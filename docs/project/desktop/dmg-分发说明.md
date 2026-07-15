@@ -53,10 +53,14 @@ bash /Volumes/Skill-Box/install.sh
 
 如果不方便跑 install.sh,直接一行复制粘贴:
 ```bash
-xattr -cr /Applications/Skill-Box.app && open /Applications/Skill-Box.app
+xattr -cr /Applications/Skill-Box.app && \
+  /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/Skill-Box.app && \
+  launchctl asuser "$(id -u)" /Applications/Skill-Box.app/Contents/MacOS/Skill-Box &
 ```
 
-`xattr -cr` 是 macOS 社区对付 ad-hoc/local build .app 的**最常用一招** —— GitHub issue **electron-builder/electron-builder#8191**、Tauri 文档、RustDesk issues 都用它绕过 Gatekeeper。
+`xattr -cr` 是 wails3 官方文档[macOS 打包 troubleshooting](https://v3.wails.io/zh-cn/getting-started/installation/)推荐的 dmg 用户侧 fix,也是 GitHub issue **electron-builder/electron-builder#8191** 的主流解。
+
+`lsregister -f` + `launchctl asuser` 是发现「双击闪一下」根因后加的二次保险:macOS 26 LaunchServices DB 里有同 bundle id 的 stale 路径(/private/tmp/dmg-mount.XXXXX/Skill-Box.app,build 阶段残留)时,open 返回 0 但拉不起进程。`lsregister -f` 强制刷新当前路径到 DB 头部,绕开 stale 优先匹配。
 
 ### 方法四:命令行绕过(开发期 / 脚本)
 
