@@ -189,17 +189,29 @@ tasks:
       - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.app"
 
   dmg:
-    summary: 把 `.app` 包成可拖拽 DMG(默认 universal)
+    summary: 把 `.app` 包成两份 dmg:arm64(Apple Silicon)+ amd64(Intel Mac)
     desc: |
-      调用 scripts/build-dmg.sh 生成 Finder 可拖拽布局的 DMG。
-      零三方依赖,只用 macOS 自带 hdiutil + osascript。
-      产物默认 {{.BIN_DIR}}/{{.APP_NAME}}.dmg。
+      一键产出两份 dmg,Apple Silicon 用户下 Skill-Box-arm64.dmg,
+      Intel Mac 用户下 Skill-Box-amd64.dmg。两份 dmg 内 .app 文件夹
+      都叫 Skill-Box.app(不带架构后缀),拖到 /Applications 后用户在
+      Finder / Dock 看到的就是干净名字。
+
+      为什么默认产物是两份单架构 dmg 而不是 universal:
+      - Apple Silicon Mac 上 universal binary 偶尔会走 x86_64 slice
+        走 Rosetta,arm64 native 启动更稳
+      - 没装 Rosetta 的 Intel Mac 启动 arm64 会失败,所以也要 amd64
+      - 两份 dmg 都是 23~25M,比 universal 46M 小一半
+
+      dmg 打包脚本:scripts/build-dmg.sh(零三方依赖,只 hdiutil + osascript)
+      串行执行 scripts/build-dmg-both.sh:先 dmg-arm64(完全跑完,清掉 .app),
+      再 dmg-amd64(同样清状态后再跑)。直接在 wails3 task 里把 dmg-arm64
+      + dmg-amd64 列为 deps 不行 —— task DAG 不能保证第二个任务第一个
+      cmds 之前 dmg-arm64 已经完成尾部 rm Skill-Box.app,会导致
+      codesign 在 .cstemp 残留状态上报 "invalid or unsupported format"。
     deps:
       - task: clean:stale
-      - task: package
     cmds:
-      - bash scripts/build-dmg.sh --arch universal --output "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
-      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}"   # 已拷进 .app,留着会污染 wails3 dev 起点
+      - bash scripts/build-dmg-both.sh
 
   dmg-universal:
     summary: 把 universal `.app` 包成可拖拽 DMG
@@ -256,6 +268,8 @@ tasks:
       - bash scripts/build-dmg.sh --skip-build --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg.staging.dmg"
+      # 清掉 .app 防止 dmg 任务链(arm64 → amd64 串联)里 .app 复用同一架构
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   dmg-amd64:
     summary: 把 amd64 `.app` 包成可拖拽 DMG(Intel Mac 用)
@@ -270,6 +284,9 @@ tasks:
       - task: common:build:frontend
       - task: common:generate:icons
     cmds:
+      # dmg-arm64 跑完尾部 rm .app,但 task DAG 顺序下 deps 可能在 dmg-arm64
+      # 还没生效前 evaluate,这里主动再清一次确保拿到空 .app
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
       - GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" MACOSX_DEPLOYMENT_TARGET="10.15" go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
@@ -288,6 +305,8 @@ tasks:
       - bash scripts/build-dmg.sh --skip-build --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg.staging.dmg"
+      # 清 .app 防止 dmg 任务链下一个任务复用
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   dmg-skip-build:
     summary: 假设 `.app` 已存在,只重写 dmg 布局(快速迭代)
