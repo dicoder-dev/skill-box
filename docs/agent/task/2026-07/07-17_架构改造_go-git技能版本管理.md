@@ -452,3 +452,34 @@ export const discardGit = () => http.post('/api/skillbox/git/discard')
   - `Bash rm` — 删有问题的 hook.go
   - `Bash mkdir -p` — 建 cskillversion controller 目录
 - **状态更新:** task #5 / #6 completed,task #7 / #8 pending
+
+### 1.3 对话轮次 (2026-07-17 第三轮 — 阶段二 + 三收尾)
+
+> 用户回复"继续 不需要考虑新旧并存...任何东西都是可以更改的",
+> 删掉"新旧并存"约束,直接走彻底替换 + 启动兜底路线。
+
+- **本轮做了:**
+  - 阶段二:删 5 个 ctag 端点 + e_skill_tag + e_skill_file_snapshot +
+    mskilltag + mskillfilesnapshot + skillaudit + sskillaudit(共 20 个文件)
+  - 阶段二:删 e_skill_file + mskillfile(2 个文件)
+  - 阶段二:删 tags.js 客户端 + SkillsView tag 弹窗 + ctxTag 右键菜单 + 28 条 i18n key
+  - 阶段二:新增 VersionHistoryModal.vue(commit 时间线 + diff + checkout + push)
+  - 阶段三:写 BootstrapInit() — 启动时 PlainInit + 扫描现有 skills 首次 commit
+  - 阶段三:cmd/bootstrap 在 SeedBundledSkills 后挂 skillversion.BootstrapInit()
+  - 阶段三:写完发现 migrate API 依赖已删的 entity.SkillTag/SkillFileSnapshot,
+    整个 migrate 工具放弃(改为"开箱即用"路线)
+  - 修 sskillapp.s_test.go AutoMigrate 去掉 SkillFile 引用
+  - 两个 commit push:`753c72d`(阶段二) + `9ea19db`(阶段三)
+- **本轮决定:**
+  - 灰度迁移工具不做 — 因 entity 已删,迁移无意义;改为启动自动 init + 首次 commit,
+    用户机器开箱即用
+  - entities.go 注释更新,删 4 个下线表的描述
+  - SkillsView tag 弹窗 CSS 删干净(tag-create / tag-list / diff-panel / .chip-tag 4 块)
+- **本轮待办:** 任务列表全部 completed,等待用户进一步指示
+- **本轮工具:**
+  - `Bash git rm -r` — 删 4 个目录
+  - `Bash go build / vet` — 验证后端
+  - `Bash npm run build` — 验证前端(10.7s 通过)
+  - `Edit` — 多次,删 tag 代码 + 加 version 弹窗 + 加 BootstrapInit 挂载点
+  - `Bash git add / commit / push` — 两次提交 + 推送
+- **状态更新:** task #7 / #8 completed,所有 8 个 task 完成
