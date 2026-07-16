@@ -143,21 +143,13 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
-      # 关键:不调 codesign:adhoc(2026-07-16 实测发现)
-      #
-      # macOS 26 Tahoe 对 codesign --force --deep --sign - 写的 ad-hoc 签名
-      # 走 amfi Code=-423 静默拒路径(spctl reject 后 amfi 提前到 Gatekeeper
-      # 之前),无任何 GUI 兜底。
-      #
-      # happytools(Aliuyanfeng/happytools)v1.1.6 dmg 实测 .app 是
-      # `code object is not signed at all` + binary 有 Go linker signature
-      # (LC_CODE_SIGNATURE load command, flags=0x20002(adhoc,linker-signed))。
-      # 这种状态 macOS 走 syspolicyd 临时签路径(Gatekeeper 弹"无法验证"对话框,
-      # 用户点"OK" + 系统设置 → 仍要打开 → 通过),跟 happytools 用户实测一致。
-      #
-      # 详细对比见 ~/.claude memory `macos-tahoe-所有非-dev-id-启动路径都被-amfi-短路`。
-      # 留空 task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
-      # 一行以备后续要重新开启一段签。
+      - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+      # 2026-07-16 实测:必须保留 wails3 alpha.60 默认 codesign:adhoc
+      # (codesign --force --deep --sign -),否则 .app 装到 /Applications 后
+      # xpcproxy 60-80ms 后 exit(1),binary 不会持续跑。
+      # 参考 testpkg (wails3 init 默认项目) 跟 happytools 行为对比。
+      # 注:dmg-arm64 / dmg-amd64 任务内的两段签 (binary + .app) 是
+      # dmg 额外包的,codesign:adhoc 是一段签覆盖,这里保留即可。
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)
