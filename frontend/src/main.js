@@ -10,6 +10,7 @@ import { getRuntime } from './core/utils/runtime.js'
 import { enableDebug, dlog, isDebug } from './core/utils/debug.js'
 import { useAppStore } from './core/store/app.js'
 import i18n from './core/i18n/index.js'
+import { installThinScrollbar } from './core/directives/thinScrollbar.js'
 
 // 双部署入口:
 // 1) 注册 pinia 并一次性写 store(runtime + baseURL)
@@ -24,6 +25,8 @@ async function bootstrap() {
   // 注意:i18n 的 locale 已经在 createI18n 时基于 localStorage/navigator 解析;
   // 若想由后端 / runtime 强制覆盖,可在 setRuntime 之后调 setLocale(runtime.lang)。
   app.use(i18n)
+  // 自绘 1px 极细滚动条(macOS Chrome 原生轨道最小 11px,无法靠 CSS 压缩)
+  installThinScrollbar(app)
 
   const store = useAppStore()
 

@@ -655,7 +655,7 @@ onErrorCaptured((err) => {
         class="ssp-scope-header-chevron"
       />
     </button>
-    <ul v-if="!sectionCollapsed" class="ssp-scope-list">
+    <ul v-if="!sectionCollapsed" v-thin-scrollbar class="ssp-scope-list">
       <!-- 2026-07-12 增 v2:作用域区首位"全局 Agent Skill" 行。
            跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
            + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/

@@ -1643,7 +1643,7 @@ defineExpose({
              旧版:作用域在顶部 → 用户第一眼看到的是 scope,文件树被挤。
              新版:文件树在上(占主要空间),作用域在底部(辅助信息,默认折叠,
              用户主动展开才看得到生效位置)。 -->
-        <div class="sfip-tree-wrap">
+        <div v-thin-scrollbar class="sfip-tree-wrap">
           <!-- 2026-07-07 增:文件树加标题栏,跟 .ssp-scope-header 风格一致 -->
           <header class="sfip-tree-header">
             <!-- 2026-07-08 改:PascalCase 直传 FileCabinet(避免 mdi 映射兜底导致的"看不见"

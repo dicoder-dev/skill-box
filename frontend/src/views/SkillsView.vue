@@ -1750,6 +1750,7 @@ onUnmounted(() => {
            之前 5 次 commit 反复在 TreeNode 内部绑 drop 修各种 bug,这次彻底放弃,
            一个容器一个 handler,真相源唯一。 -->
       <div
+        v-thin-scrollbar
         class="tree-container"
         :class="{ 'tree-container-drag-over': rootDropHover }"
         :data-drop-text="t('skills.list.dropToRoot')"

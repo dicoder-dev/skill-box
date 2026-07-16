@@ -411,6 +411,7 @@ const lineNumbers = computed(() => {
         />
         <div
           v-else
+          v-thin-scrollbar
           class="cv-md md-body markdown-body"
           v-html="renderedMd"
           @click="onMdClick"
@@ -451,7 +452,7 @@ const lineNumbers = computed(() => {
             <IconPark icon="mdi:chevron-right" width="14" height="14" />
           </button>
         </header>
-        <ul class="cv-md-outline-list">
+        <ul v-thin-scrollbar class="cv-md-outline-list">
           <li
             v-for="h in mdHeadings"
             :key="h.id"
