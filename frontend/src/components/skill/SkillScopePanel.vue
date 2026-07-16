@@ -656,12 +656,6 @@ onErrorCaptured((err) => {
 </script>
 
 <template>
-  <!-- 2026-07-17 增:Git 同步面板(go-git 版本管理)。始终在最顶部展示,
-       无论作用域状态如何,用户都能看到仓库 init / push 状态。
-       错误降级时不展示(避免噪音);否则无论 localError / scopeLoading 都先渲染。
-       2026-07-17 bugfix:之前写成 v-else-if="!localError",把作用域区 v-else-if 链
-       截胡,正常状态下作用域区被跳过 — 这里改成独立 v-if 块,作用域区按原条件渲染。 -->
-  <GitSyncPanel v-if="!localError" />
   <!-- 错误降级 UI -->
   <div v-if="localError" class="ssp-error">
     <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
@@ -833,6 +827,11 @@ onErrorCaptured((err) => {
     <span class="ssp-spinner ssp-spinner-xs"></span>
   </p>
   <p v-else class="ssp-scope-empty-tip">{{ t(LABEL_EMPTY) }}</p>
+
+  <!-- 2026-07-17 改:Git 同步面板(go-git 版本管理)移到作用域区下方,默认折叠。
+       放在所有 v-else-if 链外(独立 v-if),避免再次打断作用域的条件渲染。
+       错误降级时不展示(避免噪音)。 -->
+  <GitSyncPanel v-if="!localError" />
 
   <!-- 2026-07-07 增:自管确认弹窗,替代 window.confirm。
        wails desktop webview 默认禁用 window.confirm,直接调确认会被静默拒绝。 -->

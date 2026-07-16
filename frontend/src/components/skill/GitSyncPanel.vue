@@ -1,21 +1,18 @@
 <script setup>
 // GitSyncPanel - 技能仓库 Git 同步状态面板(2026-07-17 增)
 //
-// 嵌入 SkillScopePanel 顶部,展示:
-//   - 仓库 init 状态 + branch + HEAD 短码 + HEAD message
-//   - 远端 URL / branch / has_token
-//   - Push 失败队列长度 + 最后错误(可展开)
-//   - 操作:初始化 / 配置远端 / Push / Discard / 查看历史
+// 嵌入 SkillScopePanel 内部,默认折叠,点击 header 展开。
+// 跟作用域面板同款交互(可点击 header 展开/收起,折叠态只显示 header 行)。
 //
 // 2026-07-17 设计决策:
-//   - 不内嵌 version 弹窗(那个在 SkillsView 里),这里只做"同步状态 + 操作入口"
-//   - "配置远端"按钮打开 inline form(本组件内),避免依赖全局 Settings Tab
-//   - token 字段用 type="password",本地不持久化明文,提交后由后端落 0600 文件
-//   - 远端 URL 必须在客户端简单校验 https://(后端会再校验一次)
-//   - 任何 push 失败 → 显示红条 + 最后错误,点击可重试
+//   - 用 vue-i18n 的 t(key) 而非 plainT(key, fallback) — plainT 的第二参是
+//     插值变量,不是 fallback 字符串,所有 .vue 里 plainT('git.xxx', 'fallback')
+//     都把 fallback 当成 {key: 'fallback'} 插值对象,显示成字面量
+//   - 默认折叠 — 跟作用域面板一致,不抢首页视觉重点
+//   - 位置:在 SkillScopePanel 内部,作用域区下方(改 <section> 渲染顺序)
 
 import { ref, computed, onMounted } from 'vue'
-import { plainT } from '@/core/i18n/index.js'
+import { useI18n } from 'vue-i18n'
 import {
   getGitStatus,
   getGitConfig,
@@ -26,9 +23,13 @@ import {
 } from '@/api/skillbox/git.js'
 import IconPark from '@/components/IconPark.vue'
 
+const { t } = useI18n()
+
+// 2026-07-17 改:默认折叠,跟作用域面板一致
+const expanded = ref(false)
 // 是否展示配置表单(默认收起,有 remote_url 才展开)
 const configOpen = ref(false)
-// 表单字段
+
 const formRemoteURL = ref('')
 const formBranch = ref('main')
 const formToken = ref('')
@@ -102,7 +103,7 @@ async function doPush() {
 }
 
 async function doDiscard() {
-  if (!confirm(plainT('git.discardConfirm', '丢弃所有未提交改动?此操作不可撤销。'))) return
+  if (!confirm(t('git.discardConfirm'))) return
   loading.value = true
   try {
     await discardGit()
@@ -115,10 +116,9 @@ async function doDiscard() {
 }
 
 async function saveConfig() {
-  // 客户端校验 https://
   const url = formRemoteURL.value.trim()
   if (url && !/^https:\/\//i.test(url)) {
-    errorMsg.value = plainT('git.invalidUrl', '远端 URL 必须以 https:// 开头')
+    errorMsg.value = t('git.invalidUrl')
     return
   }
   formSaving.value = true
@@ -131,7 +131,7 @@ async function saveConfig() {
       user_name: formUserName.value.trim(),
       user_email: formUserEmail.value.trim(),
     })
-    formToken.value = '' // 写盘后清空,避免浏览器 cache 残留
+    formToken.value = ''
     configOpen.value = false
     await refresh()
   } catch (e) {
@@ -141,164 +141,169 @@ async function saveConfig() {
   }
 }
 
-function openConfig() {
-  configOpen.value = !configOpen.value
+function toggle() {
+  expanded.value = !expanded.value
+  if (expanded.value) refresh()
 }
 
 onMounted(refresh)
-
-// 暴露给父组件(用于外部触发刷新,例如"查看历史"关闭后)
-defineExpose({ refresh })
 </script>
 
 <template>
-  <div class="git-sync-panel">
-    <div class="git-header">
+  <section class="ssp-git" :class="{ 'is-expanded': expanded }">
+    <!-- Header 跟作用域面板同款(button 切换展开,chevron 提示状态) -->
+    <button
+      type="button"
+      class="ssp-git-header ssp-git-header-toggle"
+      :aria-expanded="expanded"
+      @click="toggle"
+    >
       <IconPark type="github" :size="14" />
-      <span class="git-title">{{ plainT('git.title', 'Git 同步') }}</span>
-      <span v-if="status.initialized" class="git-badge ok">
+      <span class="ssp-git-title">{{ t('git.title') }}</span>
+      <span v-if="status.initialized" class="ssp-git-badge ok">
         <IconPark type="check-one" :size="10" />
         {{ status.branch || 'main' }} · {{ status.head_short || '-' }}
       </span>
-      <span v-else class="git-badge warn">
-        {{ plainT('git.notInit', '未初始化') }}
+      <span v-else class="ssp-git-badge warn">{{ t('git.notInit') }}</span>
+      <span class="ssp-git-chevron">
+        <IconPark :type="expanded ? 'up' : 'down'" :size="12" />
       </span>
-      <button v-if="status.initialized && !configOpen" class="git-icon-btn" :title="plainT('git.config', '配置远端')" @click="openConfig">
-        <IconPark type="config" :size="12" />
-      </button>
-      <button v-else-if="status.initialized && configOpen" class="git-icon-btn" :title="plainT('git.close', '收起')" @click="openConfig">
-        <IconPark type="up" :size="12" />
-      </button>
-    </div>
+    </button>
 
-    <!-- 未 init 状态 -->
-    <div v-if="!status.initialized" class="git-empty">
-      <p class="git-empty-tip">{{ plainT('git.initTip', '首次启用 Git 版本管理,点击下面按钮初始化本地仓库。') }}</p>
-      <button class="git-btn primary" :disabled="loading" @click="doInit">
-        <IconPark type="plus" :size="12" />
-        {{ plainT('git.init', '初始化仓库') }}
-      </button>
-    </div>
-
-    <!-- 已 init 状态 -->
-    <div v-else class="git-body">
-      <!-- 远端 / 同步状态 -->
-      <div class="git-row">
-        <div class="git-row-label">{{ plainT('git.remote', '远端') }}</div>
-        <div class="git-row-value">
-          <span v-if="hasRemote" class="git-remote-url" :title="status.remote_url">{{ status.remote_url }}</span>
-          <span v-else class="git-remote-missing">{{ plainT('git.remoteMissing', '未配置') }}</span>
-          <span v-if="status.has_token" class="git-token-ok">
-            <IconPark type="lock" :size="10" /> Token
-          </span>
-          <span v-else class="git-token-warn">
-            <IconPark type="unlock" :size="10" /> {{ plainT('git.noToken', '无 Token') }}
-          </span>
-        </div>
-      </div>
-
-      <div class="git-row">
-        <div class="git-row-label">{{ plainT('git.head', '当前') }}</div>
-        <div class="git-row-value">
-          <code class="git-head-hash">{{ status.head_short || '-' }}</code>
-          <span class="git-head-msg" :title="status.head_message">{{ status.head_message || '(无)' }}</span>
-        </div>
-      </div>
-
-      <div class="git-row">
-        <div class="git-row-label">{{ plainT('git.workingTree', '工作区') }}</div>
-        <div class="git-row-value">
-          <span v-if="status.working_clean" class="git-clean">
-            <IconPark type="check-one" :size="10" /> {{ plainT('git.clean', '干净') }}
-          </span>
-          <span v-else class="git-dirty">
-            <IconPark type="edit" :size="10" /> {{ plainT('git.dirty', '有改动') }}
-          </span>
-          <span v-if="status.pending_push > 0" class="git-pending" :title="plainT('git.pendingTip', '等待重试的 push 任务数')">
-            <IconPark type="upload" :size="10" /> {{ status.pending_push }} pending
-          </span>
-        </div>
-      </div>
-
-      <!-- 失败错误 -->
-      <div v-if="status.last_push_error" class="git-error">
-        <IconPark type="warning" :size="12" />
-        <span class="git-error-msg">{{ status.last_push_error }}</span>
-      </div>
-
-      <!-- 操作按钮 -->
-      <div class="git-actions">
-        <button v-if="hasRemote" class="git-btn" :disabled="loading" @click="doPush">
-          <IconPark type="upload" :size="12" />
-          {{ plainT('git.push', 'Push') }}
-        </button>
-        <button v-if="!status.working_clean" class="git-btn warn" :disabled="loading" @click="doDiscard">
-          <IconPark type="undo" :size="12" />
-          {{ plainT('git.discard', 'Discard') }}
+    <!-- 折叠态下不渲染 body,跟作用域面板一致 -->
+    <div v-if="expanded" class="ssp-git-body">
+      <!-- 未 init 状态 -->
+      <div v-if="!status.initialized" class="ssp-git-empty">
+        <p class="ssp-git-empty-tip">{{ t('git.initTip') }}</p>
+        <button class="ssp-git-btn primary" :disabled="loading" @click="doInit">
+          <IconPark type="plus" :size="12" />
+          {{ t('git.init') }}
         </button>
       </div>
 
-      <!-- 配置表单(折叠) -->
-      <div v-if="configOpen" class="git-config-form">
-        <label class="git-form-row">
-          <span class="git-form-label">{{ plainT('git.formRemoteURL', '远端 URL') }}</span>
-          <input v-model="formRemoteURL" type="text" placeholder="https://github.com/user/repo.git" class="git-input" />
-        </label>
-        <label class="git-form-row">
-          <span class="git-form-label">{{ plainT('git.formBranch', '分支') }}</span>
-          <input v-model="formBranch" type="text" placeholder="main" class="git-input" />
-        </label>
-        <label class="git-form-row">
-          <span class="git-form-label">{{ plainT('git.formToken', 'Token') }}</span>
-          <input v-model="formToken" type="password" placeholder="github_pat_xxx (留空保留现有)" class="git-input" />
-        </label>
-        <label class="git-form-row">
-          <span class="git-form-label">{{ plainT('git.formUserName', 'Author 名') }}</span>
-          <input v-model="formUserName" type="text" placeholder="留空用环境变量" class="git-input" />
-        </label>
-        <label class="git-form-row">
-          <span class="git-form-label">{{ plainT('git.formUserEmail', 'Author 邮箱') }}</span>
-          <input v-model="formUserEmail" type="text" placeholder="留空用环境变量" class="git-input" />
-        </label>
-        <div class="git-form-actions">
-          <button class="git-btn" :disabled="formSaving" @click="configOpen = false">{{ plainT('git.cancel', '取消') }}</button>
-          <button class="git-btn primary" :disabled="formSaving" @click="saveConfig">
-            {{ plainT('git.save', '保存') }}
+      <!-- 已 init 状态 -->
+      <div v-else class="ssp-git-content">
+        <div class="ssp-git-row">
+          <div class="ssp-git-row-label">{{ t('git.remote') }}</div>
+          <div class="ssp-git-row-value">
+            <span v-if="hasRemote" class="ssp-git-remote-url" :title="status.remote_url">{{ status.remote_url }}</span>
+            <span v-else class="ssp-git-remote-missing">{{ t('git.remoteMissing') }}</span>
+            <span v-if="status.has_token" class="ssp-git-token-ok">
+              <IconPark type="lock" :size="10" /> Token
+            </span>
+            <span v-else class="ssp-git-token-warn">
+              <IconPark type="unlock" :size="10" /> {{ t('git.noToken') }}
+            </span>
+            <button class="ssp-git-icon-btn" :title="t('git.config')" @click="configOpen = !configOpen">
+              <IconPark type="config" :size="12" />
+            </button>
+          </div>
+        </div>
+
+        <div class="ssp-git-row">
+          <div class="ssp-git-row-label">{{ t('git.head') }}</div>
+          <div class="ssp-git-row-value">
+            <code class="ssp-git-head-hash">{{ status.head_short || '-' }}</code>
+            <span class="ssp-git-head-msg" :title="status.head_message">{{ status.head_message || '(无)' }}</span>
+          </div>
+        </div>
+
+        <div class="ssp-git-row">
+          <div class="ssp-git-row-label">{{ t('git.workingTree') }}</div>
+          <div class="ssp-git-row-value">
+            <span v-if="status.working_clean" class="ssp-git-clean">
+              <IconPark type="check-one" :size="10" /> {{ t('git.clean') }}
+            </span>
+            <span v-else class="ssp-git-dirty">
+              <IconPark type="edit" :size="10" /> {{ t('git.dirty') }}
+            </span>
+            <span v-if="status.pending_push > 0" class="ssp-git-pending" :title="t('git.pendingTip')">
+              <IconPark type="upload" :size="10" /> {{ t('git.pending', { n: status.pending_push }) }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="status.last_push_error" class="ssp-git-error">
+          <IconPark type="warning" :size="12" />
+          <span class="ssp-git-error-msg">{{ status.last_push_error }}</span>
+        </div>
+
+        <div class="ssp-git-actions">
+          <button v-if="hasRemote" class="ssp-git-btn" :disabled="loading" @click="doPush">
+            <IconPark type="upload" :size="12" />
+            {{ t('git.push') }}
+          </button>
+          <button v-if="!status.working_clean" class="ssp-git-btn warn" :disabled="loading" @click="doDiscard">
+            <IconPark type="undo" :size="12" />
+            {{ t('git.discard') }}
           </button>
         </div>
-      </div>
 
-      <!-- 错误信息(操作级,不是 push 错误) -->
-      <div v-if="errorMsg" class="git-error">
-        <IconPark type="close" :size="12" />
-        <span class="git-error-msg">{{ errorMsg }}</span>
+        <div v-if="configOpen" class="ssp-git-config-form">
+          <label class="ssp-git-form-row">
+            <span class="ssp-git-form-label">{{ t('git.formRemoteURL') }}</span>
+            <input v-model="formRemoteURL" type="text" placeholder="https://github.com/user/repo.git" class="ssp-git-input" />
+          </label>
+          <label class="ssp-git-form-row">
+            <span class="ssp-git-form-label">{{ t('git.formBranch') }}</span>
+            <input v-model="formBranch" type="text" placeholder="main" class="ssp-git-input" />
+          </label>
+          <label class="ssp-git-form-row">
+            <span class="ssp-git-form-label">{{ t('git.formToken') }}</span>
+            <input v-model="formToken" type="password" :placeholder="t('git.formToken')" class="ssp-git-input" />
+          </label>
+          <label class="ssp-git-form-row">
+            <span class="ssp-git-form-label">{{ t('git.formUserName') }}</span>
+            <input v-model="formUserName" type="text" class="ssp-git-input" />
+          </label>
+          <label class="ssp-git-form-row">
+            <span class="ssp-git-form-label">{{ t('git.formUserEmail') }}</span>
+            <input v-model="formUserEmail" type="text" class="ssp-git-input" />
+          </label>
+          <div class="ssp-git-form-actions">
+            <button class="ssp-git-btn" :disabled="formSaving" @click="configOpen = false">{{ t('git.cancel') }}</button>
+            <button class="ssp-git-btn primary" :disabled="formSaving" @click="saveConfig">{{ t('git.save') }}</button>
+          </div>
+        </div>
+
+        <div v-if="errorMsg" class="ssp-git-error">
+          <IconPark type="close" :size="12" />
+          <span class="ssp-git-error-msg">{{ errorMsg }}</span>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.git-sync-panel {
+/* 2026-07-17 改:跟作用域面板样式对齐(.ssp- 前缀),用 section 包裹。
+   折叠态只显示 header,展开态显示 body。 */
+
+.ssp-git {
+  margin-top: 8px;
   border: 1px solid var(--border-color, rgba(127, 127, 127, 0.15));
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  border-radius: var(--radius, 6px);
   background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
-  font-size: 12px;
 }
 
-.git-header {
+.ssp-git-header {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--text-primary, currentColor);
+  text-align: left;
 }
+.ssp-git-header:hover { background: rgba(127, 127, 127, 0.04); }
+.ssp-git-title { flex: 0 0 auto; }
 
-.git-title {
-  flex: 0 0 auto;
-}
-
-.git-badge {
+.ssp-git-badge {
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
@@ -313,52 +318,58 @@ defineExpose({ refresh })
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.git-badge.ok {
+.ssp-git-badge.ok {
   background: rgba(34, 197, 94, 0.15);
   color: rgb(34, 197, 94);
 }
-.git-badge.warn {
+.ssp-git-badge.warn {
   background: rgba(245, 158, 11, 0.15);
   color: rgb(245, 158, 11);
 }
 
-.git-icon-btn {
+.ssp-git-chevron {
   flex: 0 0 auto;
-  background: transparent;
-  border: 0;
-  padding: 2px 4px;
-  cursor: pointer;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
+  display: inline-flex;
+  align-items: center;
 }
-.git-icon-btn:hover { color: var(--text-primary, currentColor); }
 
-.git-empty {
-  margin-top: 8px;
+.ssp-git-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.git-empty-tip {
-  margin: 0 0 6px;
+
+.ssp-git-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.ssp-git-empty-tip {
+  margin: 0;
   font-size: 11px;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
 }
 
-.git-body {
-  margin-top: 8px;
+.ssp-git-content {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.git-row {
+.ssp-git-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
-.git-row-label {
+.ssp-git-row-label {
   flex: 0 0 40px;
   font-size: 11px;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
 }
-.git-row-value {
+.ssp-git-row-value {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -366,28 +377,38 @@ defineExpose({ refresh })
   min-width: 0;
   font-size: 11px;
 }
-.git-remote-url {
+.ssp-git-remote-url {
   font-family: var(--font-mono, monospace);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
-.git-remote-missing { color: var(--text-muted, rgba(127, 127, 127, 0.5)); }
-.git-token-ok { color: rgb(34, 197, 94); display: inline-flex; align-items: center; gap: 2px; }
-.git-token-warn { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
-.git-head-hash { font-family: var(--font-mono, monospace); }
-.git-head-msg {
+.ssp-git-remote-missing { color: var(--text-muted, rgba(127, 127, 127, 0.5)); }
+.ssp-git-token-ok { color: rgb(34, 197, 94); display: inline-flex; align-items: center; gap: 2px; }
+.ssp-git-token-warn { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
+.ssp-git-head-hash { font-family: var(--font-mono, monospace); }
+.ssp-git-head-msg {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
-.git-clean { color: rgb(34, 197, 94); display: inline-flex; align-items: center; gap: 2px; }
-.git-dirty { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
-.git-pending { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
+.ssp-git-clean { color: rgb(34, 197, 94); display: inline-flex; align-items: center; gap: 2px; }
+.ssp-git-dirty { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
+.ssp-git-pending { color: rgb(245, 158, 11); display: inline-flex; align-items: center; gap: 2px; }
 
-.git-error {
+.ssp-git-icon-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: var(--text-muted, rgba(127, 127, 127, 0.7));
+}
+.ssp-git-icon-btn:hover { color: var(--text-primary, currentColor); }
+
+.ssp-git-error {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -395,22 +416,18 @@ defineExpose({ refresh })
   border-left: 2px solid rgb(239, 68, 68);
   padding: 4px 6px;
   border-radius: 3px;
-  margin-top: 6px;
   font-size: 11px;
   color: rgb(239, 68, 68);
 }
-.git-error-msg {
-  word-break: break-all;
-}
+.ssp-git-error-msg { word-break: break-all; }
 
-.git-actions {
+.ssp-git-actions {
   display: flex;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
-.git-btn {
-  flex: 0 0 auto;
+.ssp-git-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -422,21 +439,20 @@ defineExpose({ refresh })
   border-radius: 4px;
   cursor: pointer;
 }
-.git-btn:hover:not(:disabled) { background: rgba(127, 127, 127, 0.08); }
-.git-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.git-btn.primary {
+.ssp-git-btn:hover:not(:disabled) { background: rgba(127, 127, 127, 0.08); }
+.ssp-git-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ssp-git-btn.primary {
   border-color: rgb(59, 130, 246);
   background: rgba(59, 130, 246, 0.15);
   color: rgb(59, 130, 246);
 }
-.git-btn.warn {
+.ssp-git-btn.warn {
   border-color: rgb(245, 158, 11);
   background: rgba(245, 158, 11, 0.15);
   color: rgb(245, 158, 11);
 }
 
-.git-config-form {
-  margin-top: 8px;
+.ssp-git-config-form {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -444,16 +460,16 @@ defineExpose({ refresh })
   background: rgba(127, 127, 127, 0.04);
   border-radius: 4px;
 }
-.git-form-row {
+.ssp-git-form-row {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.git-form-label {
+.ssp-git-form-label {
   font-size: 10px;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
 }
-.git-input {
+.ssp-git-input {
   padding: 3px 6px;
   font-size: 11px;
   border: 1px solid var(--border-color, rgba(127, 127, 127, 0.25));
@@ -462,7 +478,7 @@ defineExpose({ refresh })
   color: var(--text-primary, currentColor);
   font-family: var(--font-mono, monospace);
 }
-.git-form-actions {
+.ssp-git-form-actions {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
