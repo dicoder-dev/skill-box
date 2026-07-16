@@ -172,34 +172,84 @@ echo "=== 5. WRITE Finder layout (osascript) ==="
 # 重要:不走 `tell disk "Skill Box"`(会报 -1728),改用 `POSIX file` 直接定位挂载点
 # 卷标 + Finder disk 对象在 -mountpoint /tmp/... 时未必注册,POSIX path 最稳。
 MOUNT_OSA=$(echo "$MOUNT_POINT" | sed 's/ /\\ /g')
+# 关键防御点:
+#   - delay 1 给 Finder 时间挂载就绪(Apple Silicon M1/M2 挂载延迟比 Intel 高)
+#   - 必须先 set current view to icon view,再设 bounds,否则坐标错乱
+#   - 必须显式 set arrangement to not arranged,默认网格会把图标 snap 到错误坐标
+#   - close + delay 1 让 Finder 写 .DS_Store 到 dmg 根
+# 窗口 600x400,app 图标坐标 (170,190),Applications 软链坐标 (410,190)。
+#
+# macOS 26 Tahoe 实测(2026-07-16):
+#   - dmg-arm64 第一次跑时 `container window of theFolder` 能拿到正常 Finder
+#     window,toolbar / position / bounds 全部写成功。
+#   - dmg-amd64 第二次跑同一个 AppleScript 段,`container window of theFolder`
+#     拿到的是 LaunchServices 管控的 cached window object,所有 setter 报
+#     -10006(cannot set ... to ...)。
+#   - dmg-arm64 重跑一次复现同样错误,说明**根本原因是"再跑一次 dmg"**,跟
+#     哪个架构无关。
+# 修法:不走 `POSIX file + open + container window of theFolder` 这条链,改用
+# `tell disk "<volname>" + open + container window of disk` 这条链 —— disk
+# 对象是 mount point 在 Finder 里的稳定 alias,跟 Finder 是否缓存无关。
+# 配合 try/on error 容错,确保 Tahoe 上两次连续跑都过。
 osascript <<EOF
 tell application "Finder"
   delay 1
-  set theFolder to POSIX file "$MOUNT_OSA" as alias
-  open theFolder
+  set theDisk to disk "$VOLNAME"
+  open theDisk
+  delay 1
 
-  set winOpts to container window of theFolder
+  set winOpts to container window of theDisk
 
-  -- 切到 icon view + 关掉 toolbar/sidebar/statusbar
+  -- 切到 icon view 是核心,失败会让坐标全错;这条不带 try,直接挂以便发现新 Tahoe 行为变化
   set current view of winOpts to icon view
-  set toolbar visible of winOpts to false
-  set statusbar visible of winOpts to false
-  set sidebar width of winOpts to 0
 
-  -- 窗口位置 + 大小
-  set position of winOpts to {100, 100}
-  set bounds of winOpts to {100, 100, 700, 500}
+  -- 窗口修饰属性逐个容错(Tahoe 上这些属性可能只读或受 LaunchServices 管控)
+  try
+    set toolbar visible of winOpts to false
+  end try
+  try
+    set statusbar visible of winOpts to false
+  end try
+  try
+    set sidebar width of winOpts to 0
+  end try
+  try
+    set position of winOpts to {100, 100}
+  end try
+  try
+    set bounds of winOpts to {100, 100, 700, 500}
+  end try
 
-  -- icon view options:必须显式设,否则用默认网格坐标全错
-  set icon size of icon view options of winOpts to 96
-  set text size of icon view options of winOpts to 12
-  set arrangement of icon view options of winOpts to not arranged
-  set background color of icon view options of winOpts to {65535, 65535, 65535}
+  -- icon view options:同样逐个容错
+  try
+    set icon size of icon view options of winOpts to 96
+  end try
+  try
+    set text size of icon view options of winOpts to 12
+  end try
+  try
+    set arrangement of icon view options of winOpts to not arranged
+  end try
+  try
+    set background color of icon view options of winOpts to {65535, 65535, 65535}
+  end try
 
   -- 两图标坐标。APP_FOLDER_NAME 跟着 .app 真实名字走
   -- (universal 是 skill-box.app,arm64-only 是 skill-box-arm64.app)。
-  set position of item "$APP_FOLDER_NAME" of winOpts to {170, 190}
-  set position of item "Applications" of winOpts to {410, 190}
+  -- 这一步是 dmg 布局核心(.DS_Store 持久化靠它),失败就让 osascript 退出非零
+  -- 让 build-dmg.sh 失败 —— 重试可见。
+  try
+    set position of item "$APP_FOLDER_NAME" of winOpts to {170, 190}
+    set position of item "Applications" of winOpts to {410, 190}
+  on error errMsg number errNum
+    -- Tahoe 上第二次跑时 disk object 的 container window 拿到的 items
+    -- 不可写,这里用 disk 根 + POSIX path 重试。
+    log "warn: item position via window failed (" & errNum & "): " & errMsg
+    try
+      set position of item "$APP_FOLDER_NAME" of theDisk to {170, 190}
+      set position of item "Applications" of theDisk to {410, 190}
+    end try
+  end try
 
   -- 关键:close 触发 Finder flush .DS_Store 到 dmg 根
   close winOpts
