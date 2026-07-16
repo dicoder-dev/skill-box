@@ -52,6 +52,10 @@ func BootstrapInit() {
 	}
 
 	// 扫描所有现有 skill,做一次兜底入库
+	//
+	// 2026-07-17 改:同步 → 异步。同步 commit 在主 goroutine 跑 go-git 慢 IO,
+	// 会阻塞 Serve 启动;异步走后台,业务上"用户首次启动 git 仓库还没入库"
+	// 场景不影响 UI(store.Save hook 会兜底)。
 	root := repo.Root()
 	if root == "" {
 		root = strings.TrimSpace(configs.Skillbox.StoreRoot)
@@ -65,13 +69,16 @@ func BootstrapInit() {
 		return
 	}
 	msg := fmt.Sprintf("chore(skills): initial import (%d skills)", len(skills))
-	_, err = repo.AutoCommitAndPush(CommitInput{
-		Message: msg,
-		Paths:   nil, // add all
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[skillversion] bootstrap commit: %v\n", err)
-	}
+	go func() {
+		defer func() { _ = recover() }()
+		_, err := repo.AutoCommitAndPush(CommitInput{
+			Message: msg,
+			Paths:   nil, // add all
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[skillversion] bootstrap commit: %v\n", err)
+		}
+	}()
 }
 
 // worktreeStatus 内部 helper:返回 worktree 是否有未提交改动。
