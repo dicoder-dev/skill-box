@@ -29,6 +29,7 @@ import (
 
 	"ginp-api/configs"
 	"ginp-api/internal/skilladapter"
+	"ginp-api/internal/skillversion"
 	sharefunc "ginp-api/share/func"
 )
 
@@ -244,7 +245,48 @@ func (s *Store) Save(c skilladapter.Canonical, deletedPaths []string) error {
 	if err := os.Rename(tmp, dir); err != nil {
 		return fmt.Errorf("skillstore: rename temp: %w", err)
 	}
+
+	// 2026-07-17 增:落盘成功后调 skillversion.AutoCommitAndPush。
+	// 失败仅写 logger,不阻断 store.Save(业务写盘已经成功,版本管理失败不能反向回滚)。
+	// 走 goroutine 异步执行,store.Save 不等 git 完成。
+	go autoCommitAfterSave(c.Manifest.GroupPath, c.Manifest.Name, "update")
 	return nil
+}
+
+// autoCommitAfterSave 把 store.Save 的成功事件转成 git commit。
+//
+// 2026-07-17:走 skillversion.Repo.AutoCommitAndPush,失败不抛(已包在内部)。
+// 注释:go-git 调用方在异步 goroutine 写日志,要复用项目 logger。
+func autoCommitAfterSave(group, name, op string) {
+	defer func() {
+		_ = recover() // 防 panic 拖垮 store 调用方
+	}()
+	rel := filepath.ToSlash(filepath.Join(group, name))
+	if group == "" {
+		rel = name
+	}
+	repo, err := skillversionRepo()
+	if err != nil {
+		loggerWarn("skillversion: open repo: %v", err)
+		return
+	}
+	_, err = repo.AutoCommitAndPush(skillversion.CommitInput{
+		Message: fmt.Sprintf("skill(store): %s %s", op, rel),
+		Paths:   []string{rel},
+	})
+	if err != nil {
+		loggerWarn("skillversion: AutoCommitAndPush %s: %v", rel, err)
+	}
+}
+
+// skillversionRepo 拿 skillversion 全局单例(避免每次 Save 都重新 init)。
+var skillversionRepo = func() (*skillversion.Repo, error) {
+	return skillversion.Default()
+}
+
+// loggerWarn 占位 logger,替换为 stderr 输出(skillversion 失败仅用于调试)。
+var loggerWarn = func(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "[skillversion] "+format+"\n", args...)
 }
 
 // copyFileAtomic 把 src 单文件复制到 dst(读 src 内容 → writeFileAtomic dst)。

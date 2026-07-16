@@ -12,6 +12,7 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillapply"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillpkg"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskilltest"
+	_ "ginp-api/internal/gapi/controller/skillbox/cskillversion" // 2026-07-17 增:go-git 版本管理 11 个 HTTP API
 	_ "ginp-api/internal/gapi/controller/skillbox/ctag"
 	_ "ginp-api/internal/gapi/controller/skillbox/ctool"
 	_ "ginp-api/internal/gapi/controller/system/cindex"
