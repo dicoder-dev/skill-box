@@ -21,5 +21,5 @@
 - [隐藏段过滤 HasHiddenSegment](hidden-segment-filter.md) — skilladapter 统一 hidden 段规则,Apply/ReadFiles/AI prompt/ChatStream system 四点同源
 - [AI 历史 source_path prop drilling](ai-history-sourcepath-prop-drilling.md) — filePath ≠ source_path,4 层 prop drilling 才把 absolute path 传到后端;v1 误用 filePath 后端永久 404 + catch(_) 静默
 - [拖拽把手用绝对定位不占布局](fe-resizable-panel-absolute-handle.md) — grid/flex 把手当子项会挤乱列/撑出横向溢出;一律 position:absolute + 面板宽走 CSS 变量,把手 left/right 引用同一变量;useResizablePanel composable;详情底部横向滚动条真凶是 sfip-viewer-header flex 撑破
-- [自绘 1px 滚动条 v-thin-scrollbar](fe-thin-scrollbar-directive.md) — macOS Chrome 轨道硬下限 11px,CSS 压不下去;Vue 指令自绘 thumb 1px + ResizeObserver + scroll 联动,统一 macOS/WKWebView/Chrome/Firefox 视觉
-- [全局隐藏滚动条客户端惯例](fe-hide-scrollbar-everywhere.md) — 桌面软件风格不显示滚动条,任何页面都不需要;v-thin-scrollbar 仅在 hover 时显 thumb,平时隐藏
+- [自绘 1px 滚动条 v-thin-scrollbar(已弃用)](fe-thin-scrollbar-directive.md) — **2026-07-17 用户反馈不要任何滚动条,指令已删除**;若未来真需要自绘可参考此实现:macOS Chrome 轨道硬下限 11px 需自绘 thumb + ResizeObserver + scroll 联动
+- [全局隐藏滚动条客户端惯例](fe-hide-scrollbar-everywhere.md) — 桌面软件风格不显示滚动条;CSS 双层(::-webkit-scrollbar { display:none } + html { scrollbar-width: none })即可,无需自绘
