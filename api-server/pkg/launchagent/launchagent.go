@@ -59,6 +59,64 @@ func IsLaunchdChild() bool {
 	return os.Getenv("LaunchAgentLabel") == Label
 }
 
+// InstalledBinaryPath 返回当前 plist 里 ProgramArguments[0] 指向的 binary 绝对路径。
+//
+// 用途:macOS 26 Tahoe 自启动要求 plist 的 program 路径必须跟当前 binary 一致。
+// dmg 装的 .app 在 /Applications,plist 之前可能是 dev 期 build 写下的路径;
+// 首次启动 dmg .app 时如果 plist 路径不一致,需要用当前 binary 路径重写 plist
+// 才能让后续 launchd 派发链拉对 binary。
+//
+// 实现:plist 是 XML,程序里就用 plist 包的最小子集查 ProgramArguments。
+// 失败时(文件不存在 / 解析失败 / 无 ProgramArguments)返回空字符串,
+// 调用方按"plist 未装"处理。
+func InstalledBinaryPath() (string, error) {
+	plist, err := PlistPath()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(plist)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("launchagent: read plist %s: %w", plist, err)
+	}
+	// plist XML 形态:
+	//   <key>ProgramArguments</key>
+	//   <array>
+	//     <string>/path/to/binary</string>
+	//     ...
+	//   </array>
+	// 这里用极简 grep:先找 <key>ProgramArguments</key>,再找紧跟的 <array>...</array>。
+	// 不引入第三发 plist 解析包,plist 结构稳定,够用。
+	body := string(data)
+	keyIdx := strings.Index(body, "<key>ProgramArguments</key>")
+	if keyIdx < 0 {
+		return "", nil
+	}
+	after := body[keyIdx:]
+	arrStart := strings.Index(after, "<array>")
+	if arrStart < 0 {
+		return "", nil
+	}
+	after = after[arrStart+len("<array>"):]
+	arrEnd := strings.Index(after, "</array>")
+	if arrEnd < 0 {
+		return "", nil
+	}
+	arr := after[:arrEnd]
+	strStart := strings.Index(arr, "<string>")
+	if strStart < 0 {
+		return "", nil
+	}
+	arr = arr[strStart+len("<string>"):]
+	strEnd := strings.Index(arr, "</string>")
+	if strEnd < 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(arr[:strEnd]), nil
+}
+
 // IsInstalled 报告 LaunchAgent 是否已注册(plist 文件存在 + launchd 域里有目标)。
 //
 // 只检查 plist 文件存在,因为 launchctl list 在 launchd 重启 / 用户登出后
@@ -89,6 +147,9 @@ func IsInstalled() (bool, error) {
 // 实例会带 LaunchAgentLabel 环境变量,IsLaunchdChild 会返 true;当前进程
 // (本函数调用方)不退出,继续跑下去会和 launchd 拉的那一份撞 8082 端口。
 // 因此调用方在 Install 返回成功时应该 os.Exit(0),让 launchd 那份接管。
+//
+// 如果 plist 已存在,先 bootout 旧域,再写新 plist + bootstrap,避免
+// `launchctl bootstrap` 报"service already loaded"。
 func Install(binaryPath, logPath string) error {
 	plist, err := PlistPath()
 	if err != nil {
@@ -96,6 +157,18 @@ func Install(binaryPath, logPath string) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(plist), 0o755); err != nil {
 		return fmt.Errorf("launchagent: MkdirAll: %w", err)
+	}
+
+	// 已存在的 plist 先 bootout,否则后续 bootstrap 报 "service already loaded"。
+	// bootout 失败(服务没在跑 / 已 bootout)不阻断,只是日志提示。
+	if _, err := os.Stat(plist); err == nil {
+		uid := os.Getuid()
+		domainTarget := fmt.Sprintf("gui/%d", uid)
+		if bout := exec.Command("launchctl", "bootout", domainTarget, plist); bout.Err != nil {
+			// 忽略:可能是 plist 已不在 launchd 域里
+		} else {
+			_ = bout.Run()
+		}
 	}
 
 	content := buildPlist(binaryPath, logPath)

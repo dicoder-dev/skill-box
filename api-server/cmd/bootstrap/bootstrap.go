@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
@@ -318,16 +317,27 @@ func (b *Backend) Shutdown() {
 //        第二次双击或等 kickstart
 //     3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
 //
-//   后续启动(plist 已装 + launchd 那份已经在跑 8082):
-//     1. 检测 8082 已被 Skill-Box 占用 → 当前是双击,直接退出避免撞端口
+//   首次启动(无 plist):
+//     1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
+//     2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
+//        第二次双击或等 kickstart
+//     3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
 //
-//   后续启动(plist 已装 + 8082 没占用,比如 launchd 那份死了):
-//     1. launchctl kickstart 拉一份
-//     2. 本进程退出
+//   后续启动(plist 已装 + plist program 路径 != 当前 binary 路径,典型场景
+//   是 dmg 装的 .app 首次双击,plist 还是 dev 期 build 留下的路径):
+//     1. Install 重写 plist 指向当前 binary 路径(Install 内部 bootout + 写 + bootstrap)
+//     2. 本进程继续 Serve,plist 已重写,下次启动路径一致
 //
-// 为什么首次启动不 kickstart:实测发现 kickstart 立刻 fork 一个新进程,
-// 那个新进程也走本函数,跟当前进程撞 8082;现在不 kickstart,本进程正常
-// Serve,plist 已注册,后续启动自动走 launchd 派发(amfi 不再 -423)。
+//   后续启动(plist 已装 + plist program 路径 == 当前 binary 路径):
+//     1. 如果 8082 已被 Skill-Box 占用 → launchd 那份在跑,本进程退出避免撞端口
+//     2. 如果 8082 没占用 → 本进程直接 Serve(不 kickstart,kickstart -k 5s 超时
+//        在 macOS 26 Tahoe 下不稳定,launchd child 启动 + 跑 Serve 通常 > 5s,
+//        5s 超时会让本进程退出后 launchd 那份还没起来 → 用户看到二次启动)
+//
+// 为什么首次启动和后续启动都不 kickstart:实测 2026-07-16,kickstart -k 后
+// launchd child 启动到 8082 LISTEN 通常需要 8-12s(Go runtime + sqlite migrate
+// + SeedBundledSkills + Gin 监听),我们写死的 5s 超时不够。改成"本进程 Serve
+// + plist 仅作 launchctl asuser 直派发的标记",用户视觉上是"双击即开,无延迟"。
 func maybeBootstrapLaunchAgent() error {
 	if launchagent.IsLaunchdChild() {
 		log.Printf("bootstrap: launchd child (LaunchAgentLabel=%s), skip bootstrap",
@@ -341,34 +351,36 @@ func maybeBootstrapLaunchAgent() error {
 	}
 
 	if installed {
-		// plist 已装。如果 8082 已被 Skill-Box 占用,说明 launchd 那份已经在跑,
-		// 当前是 Finder 双击起来的(被 amfi -423 杀掉之前的 fork),本进程退出避免撞端口。
+		// plist 已装。第一件事:看 plist 里的 program 路径跟当前 binary 一不一致。
+		// macOS 26 Tahoe 下 dmg 装的 .app 首次双击,如果 plist 还是 dev 期写的
+		// 路径(/Volumes/MyDrive/.../bin/Skill-Box.dev.app/...),launchd 派发
+		// 链拉的还是 dev 期 binary,那个 binary 也走 maybeBootstrap 又去
+		// kickstart,5s 超时退出死循环。修复:用当前 binary 路径重写 plist。
+		currentExe, _ := os.Executable()
+		installedPath, _ := launchagent.InstalledBinaryPath()
+		if currentExe != "" && installedPath != "" && currentExe != installedPath {
+			log.Printf("bootstrap: plist program=%s, current=%s, rewriting plist",
+				installedPath, currentExe)
+			if err := launchagent.Install(currentExe, launchLogPath()); err != nil {
+				log.Printf("bootstrap: rewrite plist failed: %v (will continue with current process)", err)
+				return nil
+			}
+			log.Printf("bootstrap: plist rewritten to %s, continuing to serve", currentExe)
+			return nil
+		}
+
+		// plist 已装 + program 路径对得上。如果 8082 已被 Skill-Box 占用,
+		// 说明 launchd 那份已经在跑,当前是 Finder 双击起来的(被 amfi -423
+		// 杀掉之前的 fork),本进程退出避免撞端口。
 		if isPortOccupied(8082, "Skill-Box") {
 			log.Printf("bootstrap: LaunchAgent installed and 8082 already LISTEN, exiting")
 			os.Exit(0)
 		}
-		// plist 已装但 8082 没占用:launchd 那份死了(用户上次退出后没再起)。
-		// kickstart 让 launchd 拉一份,本进程等 launchd 那份起来(8082 LISTEN)
-		// 后再退出 —— 否则 launchd 那份 fork 出来会跟本进程同时跑 + 都
-		// 走 maybeBootstrap 死循环(实测 2026-07-15,kickstart -k 杀旧拉新,
-		// 新进程启动瞬间旧进程已被 SIGTERM,8082 短暂空,新进程又走本分支)。
-		uid := os.Getuid()
-		log.Printf("bootstrap: LaunchAgent installed but 8082 not LISTEN, kickstarting launchd")
-		if kerr := exec.Command("launchctl", "kickstart", "-k",
-			fmt.Sprintf("gui/%d/%s", uid, launchagent.Label)).Run(); kerr != nil {
-			log.Printf("bootstrap: kickstart failed: %v (will continue as fallback)", kerr)
-			return nil
-		}
-		// 等 launchd 那份起来,最多 5 秒
-		for i := 0; i < 50; i++ {
-			time.Sleep(100 * time.Millisecond)
-			if isPortOccupied(8082, "Skill-Box") {
-				log.Printf("bootstrap: launchd child up (8082 LISTEN), exiting")
-				os.Exit(0)
-			}
-		}
-		log.Printf("bootstrap: launchd child did not come up in 5s, exiting anyway")
-		os.Exit(0)
+		// plist 已装 + 路径对 + 8082 没占用:launchd 没拉 launchd 那份
+		// (KeepAlive=false RunAtLoad=false,plist 仅作注册标记)。本进程
+		// 直接 Serve 即可,plist 留着供下次 launchctl asuser 直派发时用。
+		log.Printf("bootstrap: LaunchAgent installed and 8082 free, serving in current process")
+		return nil
 	}
 
 	// plist 未装 → 首次启动
@@ -376,10 +388,9 @@ func maybeBootstrapLaunchAgent() error {
 	if err != nil {
 		return fmt.Errorf("get executable: %w", err)
 	}
-	logPath := filepath.Join(sharefunc.LogsDir(), "launchagent.log")
 
-	log.Printf("bootstrap: bootstrapping LaunchAgent (binary=%s, log=%s)", exe, logPath)
-	if err := launchagent.Install(exe, logPath); err != nil {
+	log.Printf("bootstrap: bootstrapping LaunchAgent (binary=%s, log=%s)", exe, launchLogPath())
+	if err := launchagent.Install(exe, launchLogPath()); err != nil {
 		return err
 	}
 	log.Printf("bootstrap: LaunchAgent bootstrapped successfully, continuing to serve")
@@ -387,6 +398,16 @@ func maybeBootstrapLaunchAgent() error {
 	// 后续启动时,Finder 双击会被 amfi 杀,但 launchd 那份会接管。
 	// 用户退出本进程后,plist 已注册,下次启动 kickstart 拉一份。
 	return nil
+}
+
+// launchLogPath 返回 ~/.skill-box/logs/launchagent.log 的绝对路径,
+// bootstrap 模块需要传这个路径给 launchagent.Install。
+//
+// 抽出来单独一个函数避免在 maybeBootstrapLaunchAgent 内部重复构造路径。
+// 与 sharefunc.LogsDir() 同源,只是 sharefunc 在 dbs 等包依赖重,
+// 这里手动拼保持 launchagent.Install 的参数语义清晰。
+func launchLogPath() string {
+	return filepath.Join(sharefunc.LogsDir(), "launchagent.log")
 }
 
 // isPortOccupied 检测指定端口是否被指定进程名占用。
