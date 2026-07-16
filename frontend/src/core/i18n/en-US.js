@@ -1224,6 +1224,7 @@ Booleans use true / false (not the strings "true" / "false"). Output nothing out
     historyPickCommit: 'Click a commit on the left to view diff',
     historyCheckout: 'Reset to this commit',
     historyPush: 'Push',
+    historyPull: 'Pull',
     checkoutConfirm: 'Reset working tree to commit {hash}? This will overwrite any unsaved local changes.',
   },
 }

@@ -12,17 +12,20 @@
 //   - 错误信息顶部统一展示,操作级错误带行内 icon
 
 import { ref, computed, watch } from 'vue'
-import { plainT } from '@/core/i18n/index.js'
+import { useI18n } from 'vue-i18n'
 import {
   getGitLog,
   getGitDiff,
   checkoutGit,
   pushGit,
+  pullGit,
   discardGit,
   getGitStatus,
 } from '@/api/skillbox/git.js'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -84,8 +87,7 @@ async function loadDiff() {
 
 async function doCheckout() {
   if (!selectedHash.value) return
-  if (!confirm(plainT('git.checkoutConfirm',
-    `确定要 reset 工作区到 commit ${selectedHash.value.slice(0, 7)}?此操作会覆盖本地未保存的改动。`))) {
+  if (!confirm(t('git.checkoutConfirm', { hash: selectedHash.value.slice(0, 7) }))) {
     return
   }
   loading.value = true
@@ -114,8 +116,21 @@ async function doPush() {
   }
 }
 
+// 2026-07-17 增:Pull 按钮 — 拉取远端改动;工作区有未提交改动返 409。
+async function doPull() {
+  loading.value = true
+  try {
+    await pullGit()
+    await loadAll()
+  } catch (e) {
+    errorMsg.value = (e && e.message) || String(e)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function doDiscard() {
-  if (!confirm(plainT('git.discardConfirm', '丢弃所有未提交改动?此操作不可撤销。'))) return
+  if (!confirm(t('git.discardConfirm'))) return
   loading.value = true
   try {
     await discardGit()
@@ -147,7 +162,7 @@ function close() {
   <Modal
     :model-value="open"
     size="xl"
-    :title="plainT('git.history.title', '版本历史')"
+    :title="t('git.history.title')"
     @update:model-value="emit('update:open', $event)"
   >
     <div class="version-modal">
@@ -158,13 +173,13 @@ function close() {
           {{ status.branch }} · {{ status.head_short }}
         </span>
         <span v-else class="status-pill warn">
-          {{ plainT('git.notInit', '未初始化') }}
+          {{ t('git.notInit') }}
         </span>
         <span v-if="status.pending_push > 0" class="status-pill warn">
           <IconPark type="upload" :size="10" /> {{ status.pending_push }} pending
         </span>
         <span v-if="!status.working_clean" class="status-pill warn">
-          <IconPark type="edit" :size="10" /> {{ plainT('git.dirty', '有改动') }}
+          <IconPark type="edit" :size="10" /> {{ t('git.dirty') }}
         </span>
       </div>
 
@@ -176,14 +191,14 @@ function close() {
 
       <div v-if="!status || !status.initialized" class="version-empty">
         <IconPark type="github" :size="36" />
-        <p>{{ plainT('git.history.initFirst', '请先在作用域面板初始化 Git 仓库') }}</p>
+        <p>{{ t('git.history.initFirst') }}</p>
       </div>
 
       <div v-else class="version-body">
         <!-- 左:commit 列表 -->
         <div class="version-list">
           <div v-if="loading && !items.length" class="version-loading">
-            {{ plainT('common.loading', '加载中...') }}
+            {{ t('common.loading') }}
           </div>
           <ul v-else-if="items.length" class="version-items">
             <li
@@ -203,20 +218,20 @@ function close() {
             </li>
           </ul>
           <div v-else class="version-empty">
-            <p>{{ plainT('git.history.empty', '暂无 commit 记录') }}</p>
+            <p>{{ t('git.history.empty') }}</p>
           </div>
         </div>
 
         <!-- 右:diff 视图 -->
         <div class="version-diff">
           <div class="diff-header">
-            <span class="diff-title">{{ plainT('git.history.diff', '变更对比') }}</span>
+            <span class="diff-title">{{ t('git.history.diff') }}</span>
             <span class="diff-range">{{ shortHash(diffFrom) }} → {{ shortHash(diffTo) }}</span>
           </div>
-          <div v-if="diffLoading" class="diff-loading">{{ plainT('common.loading', '加载中...') }}</div>
+          <div v-if="diffLoading" class="diff-loading">{{ t('common.loading') }}</div>
           <pre v-else-if="diffText" class="diff-pre">{{ diffText }}</pre>
           <div v-else class="diff-empty">
-            {{ plainT('git.history.pickCommit', '点击左侧 commit 查看 diff') }}
+            {{ t('git.history.pickCommit') }}
           </div>
         </div>
       </div>
@@ -225,15 +240,21 @@ function close() {
       <div v-if="status && status.initialized" class="version-actions">
         <button class="version-btn" :disabled="loading || !selected" @click="doCheckout">
           <IconPark type="undo" :size="12" />
-          {{ plainT('git.history.checkout', 'Reset 到此 commit') }}
+          {{ t('git.history.checkout') }}
         </button>
         <button v-if="status.remote_url" class="version-btn" :disabled="loading" @click="doPush">
           <IconPark type="upload" :size="12" />
-          {{ plainT('git.history.push', 'Push') }}
+          {{ t('git.history.push') }}
+        </button>
+        <!-- 2026-07-17 增:Pull 按钮,跟 Push 平行;有 remote_url 才显示,
+             工作区有未提交改动时仍可点(后端会返 409 + 友好错误)。 -->
+        <button v-if="status.remote_url" class="version-btn" :disabled="loading" @click="doPull">
+          <IconPark type="download" :size="12" />
+          {{ t('git.history.pull') }}
         </button>
         <button v-if="!status.working_clean" class="version-btn warn" :disabled="loading" @click="doDiscard">
           <IconPark type="close" :size="12" />
-          {{ plainT('git.discard', 'Discard') }}
+          {{ t('git.discard') }}
         </button>
       </div>
     </div>

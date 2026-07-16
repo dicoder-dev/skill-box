@@ -1249,6 +1249,7 @@ const messages = {
     historyPickCommit: '点击左侧 commit 查看 diff',
     historyCheckout: 'Reset 到此 commit',
     historyPush: 'Push',
+    historyPull: 'Pull',
     checkoutConfirm: '确定要 reset 工作区到 commit {hash}?此操作会覆盖本地未保存的改动。',
   },
 }

@@ -175,15 +175,24 @@ func (q *pushQueueImpl) load() {
 	}
 }
 
-// RetryFailed 启动时扫一次重试队列(bootstrap.RegisterBootHook 调用)。
-func RetryFailed(repo *Repo) {
+// RetryFailedPushes 启动时扫一次重试队列(bootstrap 调用)。
+//
+// 2026-07-17 改:不传参,内部直接用 Default() 拿 Repo(避免 bootstrap 还要
+// import skillstore 拿 Repo)。
+func RetryFailedPushes() {
+	defer func() { _ = recover() }()
+	repo, err := Default()
+	if err != nil {
+		return
+	}
 	items := pushQueue.Items()
 	for _, it := range items {
 		if it.Attempts >= maxPushAttempts {
 			continue
 		}
-		if err := repo.Push(); err == nil {
-			pushQueue.Remove(it.Hash)
-		}
+		// 注意:每次 push 都会扣减 attempt,5 次失败后 pushQueue.Add 内部会移除。
+		// 这里直接调 repo.Push() 即可,失败由 Push 内部的 recordPushError
+		// + pushQueue.Add 接管。
+		_ = repo.Push()
 	}
 }

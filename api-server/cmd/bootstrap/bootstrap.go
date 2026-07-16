@@ -214,6 +214,9 @@ func Boot(opts BootOptions) (*Backend, error) {
 	// 必须在 SeedBundledSkills 之后(否则 init 时扫描不到 seed 出来的 skill),
 	// 在 Serve 之前(否则 HTTP 请求进来 store.Save hook 会先于 init commit)。
 	skillversion.BootstrapInit()
+	// 2026-07-17 增:启动时重试 push 队列(上次进程 push 失败的 commit,
+	// 本次启动时再尝试一次 push,上限 5 次由 pushQueue.Add 内部管控)。
+	skillversion.RetryFailedPushes()
 	if !opts.DisableTask {
 		StartTask()
 	}

@@ -363,6 +363,38 @@ func (r *Repo) DiscardChanges() error {
 	return wt.Reset(&git.ResetOptions{Mode: git.HardReset})
 }
 
+// Pull 手动 pull(从远端拉取,fast-forward only)。
+//
+// 2026-07-17 增:go-git v5 Pull = Fetch + Merge,只能 fast-forward;若远端有
+// non-ff 改动会报 ErrNonFastForwardUpdate,这时让用户先 commit 自己工作区
+// 改动(或 discard),再 retry。Force: true 允许非快进更新,本地会丢失
+// 未 push 的 commit,所以默认不打开。
+func (r *Repo) Pull() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	auth, err := loadAuthFromConfig()
+	if err != nil {
+		return err
+	}
+	repo, err := r.open()
+	if err != nil {
+		return err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	// 工作区有未提交改动时拒绝 pull,避免冲突或覆盖
+	if st, _ := wt.Status(); !st.IsClean() {
+		return ErrWorkingTreeDirty
+	}
+	return wt.Pull(&git.PullOptions{
+		RemoteName: "origin",
+		Auth:       auth,
+		Force:      false,
+	})
+}
+
 // resolveHash 解析 ref/短 hash/全 hash → plumbing.Hash。
 func resolveHash(repo *git.Repository, ref string) (plumbing.Hash, error) {
 	if ref == "" || ref == "HEAD" {

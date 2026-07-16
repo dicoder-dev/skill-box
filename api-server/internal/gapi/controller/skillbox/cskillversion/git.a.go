@@ -284,6 +284,30 @@ func GitDiscard(c *ginp.ContextPlus) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
+// GitPull POST /api/skillbox/git/pull
+//
+// 2026-07-17 增:从远端拉取(fast-forward only);工作区有未提交改动时
+// 返 409 + ErrWorkingTreeDirty,让用户先 commit 或 discard 再 retry。
+func GitPull(c *ginp.ContextPlus) {
+	repo, err := skillversion.Default()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if err := repo.Pull(); err != nil {
+		switch {
+		case errors.Is(err, skillversion.ErrRemoteNotConfigured):
+			c.JSON(400, gin.H{"error": err.Error()})
+		case errors.Is(err, skillversion.ErrWorkingTreeDirty):
+			c.JSON(409, gin.H{"error": err.Error()})
+		default:
+			c.JSON(500, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
 // ===========================================================================
 // 路由注册
 // ===========================================================================
@@ -397,6 +421,18 @@ func init() {
 		Swagger: &ginp.SwaggerInfo{
 			Title:       "git.push",
 			Description: "手动 push;未配置 remote 返 400,失败返 500 + 错误详情",
+		},
+	})
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/skillbox/git/pull",
+		Handler:        ginp.BindHandler(GitPull),
+		HttpType:       ginp.HttpPost,
+		NeedLogin:      false,
+		NeedPermission: false,
+		PermissionName: "skillbox.git.pull",
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "git.pull",
+			Description: "手动 pull(fast-forward only);工作区有未提交改动返 409",
 		},
 	})
 	ginp.RouterAppend(ginp.RouterItem{

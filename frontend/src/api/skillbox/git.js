@@ -127,6 +127,14 @@ export function pushGit() {
 }
 
 /**
+ * 手动 pull(从远端拉取,fast-forward only)。
+ * 工作区有未提交改动时后端返 409,前端弹提示让用户先 commit/discard。
+ */
+export function pullGit() {
+  return http.post('/api/skillbox/git/pull')
+}
+
+/**
  * 丢弃工作区未提交改动(等价 git reset --hard HEAD)。
  */
 export function discardGit() {
