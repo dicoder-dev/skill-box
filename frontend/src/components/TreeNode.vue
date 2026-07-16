@@ -146,8 +146,14 @@ function onDragStart(node, e) {
 }
 
 // 应用工具 chip 列表(给 skill 叶子用)
+// 2026-07-16 改:优先从 toolsById 拿 display_name(完整可读名,如 "Claude Code"),
+// 拿不到再回退到 toolShort 大写首字母(如 "Claude")。用户反馈 chip 只显示
+// "Claude"/"Agent" 这种语言标识,缺少具体工具名,体验模糊。
 function toolShort(toolID) {
   if (!toolID) return '?'
+  const meta = props.toolsById?.[toolID]
+  if (meta?.display_name) return meta.display_name
+  if (meta?.display) return meta.display
   return toolID.charAt(0).toUpperCase() + toolID.slice(1)
 }
 const TOOL_ICON_MAP = {

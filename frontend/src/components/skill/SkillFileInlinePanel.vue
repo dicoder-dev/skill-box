@@ -1080,14 +1080,14 @@ function onCtxFile({ file, event }) {
   ctxMenu.items = [
     {
       key: 'rename-file',
-      label: LABEL_CTX_RENAME_FILE,
+      label: t(LABEL_CTX_RENAME_FILE),
       icon: 'mdi:rename-outline',
       onClick: () => openRenameFileDialog(file),
     },
     { divided: true, key: 'div-1', label: '' },
     {
       key: 'delete-file',
-      label: LABEL_CTX_DELETE_FILE,
+      label: t(LABEL_CTX_DELETE_FILE),
       icon: 'mdi:delete',
       danger: true,
       onClick: () => openDeleteFileDialog(file),
@@ -1107,20 +1107,20 @@ function onCtxFolder({ dir, event }) {
   ctxMenu.items = [
     {
       key: 'new-file',
-      label: LABEL_CTX_NEW_FILE,
+      label: t(LABEL_CTX_NEW_FILE),
       icon: 'mdi:file-document-plus-outline',
       onClick: () => openNewFileDialog(dirPath),
     },
     { divided: true, key: 'div-1', label: '' },
     {
       key: 'rename-folder',
-      label: LABEL_CTX_RENAME_FOLDER,
+      label: t(LABEL_CTX_RENAME_FOLDER),
       icon: 'mdi:rename-outline',
       onClick: () => openRenameFolderDialog(dir),
     },
     {
       key: 'open-folder',
-      label: LABEL_CTX_OPEN_FOLDER,
+      label: t(LABEL_CTX_OPEN_FOLDER),
       icon: 'mdi:folder-outline',
       onClick: () => openFolderInExplorer(dirPath),
     },
@@ -1150,20 +1150,20 @@ function onCtxRoot({ event }) {
   ctxMenu.items = [
     {
       key: 'new-dir',
-      label: LABEL_CTX_NEW_DIR,
+      label: t(LABEL_CTX_NEW_DIR),
       icon: 'mdi:folder-plus-outline',
       onClick: () => openNewFileDialog('', { kind: 'dir' }),
     },
     {
       key: 'new-file',
-      label: LABEL_CTX_NEW_FILE,
+      label: t(LABEL_CTX_NEW_FILE),
       icon: 'mdi:file-document-plus-outline',
       onClick: () => openNewFileDialog(''),
     },
     { divided: true, key: 'div-root-1', label: '' },
     {
       key: 'open-folder',
-      label: LABEL_CTX_OPEN_FOLDER,
+      label: t(LABEL_CTX_OPEN_FOLDER),
       icon: 'mdi:folder-outline',
       onClick: () => openFolderInExplorer(''),
     },

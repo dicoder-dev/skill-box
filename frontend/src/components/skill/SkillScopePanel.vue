@@ -138,8 +138,8 @@ function toolShort(toolID) {
 }
 function targetLabel(target) {
   if (!target) return ''
-  if (target.scope === 'global') return LABEL_GLOBAL
-  return `${LABEL_PROJECT_PREFIX}${target.project_id}`
+  if (target.scope === 'global') return t(LABEL_GLOBAL)
+  return `${t(LABEL_PROJECT_PREFIX)}${target.project_id}`
 }
 
 const scopeGroupByTool = computed(() => {
@@ -953,25 +953,18 @@ onErrorCaptured((err) => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 2026-07-08 增:作用域面板内滚动条美化 — 与全局统一 1px 极细 + accent 蓝淡化版
-     只作用域 panel 内部生效,不污染全局 ::-webkit-scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent) transparent;
+  /* 2026-07-08 增:作用域面板内滚动条美化 — 全局隐藏原生滚动条,
+     v-thin-scrollbar 接管自绘 thumb;其他位置 hover 才浮现 */
+  scrollbar-width: none;
 }
 .ssp-scope-list::-webkit-scrollbar {
-  width: 1px;
-  height: 1px;
+  display: none;
+  width: 0;
+  height: 0;
 }
-.ssp-scope-list::-webkit-scrollbar-track {
-  background: transparent;
-}
+.ssp-scope-list::-webkit-scrollbar-track,
 .ssp-scope-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent);
-  border-radius: 999px;
-  transition: background 0.15s ease;
-}
-.ssp-scope-list::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
+  background: transparent;
 }
 .ssp-scope-group {
   padding: 0;

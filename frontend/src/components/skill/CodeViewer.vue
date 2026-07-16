@@ -1036,25 +1036,17 @@ const lineNumbers = computed(() => {
   to { transform: rotate(360deg); }
 }
 
-/* CodeViewer 内滚动条 —— 走全局 1px(用全局样式的 accent 蓝淡化版),此处仅兜底 */
+/* CodeViewer 内滚动条 —— 全局隐藏原生轨道,只由 v-thin-scrollbar 自绘 thumb 接管 */
 .code-viewer * {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent) transparent;
+  scrollbar-width: none;
 }
 .code-viewer ::-webkit-scrollbar {
-  width: 1px;
-  height: 1px;
+  display: none;
+  width: 0;
+  height: 0;
 }
-.code-viewer ::-webkit-scrollbar-track {
-  background: transparent;
-}
-.code-viewer ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent);
-  border-radius: 999px;
-}
-.code-viewer ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
-}
+.code-viewer ::-webkit-scrollbar-track,
+.code-viewer ::-webkit-scrollbar-thumb,
 .code-viewer ::-webkit-scrollbar-corner {
   background: transparent;
 }

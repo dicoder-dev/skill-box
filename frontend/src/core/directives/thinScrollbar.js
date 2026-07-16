@@ -34,17 +34,20 @@ function _ensureStyle() {
   style.textContent = `
     .tsb-host { scrollbar-width: none; -ms-overflow-style: none; }
     .tsb-host::-webkit-scrollbar { display: none; width: 0; height: 0; }
+    /* 桌面软件惯例:任何地方都不显示滚动条,只有 hover 容器时才浮现 */
     .tsb-thumb {
       position: absolute;
       background: color-mix(in srgb, var(--accent-blue, #3b82f6) 40%, transparent);
       border-radius: 999px;
       pointer-events: none;
-      transition: background 150ms ease;
+      transition: background 150ms ease, opacity 150ms ease;
       z-index: 5;
+      opacity: 0;
     }
     .tsb-thumb-v { top: 0; right: 0; width: 1px; height: 0; }
     .tsb-thumb-h { left: 0; bottom: 0; height: 1px; width: 0; }
     .tsb-host:hover .tsb-thumb {
+      opacity: 1;
       background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
     }
   `
