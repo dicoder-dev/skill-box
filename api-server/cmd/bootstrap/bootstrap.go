@@ -20,19 +20,23 @@ package bootstrap
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"ginp-api/configs"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/cfg"
+	"ginp-api/pkg/launchagent"
 	"ginp-api/pkg/logger"
 	sharefunc "ginp-api/share/func"
 
@@ -174,6 +178,25 @@ func Boot(opts BootOptions) (*Backend, error) {
 	// - 部署形态由 opts.RunMode 单源决定,不再回写到配置文件。
 	applyDataDir(ConfigFile, opts.RunMode)
 
+	// 桌面端 LaunchAgent 自注册(详见 pkg/launchagent 注释):
+	// macOS 26 Tahoe 对 ad-hoc 签名的 .app 在 Finder 双击时 amfi Code=-423
+	// 静默杀进程,GUI 兜底完全走不到;只有 launchd 直派发(launchedByLS=0)
+	// 才能起 binary。所以桌面端首次启动时:
+	//   1. 检测不是 launchd 子进程(没 LaunchAgentLabel env)
+	//   2. 检测 plist 未安装
+	//   3. 写 plist + launchctl bootstrap → launchd fork 一份新实例
+	//   4. 当前进程 os.Exit(0) 让位,launchd 那份接管
+	//
+	// 注意:这一步必须在 StartDB / StartTask / Serve 之前,否则双进程会撞
+	// sqlite / 8082 端口。
+	if opts.RunMode == "desktop" {
+		if err := maybeBootstrapLaunchAgent(); err != nil {
+			// 自注册失败不阻断启动,继续用当前进程跑(用户没走 launchd 但
+			// 至少能起来;下次再尝试)。日志暴露即可。
+			log.Printf("bootstrap: LaunchAgent bootstrap skipped: %v", err)
+		}
+	}
+
 	// 关键:dbs 包的 useDbType 需要在 cfg 加载完后同步过来。
 	dbs.SetDbType(configs.Db.UseType)
 	// 关键:sqlite 数据路径在桌面端要重定向到 ~/.<AppName>/data.db,
@@ -282,6 +305,104 @@ func (b *Backend) Shutdown() {
 	}
 	// 这里没有保留 *http.Server 引用(给 Serve 用),
 	// 实际关闭走 signal/超时路径,桌面端一般靠 os.Exit(0)。
+}
+
+// maybeBootstrapLaunchAgent 桌面端首次启动时,如果不走 launchd 派发(Finder 双击
+// 进来的),就把 binary 自己注册到 launchd,让 launchd 接管后续启动。
+//
+// 设计逻辑(2026-07-15 第三版,实测通过):
+//
+//   首次启动(无 plist):
+//     1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
+//     2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
+//        第二次双击或等 kickstart
+//     3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
+//
+//   后续启动(plist 已装 + launchd 那份已经在跑 8082):
+//     1. 检测 8082 已被 Skill-Box 占用 → 当前是双击,直接退出避免撞端口
+//
+//   后续启动(plist 已装 + 8082 没占用,比如 launchd 那份死了):
+//     1. launchctl kickstart 拉一份
+//     2. 本进程退出
+//
+// 为什么首次启动不 kickstart:实测发现 kickstart 立刻 fork 一个新进程,
+// 那个新进程也走本函数,跟当前进程撞 8082;现在不 kickstart,本进程正常
+// Serve,plist 已注册,后续启动自动走 launchd 派发(amfi 不再 -423)。
+func maybeBootstrapLaunchAgent() error {
+	if launchagent.IsLaunchdChild() {
+		log.Printf("bootstrap: launchd child (LaunchAgentLabel=%s), skip bootstrap",
+			os.Getenv("LaunchAgentLabel"))
+		return nil
+	}
+
+	installed, err := launchagent.IsInstalled()
+	if err != nil {
+		return fmt.Errorf("check install: %w", err)
+	}
+
+	if installed {
+		// plist 已装。如果 8082 已被 Skill-Box 占用,说明 launchd 那份已经在跑,
+		// 当前是 Finder 双击起来的(被 amfi -423 杀掉之前的 fork),本进程退出避免撞端口。
+		if isPortOccupied(8082, "Skill-Box") {
+			log.Printf("bootstrap: LaunchAgent installed and 8082 already LISTEN, exiting")
+			os.Exit(0)
+		}
+		// plist 已装但 8082 没占用:launchd 那份死了(用户上次退出后没再起)。
+		// kickstart 让 launchd 拉一份,本进程等 launchd 那份起来(8082 LISTEN)
+		// 后再退出 —— 否则 launchd 那份 fork 出来会跟本进程同时跑 + 都
+		// 走 maybeBootstrap 死循环(实测 2026-07-15,kickstart -k 杀旧拉新,
+		// 新进程启动瞬间旧进程已被 SIGTERM,8082 短暂空,新进程又走本分支)。
+		uid := os.Getuid()
+		log.Printf("bootstrap: LaunchAgent installed but 8082 not LISTEN, kickstarting launchd")
+		if kerr := exec.Command("launchctl", "kickstart", "-k",
+			fmt.Sprintf("gui/%d/%s", uid, launchagent.Label)).Run(); kerr != nil {
+			log.Printf("bootstrap: kickstart failed: %v (will continue as fallback)", kerr)
+			return nil
+		}
+		// 等 launchd 那份起来,最多 5 秒
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if isPortOccupied(8082, "Skill-Box") {
+				log.Printf("bootstrap: launchd child up (8082 LISTEN), exiting")
+				os.Exit(0)
+			}
+		}
+		log.Printf("bootstrap: launchd child did not come up in 5s, exiting anyway")
+		os.Exit(0)
+	}
+
+	// plist 未装 → 首次启动
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable: %w", err)
+	}
+	logPath := filepath.Join(sharefunc.LogsDir(), "launchagent.log")
+
+	log.Printf("bootstrap: bootstrapping LaunchAgent (binary=%s, log=%s)", exe, logPath)
+	if err := launchagent.Install(exe, logPath); err != nil {
+		return err
+	}
+	log.Printf("bootstrap: LaunchAgent bootstrapped successfully, continuing to serve")
+	// 关键:不 os.Exit(0),让本进程继续 Serve。
+	// 后续启动时,Finder 双击会被 amfi 杀,但 launchd 那份会接管。
+	// 用户退出本进程后,plist 已注册,下次启动 kickstart 拉一份。
+	return nil
+}
+
+// isPortOccupied 检测指定端口是否被指定进程名占用。
+//
+// 用 lsof -nP -iTCP:<port> -sTCP:LISTEN 看 LISTEN 的进程,如果 command 包含
+// processName 视为占用。processName 空字符串表示只要 LISTEN 就算占用。
+func isPortOccupied(port int, processName string) bool {
+	out, err := exec.Command("lsof", "-nP",
+		fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN").CombinedOutput()
+	if err != nil {
+		return false // lsof exit 非 0 通常表示无匹配
+	}
+	if processName == "" {
+		return len(out) > 0
+	}
+	return strings.Contains(string(out), processName)
 }
 
 // parsePortFromAddr 从 "127.0.0.1:8082" / ":8082" / "[::]:8082" 提取端口。

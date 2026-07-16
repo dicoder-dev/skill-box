@@ -143,7 +143,21 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
-      - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+      # 关键:不调 codesign:adhoc(2026-07-16 实测发现)
+      #
+      # macOS 26 Tahoe 对 codesign --force --deep --sign - 写的 ad-hoc 签名
+      # 走 amfi Code=-423 静默拒路径(spctl reject 后 amfi 提前到 Gatekeeper
+      # 之前),无任何 GUI 兜底。
+      #
+      # happytools(Aliuyanfeng/happytools)v1.1.6 dmg 实测 .app 是
+      # `code object is not signed at all` + binary 有 Go linker signature
+      # (LC_CODE_SIGNATURE load command, flags=0x20002(adhoc,linker-signed))。
+      # 这种状态 macOS 走 syspolicyd 临时签路径(Gatekeeper 弹"无法验证"对话框,
+      # 用户点"OK" + 系统设置 → 仍要打开 → 通过),跟 happytools 用户实测一致。
+      #
+      # 详细对比见 ~/.claude memory `macos-tahoe-所有非-dev-id-启动路径都被-amfi-短路`。
+      # 留空 task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+      # 一行以备后续要重新开启一段签。
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)
@@ -254,16 +268,28 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}-arm64" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
-      # 签名分支:有 SIGN_IDENTITY 走官方 wails3 task darwin:sign(Developer ID + notarize);
-      # 没有则 ad-hoc 两段签(binary 单独 + .app --deep,都不带 --options runtime)
+      # 签名分支(2026-07-16 重构):
+      # 0. 不调 codesign(ad-hoc 一段签 / 两段签 + entitlements) → macOS 26 Tahoe
+      #    走 amfi Code=-423 静默拒路径(Gatekeeper GUI「仍要打开」永远不出现)。
+      #    实测 happytools(Aliuyanfeng/happytools)v1.1.6 dmg 内 .app 是
+      #    `code object is not signed at all` + Go linker signature,走 syspolicyd
+      #    临时签路径(弹「无法验证开发者」对话框,用户点"打开" + 系统设置
+      #    → 仍要打开 → 通过)。
+      # 1. 有 SIGN_IDENTITY 走官方 wails3 task darwin:sign(Developer ID + notarize),
+      #    走 Apple 信任链,无任何 GUI 弹框。
+      #
+      # 留 codesign 段代码(注释掉)以备后续要重新开启一段签。
       - cmd: |
           if [ -n "{{.SIGN_IDENTITY}}" ]; then
             echo "🪪  Developer ID 签名: {{.SIGN_IDENTITY}}"
             wails3 task darwin:sign
           else
-            echo "🪪  ad-hoc 两段签(binary + .app,都带 entitlements)"
-            codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
-            codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+            echo "🪪  不调 codesign,保持 Go linker signature(跟 happytools 一致)"
+            echo "    macOS 26 Tahoe 上 amfi 走 syspolicyd 临时签路径(用户走"
+            echo "    「系统设置 → 隐私与安全 → 仍要打开」),详见 memory"
+            echo "    macos-tahoe-所有非-dev-id-启动路径都被-amfi-短路"
+            # codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
+            # codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
           fi
       - bash scripts/build-dmg.sh --skip-build --arch arm64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-arm64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
@@ -298,9 +324,9 @@ tasks:
             echo "🪪  Developer ID 签名: {{.SIGN_IDENTITY}}"
             wails3 task darwin:sign
           else
-            echo "🪪  ad-hoc 两段签(binary + .app,都带 entitlements)"
-            codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
-            codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+            echo "🪪  不调 codesign,保持 Go linker signature(跟 happytools 一致)"
+            # codesign --force --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}"
+            # codesign --force --deep --sign - --entitlements build/darwin/entitlements.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app"
           fi
       - bash scripts/build-dmg.sh --skip-build --arch amd64 --output "{{.BIN_DIR}}/{{.APP_NAME}}-amd64.dmg"
       - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"

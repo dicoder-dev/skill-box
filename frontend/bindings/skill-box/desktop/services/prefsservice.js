@@ -22,7 +22,7 @@ export function Get(key) {
 
 /**
  * GetAll 返回所有偏好的快照。
- * @returns {$CancellablePromise<{ [_: string]: string }>}
+ * @returns {$CancellablePromise<{ [_ in string]?: string }>}
  */
 export function GetAll() {
     return $Call.ByID(1555090834).then(/** @type {($result: any) => any} */(($result) => {

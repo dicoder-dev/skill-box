@@ -81,6 +81,20 @@
 - **方案:** 不依赖 binary 自启,改用 strings 直接检查 binary 内嵌的路由路径(`/api/desktop/update/{check,state,download}`)+ go build 单独验证 cdesktop 子包 0 错误。
 - **教训:** 升级功能不应该依赖完整服务能跑,自检应该走最窄的子模块构建。
 
+### 4.6 User 启动 `wails3 dev` 后 `POST /api/desktop/update/download` 返 404(诊断中)
+- **现象:** user 的 wails3 dev 日志显示 `cdesktop.init.0..init.6` 都跑完了,但 **init.7(update) / init.8(window) 没有。**GET check/state 命中 SPA fallback 200(走 mountFrontRoot 返回 index.html),POST download 真实 404。
+- **定位:** 走两步:
+  1. 我写 `cmd/updater_check/main.go` blank import cdesktop 然后 `for _, r := range ginp.GetAllRouter()` —— **三条路由全在 slice**(`GET update/check`, `GET update/state`, `POST update/download`)说明代码层面正确,init 都跑过。
+  2. 比对 user 的 wails3 dev 启动日志(21:45:14 那次),init.N 只到 6,没有 7/8。说明 **user 启的 web 进程是 wails3 dev 残留的旧 binary(我没拿到新 binary 的 listening PID)**。CLAUDE.md memory.md 第 15 条「wails3 dev **不会自动监听 .go 变更后重启**」。
+- **方案:**
+  - 代码完全不动,init() 已写对,routes slice 验证三条都在。
+  - user 完全杀掉 wails3 dev 后,手动 `./run-wails.sh` 选 1 重新 build 一次即可(`task darwin:build:native` 走 `BUILD_FLAGS` ldflags,会把我的 update.a.go + cdesktop/hooks.go 全新编译进 binary)。
+  - 启动后再 curl 三个端点,应均返 `200(check)/ 200(state)/ 502(download,manifest 拉远端失败)`。
+- **教训:**
+  - wails3 dev 不会主动重启 Go 进程(CLAUDE.md memory 第 15 条明示)—— 修改 `cdesktop/*.a.go` 或 `cmd/bootstrap/*.go` 后**必须手动 pkill 重启**,否则新路由一直 404。
+  - SPA fallback 让 GET 路由收到 index.html(200)看起来像路由存在 — **这种「伪成功」是 wails3 dev SPA 架构留下的陷阱,排查时一定要先 grep `[GIN-debug] <path>` 行数与 router_manager.RegisterRouter 输出比对**。
+  - 我自己跑 `cmd/updater_check/main.go` 用 `go run` + blank import 是验证 routes 注册的最简路径,不依赖完整启动,可以独立兜底。
+
 ## 5. 需求回流
 - 用户原始要求"Windows:关闭软件,最好也是像现在一样重启即可完成更新",本期实现:Windows .exe 关掉后替身脚本接管覆盖 + Start-Process 重启。Installer 路径(msix/msi 还在 NSIS)后续接,本期 stub 报错不让走。
 - 用户提到"Mac:可以自动重启后完成更新",本期实现:helper_darwin.sh sleep 2 + mv .bak + open -a 新 .app。
