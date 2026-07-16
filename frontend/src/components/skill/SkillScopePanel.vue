@@ -715,7 +715,6 @@ onErrorCaptured((err) => {
           <button
             type="button"
             :class="['ssp-global-agent-tag', { 'ssp-global-agent-tag-active': isGlobalAgent }]"
-            :data-tip="t(LABEL_GLOBAL_AGENT_TIP)"
             :disabled="toggleAgentBusy || globalAgentLoading"
             @click="onToggleGlobalAgentClick"
           >
@@ -741,9 +740,7 @@ onErrorCaptured((err) => {
                Web 端兜底走 platform.openExternal fallback。 -->
           <button
             type="button"
-            class="ssp-global-agent-icon-btn"
-            :data-tip="t(LABEL_GLOBAL_AGENT_INFO_TIP)"
-            :aria-label="t(LABEL_GLOBAL_AGENT_INFO_TIP)"
+            class="ssp-global-agent-icon-btn ssp-global-agent-icon-btn--info"
             @click.stop="openGlobalAgentInfo"
           >
             <IconPark icon="mdi:information-outline" width="11" height="11" />
@@ -751,8 +748,6 @@ onErrorCaptured((err) => {
           <button
             type="button"
             class="ssp-global-agent-icon-btn"
-            :data-tip="t(LABEL_GLOBAL_AGENT_FOLDER_TIP)"
-            :aria-label="t(LABEL_GLOBAL_AGENT_FOLDER_TIP)"
             @click.stop="openGlobalAgentFolder"
           >
             <IconPark icon="mdi:folder-outline" width="11" height="11" />
@@ -1231,8 +1226,10 @@ onErrorCaptured((err) => {
 
 /* 2026-07-12 增 v2:整行 row 容器 — 包住左侧 tag + 右侧两个图标按钮。
    display:flex + align-items:center 让 tag 和图标按钮在同一基线水平排列,
-   跟工具行 .ssp-scope-row 视觉对齐。margin 跟旧版一致(左右 12px),保证
-   tag 的胶囊视觉位置不变。 */
+   跟工具行 .ssp-scope-row 视觉对齐。
+   2026-07-16 改:用户反馈右侧空白过多。两个图标按钮靠右贴边 →
+   info 按钮 margin-left:auto 推到 row 最右,folder 紧跟其后 4px 间距。
+   margin 跟旧版一致(左右 12px),保证 tag 的胶囊视觉位置不变。 */
 .ssp-global-agent-row {
   display: flex;
   align-items: center;
@@ -1261,6 +1258,12 @@ onErrorCaptured((err) => {
   cursor: pointer;
   overflow: hidden;
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+/* 2026-07-16 增:info 按钮是 row 最左侧 → 用 margin-left:auto 推到右端,
+   folder 按钮跟在 info 之后 4px(gap),整体靠右贴边,去掉原"tag 在左、
+   居中、右侧大段空白"的视觉断层。 */
+.ssp-global-agent-icon-btn--info {
+  margin-left: auto;
 }
 .ssp-global-agent-icon-btn:hover {
   background: var(--bg-hover);

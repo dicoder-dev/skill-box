@@ -2247,7 +2247,10 @@ defineExpose({
   word-break: break-word;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--text-faint);
+  /* 2026-07-16 改:用户反馈描述灰色看不清,改用主文本色(--text)黑色,
+     提升技能描述可读性;原本想用 --text-faint 弱化次要信息,实际可读性
+     反而下降。 */
+  color: var(--text);
   max-width: 100%;
   cursor: text;
   position: relative;
