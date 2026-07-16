@@ -125,12 +125,11 @@ const scopeCollapsed = ref(null)
 // 2026-07-07 改 v2:默认 false — 用户进首页就应该能看到作用域生效位置,
 // 不需要先点开"问号图标"。sectionCollapsed 控制整块可见性。
 const sectionCollapsed = ref(false)
-// 2026-07-17 增:sectionExpanded 作为 v-model:expanded 的目标,
-// 跟 sectionCollapsed 互补(vue v-model 不允许 !xxx 这种表达式)。
-const sectionExpanded = computed({
-  get: () => !sectionCollapsed.value,
-  set: (v) => { sectionCollapsed.value = !v },
-})
+function onScopePanelToggle(open) {
+  // 2026-07-17 改:用 :expanded + @update:expanded 显式同步,绕开 v-model+computed
+  // 的隐藏时序问题(open=true 表示面板要展开,所以 sectionCollapsed=!open)
+  sectionCollapsed.value = !open
+}
 function toggleSection() {
   sectionCollapsed.value = !sectionCollapsed.value
 }
@@ -677,12 +676,17 @@ onErrorCaptured((err) => {
        - 实现:.ssp-scope 切换 .is-expanded class,展开态下设 height + flex-basis 固定,
         .ssp-scope-list 设 max-height + overflow-y auto 内部滚动 -->
   <!-- 2026-07-17 改:用通用 CollapsiblePanel 包裹,header 样式统一。
-       sectionCollapsed 控制折叠;ul 列表保留原 .ssp-scope-list 内部样式。 -->
+       sectionCollapsed 控制折叠;ul 列表保留原 .ssp-scope-list 内部样式。
+       2026-07-17 bugfix:之前用 v-model:expanded="sectionExpanded" (computed 双向),
+       但实际渲染时点击 header 触发 update:expanded,computed 的 set 没正确同步
+       sectionCollapsed,导致面板可以打开但不能关闭。改成 :expanded + @update:expanded
+       显式 watch 同步,绕开 computed set 时机问题。 -->
   <CollapsiblePanel
     v-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
-    v-model:expanded="sectionExpanded"
+    :expanded="!sectionCollapsed"
     :title="t(LABEL_SCOPE)"
     icon="Local"
+    @update:expanded="onScopePanelToggle"
   >
     <template #title-meta>
       <span class="ssp-scope-header-count">{{ t('skills.scope.toolCountShort', { n: scopeGroupByTool.length }) }}</span>
@@ -1175,7 +1179,10 @@ onErrorCaptured((err) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 4px 12px 6px;
+  /* 2026-07-17 改:之前 margin: 4px 12px 6px 在 flex item 上下文里无效(flex
+     子元素的 margin 不参与父容器 flex 布局计算),实际由父 .ssp-global-agent-row
+     控制四周 margin。本组件只保留自身垂直 padding。 */
+  margin: 0;
   padding: 1px 8px;
   border-radius: 999px;
   background: transparent;
@@ -1228,7 +1235,9 @@ onErrorCaptured((err) => {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin: 4px 12px 4px;
+  /* 2026-07-17 改:用户反馈上下空白太多,紧凑化。去掉上下 margin,只保留左右。
+     row 直接顶住 .cp-body 的 padding,内部 tag 自身有 padding,视觉上仍然有呼吸感。 */
+  margin: 0 12px;
 }
 /* 2026-07-12 增:tag 右侧两个图标按钮 — 跟工具行 chevron 同尺寸(11~12px),
    视觉权重轻,不抢 tag 的视觉中心。
@@ -1281,7 +1290,8 @@ onErrorCaptured((err) => {
    视觉上像"标题区 / 内容区"的分割,而不是 group 之间的小间隙。
    颜色用 var(--border) 弱化(跟文件树 header 底边一致)。 */
 .ssp-global-agent-divider {
-  margin: 4px 12px 6px;
+  /* 2026-07-17 改:紧凑化 — 上 2px 下 4px,跟 row 之间 1px 视觉紧贴但保留分组感 */
+  margin: 2px 12px 4px;
   border: 0;
   border-top: 1px solid var(--border);
   height: 0;

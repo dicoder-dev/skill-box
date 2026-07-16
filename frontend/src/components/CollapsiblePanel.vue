@@ -31,9 +31,6 @@ const emit = defineEmits(['update:expanded', 'toggle'])
 const chevronIcon = computed(() => (props.expanded ? 'mdi:minus' : 'mdi:plus'))
 
 function toggle() {
-  // 2026-07-17 增:toggle 调试日志(等面板可点击问题排查完再删)
-  // eslint-disable-next-line no-console
-  console.log('[CollapsiblePanel] toggle', { from: props.expanded, title: props.title })
   emit('update:expanded', !props.expanded)
   emit('toggle', !props.expanded)
 }
