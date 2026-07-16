@@ -14,6 +14,7 @@ import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import GitSyncPanel from '@/components/skill/GitSyncPanel.vue'
+import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
@@ -124,6 +125,12 @@ const scopeCollapsed = ref(null)
 // 2026-07-07 改 v2:默认 false — 用户进首页就应该能看到作用域生效位置,
 // 不需要先点开"问号图标"。sectionCollapsed 控制整块可见性。
 const sectionCollapsed = ref(false)
+// 2026-07-17 增:sectionExpanded 作为 v-model:expanded 的目标,
+// 跟 sectionCollapsed 互补(vue v-model 不允许 !xxx 这种表达式)。
+const sectionExpanded = computed({
+  get: () => !sectionCollapsed.value,
+  set: (v) => { sectionCollapsed.value = !v },
+})
 function toggleSection() {
   sectionCollapsed.value = !sectionCollapsed.value
 }
@@ -669,36 +676,18 @@ onErrorCaptured((err) => {
         面板自身高度永远不变,只内部滚动,不再把 .sfip-tree-wrap 挤压缩小
        - 实现:.ssp-scope 切换 .is-expanded class,展开态下设 height + flex-basis 固定,
         .ssp-scope-list 设 max-height + overflow-y auto 内部滚动 -->
-  <section
-    v-else-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
-    :class="['ssp-scope', { 'is-expanded': !sectionCollapsed }]"
+  <!-- 2026-07-17 改:用通用 CollapsiblePanel 包裹,header 样式统一。
+       sectionCollapsed 控制折叠;ul 列表保留原 .ssp-scope-list 内部样式。 -->
+  <CollapsiblePanel
+    v-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
+    v-model:expanded="sectionExpanded"
+    :title="t(LABEL_SCOPE)"
+    icon="Local"
   >
-    <!-- 2026-07-07 改:作用域标题栏改成可点击 button,点击切换整体展开/收起。
-         右侧加 chevron 图标提示状态。sectionCollapsed = true 时只显示标题,
-         隐藏 .ssp-scope-list;收起态下 max-height 收紧避免占太多空间。 -->
-    <button
-      type="button"
-      class="ssp-scope-header ssp-scope-header-toggle"
-      :aria-expanded="!sectionCollapsed"
-      @click="toggleSection"
-    >
-      <!-- 2026-07-08 改:用 Local(图标位置 marker)替代原 mdi:help-circle-outline(Help)。
-           "作用域" 语义核心是"这个 skill 在哪些工具/位置上生效",位置/坐标定位图标比问号更贴切。
-           用 PascalCase 直传 iconpark 组件名,避免 mdi 映射兜底导致 fallback 到问号。 -->
-      <IconPark icon="Local" width="13" height="13" />
-      <span>{{ t(LABEL_SCOPE) }}</span>
+    <template #title-meta>
       <span class="ssp-scope-header-count">{{ t('skills.scope.toolCountShort', { n: scopeGroupByTool.length }) }}</span>
-      <!-- 2026-07-07 改:展开收起箭头 chevron-up/down → plus/minus。
-           plus = 当前是合上点开后展开,minus = 当前是展开点合上。
-           跟 TreeNode/FileTreeNode 同步。 -->
-      <IconPark
-        :icon="sectionCollapsed ? 'mdi:plus' : 'mdi:minus'"
-        width="13"
-        height="13"
-        class="ssp-scope-header-chevron"
-      />
-    </button>
-    <ul v-if="!sectionCollapsed" class="ssp-scope-list">
+    </template>
+    <ul class="ssp-scope-list">
       <!-- 2026-07-12 增 v2:作用域区首位"全局 Agent Skill" 行。
            跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
            + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
@@ -822,7 +811,7 @@ onErrorCaptured((err) => {
       <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
       {{ scopeError }}
     </p>
-  </section>
+  </CollapsiblePanel>
   <p v-else-if="scopeLoading" class="ssp-scope-loading">
     <span class="ssp-spinner ssp-spinner-xs"></span>
   </p>
