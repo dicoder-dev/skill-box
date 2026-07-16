@@ -31,6 +31,9 @@ const emit = defineEmits(['update:expanded', 'toggle'])
 const chevronIcon = computed(() => (props.expanded ? 'mdi:minus' : 'mdi:plus'))
 
 function toggle() {
+  // 2026-07-17 增:toggle 调试日志(等面板可点击问题排查完再删)
+  // eslint-disable-next-line no-console
+  console.log('[CollapsiblePanel] toggle', { from: props.expanded, title: props.title })
   emit('update:expanded', !props.expanded)
   emit('toggle', !props.expanded)
 }
@@ -67,6 +70,8 @@ function toggle() {
   border-radius: var(--radius, 6px);
   background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
   margin-top: 8px;
+  /* 2026-07-17 增:overflow:hidden 让 header 底部分割线不溢出圆角 */
+  overflow: hidden;
 }
 
 .cp-header {
@@ -75,15 +80,18 @@ function toggle() {
   gap: 6px;
   width: 100%;
   padding: 6px 10px;
-  background: transparent;
+  /* 2026-07-17 改:header 灰色背景,跟 body 区分(用户反馈) */
+  background: var(--bg-elevated-strong, rgba(127, 127, 127, 0.08));
   border: 0;
+  /* 2026-07-17 增:header 底部分割线,表示"这是面板头部" */
+  border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary, currentColor);
   text-align: left;
 }
-.cp-header:hover { background: rgba(127, 127, 127, 0.04); }
+.cp-header:hover { background: var(--bg-elevated-stronger, rgba(127, 127, 127, 0.14)); }
 
 .cp-title {
   flex: 0 0 auto;
