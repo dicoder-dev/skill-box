@@ -30,8 +30,18 @@ tasks:
 
   # 构建前端项目（生产或开发模式由 DEV 变量控制）。
   # 内部会先安装前端依赖并生成 Wails 绑定代码。
+  #
+  # VITE_DEPLOY_MODE 决定 vite.config.js 注入的 import.meta.env.VITE_RUN_MODE:
+  #   - "desktop" → 编译期常量 runMode="desktop",前端按桌面端形态渲染(隐藏
+  #     红绿灯、显示系统托盘入口、应用偏好 section 可见)
+  #   - "web"     → runMode="web",前端按 web 形态渲染(显示完整浏览器 chrome)
+  #   - 留空:兑底 "web"
+  # 调用方传 `VITE_DEPLOY_MODE: desktop` 即可,常见位置:
+  #   - build/darwin/Taskfile.yml 的 dmg-arm64 / dmg-amd64 任务(桌面端打包)
+  #   - build/windows/Taskfile.yml(同理)
+  # 根 task dev 走 web 形态,不需要设。
   build:frontend:
-    label: build:frontend (DEV={{.DEV}})
+    label: build:frontend (DEV={{.DEV}}, VITE_DEPLOY_MODE={{.VITE_DEPLOY_MODE}})
     summary: 构建前端项目
     dir: frontend
     sources:
@@ -48,8 +58,11 @@ tasks:
       - npm run {{.BUILD_COMMAND}} -q
     env:
       PRODUCTION: '{{if eq .DEV "true"}}false{{else}}true{{end}}'
+      VITE_DEPLOY_MODE: '{{.VITE_DEPLOY_MODE}}'
     vars:
       BUILD_COMMAND: '{{if eq .DEV "true"}}build:dev{{else}}build{{end}}'
+      # 默认 "web";desktop 端调用方传 "desktop" 进来覆盖。
+      VITE_DEPLOY_MODE: '{{.VITE_DEPLOY_MODE | default "web"}}'
 
 
   # 下载 Puppertino CSS 并写入 frontend/public 目录，

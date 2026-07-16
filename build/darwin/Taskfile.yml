@@ -252,6 +252,13 @@ tasks:
     deps:
       - task: clean:stale
       - task: common:build:frontend
+        vars:
+          # 桌面端打包:前端必须编译期注入 runMode="desktop",否则
+          # 前端会按 web 形态渲染(红绿灯 + chrome 不隐藏、桌面端偏好
+          # section 不可见),实测 2026-07-16 dmg 装后首次启动就是这个
+          # 现象。VITE_DEPLOY_MODE="desktop" 由 build/Taskfile.yml 的
+          # common:build:frontend 透传到 vite.config.js → import.meta.env.VITE_RUN_MODE。
+          VITE_DEPLOY_MODE: desktop
       - task: common:generate:icons
     cmds:
       - GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" MACOSX_DEPLOYMENT_TARGET="10.15" go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
@@ -300,6 +307,9 @@ tasks:
     deps:
       - task: clean:stale
       - task: common:build:frontend
+        vars:
+          # 桌面端打包:前端必须编译期注入 runMode="desktop",详见 dmg-arm64 注释。
+          VITE_DEPLOY_MODE: desktop
       - task: common:generate:icons
     cmds:
       # dmg-arm64 跑完尾部 rm .app,但 task DAG 顺序下 deps 可能在 dmg-arm64
