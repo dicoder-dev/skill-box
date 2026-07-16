@@ -162,9 +162,28 @@ func main() {
 // setupStartupLog 在 main 入口开启动期日志文件,所有写入通过 writeStartupLine
 // 同步落到磁盘 + log 包默认 writer(原 stderr 行为不变)。
 //
-// 文件路径:`~/.skill-box/logs/startup-YYYYMMDD-HHMMSS-<pid>.log`。
-// 优先 sharefunc.LogsDir() 获取桌面端数据目录(~/skill-box/),失败兜底
-// os.UserHomeDir()/skill-box/logs/。
+// 目录结构(2026-07-16 改):
+//   ~/.skill-box/logs/
+//     ├── startup/
+//     │   ├── 2026/                  ← 第一层:年份
+//     │   │   ├── 2026-07-16/        ← 第二层:月份-日期
+//     │   │   │   └── startup-175948-67581.log  ← 文件
+//     │   │   └── ...
+//     │   └── ...
+//     ├── 2026-07/                   ← 业务 log 月份目录(由 StartGinLogger 写)
+//     │   ├── 2026-07-16.log
+//     │   └── ...
+//     └── 2026-07/                   ← 请求 log 月份目录(由 ginp middleware 写)
+//         ├── 07-16-request.txt
+//         └── ...
+//
+// 清理策略(2026-07-16 增):启动早期调用 cleanupOldLogs,删除 2 个月前的:
+//   - logs/startup/<年份>/              ← 整目录删除
+//   - logs/<YYYY-MM>/                  ← 整目录删除
+//   - logs/<YYYY-MM-DD>.log            ← 根目录散落的日期文件(2026-07-14 之前的旧风格)
+//
+// "2 个月" 定义:当前月往前数 2 个完整月。即 2026-07-16 启动时,清理 < 2026-05 的所有目录。
+// 月份边界以 time.Time 算,清理一次完成。
 func setupStartupLog() error {
 	logsDir := func_LogsDir()
 	if logsDir == "" {
@@ -175,8 +194,21 @@ func setupStartupLog() error {
 		return fmt.Errorf("mkdir %s: %w", logsDir, err)
 	}
 
-	ts := time.Now().Format("20060102-150405")
-	fname := filepath.Join(logsDir, fmt.Sprintf("startup-%s-%d.log", ts, os.Getpid()))
+	// 启动早期先做清理,失败也只是日志提示,不阻断启动。
+	if err := cleanupOldLogs(logsDir, 2); err != nil {
+		log.Printf("startup: cleanupOldLogs failed: %v (continue)", err)
+	}
+
+	// 3 层目录:startup/<YYYY>/<MM-DD>/
+	now := time.Now()
+	yearDir := filepath.Join(logsDir, "startup", now.Format("2006"))
+	dayDir := filepath.Join(yearDir, now.Format("2006-01-02"))
+	if err := os.MkdirAll(dayDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dayDir, err)
+	}
+
+	ts := now.Format("150405")
+	fname := filepath.Join(dayDir, fmt.Sprintf("startup-%s-%d.log", ts, os.Getpid()))
 	f, err := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", fname, err)
@@ -188,6 +220,229 @@ func setupStartupLog() error {
 
 	log.Printf("startup: log file opened at %s", fname)
 	return nil
+}
+
+// cleanupOldLogs 删除 logsDir 下超过 keepMonths 月的日志目录/文件。
+//
+// 清理范围:
+//   - logsDir/startup/<YYYY>/           ← 整目录(年份为粒度)
+//   - logsDir/<YYYY-MM>/                ← 整目录(月份为粒度,业务 log / 请求 log 共用)
+//   - logsDir/<YYYY-MM-DD>.log          ← 根目录散落文件(早期格式,bootstrap 业务 log)
+//
+// cutOffMonth 计算:now 往前 keepMonths 个完整月。
+// 例:now=2026-07-16, keepMonths=2 → cutOffMonth=2026-05 → 清理 < 2026-05 的一切。
+//
+// 函数不做 dry-run,直接 os.RemoveAll;调用方在 setupStartupLog 早期调,失败也不阻断启动。
+func cleanupOldLogs(logsDir string, keepMonths int) error {
+	if keepMonths <= 0 {
+		return fmt.Errorf("cleanupOldLogs: keepMonths must be > 0, got %d", keepMonths)
+	}
+	now := time.Now()
+	cutOffYear, cutOffMonth := now.Year(), int(now.Month())-keepMonths
+	for cutOffMonth <= 0 {
+		cutOffMonth += 12
+		cutOffYear--
+	}
+	cutOff := cutOffYear*100 + cutOffMonth // 例 2026-07 → 202605
+
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", logsDir, err)
+	}
+
+	var removed []string
+	for _, e := range entries {
+		name := e.Name()
+		full := filepath.Join(logsDir, name)
+
+		// 1) startup/<YYYY>/ 整目录
+		if name == "startup" && e.IsDir() {
+			if rerr := cleanupStartupSubtree(full, cutOff); rerr != nil {
+				log.Printf("startup: cleanup startup subtree failed: %v", rerr)
+			}
+			continue
+		}
+
+		// 2) <YYYY-MM>/ 月份目录
+		if e.IsDir() && isYearMonthName(name) {
+			ym := parseYearMonth(name)
+			if ym < cutOff {
+				if err := os.RemoveAll(full); err != nil {
+					log.Printf("startup: rm dir %s: %v", full, err)
+					continue
+				}
+				removed = append(removed, name+"/")
+			}
+			continue
+		}
+
+		// 3) <YYYY-MM-DD>.log 根目录散落文件(早期格式)
+		if !e.IsDir() && isYearMonthDayLog(name) {
+			ymd := parseYearMonthDayLog(name)
+			if ymd < cutOff*100 { // YYYYMMDD < YYYYMM00 一定 true,粗粒度比较即可
+				if err := os.Remove(full); err != nil {
+					log.Printf("startup: rm file %s: %v", full, err)
+					continue
+				}
+				removed = append(removed, name)
+			}
+		}
+	}
+
+	if len(removed) > 0 {
+		log.Printf("startup: cleanupOldLogs cutOff=%d, removed: %v", cutOff, removed)
+	}
+	return nil
+}
+
+// cleanupStartupSubtree 清理 startup/<YYYY>/<MM-DD>/ 目录树(2 层深)。
+// cutOff 是 YYYYMM 格式。遍历规则:
+//   - 第一层是年份目录("2025"/"2026"),第二层是日期目录("2026-07-16")。
+//   - parseStartupDay 只接受 "YYYY-MM-DD" 格式,年份目录自身无法解析,
+//     需要下沉一层。
+//   - 旧 startup 日志是单层 "startup/YYYY-MM-DD-..." 文件(commit c52ab1a
+//     之前格式),这里 ReadDir 时如果发现 entries 是文件而不是目录,跳过;
+//     这些单层文件已被 setupStartupLog 改成 3 层结构,后续不会再产生。
+func cleanupStartupSubtree(startupDir string, cutOff int) error {
+	yearEntries, err := os.ReadDir(startupDir)
+	if err != nil {
+		return err
+	}
+	for _, ye := range yearEntries {
+		if !ye.IsDir() {
+			// 单层 startup/<file>.log 之类的遗留,跳过。
+			continue
+		}
+		yearDir := filepath.Join(startupDir, ye.Name())
+		dayEntries, err := os.ReadDir(yearDir)
+		if err != nil {
+			log.Printf("startup: read %s: %v", yearDir, err)
+			continue
+		}
+		for _, de := range dayEntries {
+			if !de.IsDir() {
+				continue
+			}
+			dayName := de.Name() // 形如 "2026-07-16"
+			ymd, ok := parseStartupDay(dayName)
+			if !ok {
+				continue
+			}
+			// ymd = YYYY*10000 + MM*100 + DD
+			// 跟 cutOff (YYYY*100 + MM) 比,把 ymd 转成 YYYY*100 + MM 比较
+			ymdYM := ymd / 100
+			if ymdYM < cutOff {
+				full := filepath.Join(yearDir, dayName)
+				if err := os.RemoveAll(full); err != nil {
+					log.Printf("startup: rm %s: %v", full, err)
+					continue
+				}
+				log.Printf("startup: cleanup removed %s", full)
+			}
+		}
+		// 年份目录下没有日期目录了,空目录也清掉,避免 startup/2025/ 这种空壳
+		if remaining, _ := os.ReadDir(yearDir); len(remaining) == 0 {
+			if err := os.Remove(yearDir); err != nil {
+				log.Printf("startup: rm empty %s: %v", yearDir, err)
+			} else {
+				log.Printf("startup: cleanup removed empty %s", yearDir)
+			}
+		}
+	}
+	return nil
+}
+
+// isYearMonthName 判断文件名是否形如 "2026-07"。
+func isYearMonthName(s string) bool {
+	if len(s) != 7 {
+		return false
+	}
+	if s[4] != '-' {
+		return false
+	}
+	for i, c := range s {
+		if i == 4 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseYearMonth 把 "2026-07" → 202607(YYYYMM 整数,便于整数比较)。
+func parseYearMonth(s string) int {
+	if !isYearMonthName(s) {
+		return 0
+	}
+	y := atoi4(s[0:4])
+	m := atoi2(s[5:7])
+	return y*100 + m
+}
+
+// isYearMonthDayLog 判断文件名是否形如 "2026-07-16.log"。
+// "2026-07-16" 是 10 字符,加 ".log" 共 14 字符。
+func isYearMonthDayLog(s string) bool {
+	if len(s) != 14 || s[10:] != ".log" {
+		return false
+	}
+	for i, c := range s {
+		if i == 4 || i == 7 {
+			if c != '-' {
+				return false
+			}
+			continue
+		}
+		if i >= 10 {
+			break
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseYearMonthDayLog 把 "2026-07-16.log" → 20260716(YYYYMMDD 整数)。
+func parseYearMonthDayLog(s string) int {
+	if !isYearMonthDayLog(s) {
+		return 0
+	}
+	y := atoi4(s[0:4])
+	m := atoi2(s[5:7])
+	d := atoi2(s[8:10])
+	return y*10000 + m*100 + d
+}
+
+// parseStartupDay 把 "2026-07-16" → 20260716。格式不符返 (0, false)。
+func parseStartupDay(s string) (int, bool) {
+	if len(s) != 10 {
+		return 0, false
+	}
+	if s[4] != '-' || s[7] != '-' {
+		return 0, false
+	}
+	for i, c := range s {
+		if i == 4 || i == 7 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+	}
+	y := atoi4(s[0:4])
+	m := atoi2(s[5:7])
+	d := atoi2(s[8:10])
+	return y*10000 + m*100 + d, true
+}
+
+func atoi2(s string) int {
+	return int(s[0]-'0')*10 + int(s[1]-'0')
+}
+
+func atoi4(s string) int {
+	return int(s[0]-'0')*1000 + int(s[1]-'0')*100 + int(s[2]-'0')*10 + int(s[3]-'0')
 }
 
 // writeStartupLine 同步写一行 + flush 到磁盘,避免 panic / os.Exit 来不及落盘。

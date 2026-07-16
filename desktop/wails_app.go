@@ -787,26 +787,45 @@ func (a *App) startupAsync(autoResize bool, aspectW, aspectH int) {
 			a.resizePrimaryToScreenRatio(defaultPrimaryWidthRatio, defaultPrimaryHeightRatio, aspectW, aspectH)
 		}
 
-		// 1) 读偏好
-		var (
-			notifyEnabled   = true
-			shortcutEnabled = true
-			startMinimized  = false
-		)
-		if a.backend != nil {
-			prefs := a.backend.NewSettings()
-			if prefs != nil {
-				if v, ok, _ := prefs.Get(PrefKeyNotifyEnabled); ok && v == "false" {
-					notifyEnabled = false
-				}
-				if v, ok, _ := prefs.Get(PrefKeyShortcutEnabled); ok && v == "false" {
-					shortcutEnabled = false
-				}
-				if v, ok, _ := prefs.Get(PrefKeyStartMinimized); ok && v == "true" {
-					startMinimized = true
+		// 1) 读偏好 + 默认值兜底
+		//
+		// 2026-07-16 fix:startup 期 prefs.Get 找不到 key 时返 ("" , false, nil),
+		// 老代码直接给 default,正确。但 prefs.Get 找到但 db 里有"历史脏数据"
+		// 时(比如 desktop.start_minimized=true,但用户没主动设过这个开关),
+		// 老逻辑直接采用脏数据,导致 dmg 双击后窗口被启动期 Hide()。
+		//
+		// 修复两层:
+		//   (a) initDefaults:启动早期把 PrefsDefaults 里所有 key 写一份到 db,
+		//       仅写 db 里不存在的 key。这样未来 Get 返 true (key 存在且 =true)
+		//       时就是用户主动设的,脏数据场景不会再"幽灵设回 true"。
+		//   (b) readPref:Get 找不到时回退到 PrefsDefaults 而不是 hardcode 默认值,
+		//       保持单一来源(PrefsDefaults)。
+		if prefs := a.backend.NewSettings(); prefs != nil {
+			for k, def := range PrefsDefaults() {
+				if _, ok, _ := prefs.Get(k); !ok {
+					if err := prefs.Set(k, def); err != nil {
+						log.Printf("desktop: prefs initDefaults %s=%s failed: %v", k, def, err)
+					}
 				}
 			}
 		}
+		prefs := a.backend.NewSettings()
+		defaults := PrefsDefaults()
+		readPref := func(key, defaultVal string) string {
+			if prefs == nil {
+				return defaultVal
+			}
+			if v, ok, _ := prefs.Get(key); ok && v != "" {
+				return v
+			}
+			if def, has := defaults[key]; has {
+				return def
+			}
+			return defaultVal
+		}
+		notifyEnabled := readPref(PrefKeyNotifyEnabled, "true") == "true"
+		shortcutEnabled := readPref(PrefKeyShortcutEnabled, "true") == "true"
+		startMinimized := readPref(PrefKeyStartMinimized, "false") == "true"
 		a.notifier.SetEnabled(notifyEnabled)
 		a.shortcut.SetEnabled(shortcutEnabled)
 
@@ -823,16 +842,8 @@ func (a *App) startupAsync(autoResize bool, aspectW, aspectH int) {
 
 		// 3) 注册全局快捷键
 		if shortcutEnabled {
-			// 默认 combo = "Cmd+Shift+S";从 prefs 读用户改写值。
-			combo := "Cmd+Shift+S"
-			if a.backend != nil {
-				prefs := a.backend.NewSettings()
-				if prefs != nil {
-					if v, ok, _ := prefs.Get(PrefKeyGlobalHotKey); ok && v != "" {
-						combo = v
-					}
-				}
-			}
+			// 默认 combo = "Cmd+Shift+S";从 prefs 读用户改写值(用上面的 readPref 兑底)。
+			combo := readPref(PrefKeyGlobalHotKey, "Cmd+Shift+S")
 			if err := a.shortcut.Register(combo, func() {
 				if w := a.app.Window.Current(); w != nil {
 					w.Show()
