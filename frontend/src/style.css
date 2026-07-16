@@ -335,12 +335,12 @@ code {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* 滚动条美化（全局）
-   - WebKit/Blink：8px 圆角拇指，加 2px 透明 border + background-clip 让拇指“缩进”不贴边
+   - WebKit/Blink：6px 极细圆角拇指，加 2px 透明 border + background-clip 让拇指“缩进”不贴边
    - Firefox：scrollbar-width:thin + scrollbar-color 兜底
    - 颜色走 --border / hover --text-faint，亮/暗主题自动跟随（.dark 下变量已切换） */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -368,6 +368,45 @@ code {
 html {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+/* ============================================
+   全局进度条美化
+   - WebKit:3px 极细,圆角 track + value,value 用主色 55% 透明度淡化
+   - Firefox:appearance:none 后用 background-size 控制进度填充
+   - 覆盖整个应用任何 <progress> 元素(未来引入或三方组件也生效)
+   ============================================ */
+progress {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+  color: color-mix(in srgb, var(--primary, #2563eb) 55%, transparent); /* Firefox 用 */
+}
+
+/* WebKit track/背景 */
+progress::-webkit-progress-bar {
+  background: var(--bg-subtle);
+  border-radius: 999px;
+}
+
+/* WebKit 已完成部分(value) */
+progress::-webkit-progress-value {
+  background: color-mix(in srgb, var(--primary, #2563eb) 55%, transparent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+/* indeterminate 态(进度未知):用一段浅色条纹跑马灯,极淡 */
+progress:indeterminate::-webkit-progress-bar {
+  background: var(--bg-subtle);
+}
+progress:indeterminate::-webkit-progress-value {
+  background: transparent;
 }
 
 /* ============================================
