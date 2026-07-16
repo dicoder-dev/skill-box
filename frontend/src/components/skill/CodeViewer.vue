@@ -14,7 +14,7 @@
 // wails3 webview 下 worker 被 SPA fallback 截胡的问题(动态 import + MonacoEnvironment
 // 内联 Blob worker 指向 jsdelivr workerMain.js),这次直接复用。
 
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
@@ -25,6 +25,7 @@ import { handleExternalClick } from '@/core/utils/external_link.js'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
 import { loadMonaco, isDark } from '@/core/composables/useMonaco'
+import { useResizablePanel } from '@/core/composables/useResizablePanel'
 // 2026-07-13 增:右侧 AI 对话面板(替换大纲区域)。由父级 SkillFileInlinePanel 通过
 // rightPanelMode 决定渲染哪个 aside('outline' / 'ai' / 'none')。
 import AIRightPanel from '@/components/ai/AIRightPanel.vue'
@@ -221,6 +222,31 @@ watch(() => props.content, (v) => {
 })
 
 const editorContainer = ref(null)
+
+// ===== 大纲面板宽度拖拽（写 CSS 变量 --outline-panel-w 到 CodeViewer 根元素）=====
+const cvRootEl = ref(null)
+const {
+  width: outlineWidth,
+  dragging: outlineDragging,
+  startDrag: onOutlineStartDrag,
+  reset: resetOutlineWidth,
+  sync: syncOutlineWidth,
+} = useResizablePanel({
+  target: 'css-var',
+  direction: 'left',
+  storageKey: 'outline-w',
+  defaultWidth: 220,
+  min: 160,
+  max: 400,
+  cssVar: '--outline-panel-w',
+  scopeEl: cvRootEl,
+})
+
+onMounted(() => {
+  // 大纲宽度初始化(setup 时 cvRootEl 未挂载,这里再写一次 CSS 变量)
+  syncOutlineWidth()
+})
+
 let monacoEditor = null
 let monacoModel = null
 let monacoRef = null   // { monaco } from loadMonaco(),供 watch 里 setModelLanguage 用
@@ -344,7 +370,7 @@ const lineNumbers = computed(() => {
 <template>
   <!-- 2026-07-13 增 v3:applyFlash > 0 时给根加 cv-just-applied class,触发 1.5s 黄色边框闪烁动画,
        让用户直观看到「文件被改了」 -->
-  <div :class="['code-viewer', { 'cv-just-applied': applyFlash > 0 }]" :data-apply-flash="applyFlash">
+  <div ref="cvRootEl" :class="['code-viewer', { 'cv-just-applied': applyFlash > 0 }]" :data-apply-flash="applyFlash">
     <!-- 2026-07-08 增:office 文档(.docx / .pdf / .xlsx / .xls / .pptx)走 vue-office 在线预览 -->
     <OfficeViewer
       v-if="isOffice"
@@ -393,6 +419,20 @@ const lineNumbers = computed(() => {
       <!-- 2026-07-13 改:大纲面板条件改为 rightPanelMode === 'outline'(原来用 outlineVisible
            composable 二元状态),由父级统一管控。aside 本身仍按 view + 有标题 + outline 三条件
            显隐。收起按钮的点击事件也改为 emit 模式(由父级更新 rightPanelMode)。 -->
+      <!-- 拖拽把手:拖左边界改变大纲宽度(双击重置);仅在大纲挂载时显示 -->
+      <div
+        v-if="!editable && mdHeadings.length && rightPanelMode === 'outline'"
+        class="cv-md-outline-resizer"
+        :class="{ 'cv-md-outline-resizer-dragging': outlineDragging }"
+        role="separator"
+        aria-orientation="vertical"
+        :aria-valuenow="outlineWidth"
+        aria-valuemin="160"
+        aria-valuemax="400"
+        title="拖动调整宽度(双击重置)"
+        @mousedown="onOutlineStartDrag"
+        @dblclick="resetOutlineWidth"
+      />
       <aside
         v-if="!editable && mdHeadings.length && rightPanelMode === 'outline'"
         class="cv-md-outline"
@@ -577,6 +617,8 @@ const lineNumbers = computed(() => {
   display: flex;
   flex-direction: row;
   overflow: hidden;
+  min-width: 0;
+  position: relative;
 }
 .cv-md-content {
   flex: 1;
@@ -610,12 +652,41 @@ const lineNumbers = computed(() => {
    整体视觉跟站点主色(--bg-card)统一。滚动条用自定义 webkit 样式做美化。 */
 .cv-md-outline {
   flex-shrink: 0;
-  width: 220px;
+  width: var(--outline-panel-w, 220px);
   border-left: 1px solid var(--border);
   background: #ffffff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 大纲拖拽把手:绝对定位到大纲左边界(不占 flex 宽度,避免撑出横向溢出)。
+   命中 8px,视觉细线 hover/拖拽时显蓝色。 */
+.cv-md-outline-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: var(--outline-panel-w, 220px);
+  width: 8px;
+  transform: translateX(4px);
+  cursor: col-resize;
+  background: transparent;
+  z-index: 3;
+  user-select: none;
+}
+.cv-md-outline-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.cv-md-outline-resizer:hover::after,
+.cv-md-outline-resizer-dragging::after {
+  background: var(--accent-blue);
 }
 .cv-md-outline-header {
   display: flex;
@@ -676,27 +747,8 @@ const lineNumbers = computed(() => {
   overflow-x: hidden;
   flex: 1;
   min-height: 0;
-  /* 2026-07-10 增:自定义 webkit 滚动条(更细、更柔和的灰,鼠标 hover 时变深) */
-  scrollbar-width: thin;
-  scrollbar-color: #d4d4d8 transparent;
-}
-.cv-md-outline-list::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.cv-md-outline-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.cv-md-outline-list::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
-  border-radius: 999px;
-  border: 1px solid #ffffff;
-}
-.cv-md-outline-list::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
-}
-.cv-md-outline-list::-webkit-scrollbar-corner {
-  background: transparent;
+  /* 滚动条走 .code-viewer * 的统一 6px 精致版(见文件末尾),不再单独硬编码颜色,
+     以便亮/暗主题跟随 --border / --text-faint 变量 */
 }
 .cv-md-outline-item {
   list-style: none;
@@ -983,6 +1035,8 @@ const lineNumbers = computed(() => {
   to { transform: rotate(360deg); }
 }
 
+/* CodeViewer 内滚动条细化 —— 全局 8px 基础上收窄到 6px(代码区视觉密度高),
+   颜色走 --border / hover --text-faint,亮/暗主题自动跟随 */
 .code-viewer * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
@@ -997,7 +1051,6 @@ const lineNumbers = computed(() => {
 .code-viewer ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 999px;
-  transition: background 160ms ease;
 }
 .code-viewer ::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);

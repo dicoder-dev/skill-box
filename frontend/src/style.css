@@ -334,7 +334,10 @@ code {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 滚动条美化 */
+/* 滚动条美化（全局）
+   - WebKit/Blink：8px 圆角拇指，加 2px 透明 border + background-clip 让拇指“缩进”不贴边
+   - Firefox：scrollbar-width:thin + scrollbar-color 兜底
+   - 颜色走 --border / hover --text-faint，亮/暗主题自动跟随（.dark 下变量已切换） */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -346,11 +349,25 @@ code {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox 全局兜底 */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 /* ============================================

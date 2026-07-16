@@ -20,3 +20,4 @@
 - [md 文件大纲导航](fe-md-outline-nav.md) — md-it heading_open 重写 + extractHeadings 抽 title + CodeViewer .cv-md-wrap 改两列
 - [隐藏段过滤 HasHiddenSegment](hidden-segment-filter.md) — skilladapter 统一 hidden 段规则,Apply/ReadFiles/AI prompt/ChatStream system 四点同源
 - [AI 历史 source_path prop drilling](ai-history-sourcepath-prop-drilling.md) — filePath ≠ source_path,4 层 prop drilling 才把 absolute path 传到后端;v1 误用 filePath 后端永久 404 + catch(_) 静默
+- [拖拽把手用绝对定位不占布局](fe-resizable-panel-absolute-handle.md) — grid/flex 把手当子项会挤乱列/撑出横向溢出;一律 position:absolute + 面板宽走 CSS 变量,把手 left/right 引用同一变量;useResizablePanel composable;详情底部横向滚动条真凶是 sfip-viewer-header flex 撑破

@@ -27,6 +27,7 @@ import { updateSkill, createSkill, getStoreInfo } from '@/api/skillbox/skills'
 // 2026-07-13 改:右侧面板状态改用 useRightPanelMode(原 useMdOutlineVisible 不再使用,
 // import 也去掉)。CodeViewer 内也不再 import 这个 composable。
 import { useRightPanelMode } from '@/core/composables/useRightPanelMode'
+import { useResizablePanel } from '@/core/composables/useResizablePanel'
 import { useToastStore } from '@/core/store/toast'
 
 // 2026-07-07 临时调试:桌面端 webview 缓存导致浏览器拉到旧 chunk,
@@ -311,6 +312,25 @@ onUpdated(() => {
   _syncLocalFiles()
 })
 // 首次同步在 onMounted 里跑一次
+// ===== 目录树面板宽度拖拽（写 CSS 变量 --sfip-left-w 到 .sfip-body）=====
+const sfipBodyEl = ref(null)
+const {
+  width: sfipLeftWidth,
+  dragging: sfipLeftDragging,
+  startDrag: onSfipLeftStartDrag,
+  reset: resetSfipLeftWidth,
+  sync: syncSfipLeftWidth,
+} = useResizablePanel({
+  target: 'css-var',
+  direction: 'right',
+  storageKey: 'sfip-left-w',
+  defaultWidth: 280,
+  min: 180,
+  max: 500,
+  cssVar: '--sfip-left-w',
+  scopeEl: sfipBodyEl,
+})
+
 onMounted(() => {
   _syncSelectedFile()
   _syncLocalFiles()
@@ -320,6 +340,8 @@ onMounted(() => {
   // 仅在编辑模式或当前文件 dirty 时触发,避免空保存(同工具栏"保存"按钮的可见条件)。
   // macOS 上 metaKey(Cmd)等价 ctrlKey;其它平台 ctrlKey。输入法组合中不抢键。
   window.addEventListener('keydown', onKeyDown)
+  // 目录树宽度拖拽初始化(setup 时 sfipLeftEl 未挂载,这里再写一次)
+  syncSfipLeftWidth()
 })
 
 // 2026-07-07 改:切换文件前也走 dirty 检查。
@@ -1615,7 +1637,7 @@ defineExpose({
       </button>
     </header>
 
-    <div class="sfip-body">
+    <div ref="sfipBodyEl" class="sfip-body">
       <nav class="sfip-left">
         <!-- 2026-07-07 改 v3:作用域区移到文件树底部。
              旧版:作用域在顶部 → 用户第一眼看到的是 scope,文件树被挤。
@@ -1643,6 +1665,20 @@ defineExpose({
         </div>
         <SkillScopePanel :skill="skill" />
       </nav>
+
+      <!-- 拖拽把手:拖右边界改变目录树宽度(双击重置) -->
+      <div
+        class="sfip-resizer"
+        :class="{ 'sfip-resizer-dragging': sfipLeftDragging }"
+        role="separator"
+        aria-orientation="vertical"
+        :aria-valuenow="sfipLeftWidth"
+        aria-valuemin="180"
+        aria-valuemax="500"
+        title="拖动调整宽度(双击重置)"
+        @mousedown="onSfipLeftStartDrag"
+        @dblclick="resetSfipLeftWidth"
+      />
 
       <main class="sfip-viewer">
         <header class="sfip-viewer-header">
@@ -2301,15 +2337,49 @@ defineExpose({
   display: flex;
   flex: 1;
   min-height: 0;
+  position: relative;
+  /* 修横向滚动条根因:显式收紧,避免子级撑出横向滚动条 */
+  overflow: hidden;
+  min-width: 0;
 }
 .sfip-left {
-  width: 240px;
+  width: var(--sfip-left-w, 280px);
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  min-width: 0;
+}
+
+/* 拖拽把手:绝对定位到目录树右边界(不占 flex 宽度,避免撑出横向溢出)。
+   命中 8px,视觉细线 hover/拖拽时显蓝色。 */
+.sfip-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--sfip-left-w, 280px);
+  width: 8px;
+  transform: translateX(-4px);
+  cursor: col-resize;
+  background: transparent;
+  z-index: 3;
+  user-select: none;
+}
+.sfip-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.sfip-resizer:hover::after,
+.sfip-resizer-dragging::after {
+  background: var(--accent-blue);
 }
 .sfip-tree-wrap {
   flex: 1;
@@ -2365,6 +2435,9 @@ defineExpose({
   font-size: 12px;
   color: var(--text-dim);
   flex-shrink: 0;
+  /* 兜底:工具栏按钮较多时不撑破容器,避免详情底部出现横向滚动条 */
+  min-width: 0;
+  overflow: hidden;
 }
 .sfip-viewer-path {
   font-family: ui-monospace, SFMono-Regular, monospace;

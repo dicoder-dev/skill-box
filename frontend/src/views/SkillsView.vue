@@ -51,6 +51,7 @@ import { useSkillTreeStore } from '@/core/store/skill-tree'
   // 让首页 skill 树 chip 前的图标用真 logo (icon_file 优先 + mdi 兜底),
   // 而不是硬编码的 mdi 字符串。
 import { useToolsStore } from '@/core/store/tools'
+import { useResizablePanel } from '@/core/composables/useResizablePanel'
 
 const { t } = useI18n()
 
@@ -1660,6 +1661,25 @@ function onScopeChange() {
   skillTree.load({ keyword: keyword.value || undefined }).catch(() => { /* 忽略 */ })
 }
 
+// ===== 左侧技能列表宽度拖拽（grid 第一列列宽，写 CSS 变量 --skills-list-w）=====
+const skillsLayoutEl = ref(null)
+const {
+  width: skillsListWidth,
+  dragging: skillsDragging,
+  startDrag: onSkillsStartDrag,
+  reset: resetSkillsListWidth,
+  sync: syncSkillsListWidth,
+} = useResizablePanel({
+  target: 'grid-col',
+  direction: 'right',
+  storageKey: 'skills-list-w',
+  defaultWidth: 260,
+  min: 180,
+  max: 480,
+  applyTo: skillsLayoutEl,
+  cssVar: '--skills-list-w',
+})
+
 onMounted(() => {
   reload()
   appBus?.on?.('skills:refresh', onSkillsRefresh)
@@ -1677,6 +1697,8 @@ onMounted(() => {
   if (!toolsStore.items || toolsStore.items.length === 0) {
     toolsStore.load().catch(() => { /* 失败也不影响 skill 列表渲染 */ })
   }
+  // grid 列宽拖拽初始化（setup 时 skillsLayoutEl 还没挂载，这里再写一次）
+  syncSkillsListWidth()
 })
 
 onUnmounted(() => {
@@ -1687,7 +1709,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="skills-layout">
+  <div ref="skillsLayoutEl" class="skills-layout">
     <!-- 左侧:技能列表 -->
     <aside class="skills-pane">
       <!-- 顶部操作栏 -->
@@ -1775,6 +1797,20 @@ onUnmounted(() => {
         </button>
       </footer>
     </aside>
+
+    <!-- 拖拽把手:拖右边界改变左侧技能列表宽度(双击重置) -->
+    <div
+      class="panel-resizer panel-resizer-right"
+      :class="{ 'panel-resizer-dragging': skillsDragging }"
+      role="separator"
+      aria-orientation="vertical"
+      :aria-valuenow="skillsListWidth"
+      aria-valuemin="180"
+      aria-valuemax="480"
+      title="拖动调整宽度(双击重置)"
+      @mousedown="onSkillsStartDrag"
+      @dblclick="resetSkillsListWidth"
+    />
 
     <!-- 右侧:技能详情 -->
     <section class="detail-pane">
@@ -2352,7 +2388,8 @@ onUnmounted(() => {
 <style scoped>
 .skills-layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  position: relative;
+  grid-template-columns: var(--skills-list-w, 260px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   grid-auto-rows: minmax(0, 1fr);
   gap: 0;
@@ -2366,6 +2403,38 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+/* 拖拽把手:绝对定位到第一列右边界(不占 grid 列位,避免打乱 skills/detail 自动放置)。
+   命中 8px,视觉 hover/拖拽时显蓝色。 */
+.panel-resizer {
+  z-index: 5;
+  background: transparent;
+  user-select: none;
+}
+.panel-resizer-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--skills-list-w, 260px);
+  width: 8px;
+  transform: translateX(-4px);
+  cursor: col-resize;
+}
+.panel-resizer-right::after {
+  /* 视觉细线:居中 2px,hover/拖拽时高亮 */
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.panel-resizer-right:hover::after,
+.panel-resizer-dragging::after {
+  background: var(--accent-blue);
 }
 
 /* grid 子项显式 min-height:0,否则 grid item 默认 min-height:auto
@@ -2737,7 +2806,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  /* 修横向滚动条根因:详情面板不再自己 overflow-y:auto,滚动下沉到
+     .sfip-body / .cv-md / .sfip-tree-wrap,避免底部出现多余横向滚动条 */
+  overflow: hidden;
   background: var(--bg);
 }
 
