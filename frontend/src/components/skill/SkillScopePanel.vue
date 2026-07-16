@@ -656,16 +656,18 @@ onErrorCaptured((err) => {
 </script>
 
 <template>
+  <!-- 2026-07-17 增:Git 同步面板(go-git 版本管理)。始终在最顶部展示,
+       无论作用域状态如何,用户都能看到仓库 init / push 状态。
+       错误降级时不展示(避免噪音);否则无论 localError / scopeLoading 都先渲染。
+       2026-07-17 bugfix:之前写成 v-else-if="!localError",把作用域区 v-else-if 链
+       截胡,正常状态下作用域区被跳过 — 这里改成独立 v-if 块,作用域区按原条件渲染。 -->
+  <GitSyncPanel v-if="!localError" />
   <!-- 错误降级 UI -->
   <div v-if="localError" class="ssp-error">
     <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
     <span>{{ t(LABEL_TITLE_ERROR) }}: {{ localError }}</span>
     <button class="link" @click="safeReload">{{ t(LABEL_RETRY) }}</button>
   </div>
-  <!-- 2026-07-17 增:Git 同步面板(go-git 版本管理)。始终在最顶部展示,
-       无论作用域状态如何,用户都能看到仓库 init / push 状态。
-       错误降级时不展示(避免噪音)。 -->
-  <GitSyncPanel v-else-if="!localError" />
   <!-- 2026-07-08 改:作用域区高度锁死策略
        - sectionCollapsed=true(整体收起):只显示 header 一行,高度由内容决定,约 36px
        - sectionCollapsed=false(整体展开):面板高度锁成固定值(SECTION_EXPANDED_HEIGHT),
