@@ -34,6 +34,7 @@ import (
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/internal/settings"
+	"ginp-api/internal/skillversion" // 2026-07-17 增:启动兜底初始化 git 仓库
 	"ginp-api/pkg/cfg"
 	"ginp-api/pkg/launchagent"
 	"ginp-api/pkg/logger"
@@ -209,6 +210,10 @@ func Boot(opts BootOptions) (*Backend, error) {
 	// SeedBundledSkills 必须在 StartTask / Serve 之前:被 seed 的 skill 是
 	// 用户在 UI 上能看到 / 能 Apply 的内容,启动期一次性灌入。
 	SeedBundledSkills()
+	// 2026-07-17 增:skillversion 启动兜底 — 初始化本地 git 仓库 + 首次入库现有 skills。
+	// 必须在 SeedBundledSkills 之后(否则 init 时扫描不到 seed 出来的 skill),
+	// 在 Serve 之前(否则 HTTP 请求进来 store.Save hook 会先于 init commit)。
+	skillversion.BootstrapInit()
 	if !opts.DisableTask {
 		StartTask()
 	}

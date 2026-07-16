@@ -61,7 +61,6 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(
-		&entity.SkillFile{},
 		&entity.SkillApply{},
 		&entity.MarketSkill{},
 		&entity.Setting{},
