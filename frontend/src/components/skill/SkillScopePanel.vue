@@ -15,6 +15,7 @@ import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import GitSyncPanel from '@/components/skill/GitSyncPanel.vue'
 import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
+import AccordionGroup from '@/components/AccordionGroup.vue'
 import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
@@ -30,6 +31,18 @@ import { platform } from '@/platform'
 
 const props = defineProps({
   skill: { type: Object, default: () => ({}) },
+})
+// 2026-07-17 增:转发 show-history 事件给父级(SkillsView),让父级决定
+// 怎么打开 VersionHistoryModal(传 skillPath 实现 per-skill 历史)。
+defineEmits(['show-history'])
+
+// 2026-07-17 增:从 props.skill 拿 groupPath + name 拼出 repo 相对路径,
+// 传给 GitSyncPanel 用于 per-skill 历史入口。
+const skillPath = computed(() => {
+  const s = props.skill || {}
+  const name = s.name || ''
+  const groupPath = s.group_path || s.groupPath || ''
+  return groupPath ? `${groupPath}/${name}` : name
 })
 
 const toast = useToastStore()
@@ -123,15 +136,18 @@ const scopeCollapsed = ref(null)
 // 2026-07-07 增:作用域区整体可展开/收起(标题栏点击切换)。
 // true = 整体收起(只看到标题);false = 展开(看到工具列表)。
 // 2026-07-07 改 v2:默认 false — 用户进首页就应该能看到作用域生效位置,
-// 不需要先点开"问号图标"。sectionCollapsed 控制整块可见性。
-const sectionCollapsed = ref(false)
+// 不需要先点开"问号图标"。scopeExpanded 跟"作用域"面板展开状态同步;
+// 2026-07-17 改:从内部 ref 改成父级 AccordionGroup 的 active id 派生,
+// 实现"一次只能展开一个"accordion 行为 — 展开 git 同步会自动收起作用域。
+// activePanel 字符串:'scope' | 'git' | null(全折叠);子面板 panelId 跟它对齐。
+const activePanel = ref(null)
+const scopeActive = computed(() => activePanel.value === 'scope')
+const scopeExpanded = computed(() => scopeActive.value)
 function onScopePanelToggle(open) {
-  // 2026-07-17 改:用 :expanded + @update:expanded 显式同步,绕开 v-model+computed
-  // 的隐藏时序问题(open=true 表示面板要展开,所以 sectionCollapsed=!open)
-  sectionCollapsed.value = !open
+  activePanel.value = open ? 'scope' : null
 }
 function toggleSection() {
-  sectionCollapsed.value = !sectionCollapsed.value
+  activePanel.value = activePanel.value === 'scope' ? null : 'scope'
 }
 
 const busyKey = ref('')
@@ -681,11 +697,16 @@ onErrorCaptured((err) => {
        但实际渲染时点击 header 触发 update:expanded,computed 的 set 没正确同步
        sectionCollapsed,导致面板可以打开但不能关闭。改成 :expanded + @update:expanded
        显式 watch 同步,绕开 computed set 时机问题。 -->
+  <!-- 2026-07-17 改:用 AccordionGroup 包作用域 + Git 同步面板,
+       实现"一次只能展开一个"的 accordion 行为 — 展开 git 同步会自动收起作用域。
+       v-model:active="activePanel" 管 active 面板 ID;null = 全折叠。 -->
+  <AccordionGroup v-model:active="activePanel">
   <CollapsiblePanel
     v-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
-    :expanded="!sectionCollapsed"
+    :expanded="scopeExpanded"
     :title="t(LABEL_SCOPE)"
     icon="Local"
+    panel-id="scope"
     @update:expanded="onScopePanelToggle"
   >
     <template #title-meta>
@@ -823,8 +844,11 @@ onErrorCaptured((err) => {
 
   <!-- 2026-07-17 改:Git 同步面板(go-git 版本管理)移到作用域区下方,默认折叠。
        放在所有 v-else-if 链外(独立 v-if),避免再次打断作用域的条件渲染。
-       错误降级时不展示(避免噪音)。 -->
-  <GitSyncPanel v-if="!localError" />
+       错误降级时不展示(避免噪音)。
+       2026-07-17 改:接 show-history 事件转发,父组件打开 VersionHistoryModal;
+       skillPath 传当前 skill 路径,实现 per-skill 修改历史入口。 -->
+  <GitSyncPanel v-if="!localError" :skill-path="skillPath" @show-history="$emit('show-history', $event)" />
+  </AccordionGroup>
 
   <!-- 2026-07-07 增:自管确认弹窗,替代 window.confirm。
        wails desktop webview 默认禁用 window.confirm,直接调确认会被静默拒绝。 -->

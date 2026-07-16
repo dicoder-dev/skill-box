@@ -1312,6 +1312,15 @@ async function openGroupInFolder(groupPath) {
 
 // ====== Version 历史弹窗(2026-07-17 增,替代旧 tag 弹窗) ======
 const versionOpen = ref(false)
+// 2026-07-17 增:per-skill 历史模式 — VersionHistoryModal 可选 skillPath prop,
+// 非空时只显示该 skill 的 commit。GitSyncPanel 的"查看历史"按钮会传这个值。
+const versionSkillPath = ref('')
+// 2026-07-17 增:SkillFileInlinePanel @show-history 转发 → 打开 VersionHistoryModal。
+// skillPath 参数有值时走 per-skill 模式,空时走全仓模式(节点右键菜单触发)。
+function onShowHistory(skillPath) {
+  versionSkillPath.value = skillPath || ''
+  versionOpen.value = true
+}
 function openVersionDialog(node) {
   const name = node.skill_meta?.name || node.name
   const path = node.path || name
@@ -1321,6 +1330,7 @@ function openVersionDialog(node) {
   } else {
     selectItem(row)
   }
+  versionSkillPath.value = '' // 节点右键 → 全仓历史
   versionOpen.value = true
 }
 
@@ -1766,6 +1776,7 @@ onUnmounted(() => {
           @saved="onDrawerSaved"
           @created="onInlinePanelCreated"
           @ai-apply-skill="onAIApply"
+          @show-history="onShowHistory"
         >
           <!-- 2026-07-07 改 v3:把"编辑 / 取消 / 保存"按钮搬到 InlinePanel 面包屑行内,
                跟 [i] 信息按钮同一栏、[i] 左侧依次排列(渲染顺序:name-actions → actions → [i])。
@@ -1833,7 +1844,7 @@ onUnmounted(() => {
     <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->
 
     <!-- 2026-07-17 增:Version 历史弹窗(go-git commit 时间线 + diff + checkout + push) -->
-    <VersionHistoryModal v-model:open="versionOpen" :skill="current" @checked-out="onCheckedOut" />
+    <VersionHistoryModal v-model:open="versionOpen" :skill="current" :skill-path="versionSkillPath" @checked-out="onCheckedOut" />
 
     <!-- 测试结果弹窗 -->
     <Modal

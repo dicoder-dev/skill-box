@@ -1192,7 +1192,9 @@ Booleans use true / false (not the strings "true" / "false"). Output nothing out
   // 2026-07-17 add: Git sync panel (go-git version management) strings.
   git: {
     title: 'Git Sync',
+    showHistory: 'View history',
     notInit: 'Not initialized',
+    noCommits: 'No commits',
     init: 'Initialize repository',
     initTip: 'Click below to initialize a local repository. After that, skill changes are auto-committed and pushed to remote.',
     remote: 'Remote',
@@ -1220,6 +1222,7 @@ Booleans use true / false (not the strings "true" / "false"). Output nothing out
     historyTitle: 'Version history',
     historyInitFirst: 'Please initialize the Git repository first',
     historyEmpty: 'No commits yet',
+    historyEmptySkill: 'No changes recorded for this skill',
     historyDiff: 'Changes',
     historyPickCommit: 'Click a commit on the left to view diff',
     historyCheckout: 'Reset to this commit',

@@ -212,15 +212,23 @@ func (r *Repo) Status() (Status, error) {
 	}
 	head, err := repo.Head()
 	if err == nil {
-		s.HeadHash = head.Hash().String()
-		s.HeadShort = head.Hash().String()[:7]
-		s.Branch = head.Name().Short()
-		if c, cerr := repo.CommitObject(head.Hash()); cerr == nil {
-			msg := strings.SplitN(c.Message, "\n", 2)[0]
-			if len(msg) > 120 {
-				msg = msg[:120] + "…"
+		hash := head.Hash()
+		// 2026-07-17 改:go-git PlainInit 后 HEAD 可能指向 zero hash(还没
+		// 任何 commit),这时不应该显示 "0000000",前端 badge 改成空 + 状态
+		// 文案 "no commits yet"。分支名也只在有 commit 时才有意义。
+		if !hash.IsZero() {
+			s.HeadHash = hash.String()
+			s.HeadShort = hash.String()[:7]
+			if name := head.Name(); name != plumbing.ReferenceName("") {
+				s.Branch = name.Short()
 			}
-			s.HeadMessage = msg
+			if c, cerr := repo.CommitObject(hash); cerr == nil {
+				msg := strings.SplitN(c.Message, "\n", 2)[0]
+				if len(msg) > 120 {
+					msg = msg[:120] + "…"
+				}
+				s.HeadMessage = msg
+			}
 		}
 	}
 	if remote, rerr := repo.Remote("origin"); rerr == nil {
@@ -237,7 +245,11 @@ func (r *Repo) Status() (Status, error) {
 }
 
 // Log 读最近 N 条 commit 历史(默认 50,上限 500)。
-func (r *Repo) Log(limit int) ([]CommitEntry, error) {
+//
+// 2026-07-17 增:可选 pathPrefix 参数过滤 — 非空时只返回涉及该路径前缀的
+// commit(用 go-git LogOptions.FileName + 跳过未涉及文件,O(N) walk 树)。
+// 这是 per-skill 修改历史的实现核心:传 "<group>/<name>/" 即可只显示该 skill 的 commit。
+func (r *Repo) Log(limit int, pathPrefix string) ([]CommitEntry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
@@ -259,6 +271,25 @@ func (r *Repo) Log(limit int) ([]CommitEntry, error) {
 		if count >= limit {
 			return errStop
 		}
+		// 2026-07-17 增:per-path 过滤。空 prefix = 不过滤,走全量;
+		// 非空时用 commitFiles 拿该 commit 涉及的文件,任何一个以 prefix
+		// 开头就保留。
+		if pathPrefix != "" {
+			files, ferr := commitFiles(repo, c)
+			if ferr != nil {
+				return nil // 拿不到文件列表,跳过(不返回错误,继续走下一条)
+			}
+			matched := false
+			for _, f := range files {
+				if strings.HasPrefix(f, pathPrefix) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return nil
+			}
+		}
 		entry := CommitEntry{
 			Hash:    c.Hash.String(),
 			Short:   c.Hash.String()[:7],
@@ -278,6 +309,14 @@ func (r *Repo) Log(limit int) ([]CommitEntry, error) {
 		out = []CommitEntry{}
 	}
 	return out, nil
+}
+
+// LogAll 是 Log 的全量便捷包装(无 path filter,跟阶段一 API 兼容)。
+//
+// 2026-07-17 增:HTTP API 之前绑定的是 Log(limit) 单参,改成 (limit, path) 后
+// 旧调用方会编译失败,所以保留 LogAll 给需要"全仓 log"的端点用。
+func (r *Repo) LogAll(limit int) ([]CommitEntry, error) {
+	return r.Log(limit, "")
 }
 
 // errStop 内部 sentinel,ForEach 用它提前终止。

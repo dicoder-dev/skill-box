@@ -2,9 +2,9 @@
 // GitSyncPanel - 技能仓库 Git 同步状态面板(2026-07-17 增)
 //
 // 2026-07-17 改:用通用 CollapsiblePanel 包裹,header 样式与作用域面板一致。
-// 默认折叠,点 header 展开。
+// 默认折叠,点 header 展开;accordion 模式:同 parent 内任一面板展开会收起其他。
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getGitStatus,
@@ -19,7 +19,32 @@ import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 
 const { t } = useI18n()
 
-const expanded = ref(false)
+// 2026-07-17 增:可选 skillPath,非空时"查看历史"按钮会 emit 这个路径,
+// 让父组件打开 VersionHistoryModal 并传 skillPath 实现 per-skill 历史。
+const props = defineProps({
+  skillPath: { type: String, default: '' },
+})
+const emit = defineEmits(['show-history'])
+
+// 2026-07-17 改:从本地 ref 改成走 AccordionGroup 协调器(注入式)。
+// 没包 AccordionGroup 时退化为本地 ref,行为跟旧版一致。
+const coordinator = inject('cpCoordinator', null)
+const localExpanded = ref(false)
+const gitExpanded = computed(() => {
+  if (coordinator) {
+    return coordinator.activeId === 'git'
+  }
+  return localExpanded.value
+})
+function onGitToggle(open) {
+  if (coordinator) {
+    coordinator.toggle('git', open)
+  } else {
+    localExpanded.value = open
+  }
+  if (open && !cfgLoaded.value) refresh()
+}
+
 const configOpen = ref(false)
 
 const formRemoteURL = ref('')
@@ -133,11 +158,6 @@ async function saveConfig() {
   }
 }
 
-function onToggle(open) {
-  // 首次展开时拉一次 status(默认折叠避免无谓请求)
-  if (open && !cfgLoaded.value) refresh()
-}
-
 onMounted(() => {
   // 不主动 refresh,等用户点开再拉(避免面板未显示就发请求)
 })
@@ -145,15 +165,22 @@ onMounted(() => {
 
 <template>
   <CollapsiblePanel
-    v-model:expanded="expanded"
+    :expanded="gitExpanded"
     :title="t('git.title')"
     icon="github"
-    @toggle="onToggle"
+    panel-id="git"
+    @update:expanded="onGitToggle"
   >
     <template #title-meta>
-      <span v-if="status.initialized" class="gsp-badge ok">
+      <!-- 2026-07-17 改:zero head 显示 'no commits yet' 而非 raw hash;
+           没 init 显示 '未初始化';都靠 status.head_hash 是否为空判断。 -->
+      <span v-if="status.initialized && status.head_hash" class="gsp-badge ok">
         <IconPark type="check-one" :size="10" />
         {{ status.branch || 'main' }} · {{ status.head_short || '-' }}
+      </span>
+      <span v-else-if="status.initialized" class="gsp-badge warn">
+        <IconPark type="warning" :size="10" />
+        {{ t('git.noCommits', '无提交') }}
       </span>
       <span v-else class="gsp-badge warn">{{ t('git.notInit') }}</span>
     </template>
@@ -187,8 +214,8 @@ onMounted(() => {
       <div class="gsp-row">
         <div class="gsp-row-label">{{ t('git.head') }}</div>
         <div class="gsp-row-value">
-          <code class="gsp-head-hash">{{ status.head_short || '-' }}</code>
-          <span class="gsp-head-msg" :title="status.head_message">{{ status.head_message || '(无)' }}</span>
+          <code class="gsp-head-hash">{{ status.head_short || (status.initialized ? t('git.noCommits', '无提交') : '-') }}</code>
+          <span class="gsp-head-msg" :title="status.head_message">{{ status.head_message || (status.initialized ? t('git.noCommits', '无提交') : t('git.notInit', '未初始化')) }}</span>
         </div>
       </div>
 
@@ -220,6 +247,13 @@ onMounted(() => {
         <button v-if="!status.working_clean" class="gsp-btn warn" :disabled="loading" @click="doDiscard">
           <IconPark type="undo" :size="12" />
           {{ t('git.discard') }}
+        </button>
+        <!-- 2026-07-17 增:查看修改历史按钮 — 有 skillPath 时 emit 路径,
+             父组件打开 VersionHistoryModal(skillPath) 进入 per-skill 模式;
+             没传 skillPath 时 emit 空字符串,父组件走全仓历史。 -->
+        <button class="gsp-btn" :disabled="loading" @click="emit('show-history', props.skillPath)">
+          <IconPark type="history" :size="12" />
+          {{ t('git.showHistory') }}
         </button>
       </div>
 

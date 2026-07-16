@@ -1217,7 +1217,9 @@ const messages = {
   // 注意:这些 key 必须在 messages 根级别,因为 plainT 是按 dot path 查的。
   git: {
     title: 'Git 同步',
+    showHistory: '查看历史',
     notInit: '未初始化',
+    noCommits: '无提交',
     init: '初始化仓库',
     initTip: '点击下方按钮初始化本地仓库,之后技能改动会自动 commit + push 到远端。',
     remote: '远端',
@@ -1245,6 +1247,7 @@ const messages = {
     historyTitle: '版本历史',
     historyInitFirst: '请先在上方初始化 Git 仓库',
     historyEmpty: '暂无 commit 记录',
+    historyEmptySkill: '该技能暂无修改记录',
     historyDiff: '变更对比',
     historyPickCommit: '点击左侧 commit 查看 diff',
     historyCheckout: 'Reset 到此 commit',

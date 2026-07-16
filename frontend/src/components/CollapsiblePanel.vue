@@ -1,9 +1,6 @@
 <script setup>
 // CollapsiblePanel - 通用可折叠面板(2026-07-17 增)
 //
-// 用途:统一 skill 详情区的"作用域"和"Git 同步"两个面板的标题/折叠交互样式,
-// 避免每个面板各自实现一遍 .ssp-*-header + chevron 切换。
-//
 // 2026-07-17 设计:
 //   - 标题样式按作用域面板 .ssp-scope-header 来(浅背景 + 左侧 icon + 标题文字
 //     + 右侧 meta slot + chevron)
@@ -12,8 +9,12 @@
 //   - 提供 #title-meta 插槽放 badge/count 等右侧附加信息
 //   - 提供 #default 插槽放面板内容
 //   - 自身不带业务逻辑(状态/数据由调用方管)
+//
+// 2026-07-17 改:加 panelId + inject 协调器,实现"一次只能展开一个"
+// 的 accordion 行为。同一 parent 树内,任一面板被展开时其他已展开面板自动折叠。
+// 不传 panelId 则走普通独立模式(向后兼容)。
 
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 
 const props = defineProps({
@@ -25,14 +26,26 @@ const props = defineProps({
   icon: { type: String, default: '' },
   // 折叠时也强制渲染 body(给"必看"信息用;默认 false 折叠时不渲染,省 DOM)
   forceMount: { type: Boolean, default: false },
+  // 2026-07-17 增:面板 ID,用于 accordion 协调。不传 = 独立面板,跟其他面板互不干扰。
+  panelId: { type: String, default: '' },
 })
 const emit = defineEmits(['update:expanded', 'toggle'])
+
+// 注入 accordion 协调器;父组件用 <AccordionGroup> 包一层即可启用。
+// 没包时 coordinator = null,行为跟旧版一致。
+const coordinator = inject('cpCoordinator', null)
 
 const chevronIcon = computed(() => (props.expanded ? 'mdi:minus' : 'mdi:plus'))
 
 function toggle() {
-  emit('update:expanded', !props.expanded)
-  emit('toggle', !props.expanded)
+  const next = !props.expanded
+  if (coordinator && props.panelId) {
+    // 走协调器 — 通知父级更新 activeId
+    coordinator.toggle(props.panelId, next)
+  } else {
+    emit('update:expanded', next)
+  }
+  emit('toggle', next)
 }
 </script>
 
@@ -66,10 +79,7 @@ function toggle() {
   border: 1px solid var(--border-color, rgba(127, 127, 127, 0.15));
   border-radius: var(--radius, 6px);
   background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
-  /* 2026-07-17 改:用户反馈面板间距太大,从 8px 减到 2px,
-     多个面板堆叠时视觉更紧凑,只留一丝丝空白区分。 */
   margin-top: 2px;
-  /* 2026-07-17 增:overflow:hidden 让 header 底部分割线不溢出圆角 */
   overflow: hidden;
 }
 
@@ -79,10 +89,8 @@ function toggle() {
   gap: 6px;
   width: 100%;
   padding: 6px 10px;
-  /* 2026-07-17 改:header 灰色背景,跟 body 区分(用户反馈) */
   background: var(--bg-elevated-strong, rgba(127, 127, 127, 0.08));
   border: 0;
-  /* 2026-07-17 增:header 底部分割线,表示"这是面板头部" */
   border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
   cursor: pointer;
   font-size: 12px;
@@ -92,9 +100,7 @@ function toggle() {
 }
 .cp-header:hover { background: var(--bg-elevated-stronger, rgba(127, 127, 127, 0.14)); }
 
-.cp-title {
-  flex: 0 0 auto;
-}
+.cp-title { flex: 0 0 auto; }
 
 .cp-meta {
   flex: 1 1 auto;

@@ -87,8 +87,8 @@ export function initGit() {
  *   total: number
  * }>}
  */
-export function getGitLog(limit = 50) {
-  return http.get('/api/skillbox/git/log', { limit })
+export function getGitLog(limit = 50, path = '') {
+  return http.get('/api/skillbox/git/log', { limit, path })
 }
 
 /**

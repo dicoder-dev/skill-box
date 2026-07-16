@@ -30,6 +30,10 @@ const { t } = useI18n()
 const props = defineProps({
   open: { type: Boolean, default: false },
   skill: { type: Object, default: () => ({}) },
+  // 2026-07-17 增:可选 skillPath(相对 repo root,例如 "frontend/code-review"),
+  // 非空时只显示涉及该路径的 commit(per-skill 修改历史)。
+  // 不传则跟旧版一致,显示全仓 commit 历史。
+  skillPath: { type: String, default: '' },
 })
 const emit = defineEmits(['update:open', 'checked-out'])
 
@@ -54,7 +58,12 @@ async function loadAll() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const [log, st] = await Promise.all([getGitLog(50), getGitStatus()])
+    // 2026-07-17 改:per-skill 过滤 — props.skillPath 非空时传给 getGitLog 第二参,
+    // 后端只返回涉及该路径的 commit。
+    const [log, st] = await Promise.all([
+      getGitLog(50, props.skillPath || undefined),
+      getGitStatus(),
+    ])
     items.value = log.items || []
     status.value = st
     // 默认选中 HEAD(第一个)
@@ -162,7 +171,7 @@ function close() {
   <Modal
     :model-value="open"
     size="xl"
-    :title="t('git.history.title')"
+    :title="props.skillPath ? `${t('git.history.title')} — ${props.skillPath}` : t('git.history.title')"
     @update:model-value="emit('update:open', $event)"
   >
     <div class="version-modal">
@@ -218,7 +227,7 @@ function close() {
             </li>
           </ul>
           <div v-else class="version-empty">
-            <p>{{ t('git.history.empty') }}</p>
+            <p>{{ props.skillPath ? t('git.history.emptySkill', '该技能暂无修改记录') : t('git.history.empty') }}</p>
           </div>
         </div>
 

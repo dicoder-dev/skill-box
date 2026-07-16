@@ -167,16 +167,20 @@ func GitInit(c *ginp.ContextPlus) {
 	c.JSON(200, gin.H{"ok": true, "initialized": true})
 }
 
-// GitLog GET /api/skillbox/git/log?limit=50
+// GitLog GET /api/skillbox/git/log?limit=50&path=<group>/<name>
+//
+// 2026-07-17 增:可选 path 参数 — 非空时只返回涉及该路径前缀的 commit
+// (per-skill 修改历史的核心)。path 用正斜杠,跟 skills 目录布局一致。
 func GitLog(c *ginp.ContextPlus, req *struct {
-	Limit int `json:"limit" form:"limit"`
+	Limit int    `json:"limit" form:"limit"`
+	Path  string `json:"path" form:"path"`
 }) {
 	repo, err := skillversion.Default()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	entries, lerr := repo.Log(req.Limit)
+	entries, lerr := repo.Log(req.Limit, req.Path)
 	if lerr != nil {
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return
@@ -192,7 +196,7 @@ func GitCommit(c *ginp.ContextPlus) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	entries, lerr := repo.Log(500)
+	entries, lerr := repo.Log(500, "")
 	if lerr != nil {
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return

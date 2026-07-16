@@ -159,7 +159,7 @@ const props = defineProps({
   skill: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['saved', 'ai-apply-skill'])
+const emit = defineEmits(['saved', 'ai-apply-skill', 'show-history'])
 
 // 2026-07-13 增 v3:AI 应用成功后,CodeViewer 根容器黄色边框闪烁 1.5s 让用户看到文件被改了。
 // 每次应用 +1,CodeViewer 通过动画响应变化;1.5s 后我们把 applyFlash 重置回 0,
@@ -1663,7 +1663,8 @@ defineExpose({
             @context-menu-root="onCtxRoot"
           />
         </div>
-        <SkillScopePanel :skill="skill" />
+        <!-- 2026-07-17 改:转发 show-history 事件给父级,让 SkillsView 打开 VersionHistoryModal(skillPath) -->
+        <SkillScopePanel :skill="skill" @show-history="emit('show-history', $event)" />
       </nav>
 
       <!-- 拖拽把手:拖右边界改变目录树宽度(双击重置) -->
