@@ -335,12 +335,13 @@ code {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* 滚动条美化（全局）
-   - WebKit/Blink：6px 极细圆角拇指，加 2px 透明 border + background-clip 让拇指“缩进”不贴边
+   - WebKit/Blink：4px 极细圆角拇指，不加 border（让 thumb 实色占满整宽，视觉不再“轨道”感）
    - Firefox：scrollbar-width:thin + scrollbar-color 兜底
-   - 颜色走 --border / hover --text-faint，亮/暗主题自动跟随（.dark 下变量已切换） */
+   - thumb 用 var(--border) 加 alpha 透明度,亮/暗主题看起来更“虚”不抢眼
+   - 组件 scoped 里如果另外写 width 会覆盖此处（特例仍可生效） */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -348,16 +349,12 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-corner {
