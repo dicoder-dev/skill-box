@@ -156,6 +156,13 @@ function toolShort(toolID) {
   if (meta?.display) return meta.display
   return toolID.charAt(0).toUpperCase() + toolID.slice(1)
 }
+// 2026-07-16 增:chip 悬浮提示 — 显示完整的可读名(优先 display_name,否则 tool_id),
+// 避免用户看到短标识想确认"这是哪个工具"时无处可查。
+function toolFullTitle(toolID) {
+  const meta = props.toolsById?.[toolID]
+  if (meta?.display_name) return meta.display_name
+  return toolID
+}
 const TOOL_ICON_MAP = {
   codex: 'mdi:console',
   claude: 'mdi:robot-outline',
@@ -315,17 +322,14 @@ function visibleTools(node) {
               width="14"
               height="14"
               :class="['tree-skill-icon', isGlobalAgent(node) ? 'is-global-agent' : '']"
+              :title="isGlobalAgent(node) ? t('skills.treeNode.globalAgentTip') : ''"
             />
-            <!-- 2026-07-11 增:全局 Agent 卡片在 name 左侧加翠绿色 tag,
-                 直观告诉用户"该 skill 来自全局 agents 目录"。
-                 顺序:图标 → 全局 Agent tag → skill name → @version,
-                 四者同行不换行,溢出时 ellipsis 优先压缩 name。
-                 2026-07-16 改:badge 文案去"全局"留"Agent"(按用户反馈),见 i18n。 -->
-            <span
-              v-if="isGlobalAgent(node)"
-              class="tree-skill-badge-global-agent"
-              :title="t('skills.treeNode.globalAgentTip')"
-            >{{ t('skills.treeNode.globalAgentBadge') }}</span>
+            <!-- 2026-07-16 删:全局 Agent 卡片不再渲染「Agent」badge。
+                 前面的图标已经用 mdi:earth(全局 Agent)替代 mdi:puzzle-outline,
+                 视觉语义足够强;再叠一个 badge 占用横向空间,挤压 skill name。
+                 顺序简化为:图标 → skill name,跟普通 skill 卡片一致,
+                 区别仅在于图标样式(emerald + earth 图标)。
+                 想要看提示文案仍可 hover 图标(后续若需要可补 :title 或 :data-tip)。 -->
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
             <!-- 2026-07-16 改:列表项不再显示版本号,给右侧详情腾出更多横向空间;
                  版本号仍在详情区顶栏 badge 展示。 -->
@@ -336,7 +340,7 @@ function visibleTools(node) {
               :key="tid"
               class="tree-tool-chip"
               :class="['tool-chip-' + (TOOL_ACCENT[tid] || 'default')]"
-              :title="tid"
+              :title="toolFullTitle(tid)"
             >
               <!--
                 2026-07-03 改:优先用 icon_file 真 logo,回退 mdi。
@@ -533,24 +537,8 @@ function visibleTools(node) {
   font-weight: 600;
   color: var(--text);
 }
-/* 2026-07-11 增:全局 Agent 标签 — 翠绿色,跟 Claude chip 同色相。
-   与 chip 样式对齐(50-tint 浅底 / 200-tint 浅边 / 600-tint 主色字),
-   视觉统一感强,且"翠绿"语义契合"全局/通用"。 */
-.tree-skill-badge-global-agent {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--accent-emerald-bg);
-  border: 1px solid var(--accent-emerald-border);
-  color: var(--accent-emerald);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-  user-select: none;
-}
+/* 2026-07-16 删:.tree-skill-badge-global-agent — 卡片不再渲染 badge,
+   图标(mdi:earth + emerald)已能代表全局 Agent 语义。 */
 
 .tree-version {
   font-size: 10px;

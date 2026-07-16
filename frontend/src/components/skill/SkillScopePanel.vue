@@ -17,6 +17,7 @@ import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
+import { listProjects } from '@/api/skillbox/projects'
 import { plainT } from '@/core/i18n/index.js'
 // 2026-07-12 增:folder 按钮需要 platform.fs.reveal / platform.openExternal,
 // 显式 import 而非依赖 wails3 全局变量(裸名 platform 在 Web 部署 / Vite dev
@@ -64,7 +65,9 @@ function t(key, values) {
 }
 const LABEL_SCOPE = 'skills.scope.title'
 const LABEL_GLOBAL = 'skills.scope.global'
-const LABEL_PROJECT_PREFIX = 'skills.scope.projectPrefix'
+// 2026-07-16 改:target 显示真实项目名,不再硬拼 LABEL_PROJECT_PREFIX + id 文本。
+// 用户反馈"项目 #1 / #2 / #3"是语言标识,正确的应该是从 projects 数据表读取
+// 用户在项目页配置的 name(走 loadProjectsMap → projectsById)。
 const LABEL_EMPTY = 'skills.scope.empty'
 const LABEL_LOADING = 'skills.scope.loading'
 const LABEL_ENABLE = 'skills.scope.enable'
@@ -136,10 +139,41 @@ function toolShort(toolID) {
   if (!toolID) return '?'
   return toolID.charAt(0).toUpperCase() + toolID.slice(1)
 }
+// 2026-07-16 改:project 作用域显示真实项目名(从 projects 数据表读取),
+// 不再硬拼 i18n 文本「项目 #N」。用户在项目页配置的 name 是事实来源;
+// 拿不到(name 缺失 / 接口未拉 / 项目被删)再退回 project_id,保证至少可读。
+const projectsById = ref({})
+let projectsLoadedAt = 0
+async function loadProjectsMap(force = false) {
+  // 缓存策略:首次加载或 5 分钟以上 / force=true 才重拉,避免每次切 skill 都打接口。
+  const FRESH_MS = 5 * 60 * 1000
+  if (!force && projectsLoadedAt && Date.now() - projectsLoadedAt < FRESH_MS) {
+    return
+  }
+  try {
+    const out = await listProjects({ page: 1, size: 500 })
+    const items = out?.items || []
+    const m = {}
+    for (const p of items) {
+      if (p && p.id !== undefined && p.id !== null) m[p.id] = p
+    }
+    projectsById.value = m
+    projectsLoadedAt = Date.now()
+  } catch (_) {
+    // 静默失败:targetLabel 拿不到 name 时仍可退回 project_id 兜底,
+    // 避免接口 5xx 时整个作用域区空白。
+  }
+}
+function projectLabel(projectID) {
+  if (!projectID) return ''
+  const p = projectsById.value[projectID]
+  if (p && (p.name || p.alias)) return p.name || p.alias
+  return `${projectID}`
+}
 function targetLabel(target) {
   if (!target) return ''
   if (target.scope === 'global') return t(LABEL_GLOBAL)
-  return `${t(LABEL_PROJECT_PREFIX)}${target.project_id}`
+  return projectLabel(target.project_id)
 }
 
 const scopeGroupByTool = computed(() => {
@@ -341,6 +375,9 @@ function onScopeRefresh() {
   loadScope()
   // 2026-07-12 增:同步重查全局 Agent 状态,确保用户保存 SKILL.md 后 tag 仍是最新值。
   loadGlobalAgentStatus()
+  // 2026-07-16 增:项目页新建/重命名/删除项目也会派发 scope-refresh,
+  // 强制重拉 projectsById 让 target 显示跟项目数据表对齐。
+  loadProjectsMap(true)
 }
 
 // 2026-07-12 增:info 弹窗 — 列出"哪些工具适配了 ~/.agents/skills/"。
@@ -481,6 +518,11 @@ onMounted(() => {
     loadScope({ resetCollapsed: true })
     loadGlobalAgentStatus({ reset: true })
   }
+  // 2026-07-16 增:作用域区每个 target 都要展示 project name(替代硬拼的
+  // 「项目 #N」)。listProjects 全量拉一次后缓存进 projectsById,后续 5 分钟内
+  // 复用;用户在项目页新建/重命名/删除项目 → SkillsView 收到 scope-refresh
+  // 事件也会强制刷新一次,保证本组件的展示跟项目数据表实时一致。
+  loadProjectsMap()
   window.addEventListener('skillbox:scope-refresh', onScopeRefresh)
 })
 // 2026-07-08 增:旧版漏 onUnmounted 清理 listener,导致 ScopePanel 实例重建时

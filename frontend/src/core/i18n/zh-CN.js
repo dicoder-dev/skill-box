@@ -566,7 +566,9 @@ const messages = {
     scope: {
       title: 'skill 作用域',
       global: '全局',
-      projectPrefix: '项目 #',
+      // 2026-07-16 删:projectPrefix(原来用于拼接"项目 #N")。
+      // SkillScopePanel 现在直接从 projects 数据表读取用户在项目页配置的 name,
+      // 不再硬拼 i18n 文案,避免显示成语言标识。保留空行注释避免结构变动。
       empty: '该技能尚未写入任何工具/位置',
       loading: '加载中...',
       enable: '启用作用域',
@@ -745,10 +747,11 @@ const messages = {
       openAICompat: '兼容、硅基等',
     },
 
-    // 2026-07-16 改:卡片上的全局 Agent 标签按用户反馈去掉"全局",只保留
-    // "Agent"(详情面板里的"全局 Agent Skill"按钮不受影响,该处是动作说明)。
+    // 2026-07-16 改:卡片上的全局 Agent 标签按用户反馈移除(全局 Agent skill
+    // 卡片前的 mdi:earth 图标已经能代表"全局 Agent"语义,再叠 badge 会挤压
+    // skill name 横向空间)。globalAgentTip 保留 — 用作 TreeNode 图标的 hover
+    // title 提示。
     treeNode: {
-      globalAgentBadge: 'Agent',
       globalAgentTip: '该技能位于全局 agents 目录,所有工具可自动读取',
       dropHere: '放到此处',
     },

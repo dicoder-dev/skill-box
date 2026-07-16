@@ -431,7 +431,9 @@ const messages = {
     scope: {
       title: 'Skill scope',
       global: 'Global',
-      projectPrefix: 'Project #',
+      // 2026-07-16 removed: projectPrefix (was used to compose "Project #N").
+      // SkillScopePanel now reads project names directly from the projects data
+      // table (configured on the Projects page) instead of stitching i18n text.
       empty: 'This skill has not been written to any tool/location yet',
       loading: 'Loading...',
       enable: 'Enable scope',
@@ -728,9 +730,11 @@ Booleans use true / false (not the strings "true" / "false"). Output nothing out
       openAICompat: 'Compatible / SiliconFlow etc.',
     },
 
-    // 2026-07-13 new: TreeNode (left tree) global Agent badge
+    // 2026-07-16 removed: TreeNode global Agent badge text.
+    // Per user feedback, the mdi:earth icon on the card is enough to convey
+    // the "global Agent" semantic; an extra badge crowds the skill name.
+    // globalAgentTip stays — used as the icon's hover title.
     treeNode: {
-      globalAgentBadge: 'Global Agent',
       globalAgentTip: 'This skill lives in the global agents directory and is read by all tools automatically',
       dropHere: 'Drop here',
     },
