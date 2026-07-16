@@ -184,15 +184,17 @@ function onReset() {
 }
 
 .update-progress {
-  height: 8px;
+  height: 3px;
   background: var(--bg-subtle);
-  border-radius: 4px;
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .update-progress-bar {
   height: 100%;
-  background: var(--primary);
+  /* 颜色淡化:主色降到 55% 透明度,视觉更柔和 */
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
+  border-radius: 999px;
   transition: width 0.3s ease;
 }
 

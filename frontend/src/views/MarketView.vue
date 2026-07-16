@@ -1487,16 +1487,17 @@ const lastInstalledName = ref('')
 }
 .progress-track {
   width: 100%;
-  height: 6px;
-  background: color-mix(in srgb, var(--accent) 15%, var(--bg-card));
-  border-radius: 3px;
+  height: 3px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+  border-radius: 999px;
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--mkt-accent)));
+  /* 颜色淡化:主色降到 55% 透明度,去掉高饱和渐变 */
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
   transition: width 0.15s linear;
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 /* 2026-07-09 增:子步骤文字(类似 npm install 那种"正在 xxx"体感) */
