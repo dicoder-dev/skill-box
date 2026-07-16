@@ -486,7 +486,7 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
     </p>
 
     <!-- 消息列表 -->
-    <div v-thin-scrollbar ref="listEl" class="airp-list">
+    <div ref="listEl" class="airp-list">
       <p v-if="!messages.length" class="airp-empty">
         <img
           class="airp-empty-img"

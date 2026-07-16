@@ -411,7 +411,6 @@ const lineNumbers = computed(() => {
         />
         <div
           v-else
-          v-thin-scrollbar
           class="cv-md md-body markdown-body"
           v-html="renderedMd"
           @click="onMdClick"
@@ -452,7 +451,7 @@ const lineNumbers = computed(() => {
             <IconPark icon="mdi:chevron-right" width="14" height="14" />
           </button>
         </header>
-        <ul v-thin-scrollbar class="cv-md-outline-list">
+        <ul class="cv-md-outline-list">
           <li
             v-for="h in mdHeadings"
             :key="h.id"
@@ -1036,7 +1035,7 @@ const lineNumbers = computed(() => {
   to { transform: rotate(360deg); }
 }
 
-/* CodeViewer 内滚动条 —— 全局隐藏原生轨道,只由 v-thin-scrollbar 自绘 thumb 接管 */
+/* CodeViewer 内滚动条 —— 全局隐藏原生轨道即可 */
 .code-viewer * {
   scrollbar-width: none;
 }

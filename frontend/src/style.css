@@ -335,11 +335,10 @@ code {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================
-   全局滚动条:桌面客户端惯例 —— 默认任何地方都不显示
+   全局滚动条:桌面客户端惯例 —— 任何地方都不显示
    - WebKit/Blink::-webkit-scrollbar { display: none }
    - Firefox scrollbar-width: none
-   - 仍需要滚动行为的容器(如 v-thin-scrollbar 接管)单独显 thumb,
-     不需要滚动的容器 + overflow:auto 也不会再出现 15px 占位
+   - 内容区不再留 15px 占位,需要滚动仍可滚(mousewheel / trackpad)
    ============================================ */
 ::-webkit-scrollbar {
   display: none;
@@ -356,13 +355,6 @@ code {
 html {
   scrollbar-width: none;
 }
-
-/* 之前保留的 1px thumb 样式已废弃(v-thin-scrollbar 自带 .tsb-thumb 全局样式),
-   旧规则在此覆盖,避免误用
-   --- 已被 v-thin-scrollbar 取代,以下规则不再生效 ---
-   ::-webkit-scrollbar { width: 1px; height: 1px; }
-   ::-webkit-scrollbar-thumb { background: color-mix(...); }
-   ------------------------------------------- */
 
 /* ============================================
    全局进度条美化

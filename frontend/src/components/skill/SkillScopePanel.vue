@@ -697,7 +697,7 @@ onErrorCaptured((err) => {
         class="ssp-scope-header-chevron"
       />
     </button>
-    <ul v-if="!sectionCollapsed" v-thin-scrollbar class="ssp-scope-list">
+    <ul v-if="!sectionCollapsed" class="ssp-scope-list">
       <!-- 2026-07-12 增 v2:作用域区首位"全局 Agent Skill" 行。
            跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
            + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
@@ -990,8 +990,7 @@ onErrorCaptured((err) => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 2026-07-08 增:作用域面板内滚动条美化 — 全局隐藏原生滚动条,
-     v-thin-scrollbar 接管自绘 thumb;其他位置 hover 才浮现 */
+  /* 2026-07-08 增:作用域面板内滚动条 —— 跟随全局隐藏 */
   scrollbar-width: none;
 }
 .ssp-scope-list::-webkit-scrollbar {
