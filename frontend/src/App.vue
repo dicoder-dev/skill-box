@@ -162,9 +162,14 @@ onMounted(refreshStats)
 // 顺序:技能 / 工具 / 项目 / 市场 / 设置 — 把"工具"提前到"项目"之前。
 // 2026-07-11 改:侧栏改为纯图标条(hover tooltip),导航主体迁到顶栏,
 // 此处 navItems 同时供侧栏图标按钮和顶栏 tab 按钮复用,key/icon/label 不变。
+// 2026-07-16 改:侧栏 3 大图标跟技能树卡片对齐 —
+//   技能  mdi:book-open-variant → mdi:puzzle-outline  (跟 TreeNode 技能卡片前的图标一致,Puzzle)
+//   工具  mdi:tools 保持         (Tool,语义清晰)
+//   项目  mdi:folder-multiple-outline 保持 (FileCabinet,文件柜语义贴近"项目仓库")
+// 顶栏右侧 stat-badge(技能/项目/工具 3 个数字徽章)也复用 navItems.icon,
+// 改这里一处,顶栏徽章联动同步更新,保持全局视觉一致。
 const navItems = computed(() => [
-  { key: 'skills',    label: t('app.nav.skills.label'),    icon: 'mdi:book-open-variant' },
-  // 2026-07-06 调:工具提到 projects 之前(原来是 projects → tools)
+  { key: 'skills',    label: t('app.nav.skills.label'),    icon: 'mdi:puzzle-outline' },
   { key: 'tools',     label: t('app.nav.tools.label'),     icon: 'mdi:tools' },
   { key: 'projects',  label: t('app.nav.projects.label'),  icon: 'mdi:folder-multiple-outline' },
   { key: 'market',    label: t('app.nav.market.label'),    icon: 'mdi:cart-outline' },
