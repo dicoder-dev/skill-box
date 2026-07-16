@@ -17,7 +17,8 @@ import IconPark from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
-import { createTag, listTags, deleteTag, diffTag, rollbackTag } from '@/api/skillbox/tags'
+// 2026-07-17 改造:tag 弹窗 → version 历史弹窗,版本管理改走 git commit。
+import VersionHistoryModal from '@/components/skill/VersionHistoryModal.vue'
 // 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
 // (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
@@ -75,7 +76,6 @@ const current = ref(null)         // 完整 skill 详情(loadSkill 后填充)
 const currentMd = ref('')         // 原始 SKILL.md 全文
 const currentBody = ref('')       // extractBody 后的正文
 const currentMeta = reactive({ description: '', triggers: [] })
-const currentTagList = ref([])    // 当前 skill 的 tag 列表
 const currentLoading = ref(false)
 const currentError = ref('')
 // 2026-07-08 增:对当前选中 skill 生成稳定 identity,绑到 SkillFileInlinePanel :key,
@@ -499,11 +499,6 @@ async function loadCurrent(row) {
     }
     current.value = enriched
     skillTree.setSelected(finalPath)
-    // 同步拉一次 tag 列表,让详情区"标签"chip 有数据
-    try {
-      const out = await listTags({ scope: 'global', name: row.name })
-      currentTagList.value = out?.items || []
-    } catch (_) { currentTagList.value = [] }
     // 2026-07-07 改:scope-status 拉到工作由 SkillFileInlinePanel 自管
     // (通过 watch props.skill 触发 + scope-refresh 事件驱动),parent 不再调用
     // loadScopeStatus。
@@ -601,107 +596,6 @@ const renderedHtml = computed(() => renderMarkdownView(currentBody.value))
 function onMdClick(e) {
   handleExternalClick(e)
 }
-
-// ====== Tag 弹窗 ======
-const tagOpen = ref(false)
-const tagList = ref([])
-const tagLoading = ref(false)
-const tagError = ref('')
-const tagMessage = ref('')
-const newTagName = ref('')
-const newTagMessage = ref('')
-const diffResult = ref(null)
-const diffLeftTagID = ref(0)
-const diffRightTagID = ref(0)
-const rolling = ref(false)
-
-async function openTagDialog() {
-  if (!current.value) return
-  tagOpen.value = true
-  tagList.value = []
-  diffResult.value = null
-  newTagName.value = ''
-  newTagMessage.value = ''
-  await loadTagList()
-}
-async function loadTagList() {
-  if (!current.value) return
-  tagLoading.value = true
-  tagError.value = ''
-  try {
-    const out = await listTags({ scope: current.value.scope, name: current.value.name })
-    tagList.value = out?.items || []
-    currentTagList.value = tagList.value
-  } catch (e) { tagError.value = e?.message || String(e) }
-  finally { tagLoading.value = false }
-}
-async function doCreateTag() {
-  if (!current.value) { tagError.value = t('skills.tag.selectFirst'); return }
-  if (!newTagName.value.trim()) { tagError.value = t('skills.tag.emptyName'); return }
-  tagLoading.value = true
-  tagError.value = ''
-  try {
-    await createTag({
-      scope: current.value.scope,
-      project_id: current.value.project_id,
-      name: current.value.name,
-      tag: newTagName.value.trim(),
-      message: newTagMessage.value,
-    })
-    newTagName.value = ''
-    newTagMessage.value = ''
-    tagMessage.value = t('skills.tag.msgCreated')
-    await loadTagList()
-  } catch (e) { tagError.value = e?.message || String(e) }
-  finally { tagLoading.value = false }
-}
-async function doDeleteTag(tagID) {
-  const ok = await openConfirm({
-    title: t('common.delete'),
-    message: t('skills.tag.confirmDelete', { id: tagID }),
-    variant: 'danger',
-    confirmText: t('common.delete'),
-  })
-  if (!ok) return
-  try {
-    await deleteTag({ tag_id: tagID })
-    tagMessage.value = t('skills.tag.msgDeleted', { id: tagID })
-    await loadTagList()
-  } catch (e) { tagError.value = e?.message || String(e) }
-}
-async function doDiff(leftID, rightID) {
-  if (!current.value) { tagError.value = t('skills.tag.selectFirst'); return }
-  try {
-    const out = await diffTag({ scope: current.value.scope, name: current.value.name, left_tag_id: leftID || 0, right_tag_id: rightID || 0 })
-    diffResult.value = out
-    diffLeftTagID.value = leftID
-    diffRightTagID.value = rightID
-  } catch (e) { tagError.value = e?.message || String(e) }
-}
-async function doRollback(tagID) {
-  const ok = await openConfirm({
-    title: t('skills.tag.rollbackTo'),
-    message: t('skills.tag.confirmRollback', { id: tagID }),
-    confirmText: t('skills.tag.rollbackTo'),
-    variant: 'danger',
-  })
-  if (!ok) return
-  rolling.value = true
-  tagError.value = ''
-  try {
-    const out = await rollbackTag({ tag_id: tagID })
-    tagMessage.value = t('skills.tag.msgRolledBack', { pre: out.pre_rollback_tag, files: out.files_restored })
-    diffResult.value = null
-    await reload()
-    const row = items.value.find((x) => skillKey(x) === selectedKey.value)
-    if (row) await loadCurrent(row)
-    await loadTagList()
-  } catch (e) { tagError.value = e?.message || String(e) }
-  finally { rolling.value = false }
-}
-
-// 标签 chip 列表(取自 currentTagList,与弹窗共用)
-const currentTags = computed(() => currentTagList.value || [])
 
 // ====== 测试弹窗 ======
 const testOpen = ref(false)
@@ -1185,10 +1079,10 @@ function onSkillContextMenu({ node, event }) {
       onClick: () => copySourcePath(node),
     },
     {
-      key: 'tag',
-      label: t('skills.list.ctxTag'),
-      icon: 'mdi:tag-outline',
-      onClick: () => openSkillTagDialog(node),
+      key: 'version',
+      label: t('skills.list.ctxVersion'),
+      icon: 'mdi:history',
+      onClick: () => openVersionDialog(node),
     },
     { divided: true, key: 'div-1', label: '' },
     {
@@ -1416,22 +1310,25 @@ async function openGroupInFolder(groupPath) {
   }
 }
 
-// ====== skill 打 tag(复用详情区右上角 tag 弹窗) ======
-async function openSkillTagDialog(node) {
+// ====== Version 历史弹窗(2026-07-17 增,替代旧 tag 弹窗) ======
+const versionOpen = ref(false)
+function openVersionDialog(node) {
   const name = node.skill_meta?.name || node.name
   const path = node.path || name
-  const version = node.skill_meta?.version
-  // 直接调列表选中 + openTagDialog
   const row = items.value.find((x) => x.path === path)
   if (!row) {
-    // 节点不在 store items 里(罕见)— 临时构造一个伪 row
-    selectItem({ name, path, version })
+    selectItem({ name, path })
   } else {
     selectItem(row)
   }
-  // 等 current 切到再开 tag 弹窗(下一帧)
-  await nextTick()
-  openTagDialog()
+  versionOpen.value = true
+}
+
+// 2026-07-17 增:VersionHistoryModal 在 reset 完成后 emit checked-out,这里 reload 当前 skill,
+// 否则 UI 还是旧的 commit 信息。
+async function onCheckedOut(hash) {
+  const row = items.value.find((x) => skillKey(x) === selectedKey.value)
+  if (row) await loadCurrent(row)
 }
 
 // ====== 拖拽处理 ======
@@ -1935,91 +1832,8 @@ onUnmounted(() => {
     <!-- 2026-07-04 改:文件浏览器改成正文右侧内联面板(不再用抽屉),挂载点已合并到 detail-body-split 里。 -->
     <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->
 
-    <!-- Tag 弹窗 -->
-    <Modal
-      v-model="tagOpen"
-      size="xl"
-      :title="current ? t('skills.tag.titlePrefix') + ' — ' + current.name + '@' + current.version : t('skills.tag.titlePrefix')"
-    >
-      <template #title-icon>
-        <IconPark icon="mdi:tag-outline" width="18" height="18" />
-      </template>
-
-      <p v-if="tagMessage" class="message message-success">
-        <IconPark icon="mdi:check-circle-outline" width="14" height="14" />
-        {{ tagMessage }}
-      </p>
-      <p v-if="tagError" class="message message-error">
-        <IconPark icon="mdi:alert-circle-outline" width="14" height="14" />
-        {{ tagError }}
-      </p>
-
-      <div class="tag-create">
-        <input v-model="newTagName" :placeholder="t('skills.tag.createPlaceholder')" class="tag-input" />
-        <input v-model="newTagMessage" :placeholder="t('skills.tag.msgPlaceholder')" class="tag-input" />
-        <button class="primary" :disabled="tagLoading" @click="doCreateTag">
-          {{ tagLoading ? t('common.processing') : t('skills.tag.btnCreate') }}
-        </button>
-      </div>
-
-      <div v-if="tagList.length" class="tag-actions">
-        <span class="diff-label">{{ t('skills.tag.diff') }}:</span>
-        <select v-model="diffLeftTagID">
-          <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
-            {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
-          </option>
-        </select>
-        <IconPark icon="mdi:arrow-right" width="14" height="14" class="diff-arrow" />
-        <select v-model="diffRightTagID">
-          <option :value="0">{{ t('skills.tag.current') }}</option>
-          <option v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :value="tg.tag_id || tg.ID || tg.id">
-            {{ tg.tag }} ({{ (tg.created_at || '').slice(0, 16) }}){{ tg.is_implicit ? t('skills.tag.implicit') : '' }}
-          </option>
-        </select>
-        <button @click="doDiff(diffLeftTagID, diffRightTagID)">{{ t('skills.tag.seeDiff') }}</button>
-        <button @click="doDiff(0, 0)">{{ t('skills.tag.clear') }}</button>
-      </div>
-
-      <ul v-if="tagList.length" class="tag-list">
-        <li v-for="tg in tagList" :key="tg.tag_id || tg.ID || tg.id" :class="{ 'tag-implicit': tg.is_implicit }">
-          <span class="tag-id">#{{ tg.tag_id || tg.ID || tg.id }}</span>
-          <span class="tag-name"><code>{{ tg.tag }}</code></span>
-          <span class="tag-msg">{{ tg.message || t('common.dash') }}</span>
-          <span class="tag-time">{{ (tg.created_at || '').slice(0, 19) }}</span>
-          <button class="link" @click="doDiff(tg.tag_id || tg.ID || tg.id, 0)">{{ t('skills.tag.vsCurrent') }}</button>
-          <button class="link" :disabled="rolling" @click="doRollback(tg.tag_id || tg.ID || tg.id)">
-            {{ rolling ? t('skills.tag.rollingBack') : t('skills.tag.rollbackTo') }}
-          </button>
-          <button class="link danger" @click="doDeleteTag(tg.tag_id || tg.ID || tg.id)">{{ t('common.delete') }}</button>
-        </li>
-      </ul>
-
-      <div v-else-if="!tagLoading" class="empty-state empty-state-sm">
-        <IconPark icon="mdi:tag-off-outline" width="36" height="36" />
-        <p class="empty-title">{{ t('common.dash') }}</p>
-      </div>
-
-      <div v-if="diffResult" class="diff-panel">
-        <header class="diff-header">
-          <h4>{{ t('skills.tag.resultTitle') }}</h4>
-          <div class="diff-stats">
-            <span class="stat stat-added">+{{ t('skills.tag.added', { n: diffResult.added }) }}</span>
-            <span class="stat stat-removed">-{{ t('skills.tag.removed', { n: diffResult.removed }) }}</span>
-            <span class="stat stat-modified">~{{ t('skills.tag.modified', { n: diffResult.modified }) }}</span>
-            <span class="stat stat-unchanged">={{ t('skills.tag.unchanged', { n: diffResult.unchanged }) }}</span>
-          </div>
-        </header>
-        <div v-for="f in diffResult.files" :key="f.path" :class="['diff-file', `diff-kind-${f.kind}`]">
-          <div class="diff-file-header">
-            <span class="diff-file-kind">{{ f.kind }}</span>
-            <code class="diff-file-path">{{ f.path }}</code>
-          </div>
-          <pre v-if="f.lines?.length" class="diff-content"><span v-for="(l, i) in f.lines" :key="i" :class="`diff-line diff-line-${l.kind}`"><span class="diff-line-no">{{ l.left_no || '' }}|{{ l.right_no || '' }}</span>{{ l.text }}
-</span></pre>
-        </div>
-      </div>
-    </Modal>
+    <!-- 2026-07-17 增:Version 历史弹窗(go-git commit 时间线 + diff + checkout + push) -->
+    <VersionHistoryModal v-model:open="versionOpen" :skill="current" @checked-out="onCheckedOut" />
 
     <!-- 测试结果弹窗 -->
     <Modal
@@ -3168,8 +2982,7 @@ onUnmounted(() => {
 
 .chip-global.chip-active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
 .chip-project.chip-active { background: var(--accent-violet); border-color: var(--accent-violet); color: #fff; }
-.chip-tag { cursor: default; }
-.chip-tag:hover { background: var(--bg-card); color: var(--text-dim); }
+/* 2026-07-17 删:.chip-tag 块(旧 tag chip 渲染相关,tag 弹窗下线)。 */
 .chip-trigger { background: var(--accent-amber-bg); color: var(--accent-amber); border-color: var(--accent-amber-border); }
 .chip-trigger:hover { background: var(--accent-amber-bg); color: var(--accent-amber); }
 
@@ -3552,92 +3365,6 @@ onUnmounted(() => {
 }
 .message-success { background: var(--success-dim); color: var(--success); }
 .message-error { background: var(--danger-dim); color: var(--danger); }
-
-/* ============================================
-   Tag 弹窗(沿用原样)
-   ============================================ */
-.tag-create {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.tag-input { flex: 1; }
-.tag-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  flex-wrap: wrap;
-}
-.diff-label { color: var(--text-dim); font-weight: 500; }
-.diff-arrow { color: var(--text-faint); }
-
-.tag-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  border-top: 1px dashed var(--border);
-}
-.tag-list li {
-  display: grid;
-  grid-template-columns: 50px 160px 1fr 160px auto auto auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px dashed var(--border);
-  font-size: 13px;
-}
-.tag-list li.tag-implicit {
-  background: var(--bg-subtle);
-  margin: 0 -20px;
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border);
-  border-bottom: 1px dashed var(--border);
-}
-.tag-id { font-family: 'JetBrains Mono', monospace; color: var(--text-faint); }
-.tag-name code { background: var(--primary-dim); color: var(--text); }
-.tag-msg { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-time { color: var(--text-faint); font-size: 11px; }
-
-.diff-panel {
-  margin-top: 20px;
-  padding: 16px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.diff-header h4 { margin: 0; font-size: 14px; color: var(--text); }
-.diff-stats { display: flex; gap: 8px; }
-.stat { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-.stat-added { background: var(--success-dim); color: var(--success); }
-.stat-removed { background: var(--danger-dim); color: var(--danger); }
-.stat-modified { background: var(--warning-dim); color: var(--warning); }
-.stat-unchanged { background: var(--bg-card); color: var(--text-dim); }
-
-.diff-file { margin: 8px 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.diff-kind-added .diff-file-header { background: var(--bg-subtle); border-left: 3px solid var(--success); }
-.diff-kind-removed .diff-file-header { background: var(--bg-subtle); border-left: 3px solid var(--danger); }
-.diff-kind-modified .diff-file-header { background: var(--bg-subtle); border-left: 3px solid var(--warning); }
-.diff-kind-unchanged .diff-file-header { background: var(--bg-card); }
-.diff-file-header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
-.diff-file-kind { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-dim); text-transform: uppercase; font-weight: 600; }
-.diff-file-path { font-size: 12px; color: var(--text); }
-.diff-content { padding: 8px 12px; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; background: var(--bg-card); max-height: 300px; overflow: auto; white-space: pre; }
-.diff-line { display: block; }
-.diff-line-added { background: var(--bg-subtle); color: var(--text); border-left: 3px solid var(--success); }
-.diff-line-removed { background: var(--bg-subtle); color: var(--text-dim); border-left: 3px solid var(--danger); text-decoration: line-through; }
-.diff-line-context { color: var(--text-dim); }
-.diff-line-no { display: inline-block; min-width: 40px; padding-right: 10px; color: var(--text-faint); user-select: none; }
 
 /* ============================================
    测试 / 编辑 / 确认弹窗(沿用原样)

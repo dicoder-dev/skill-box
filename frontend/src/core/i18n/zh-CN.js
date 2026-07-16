@@ -170,35 +170,7 @@ const messages = {
       failed: '失败',
     },
 
-    tag: {
-      titlePrefix: 'Tag 管理',
-      count: '{count} 个 tag',
-      createPlaceholder: 'tag 名,如 v1.0.0',
-      msgPlaceholder: '描述(可选)',
-      btnCreate: '打 Tag',
-      msgCreated: '已打 tag',
-      msgDeleted: '已删除 tag #{id}',
-      msgRolledBack: '已回滚(自动打 {pre},恢复 {files} 个文件)',
-      selectFirst: '先选一个技能',
-      emptyName: 'tag 名不能为空',
-      confirmDelete: '删除 tag #{id}?file_snapshots 也会一起删。',
-      confirmRollback: '回滚到 tag #{id}?会自动打一个 _pre_rollback 隐式 tag,当前状态不会丢失。',
-      confirmUndo: '撤销应用 #{id}?将恢复目标目录到应用之前的状态。',
-      undoMsg: '已撤销应用 #{id}',
-      rollbackTo: '回滚到此',
-      rollingBack: '回滚中…',
-      diff: '差异',
-      seeDiff: '查看差异',
-      clear: '清空',
-      vsCurrent: 'vs 当前',
-      current: '当前',
-      implicit: ' [隐式]',
-      resultTitle: '差异结果',
-      added: '+{n}',
-      removed: '-{n}',
-      modified: '~{n}',
-      unchanged: '{n} 不变',
-    },
+    // 2026-07-17 删:tag 块(对应旧 ctag 弹窗,改走 go-git VersionHistoryModal)。
 
     test: {
       title: '最近测试结果',
@@ -284,7 +256,8 @@ const messages = {
       ctxRename: '重命名',
       ctxOpenFolder: '在文件夹中打开',
       ctxCopyPath: '复制路径',
-      ctxTag: '打标签',
+      // 2026-07-17 改:tag 弹窗下线,改成"版本历史"弹窗(go-git commit 时间线)。
+      ctxVersion: '查看版本历史',
       ctxDelete: '删除',
       ctxMoveTo: '移动到…',
       // 2026-07-03 改:首页分组只支持单级,不再支持多级。groupNamePrompt

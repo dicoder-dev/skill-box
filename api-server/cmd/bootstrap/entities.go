@@ -20,8 +20,8 @@ var EntityAutoMigrateList = []any{
 
 	new(entity.Project),
 	new(entity.SkillFile),
-	new(entity.SkillTag),
-	new(entity.SkillFileSnapshot),
+	// 2026-07-17 改造:skill_tags / skill_file_snapshots 表下线,
+	// 版本管理改走 ~/.skill-box/skills/ 的 git 仓库(go-git)。
 	new(entity.SkillApply),
 	new(entity.SkillTestRun),
 	new(entity.SkillTestResult),
