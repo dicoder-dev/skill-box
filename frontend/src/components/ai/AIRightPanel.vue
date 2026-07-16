@@ -785,9 +785,10 @@ const sendDisabled = computed(() => props.readOnly || !hasProvider.value || busy
   display: flex;
   flex-direction: column;
 }
-.airp-list::-webkit-scrollbar { width: 6px; height: 6px; }
+.airp-list::-webkit-scrollbar { width: 1px; height: 1px; }
 .airp-list::-webkit-scrollbar-track { background: transparent; }
-.airp-list::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+.airp-list::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent); border-radius: 999px; }
+.airp-list::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent); }
 
 .airp-empty {
   /* 撑满 .airp-list 整个高度,让 flex 内容(图片+文字)相对面板中央居中 */

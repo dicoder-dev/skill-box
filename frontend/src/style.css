@@ -334,14 +334,40 @@ code {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 滚动条美化（全局）
-   - WebKit/Blink：4px 极细圆角拇指，不加 border（让 thumb 实色占满整宽，视觉不再“轨道”感）
-   - Firefox：scrollbar-width:thin + scrollbar-color 兜底
-   - thumb 用 var(--border) 加 alpha 透明度,亮/暗主题看起来更“虚”不抢眼
-   - 组件 scoped 里如果另外写 width 会覆盖此处（特例仍可生效） */
+/* ============================================
+   全局滚动条美化（v2 - 1px 极细版）
+   - WebKit/Blink:thumb 1px 极细,圆角胶囊形,颜色用 accent 蓝低透明度淡化,
+     不抢眼,只在 hover 时稍微加深
+   - Firefox:scrollbar-width:thin(已是最细档)+ scrollbar-color
+   - 注意:macOS WKWebView(桌面端)在系统偏好「始终显示滚动条」下会
+     强制用原生 overlay 滚动条,CSS width 仅影响 thumb 不影响轨道占位。
+     系统设置 → 外观 → 显示滚动条 → 改「基于鼠标或触控板」可让 webkit 自定义样式生效。
+   - 用 :where() 把本组规则权重拉到最低,组件 scoped 里的 width(如 .ssp-scope-list
+     / .code-viewer)仍可覆盖以兼容特例
+   ============================================ */
+:where(::webkit-scrollbar) {
+  width: 1px;
+  height: 1px;
+}
+:where(::webkit-scrollbar-track) {
+  background: transparent;
+}
+:where(::webkit-scrollbar-thumb) {
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent);
+  border-radius: 999px;
+  transition: background 150ms ease;
+}
+:where(::webkit-scrollbar-thumb:hover) {
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
+}
+:where(::webkit-scrollbar-corner) {
+  background: transparent;
+}
+
+/* 标准选择器版本（兼容部分 webkit 版本不识别 :where() 嵌套伪元素） */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 1px;
+  height: 1px;
 }
 
 ::-webkit-scrollbar-track {
@@ -349,12 +375,13 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent);
   border-radius: 999px;
+  transition: background 150ms ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
 }
 
 ::-webkit-scrollbar-corner {
@@ -364,7 +391,7 @@ code {
 /* Firefox 全局兜底 */
 html {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent) transparent;
 }
 
 /* ============================================

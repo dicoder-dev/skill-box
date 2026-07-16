@@ -953,34 +953,25 @@ onErrorCaptured((err) => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 2026-07-08 增:作用域面板内滚动条美化 — 整体 4px 细,圆角 thumb,
-     默认半透明跟 var(--bg-subtle) 灰底融合,hover 时变明显。
+  /* 2026-07-08 增:作用域面板内滚动条美化 — 与全局统一 1px 极细 + accent 蓝淡化版
      只作用域 panel 内部生效,不污染全局 ::-webkit-scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent) transparent;
 }
 .ssp-scope-list::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 1px;
+  height: 1px;
 }
 .ssp-scope-list::-webkit-scrollbar-track {
   background: transparent;
-  margin: 2px 0;
 }
 .ssp-scope-list::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, transparent);
   border-radius: 999px;
-  /* 默认半透明,跟灰底融合不抢眼 */
-  opacity: 0.6;
-  transition: background 0.15s ease, opacity 0.15s ease;
-}
-.ssp-scope-list:hover::-webkit-scrollbar-thumb {
-  background: var(--text-faint);
-  opacity: 1;
+  transition: background 0.15s ease;
 }
 .ssp-scope-list::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-blue);
-  opacity: 1;
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 70%, transparent);
 }
 .ssp-scope-group {
   padding: 0;
