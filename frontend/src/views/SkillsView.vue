@@ -2352,7 +2352,7 @@ onUnmounted(() => {
 <style scoped>
 .skills-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   grid-auto-rows: minmax(0, 1fr);
   gap: 0;

@@ -308,7 +308,8 @@ function visibleTools(node) {
               :title="t('skills.treeNode.globalAgentTip')"
             >{{ t('skills.treeNode.globalAgentBadge') }}</span>
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
-            <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
+            <!-- 2026-07-16 改:列表项不再显示版本号,给右侧详情腾出更多横向空间;
+                 版本号仍在详情区顶栏 badge 展示。 -->
           </div>
           <div v-if="visibleTools(node).length" class="tree-skill-tools">
             <span
