@@ -66,7 +66,9 @@ function toggle() {
   border: 1px solid var(--border-color, rgba(127, 127, 127, 0.15));
   border-radius: var(--radius, 6px);
   background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
-  margin-top: 8px;
+  /* 2026-07-17 改:用户反馈面板间距太大,从 8px 减到 2px,
+     多个面板堆叠时视觉更紧凑,只留一丝丝空白区分。 */
+  margin-top: 2px;
   /* 2026-07-17 增:overflow:hidden 让 header 底部分割线不溢出圆角 */
   overflow: hidden;
 }
