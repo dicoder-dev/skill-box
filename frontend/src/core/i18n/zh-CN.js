@@ -745,9 +745,10 @@ const messages = {
       openAICompat: '兼容、硅基等',
     },
 
-    // 2026-07-13 增:TreeNode 首页树节点的全局 Agent badge
+    // 2026-07-16 改:卡片上的全局 Agent 标签按用户反馈去掉"全局",只保留
+    // "Agent"(详情面板里的"全局 Agent Skill"按钮不受影响,该处是动作说明)。
     treeNode: {
-      globalAgentBadge: '全局 Agent',
+      globalAgentBadge: 'Agent',
       globalAgentTip: '该技能位于全局 agents 目录,所有工具可自动读取',
       dropHere: '放到此处',
     },

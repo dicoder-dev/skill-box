@@ -298,10 +298,23 @@ function visibleTools(node) {
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
+            <!-- 2026-07-16 增:卡片前加 skill 图标,让用户一眼看出这是技能。
+                 全局 Agent 卡片用 mdi:earth(跟 SkillScopePanel 的图标保持一致,
+                 强化"全局共享"的视觉语义);普通 skill 卡片用 mdi:puzzle-outline
+                 (拼图块,契合 skill 模块化语义)。
+                 注意:放在 head 最左侧而不是 badge 前面,badge 跟 name 同行紧凑,
+                 图标单独一格,避免跟 emerald 色胶囊挤在一起。 -->
+            <IconPark
+              :icon="isGlobalAgent(node) ? 'mdi:earth' : 'mdi:puzzle-outline'"
+              width="14"
+              height="14"
+              :class="['tree-skill-icon', isGlobalAgent(node) ? 'is-global-agent' : '']"
+            />
             <!-- 2026-07-11 增:全局 Agent 卡片在 name 左侧加翠绿色 tag,
                  直观告诉用户"该 skill 来自全局 agents 目录"。
-                 顺序:全局 Agent tag → skill name → @version,
-                 三者同行不换行,溢出时 ellipsis 优先压缩 name。 -->
+                 顺序:图标 → 全局 Agent tag → skill name → @version,
+                 四者同行不换行,溢出时 ellipsis 优先压缩 name。
+                 2026-07-16 改:badge 文案去"全局"留"Agent"(按用户反馈),见 i18n。 -->
             <span
               v-if="isGlobalAgent(node)"
               class="tree-skill-badge-global-agent"
@@ -496,9 +509,18 @@ function visibleTools(node) {
   gap: 6px;
   min-width: 0;
 }
+/* 2026-07-16 改:tree-skill-icon 真正被模板使用了(skill 卡片 head 最左侧)。
+   全局 Agent 卡片:emerald 色,跟 badge / chip 同色相,形成"全局"语义闭环;
+   普通 skill:accent dim 色,不抢 name 主体色,只起类型指示作用。 */
 .tree-skill-head .tree-skill-icon {
-  color: var(--text-dim);
   flex-shrink: 0;
+}
+/* 全局 Agent 的图标必须用 emerald — 通过 Vue :class 动态加 .is-global-agent */
+.tree-skill-head .tree-skill-icon.is-global-agent {
+  color: var(--accent-emerald);
+}
+.tree-skill-head .tree-skill-icon:not(.is-global-agent) {
+  color: var(--text-dim);
 }
 .tree-skill-head .tree-name {
   font-size: 13px;

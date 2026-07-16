@@ -234,6 +234,31 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
       if (keyword.value) {
         autoExpandMatchedPaths()
       }
+      // 2026-07-16 增:load 后,如果之前已有选中节点,把它祖先分组展开。
+      // 场景:用户点击右侧 ScopePanel 的"全局 Agent"开关 → 派发
+      // skillbox:scope-refresh → SkillsView.onScopeChange 调 skillTree.load
+      // → 非搜索态下 collapseAllGroups 整体折叠,导致当前选中的 skill 节点
+      // 被埋进折叠组里,看起来"左侧目录被关掉了"。这里复用 expandAncestorsOfPath,
+      // 把选中节点的所有祖先 group 从 collapsedPaths 移除,保证选中节点可见。
+      // 注意:放在 collapseAllGroups / autoExpandMatchedPaths 之后,优先遵循
+      // 用户显式的"全部折叠"语义失败兜底(被展开的只是选中节点祖先,不是全部);
+      // 搜索态下 selectedPath 通常已被清空(用户切了关键字),if 直接跳过。
+      // expandAncestorsOfPath 内部还会校验目标在 tree 里确实是叶子 skill,
+      // 找不到或路径异常时静默返回,不会乱展开。
+      if (selectedPath.value) {
+        expandAncestorsOfPath(selectedPath.value)
+      }
+      // 2026-07-16 增:load 后,如果之前已有选中节点,把它祖先分组展开。
+      // 场景:用户点击右侧 ScopePanel 的"全局 Agent"开关 → 派发
+      // skillbox:scope-refresh → SkillsView.onScopeChange 调 skillTree.load
+      // → 非搜索态下 collapseAllGroups 整体折叠,导致当前选中的 skill 节点
+      // 被埋进折叠组里,看起来"左侧目录被关掉了"。这里复用 expandAncestorsOfPath,
+      // 把选中节点的所有祖先 group 从 collapsedPaths 移除,保证选中节点可见。
+      // 注意:放在 collapseAllGroups / autoExpandMatchedPaths 之后,优先遵循
+      // 用户显式的"全部折叠"语义失败兜底(被展开的只是选中节点祖先,不是全部);
+      // 搜索态下 selectedPath 通常已被清空(用户切了关键字),if 直接跳过。
+      // expandAncestorsOfPath 内部还会校验目标在 tree 里确实是叶子 skill,
+      // 找不到或路径异常时静默返回,不会乱展开。
     } catch (e) {
       error.value = e?.message || String(e)
     } finally {
