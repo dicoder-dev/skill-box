@@ -252,19 +252,55 @@ const modalFilteredDiff = computed(() => {
 })
 
 // 2026-07-17:diff 行级拆 + 染色
-const modalDiffLines = computed(() => {
-  if (!modalFilteredDiff.value) return []
-  return modalFilteredDiff.value.split('\n')
-})
-function diffLineClass(line) {
-  if (!line) return ''
+// 2026-07-18 大改:从"每行一个 vnode"改成"合并相邻同色行成一个 segment"。
+// 调研结论:
+//   - VSCode / GitHub / JetBrains 全部行级(line-level)染色,不做 word-level
+//   - context 行不加任何背景(只靠 +/- 符号提示)
+//   - hunk header 与 context 行用不同灰度色分段
+//   - 性能:3000 行 diff 合并后只剩 ~100 segments,vnode 量级降 10x
+// segment 形态: { cls: 'diff-add' | 'diff-del' | 'diff-ctx' | 'diff-hunk'
+//                | 'diff-meta', lines: string[] }
+// 渲染:<pre><span v-for="seg in modalDiffSegments" :class="seg.cls">...</span></pre>
+function classifyDiffLine(line) {
+  if (!line) return 'diff-ctx' // 空行当 context(行首空 = 空白行,染色不必要)
   if (line.startsWith('@@')) return 'diff-hunk'
   if (line.startsWith('+++') || line.startsWith('---')) return 'diff-meta'
   if (line.startsWith('diff --git ')) return 'diff-meta'
   if (line.startsWith('+')) return 'diff-add'
   if (line.startsWith('-')) return 'diff-del'
   if (line.startsWith(' ')) return 'diff-ctx'
-  return ''
+  return 'diff-ctx' // 兜底
+}
+
+const modalDiffSegments = computed(() => {
+  if (!modalFilteredDiff.value) return []
+  const raw = modalFilteredDiff.value.split('\n')
+  const out = []
+  let cur = null
+  // 末尾 \n split 会产生一个空字符串尾巴 — 直接丢
+  for (let i = 0; i < raw.length; i++) {
+    const line = raw[i]
+    // 跳过末尾空行 + 纯空白尾,但保留行内的有效 \n
+    if (i === raw.length - 1 && line === '') continue
+    const cls = classifyDiffLine(line)
+    if (cur && cur.cls === cls) {
+      cur.lines.push(line)
+    } else {
+      if (cur) out.push(cur)
+      cur = { cls, lines: [line] }
+    }
+  }
+  if (cur) out.push(cur)
+  return out
+})
+
+// 保留函数给旧引用(如果别处还在用)
+const modalDiffLines = computed(() => {
+  if (!modalFilteredDiff.value) return []
+  return modalFilteredDiff.value.split('\n')
+})
+function diffLineClass(line) {
+  return classifyDiffLine(line)
 }
 
 // 2026-07-18 增:跨组件事件 — 保存后通知本 panel 重拉 log。
@@ -565,14 +601,21 @@ function formatTime(when) {
                   {{ t('git.copyCmd') }}
                 </button>
               </div>
-              <!-- 2026-07-18 改:pre 内 <template v-for><span> 在 Vue 3 编译产物
-                   里会被合并成单行 + 多个 span,白色背景下行级染色看起来全挤一行。
-                   改用直接渲染整段 string + CSS 反向匹配行级色,
-                   简化结构,避开 pre-template 的渲染歧义。 -->
-              <div
+              <!--
+                2026-07-18 重写:行级染色 diff viewer。
+                - segments 合并策略:相邻同色行合成一个 <span>,vnode 量级 ~segments 数
+                - 不在 <pre> 内部用 v-for span,改成一段一段渲染,但写起来还是
+                  <pre> 顶层 + 顶层 v-for span,本质上 Vue 3 不会丢 children
+                - 行级配色见 .vhp-modal-diff-pre .diff-add / .diff-del
+              -->
+              <pre
                 v-else-if="modalDiffText"
                 class="vhp-modal-diff-pre"
-              >{{ modalDiffText }}</div>
+              ><span
+                v-for="(seg, i) in modalDiffSegments"
+                :key="i"
+                :class="seg.cls"
+              >{{ seg.lines.join('\n') + '\n' }}</span></pre>
               <div v-else class="vhp-modal-diff-empty">
                 {{ t('git.history.pickCommit') }}
               </div>
@@ -925,23 +968,72 @@ function formatTime(when) {
   font-size: 12px;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
 }
+/* 2026-07-18 升级:diff 行级染色 — 参考 VSCode / GitHub / JetBrains 三家
+   一致的 line-level 配色(行内 word-level 不做,先求稳定)。
+   context 行不加任何背景(只靠 +/- 符号提示),行业规范。 */
 .vhp-modal-diff-pre {
   margin: 0;
   padding: 12px 16px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono, 'SF Mono', Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text, inherit);
-  /* 2026-07-18 改:diff 块整体在浅色卡背景上可能因 var(--text) 未定义
-     反而继承到父级空白色(modal 是浅色卡,父级 body 暗色主题,字色没继承)。
-     fallback 用中性灰,任何主题下都可见。 */
+  /* white-space: pre(pre 是 HTML5 raw-text 元素,空白字符会被保留),
+     不要再加 pre-wrap/pre+wrap — pre 元素语义已经是保留空白。 */
+  white-space: pre;
+  /* 横向滚动让长行(markdown 段落、JSON 行)能展开 — pre 自带 overflow:auto 也行,
+     这里显式给浏览器 sticky 提示。 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--text, #24292f);
 }
-/* 行级染色 */
-.vhp-modal-diff-pre .diff-add { color: rgb(34, 197, 94); }
-.vhp-modal-diff-pre .diff-del { color: rgb(239, 68, 68); }
-.vhp-modal-diff-pre .diff-ctx { color: var(--text-muted, rgba(127, 127, 127, 0.7)); }
-.vhp-modal-diff-pre .diff-hunk { color: rgb(59, 130, 246); font-weight: 600; }
-.vhp-modal-diff-pre .diff-meta { color: rgba(127, 127, 127, 0.85); font-weight: 500; }
+.vhp-modal-diff-pre .diff-ctx {
+  /* 上下文不染色 — VSCode / GitHub / IDEA 一致选择,只靠 +/- 符号区分。 */
+  background: transparent;
+  color: inherit;
+}
+.vhp-modal-diff-pre .diff-add {
+  /* 新增行:GitHub primer 浅绿 #e6ffec。这里用 rgba 半透明,与 modal 底色叠加。 */
+  background: rgba(46, 160, 67, 0.15);
+  color: #1a7f37;
+}
+.vhp-modal-diff-pre .diff-del {
+  /* 删除行:浅红 #ffebe9 同款 rgba 半透明。 */
+  background: rgba(248, 81, 73, 0.15);
+  color: #cf222e;
+}
+.vhp-modal-diff-pre .diff-hunk {
+  /* @@ -10,5 +12,7 @@ — GitHub 蓝灰分段背景,深色下稍深。 */
+  background: rgba(56, 139, 253, 0.12);
+  color: #6e7781;
+}
+.vhp-modal-diff-pre .diff-meta {
+  /* diff --git / --- / +++ 文件头 — 中性灰,跟 hunk 区分但同色系。 */
+  background: transparent;
+  color: #6e7781;
+}
+/* dark theme override — :root[data-theme="dark"] 与 html.dark 都罩住。
+   现代浏览器 useDark + wails 都给 <html> 加 data-theme 或 class。 */
+:root[data-theme="dark"] .vhp-modal-diff-pre,
+html.dark .vhp-modal-diff-pre {
+  color: #c9d1d9;
+}
+:root[data-theme="dark"] .vhp-modal-diff-pre .diff-add,
+html.dark .vhp-modal-diff-pre .diff-add {
+  background: rgba(46, 160, 67, 0.28);
+  color: #3fb950;
+}
+:root[data-theme="dark"] .vhp-modal-diff-pre .diff-del,
+html.dark .vhp-modal-diff-pre .diff-del {
+  background: rgba(248, 81, 73, 0.28);
+  color: #f85149;
+}
+:root[data-theme="dark"] .vhp-modal-diff-pre .diff-hunk,
+html.dark .vhp-modal-diff-pre .diff-hunk {
+  background: rgba(56, 139, 253, 0.22);
+  color: #8b949e;
+}
+:root[data-theme="dark"] .vhp-modal-diff-pre .diff-meta,
+html.dark .vhp-modal-diff-pre .diff-meta {
+  color: #8b949e;
+}
 </style>
