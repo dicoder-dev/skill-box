@@ -25,3 +25,4 @@ data.db
 # 防止 wails3 build 在仓库根目录留下 binary(任务用 APP_NAME 区分,根目录的
 # 小写 binary 是误产物,不入库)。
 /skill-box
+.screenshots/

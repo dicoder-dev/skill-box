@@ -290,6 +290,23 @@ async function doDiscard() {
   }
 }
 
+// 2026-07-17:diff 文本拆行,每行根据首字符渲染不同颜色 —
+// + 行绿、- 行红、空格行灰、@@ 行蓝、diff/--- /+++ 行灰粗。
+const diffLines = computed(() => {
+  if (!diffText.value) return []
+  return diffText.value.split('\n')
+})
+function diffLineClass(line) {
+  if (!line) return ''
+  if (line.startsWith('@@')) return 'diff-hunk'
+  if (line.startsWith('+++') || line.startsWith('---')) return 'diff-meta'
+  if (line.startsWith('diff --git ')) return 'diff-meta'
+  if (line.startsWith('+')) return 'diff-add'
+  if (line.startsWith('-')) return 'diff-del'
+  if (line.startsWith(' ')) return 'diff-ctx'
+  return ''
+}
+
 function shortHash(h) {
   return (h || '').slice(0, 7)
 }
@@ -419,7 +436,8 @@ function formatTime(when) {
           </div>
           <div class="vhp-drawer-body">
             <div v-if="diffLoading" class="vhp-drawer-loading">{{ t('common.loading') }}</div>
-            <pre v-else-if="diffText" class="vhp-drawer-pre">{{ diffText }}</pre>
+            <pre v-else-if="diffText" class="vhp-drawer-pre"><template v-for="(line, i) in diffLines" :key="i"><span :class="diffLineClass(line)">{{ line }}</span>
+</template></pre>
             <div v-else class="vhp-drawer-empty">
               {{ t('git.history.pickCommit') }}
             </div>
@@ -755,6 +773,12 @@ function formatTime(when) {
   white-space: pre;
   background: transparent;
 }
+/* 2026-07-17:diff 行染色 — + 绿、- 红、空格灰、hunk 蓝粗、meta 灰粗 */
+.vhp-drawer-pre .diff-add { color: rgb(34, 197, 94); }
+.vhp-drawer-pre .diff-del { color: rgb(239, 68, 68); }
+.vhp-drawer-pre .diff-ctx { color: var(--text-muted, rgba(127, 127, 127, 0.7)); }
+.vhp-drawer-pre .diff-hunk { color: rgb(59, 130, 246); font-weight: 600; }
+.vhp-drawer-pre .diff-meta { color: rgba(127, 127, 127, 0.85); font-weight: 500; }
 
 .vhp-drawer-actions {
   display: flex;

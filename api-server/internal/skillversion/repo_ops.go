@@ -2,6 +2,7 @@ package skillversion
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -564,7 +565,12 @@ func appendAddedFile(out *strings.Builder, repo *git.Repository, name string, ha
 	if err != nil {
 		return
 	}
-	content, err := blob.Reader().ReadAll()
+	rc, err := blob.Reader()
+	if err != nil {
+		return
+	}
+	defer rc.Close()
+	content, err := io.ReadAll(rc)
 	if err != nil {
 		return
 	}
@@ -583,7 +589,12 @@ func appendDeletedFile(out *strings.Builder, repo *git.Repository, name string, 
 	if err != nil {
 		return err
 	}
-	content, err := blob.Reader().ReadAll()
+	rc, err := blob.Reader()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	content, err := io.ReadAll(rc)
 	if err != nil {
 		return err
 	}
@@ -603,15 +614,25 @@ func appendModifiedFile(out *strings.Builder, repo *git.Repository, name string,
 	if err != nil {
 		return err
 	}
+	fromRC, err := fromBlob.Reader()
+	if err != nil {
+		return err
+	}
+	defer fromRC.Close()
+	fromContent, err := io.ReadAll(fromRC)
+	if err != nil {
+		return err
+	}
 	toBlob, err := repo.BlobObject(toHash)
 	if err != nil {
 		return err
 	}
-	fromContent, err := fromBlob.Reader().ReadAll()
+	toRC, err := toBlob.Reader()
 	if err != nil {
 		return err
 	}
-	toContent, err := toBlob.Reader().ReadAll()
+	defer toRC.Close()
+	toContent, err := io.ReadAll(toRC)
 	if err != nil {
 		return err
 	}
@@ -655,6 +676,13 @@ func splitLines(s string) []string {
 type diffOp struct {
 	kind byte // ' ' / '+' / '-'
 	text string
+}
+
+// diffSpan 一个 +/- 区间(原始编辑脚本中的连续删除或连续增加)。
+type diffSpan struct {
+	kind  byte
+	start int // raw 索引
+	end   int // raw 索引(含)
 }
 
 // unifiedDiff LCS 算法计算编辑脚本,然后合并相邻 ctx 区间输出。
@@ -706,19 +734,13 @@ func unifiedDiff(a, b []string, ctx int) []diffOp {
 		raw[l], raw[r] = raw[r], raw[l]
 	}
 	// 合并 + 应用 ctx:扫描 raw,找出 +/- 区间,在其前后保留 ctx 行 ' '。
-	type span struct {
-		kind   byte // '+' / '-'
-		start  int  // raw 索引
-		end    int  // raw 索引(含)
-	}
-	var spans []span
+	var spans []diffSpan
 	for k, op := range raw {
 		if op.kind == '+' || op.kind == '-' {
-			if len(spans) > 0 && spans[len(spans)-1].end+1 == k &&
-				(spans[len(spans)-1].kind == op.kind || isAdjacentSameKind(spans[len(spans)-1], op.kind)) {
+			if len(spans) > 0 && spans[len(spans)-1].end+1 == k {
 				spans[len(spans)-1].end = k
 			} else {
-				spans = append(spans, span{kind: op.kind, start: k, end: k})
+				spans = append(spans, diffSpan{kind: op.kind, start: k, end: k})
 			}
 		}
 	}
@@ -744,12 +766,6 @@ func unifiedDiff(a, b []string, ctx int) []diffOp {
 		}
 	}
 	return out
-}
-
-func isAdjacentSameKind(s span, kind byte) bool {
-	// 简化:相邻 +/- 区合并到前一个 span
-	_ = kind
-	return true
 }
 
 // resolveCommit 解析 ref/短 hash/全 hash → commit object。
