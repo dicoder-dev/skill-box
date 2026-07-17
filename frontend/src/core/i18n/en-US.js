@@ -824,11 +824,34 @@ const messages = {
     btnRescanning: 'Scanning…',
     btnRescanTitle: 'Rescan all 5 adapters',
     // 2026-07-01: dialog top tab switcher
+    // 2026-07-18: tab order changed + "Scan tools" renamed to "Tools" + new "From marketplace" tab first
     tabs: {
-      scan: 'Scan tools',
+      market: 'From marketplace',
+      scan: 'Tools',
       local: 'From local',
       // 2026-07-10: list candidates under ~/.agents/skills, batch import
       global: 'Global dir',
+    },
+    // 2026-07-18: marketplace import panel (3rd-party source list + URL input)
+    market: {
+      descSkillhub: 'SkillHub Chinese community market, fast in CN',
+      descSkillssh: 'skills.sh international market, focused skill directory',
+      descGithub: 'GitHub mainstream repos with SKILL.md detail pages',
+      inputPlaceholder: 'Paste detail page URL (skillhub.cn / skills.sh / github.com)',
+      btnImport: 'Import',
+      btnImporting: 'Importing…',
+      clear: 'Clear',
+      errEmpty: 'Please paste a detail page URL',
+      tip: 'Copy any detail page link from the sources above, paste into the input to import',
+      detectedSource: 'Detected {name}',
+      gotoSite: 'Open {name} website',
+      fillExample: 'Fill example',
+    },
+    // 2026-07-18: target group selector shared by all 4 tabs
+    targetGroup: {
+      label: 'Import to',
+      root: 'Root group (/)',
+      hint: 'Shared by all tabs, defaults to root',
     },
     // 2026-07-01: from-local import panel
     // 2026-07-11: extended to support zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz

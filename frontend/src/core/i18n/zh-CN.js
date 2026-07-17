@@ -842,11 +842,34 @@ const messages = {
     btnRescanning: '扫描中…',
     btnRescanTitle: '重新扫描 5 个 adapter',
     // 2026-07-01 增:弹窗顶部 tab 切换(扫工具 vs 从本地导入)
+    // 2026-07-18 改:tab 顺序调整 + 「扫描工具」改名「工具」+ 新增「从三方导入」首位
     tabs: {
-      scan: '扫描工具',
-      local: '从本地导入',
-      // 2026-07-10 增:从 ~/.agents/skills 列出全局候选 skill,勾选批量导入
+      market: '从三方导入',
+      scan: '工具',
       global: '全局目录',
+      local: '从本地导入',
+    },
+    // 2026-07-18 增:三方市场导入面板 i18n(参考 onboarding.local.* 结构)
+    // sources 列表的简介 + 输入框 placeholder + 错误文案
+    market: {
+      descSkillhub: 'SkillHub 中文社区市场,国内访问快',
+      descSkillssh: 'skills.sh 国际市场,聚焦 skills 详情目录',
+      descGithub: 'GitHub 主流仓库的 SKILL.md 详情页',
+      inputPlaceholder: '粘贴详情页 URL(skillhub.cn / skills.sh / github.com)',
+      btnImport: '导入',
+      btnImporting: '导入中…',
+      clear: '清空',
+      errEmpty: '请粘贴一个详情页 URL',
+      tip: '复制上面任何一个源的详情页链接,粘贴到输入框即可一键导入',
+      detectedSource: '已识别为 {name}',
+      gotoSite: '前往 {name} 官网',
+      fillExample: '填入示例',
+    },
+    // 2026-07-18 增:4 tab 共享的「目标分组」选择器 i18n
+    targetGroup: {
+      label: '导入到',
+      root: '根分组(/)',
+      hint: '所有 Tab 共享,默认根分组',
     },
     // 2026-07-01 增:从本地 zip / 文件夹导入面板
     // 2026-07-11 改:支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz

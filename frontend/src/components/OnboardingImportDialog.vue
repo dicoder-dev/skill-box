@@ -10,6 +10,13 @@
 //     搜索 + 多选后批量导入),独立于 scan tab 的「按工具」语义,
 //     也不依赖用户手动选文件夹/zip。
 //
+// 2026-07-18 改:Tab 顺序调整为「从三方导入 / 工具 / 全局目录 / 从本地导入」,
+//   第一位「从三方导入」走 MarketImportPanel(URL 输入框 + sources 列表);
+//   「扫描工具」改名为「工具」(key 名不变,只改 i18n 值);
+//   弹窗顶部 tab 上方新增 GroupPathSelect 横栏,4 tab 共享同一选中态,
+//   通过 provide('targetGroupPath') 传给所有子组件(本次只 MarketImportPanel
+//   实际透传 group_path,其他 3 tab 暂未支持,但 UI 全部可见)。
+//
 // 事件:
 //   - update:modelValue:标准 v-model 开关
 //   - imported:任一路径导入完成(payload 是 importResult);父组件收到后
@@ -23,6 +30,10 @@ import OnboardingView from '@/views/OnboardingView.vue'
 import LocalImportPanel from '@/components/LocalImportPanel.vue'
 // 2026-07-10 增:全局目录导入面板(从 ~/.agents/skills 列出候选 + 多选批量导入)
 import GlobalImportPanel from '@/components/GlobalImportPanel.vue'
+// 2026-07-18 增:三方市场导入面板(URL 输入框 + sources 列表);首位 tab
+import MarketImportPanel from '@/components/MarketImportPanel.vue'
+// 2026-07-18 增:目标分组下拉选择器(顶部 tab 上方一行,4 tab 共享)
+import GroupPathSelect from '@/components/GroupPathSelect.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -31,8 +42,13 @@ const emit = defineEmits(['update:modelValue', 'imported'])
 
 const { t } = useI18n()
 
-// 当前激活的 tab:'scan' | 'local' | 'global'
-const tab = ref('scan')
+// 当前激活的 tab:'market' | 'scan' | 'global' | 'local'
+// 2026-07-18 改:默认 tab 改成 'market'(首位即「从三方导入」)。
+const tab = ref('market')
+
+// 2026-07-18 增:4 tab 共享的「目标分组」路径(空 = 根分组 / 后端默认派生)。
+// 通过 provide 共享给子组件(目前仅 MarketImportPanel 实际透传给后端)。
+const targetGroupPath = ref('')
 
 function close() {
   emit('update:modelValue', false)
@@ -68,6 +84,8 @@ function resetEmittedSig() {
 // provide 只对当前树生效,新建实例互不干扰。
 provide('notifyImportDone', tryEmitImported)
 provide('resetImportDoneSig', resetEmittedSig)
+// 2026-07-18 增:4 tab 共享目标分组;子组件 inject 'targetGroupPath' 后使用。
+provide('targetGroupPath', targetGroupPath)
 
 // 兼容旧 path:子组件 @done 事件流仍然保留(点击"完成"按钮)。
 // 注意:此时 tryEmitImported 已经把同一 result 报过一次,lastEmittedSig
@@ -88,8 +106,22 @@ function onDone(result) {
       <IconPark icon="mdi:tray-arrow-down" width="18" height="18" />
     </template>
 
+    <!-- 2026-07-18 增:顶部 tab 上方一行「目标分组」选择器,4 tab 共享同一选中态 -->
+    <GroupPathSelect v-model="targetGroupPath" />
+
     <!-- 顶部 tab 切换 -->
     <div class="oid-tabs" role="tablist">
+      <!-- 2026-07-18 改:tab 顺序 market → scan → global → local,「从三方导入」放首位 -->
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="tab === 'market'"
+        :class="['oid-tab', { active: tab === 'market' }]"
+        @click="tab = 'market'"
+      >
+        <IconPark icon="mdi:cart-arrow-down" width="14" height="14" />
+        {{ t('onboarding.tabs.market') }}
+      </button>
       <button
         type="button"
         role="tab"
@@ -123,7 +155,8 @@ function onDone(result) {
     </div>
 
     <!-- tab 内容(单选渲染) -->
-    <OnboardingView v-if="tab === 'scan'" @done="onDone" />
+    <MarketImportPanel v-if="tab === 'market'" @done="onDone" />
+    <OnboardingView v-else-if="tab === 'scan'" @done="onDone" />
     <GlobalImportPanel v-else-if="tab === 'global'" @done="onDone" />
     <LocalImportPanel v-else @done="onDone" />
   </Modal>

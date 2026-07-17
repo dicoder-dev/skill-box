@@ -18,6 +18,7 @@ import { http } from '@/core/utils/requests'
  * @param {number} [payload.project_id] - scope=project 时必填
  * @param {string} [payload.conflict_mode] - "" / "prompt"(默认) / "overwrite" / "rename"
  * @param {string} [payload.rename_to] - conflict_mode=rename 时的目标名
+ * @param {string} [payload.group_path] - 目标分组路径(2026-07-18 增),空 = 走默认派生
  *
  * @returns {Promise<{
  *   source_type, source_name, remote_id, resolved_url,
