@@ -488,11 +488,13 @@ function formatTime(when) {
                 <div class="vhp-node-line vhp-node-line-bot" />
               </div>
               <div class="vhp-commit-body">
-                <!-- 2026-07-18 大改:commit 行精简 — 窄列里只显示这次提交的标题文字,
-                     type/scope 标签移除(都是 skill 自动 commit 没意义)。鼠标 hover
-                     完整 first-line 全文可见。 -->
+                <!-- 2026-07-18 改:commit 行只显示 description — 去掉
+                     conventional commit 前缀(type/scope + ":")。
+                     根因:都是 skill 自动 commit,前缀都是 "skill(store): "
+                     这种同模板,占空间没意义;看 description 本身就能识别。
+                     hover title 仍看得到 first-line 全文。 -->
                 <div class="vhp-commit-msg">
-                  <span class="vhp-commit-desc" :title="it._title.full">{{ it._title.full }}</span>
+                  <span class="vhp-commit-desc" :title="it._title.full">{{ it._title.desc || it._title.full }}</span>
                 </div>
                 <!-- 2026-07-18 大改:meta 行只保留 hash + 日期 + 文件数。
                      author 移到 modal 头部(更详细的语境才需要看作者)。
