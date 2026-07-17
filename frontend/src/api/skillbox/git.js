@@ -142,6 +142,39 @@ export function discardGit() {
 }
 
 /**
+ * 读自动 commit message 配置 + LLM 可用性。
+ * @returns {Promise<{
+ *   llm_enabled: boolean,
+ *   template: string,           // 'timestamp' | 'filename' | 'op_files'
+ *   available: boolean,         // 至少一个 enabled provider + api_key 非空
+ *   reason?: string,
+ *   provider_name?: string
+ * }>}
+ */
+export function getAutoCommitStatus() {
+  return http.get('/api/skillbox/git/auto-commit')
+}
+
+/**
+ * 写自动 commit message 配置。
+ * @param {Object} payload
+ * @param {boolean} [payload.llm_enabled] - server 侧校验 available
+ * @param {string} [payload.template]
+ * @returns {Promise<{ok: true}>}
+ */
+export function saveAutoCommit(payload) {
+  return http.post('/api/skillbox/git/auto-commit', payload)
+}
+
+/**
+ * 现场跑一次最小 prompt 验证 LLM 连通。
+ * @returns {Promise<{ok: boolean, model?: string, output?: string, reason?: string}>}
+ */
+export function testLLM() {
+  return http.post('/api/skillbox/git/llm-test')
+}
+
+/**
  * 通知所有监听 VersionHistoryPanel 的组件:本地 git 仓库新增 commit,
  * 请重新拉 log / status。
  *

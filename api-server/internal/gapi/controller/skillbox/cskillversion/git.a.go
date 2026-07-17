@@ -512,4 +512,41 @@ func init() {
 			Description: "丢弃工作区未提交改动(等价 git reset --hard HEAD)",
 		},
 	})
+	// 2026-07-18 增:auto-commit message 配置 + LLM 测试路由。
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/skillbox/git/auto-commit",
+		Handler:        ginp.BindParamsHandler(SaveAutoCommit, &RequestAutoCommit{}),
+		HttpType:       ginp.HttpPost,
+		NeedLogin:      false,
+		NeedPermission: false,
+		PermissionName: "skillbox.git.auto_commit.write",
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "git.auto_commit.write",
+			Description: "写 llm_enabled / template;llm_enabled=true 会校验 LLM 当前可用,失败返 400",
+		},
+	})
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/skillbox/git/auto-commit",
+		Handler:        ginp.BindHandler(GetAutoCommitStatus),
+		HttpType:       ginp.HttpGet,
+		NeedLogin:      false,
+		NeedPermission: false,
+		PermissionName: "skillbox.git.auto_commit.read",
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "git.auto_commit.read",
+			Description: "读当前 llm_enabled / template + LLM 是否可用(Provider + api_key)",
+		},
+	})
+	ginp.RouterAppend(ginp.RouterItem{
+		Path:           "/api/skillbox/git/llm-test",
+		Handler:        ginp.BindHandler(TestLLM),
+		HttpType:       ginp.HttpPost,
+		NeedLogin:      false,
+		NeedPermission: false,
+		PermissionName: "skillbox.git.llm_test",
+		Swagger: &ginp.SwaggerInfo{
+			Title:       "git.llm_test",
+			Description: "现场跑一次最小 prompt,用于'测试 LLM'按钮",
+		},
+	})
 }

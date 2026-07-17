@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import AISettingsPanel from '@/components/AISettingsPanel.vue'
+import AutoCommitPanel from '@/components/settings/AutoCommitPanel.vue'
 import UpdatePanel from '@/components/update/UpdatePanel.vue'
 import { platform } from '@/platform'
 import { useAppStore } from '@/core/store/app.js'
@@ -54,6 +55,11 @@ const applyMode = ref('copy') // 'copy' | 'symlink'
 const applyModeHint = ref('')
 const applyModeBusy = ref(false)
 const applyModeSupported = ref(false) // 能否真正持久化(通过 getAll 拿到 keys 判断)
+
+// 2026-07-18 增:auto-commit message 配置块始终可见 — LLM/模板开关对所有
+// skill 自动 commit 都生效,跟具体 skill 无关;开关可用性由后端根据
+// provider+api_key 情况判定。
+const showAutoCommitPanel = ref(true)
 
 // 2026-07-03 增:跨页通知 — migrate-mode 成功后 emit 'skills:refresh',
 // 让 SkillsView 静默重拉当前选中 skill 的 scope-status,以反映新的磁盘形态。
@@ -395,6 +401,10 @@ function onWindowTabChange(e) {
     <!-- 2026-07-14 增:应用自身升级卡片。
          全形态可见;桌面端"立即升级"按钮触发下载 + 替身脚本接管;
          Web 端跳外链。 -->
+    <!-- 2026-07-18 增:自动 commit message 配置块(LLM/模板双路径)。
+         放在通用偏好跟升级之间,所有形态可见;内容嵌独立组件。 -->
+    <AutoCommitPanel v-if="showAutoCommitPanel" />
+
     <section class="card" data-card="update">
       <header class="card-header">
         <h3>

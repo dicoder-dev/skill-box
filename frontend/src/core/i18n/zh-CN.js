@@ -1253,6 +1253,30 @@ const messages = {
     copied: '已复制到剪贴板:{cmd}',
     copyFailed: '复制失败:{msg}',
     checkoutConfirm: '确定要 reset 工作区到 commit {hash}?此操作会覆盖本地未保存的改动。',
+    // 2026-07-18 增:auto-commit message 设置块文案(LLM 开关 + 模板)
+    autoCommit: {
+      title: '自动 commit message',
+      subtitle: 'Skill 保存后自动同步 git commit,message 用 LLM 或模板生成',
+      llmEnabled: {
+        label: '通过 LLM 自动识别 commit 信息',
+        desc: '开启后,每次自动 commit 时调用模型根据改动文件列表生成 conventional commit 风格 message',
+        unavailableReason: '当前 LLM 不可用,请在 AI 设置里配置可用 provider 并测试通过',
+      },
+      template: {
+        label: '默认 commit 模板',
+        desc: '未启用 LLM 或 LLM 失败降级时使用',
+        filename: '按文件名',
+        opFiles: '按操作类型 + 文件数',
+        timestamp: '按时间戳',
+      },
+      testBtn: '测试 LLM',
+      fileCountUnit: '个文件',
+      loadFail: '读取自动 commit 配置失败:{msg}',
+      saved: '已保存',
+      saveFail: '保存失败:{msg}',
+      testOk: '测试通过 — {model} 返回 "{output}"',
+      testFail: '测试失败:{msg}',
+    },
   },
 }
 

@@ -16,6 +16,7 @@
 package skillstore
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	"unicode/utf8"
 
 	"ginp-api/configs"
+	"ginp-api/internal/commitmsg"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillversion"
 	sharefunc "ginp-api/share/func"
@@ -256,7 +258,17 @@ func (s *Store) Save(c skilladapter.Canonical, deletedPaths []string) error {
 // autoCommitAfterSave 把 store.Save 的成功事件转成 git commit。
 //
 // 2026-07-17:走 skillversion.Repo.AutoCommitAndPush,失败不抛(已包在内部)。
-// 注释:go-git 调用方在异步 goroutine 写日志,要复用项目 logger。
+// 2026-07-18 改:commit message 不再 hardcode — 走 commitmsg.Generate 统一处理:
+//   - 用户开了 LLMEnabled → 调模型生成 conventional commit message
+//   - 否则(或 LLM 降级)→ 用固定模板(timestamp / filename / op_files)
+//   - 失败/超时/异常 → 降级到模板,Source="llm-failed" 仅日志,store.Save 不阻断
+//
+// 拼 prompt 用到的 Paths 直接来自 store.Save 的 c.Manifest 路径 — 跟
+// skillversion.AutoCommitAndPush 的 Paths 字段保持一致(都是文件相对路径)。
+//
+// LLM 调用函数由 cskillversion.BuildCommitLLMSender() 提供(store 包不能反向依赖
+// gapi/controller 包,所以走函数指针注入)。该函数在 LLM 不可用时返 nil,
+// commitmsg.Generate 收到 nil → 走模板路径,行为正确。
 func autoCommitAfterSave(group, name, op string) {
 	defer func() {
 		_ = recover() // 防 panic 拖垮 store 调用方
@@ -270,8 +282,26 @@ func autoCommitAfterSave(group, name, op string) {
 		loggerWarn("skillversion: open repo: %v", err)
 		return
 	}
+
+	ac := configs.Skillbox.AutoCommit
+	tpl := strings.TrimSpace(ac.Template)
+	if tpl == "" {
+		tpl = "filename"
+	}
+	result := commitmsg.Generate(context.Background(), commitmsg.Options{
+		LLMEnabled: ac.LLMEnabled,
+		Template:   commitmsg.Template(tpl),
+		Op:         op,
+		Paths:      []string{rel},
+		// LLM 闭包从 commitmsg 全局注册器里取 — 由 cskillversion 在
+		// init() 时注入;不可用时返 nil → 走模板路径。
+	})
+	if result.Err != nil {
+		loggerWarn("skillversion: commitmsg %s: source=%s err=%v", rel, result.Source, result.Err)
+	}
+
 	_, err = repo.AutoCommitAndPush(skillversion.CommitInput{
-		Message: fmt.Sprintf("skill(store): %s %s", op, rel),
+		Message: result.Message,
 		Paths:   []string{rel},
 	})
 	if err != nil {

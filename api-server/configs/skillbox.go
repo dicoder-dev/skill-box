@@ -49,6 +49,22 @@ type SkillboxConfig struct {
 	//       user_name: alice                       # 可选;留空用环境变量 / 占位
 	//       user_email: alice@example.com          # 可选
 	Git GitConfig `default:"" configkey:"skillbox.git"`
+
+	// AutoCommit 2026-07-18 增:auto-commit message 策略。LLMEnabled 必须是
+	// "至少一个 ai_providers 行 enabled 且 api key 非空" — 不满足时本字段
+	// 仍可写,实际生成时降级到模板路径(message 仍落盘)并把 Source 标 llm-failed。
+	// 前端设置面板根据 GetLLMTest 返回的 Available 决定是否允许勾选。
+	AutoCommit AutoCommitConfig `default:"" configkey:"skillbox.auto_commit"`
+}
+
+// AutoCommitConfig skillbox.auto_commit.* 配置块。
+type AutoCommitConfig struct {
+	// LLMEnabled 是否用 LLM 自动识别 commit 信息。
+	LLMEnabled bool `default:"false" configkey:"llm_enabled"`
+
+	// Template LLMEnabled=false 或 LLM 降级时使用的固定模板风格。
+	// 支持: timestamp / filename / op_files(默认 filename)。
+	Template string `default:"filename" configkey:"template"`
 }
 
 // GitConfig skillbox.git.* 配置块。
