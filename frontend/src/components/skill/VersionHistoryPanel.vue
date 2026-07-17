@@ -80,12 +80,13 @@ const diffLoading = ref(false)
 
 const selected = computed(() => items.value.find((it) => it.hash === selectedHash.value) || null)
 
-// 2026-07-17 改:同时 watch isExpanded 和 skillPath。
-// - skillPath 变(切 skill):如果当前展开,重新拉
+// 2026-07-17 改:同时 watch isExpanded 和 skillPath,都强制刷新(不依赖
+// isExpanded 状态)。
+// - skillPath 变(切 skill):重新拉
 // - isExpanded 变 false→true(用户点开历史):加载一次
 // 这样无论"切 skill 时已展开"还是"展开时切换"都能拿到最新数据。
 watch(() => props.skillPath, () => {
-  if (isExpanded.value) loadAll()
+  loadAll()
 })
 watch(isExpanded, (open) => {
   if (open) loadAll()

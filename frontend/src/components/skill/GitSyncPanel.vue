@@ -177,22 +177,26 @@ async function saveConfig() {
 }
 
 onMounted(() => {
-  // 不主动 refresh,等用户点开再拉(避免面板未显示就发请求)
+  // 2026-07-17 改:onMounted 主动 refresh 一次 — 否则用户切到某个 skill
+  // 但没展开 Git 同步面板时,status 一直显示默认(initialized: false),
+  // 看起来像"未初始化"。先拉一次拿到真实状态。
+  refresh()
 })
 
-// 2026-07-17 增:用户切 skill 时,如果面板已经展开,主动 refresh 一次
-// (否则会显示上一个 skill 的缓存状态;同时 GitInit 是异步,切回时
-// 状态可能已就绪)。仅在展开状态 refresh,避免每个 skill 都拉。
+// 2026-07-17 改:每次切 skill 都 refresh(不依赖 gitExpanded) —
+// 用户切到一个新 skill,即使没展开 Git 同步面板,也需要知道当前
+// 状态(比如刚初始化的 skill 切走再切回,状态已经变了)。refresh 很轻,
+// 不依赖展开保持状态最新。
 watch(
   () => props.skillPath,
   () => {
-    if (gitExpanded.value) refresh()
+    refresh()
   },
 )
-// 2026-07-17 增:用户首次展开面板时立即 refresh,确保 status 是最新的
-// (解决"首次打开 + 切到该 skill 后 init 已完成"的状态滞后)
+// 2026-07-17 增:用户首次展开面板时也 refresh,确保 status 是最新的
+// (解决"切到该 skill 后 init 已完成"的状态滞后)
 watch(gitExpanded, (open) => {
-  if (open && !cfgLoaded.value) refresh()
+  if (open) refresh()
 })
 </script>
 
