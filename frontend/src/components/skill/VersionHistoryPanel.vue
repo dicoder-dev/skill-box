@@ -438,8 +438,18 @@ function formatTime(when) {
     @update:expanded="onHistoryToggle"
   >
     <template #title-meta>
-      <span v-if="status && status.initialized" class="vhp-badge ok">
-        {{ status.head_short || t('git.noCommits') }}
+      <!-- 2026-07-18 改:跟 GitSyncPanel 对齐 — 显示分支 + HEAD short hash,
+           让用户在面板标题就能看出"现在在哪条分支、最新版本是什么"。
+           已 init + 有 commit → 绿色 badge 显示 branch · head_short;
+           已 init 但无 commit → 黄色 badge "无提交";
+           没 init → 黄色 badge "未初始化"。 -->
+      <span v-if="status && status.initialized && status.head_hash" class="vhp-badge ok">
+        <IconPark icon="Branch" :size="10" />
+        {{ status.branch || 'main' }} · {{ status.head_short || '-' }}
+      </span>
+      <span v-else-if="status && status.initialized" class="vhp-badge warn">
+        <IconPark icon="Warning" :size="10" />
+        {{ t('git.noCommits', '无提交') }}
       </span>
       <span v-else-if="status" class="vhp-badge warn">{{ t('git.notInit') }}</span>
     </template>
@@ -491,7 +501,7 @@ function formatTime(when) {
                   <code class="vhp-commit-hash">{{ shortHash(it.hash) }}</code>
                   <span class="vhp-commit-when" :title="it.when">{{ formatTime(it.when) }}</span>
                   <span v-if="(it.files || []).length" class="vhp-commit-files">
-                    <IconPark icon="Folder" :size="9" />
+                    <IconPark icon="Folder" :size="10" />
                     {{ (it.files || []).length }}
                   </span>
                 </div>
@@ -779,18 +789,20 @@ function formatTime(when) {
   align-items: center;
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
-/* 2026-07-18 大改:vhp-commit-author 样式删除(已挪到 modal 头部展示)。
-   vhp-commit-files 改成"icon + 数字"形态,跟 hash / when 同高,icon 用 Folder
-   表达"这次提交涉及的文件数",语义比 "·1 files" 清晰。 */
+/* 2026-07-18 改:vhp-commit-files 改用 display:inline-flex + align-items:center
+   让 Folder 图标跟数字水平方向垂直对齐;之前的基线对齐在 10px 字号下
+   图标会显得"飘"。padding 上下 2px / 左右 6px 让 badge 视觉更厚实,
+   跟 hash / when 同高不显瘦。 */
 .vhp-commit-files {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   color: rgb(59, 130, 246);
   background: rgba(59, 130, 246, 0.1);
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 999px;
   font-weight: 500;
+  line-height: 1;
 }
 
 /* =========================================================================
@@ -855,6 +867,11 @@ function formatTime(when) {
   border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
   background: var(--bg-elevated, rgba(127, 127, 127, 0.03));
   flex-shrink: 0;
+  /* 2026-07-18 增:header 左右两侧之间强制至少 24px 间距,
+     防止左侧日期/作者等元信息跟右侧操作按钮挤在一起 —
+     justify-content:space-between 在 flex:1 撑满的左侧下,
+     左边最后一元素跟 modal 右边距是 0,视觉上贴到按钮。 */
+  gap: 24px;
 }
 .vhp-modal-header-left {
   display: flex;
