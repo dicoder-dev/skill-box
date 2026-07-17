@@ -95,10 +95,22 @@ async function refresh() {
   }
 }
 
+// 2026-07-17 改:init 现在是 fire-and-forget(后端 202 + 异步跑),前端
+// 轮询 status 看 init 是否完成。最多 8 秒(40 × 200ms),超时后停止轮询
+// 让用户继续操作(后台 init 会跑完,下次 refresh 就能看到结果)。
 async function doInit() {
   loading.value = true
   try {
     await initGit()
+    // 轮询 status,等 initialized=true 出现就停
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 200))
+      const st = await getGitStatus()
+      if (st && st.initialized) {
+        status.value = { ...status.value, ...st }
+        break
+      }
+    }
     await refresh()
   } catch (e) {
     errorMsg.value = (e && e.message) || String(e)

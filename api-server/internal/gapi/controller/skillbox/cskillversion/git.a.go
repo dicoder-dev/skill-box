@@ -18,6 +18,8 @@ package cskillversion
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -154,17 +156,29 @@ func GitStatus(c *ginp.ContextPlus) {
 }
 
 // GitInit POST /api/skillbox/git/init
+//
+// 2026-07-17 改:从同步改为 fire-and-forget — InitIfNotExists 内部走 go-git
+// 同步 IO(PlainInit + 空 commit),在 macOS sandbox / 文件锁场景下可能慢,
+// 同步 HTTP handler 会挂起前端按钮(loading 状态一直不返回)。
+// 改:handler 立即返 202(后台跑),前端轮询 /git/status 看 init 是否完成。
 func GitInit(c *ginp.ContextPlus) {
 	repo, err := skillversion.Default()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	if err := repo.InitIfNotExists(); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+	// 2026-07-17:如果已经 init,直接返 200,不要走异步(避免无谓的 goroutine 噪声)
+	if repo.IsInitialized() {
+		c.JSON(200, gin.H{"ok": true, "initialized": true, "already": true})
 		return
 	}
-	c.JSON(200, gin.H{"ok": true, "initialized": true})
+	go func() {
+		defer func() { _ = recover() }()
+		if err := repo.InitIfNotExists(); err != nil {
+			fmt.Fprintf(os.Stderr, "[skillversion] GitInit async: %v\n", err)
+		}
+	}()
+	c.JSON(202, gin.H{"ok": true, "initialized": false, "async": true})
 }
 
 // GitLog GET /api/skillbox/git/log?limit=50&path=<group>/<name>
