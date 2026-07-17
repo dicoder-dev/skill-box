@@ -225,7 +225,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
         'file-tree-file',
         selectedPath === file.path ? 'file-tree-selected' : '',
       ]"
-      :style="{ paddingLeft: `${depth * 8 + 4}px` }"
+      :style="{ paddingLeft: `${Math.max(4, depth * 8 + 4 - 14)}px` }"
       :aria-selected="selectedPath === file.path"
     >
       <div class="file-row file-row-file" @click="onClickFile(file, $event)" @contextmenu="onContextFile(file, $event)">
