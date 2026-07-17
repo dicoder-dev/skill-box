@@ -1,3 +1,4 @@
+branch: main
 db:
     mysql:
         db: ""
@@ -22,6 +23,7 @@ email:
         host: smtp.126.com
         port: 465
         pwd: "12345"
+remote_url: ""
 server:
     port: "8082"
 skillbox:
@@ -49,3 +51,6 @@ tencent:
         region: ""
         secret_id: ""
         secret_key: ""
+token_file: ""
+user_email: ""
+user_name: ""

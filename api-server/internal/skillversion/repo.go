@@ -135,6 +135,13 @@ func (r *Repo) InitIfNotExists() error {
 	}
 
 	if r.IsInitialized() {
+		// 2026-07-17 增:已 init 但 HEAD 损坏(PlainInit 后 wt.Commit 失败导致
+		// HEAD 指零 hash / 仓库里没 commit object)的自愈。
+		// 这种情况 IsInitialized() 返 true,但 Log/Head() 都会"object not found"。
+		// 这里检查 HEAD 是否指向有效 commit,没有就补一个 empty commit。
+		if err := repairHeadIfBroken(); err != nil {
+			return fmt.Errorf("skillversion: repair HEAD: %w", err)
+		}
 		return nil
 	}
 
@@ -159,8 +166,60 @@ func (r *Repo) InitIfNotExists() error {
 		AllowEmptyCommits: true,
 	})
 	if cerr != nil {
-		// 空 commit 也允许失败(比如 network / fs 偶发),不阻断初始化
-		_ = cerr
+		// 2026-07-17 改:不再静默 — wt.Commit 在仓库没 commit base 时会
+		// "object not found" 失败,这时退到 repairHeadIfBroken 走手工
+		// 建 commit object 绕过(go-git 5.x worktree commit 要求 base tree
+		// 关联到某个 commit,空仓库的 base 缺失就挂)。
+		if rerr := repairHeadIfBroken(); rerr != nil {
+			return fmt.Errorf("skillversion: commit + repair both failed: commit=%v repair=%v", cerr, rerr)
+		}
+	}
+	return nil
+}
+
+// repairHeadIfBroken 自愈损坏的 HEAD — 当仓库 .git 存在但 HEAD 指零 hash
+// 或 refs/heads/* 全空时,手工建一个 root commit object 并把 main / HEAD
+// 指过去。
+//
+// 2026-07-17 背景:BootstrapInit 异步跑时,如果进程被强制终止或 IO 失败,
+// 可能留下"PlainInit 完成 + 没有 commit + HEAD 零 hash"的中间状态。这时
+// 任何 Log / Head() 都会"object not found" / panic。repair 通过直接调
+// object.Commit.Encode + Storer.SetEncodedObject 绕开 Worktree.Commit
+// 对 base tree 的依赖,稳定建一个 root commit。
+func repairHeadIfBroken() error {
+	root := defaultRepo.path
+	repo, err := git.PlainOpen(root)
+	if err != nil {
+		return err
+	}
+	head, herr := repo.Head()
+	if herr == nil && !head.Hash().IsZero() {
+		// HEAD 已指向有效 commit,不需要修
+		return nil
+	}
+	// 空 tree 的 hash 是固定常量(go-git / git 内部都用)
+	const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+	author := resolveAuthor()
+	commit := &object.Commit{
+		Author:       *author,
+		Committer:    *author,
+		Message:      "chore(skills): bootstrap empty commit (repair)\n",
+		TreeHash:     plumbing.NewHash(emptyTreeHash),
+		ParentHashes: nil,
+	}
+	obj := repo.Storer.NewEncodedObject()
+	if err := commit.Encode(obj); err != nil {
+		return fmt.Errorf("encode commit: %w", err)
+	}
+	hash, err := repo.Storer.SetEncodedObject(obj)
+	if err != nil {
+		return fmt.Errorf("store commit: %w", err)
+	}
+	if err := repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", hash)); err != nil {
+		return fmt.Errorf("set refs/heads/main: %w", err)
+	}
+	if err := repo.Storer.SetReference(plumbing.NewSymbolicReference("HEAD", "refs/heads/main")); err != nil {
+		return fmt.Errorf("set HEAD: %w", err)
 	}
 	return nil
 }

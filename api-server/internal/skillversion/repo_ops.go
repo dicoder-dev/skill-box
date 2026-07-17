@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -255,6 +256,7 @@ func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) 
 	// 这里兜住返空,让接口返 200 而不是 500。
 	defer func() {
 		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "[skillversion] Log panic: %v\n%s\n", r, debug.Stack())
 			err = fmt.Errorf("skillversion: Log panic: %v", r)
 			out = nil
 		}
@@ -303,11 +305,18 @@ func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) 
 			Message: strings.SplitN(c.Message, "\n", 2)[0],
 			When:    c.Author.When,
 		}
-		// 2026-07-17 改:commitFiles 包 recover 兜底 — go-git parent.Patch
-		// 在某些 commit shape 下会 panic(runtime error: slice bounds out of range),
-		// 这里只是给 entry.Files 填值,出错就跳过。
+		// 2026-07-17 改:commitFiles 用 recover + error 双重兜底 —
+		// go-git c.Stats() / Tree() 在合并 / squash / 孤儿 commit
+		// 上会返 "object not found" 错误(不是 panic),这里捕获到
+		// 错误时 entry.Files 留空但 entry 仍然 append,不让单条
+		// commit 阻断整次 Log。前端需要的 hash/msg/author/when 都
+		// 在 entry 里,Files 是锦上添花。
 		func() {
-			defer func() { _ = recover() }()
+			defer func() {
+				if pv := recover(); pv != nil {
+					fmt.Fprintf(os.Stderr, "[skillversion] commitFiles panic on %s: %v\n", c.Hash.String()[:7], pv)
+				}
+			}()
 			if files, ferr := commitFiles(repo, c); ferr == nil {
 				entry.Files = files
 			}
@@ -338,6 +347,14 @@ func (errStopSentinel) Error() string { return "stop" }
 var errStop = errStopSentinel{}
 
 // commitFiles 拿 commit 涉及的文件路径列表(走 Parent Tree diff)。
+//
+// 2026-07-17 改:从 parent.Patch 改成 go-git 内置 c.Stats() — parent.Patch
+// 在合并 commit / squash / 边界 shape 上会 panic(runtime error: slice
+// bounds out of range),改用 commit 自带的 stats 接口,go-git 内部已
+// 处理好边界。Stats() 返 []CommitStats,每条 .Name 就是变更的文件名。
+//
+// 对 root commit(无 parent)走 Tree().Files() 列全部文件 — Stats() 在
+// root commit 上也是空 slice(没有 parent 没法 diff),所以仍走 Tree。
 func commitFiles(repo *git.Repository, c *object.Commit) ([]string, error) {
 	if c.NumParents() == 0 {
 		tree, err := c.Tree()
@@ -351,17 +368,16 @@ func commitFiles(repo *git.Repository, c *object.Commit) ([]string, error) {
 		})
 		return files, nil
 	}
-	parent, err := c.Parent(0)
+	// 2026-07-17 改:用 c.Stats() 替代 parent.Patch(c) — 后者在合并/squash
+	// 上 panic。Stats() 走 commit object 自带的统计,内部已处理多 parent
+	// 场景,不会 panic。
+	stats, err := c.Stats()
 	if err != nil {
 		return nil, err
 	}
-	patch, err := parent.Patch(c)
-	if err != nil {
-		return nil, err
-	}
-	var files []string
-	for _, fstat := range patch.Stats() {
-		files = append(files, fstat.Name)
+	files := make([]string, 0, len(stats))
+	for _, s := range stats {
+		files = append(files, s.Name)
 	}
 	return files, nil
 }
