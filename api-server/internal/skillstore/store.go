@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"ginp-api/configs"
@@ -251,6 +253,7 @@ func (s *Store) Save(c skilladapter.Canonical, deletedPaths []string) error {
 	// 2026-07-17 增:落盘成功后调 skillversion.AutoCommitAndPush。
 	// 失败仅写 logger,不阻断 store.Save(业务写盘已经成功,版本管理失败不能反向回滚)。
 	// 走 goroutine 异步执行,store.Save 不等 git 完成。
+	loggerWarn("store.Save COMMIT_HOOK: name=%s group=%s op=update", c.Manifest.Name, c.Manifest.GroupPath)
 	go autoCommitAfterSave(c.Manifest.GroupPath, c.Manifest.Name, "update")
 	return nil
 }
@@ -271,15 +274,18 @@ func (s *Store) Save(c skilladapter.Canonical, deletedPaths []string) error {
 // commitmsg.Generate 收到 nil → 走模板路径,行为正确。
 func autoCommitAfterSave(group, name, op string) {
 	defer func() {
-		_ = recover() // 防 panic 拖垮 store 调用方
+		if pv := recover(); pv != nil {
+			loggerWarn("autoCommitAfterSave PANIC: %v\n%s", pv, debug.Stack())
+		}
 	}()
+	loggerWarn("autoCommitAfterSave ENTRY: group=%q name=%q op=%q", group, name, op)
 	rel := filepath.ToSlash(filepath.Join(group, name))
 	if group == "" {
 		rel = name
 	}
 	repo, err := skillversionRepo()
 	if err != nil {
-		loggerWarn("skillversion: open repo: %v", err)
+		loggerWarn("autoCommitAfterSave open repo: %v", err)
 		return
 	}
 
@@ -288,6 +294,7 @@ func autoCommitAfterSave(group, name, op string) {
 	if tpl == "" {
 		tpl = "filename"
 	}
+	loggerWarn("autoCommitAfterSave BEFORE commitmsg.Generate: llmEnabled=%v tpl=%s", ac.LLMEnabled, tpl)
 	result := commitmsg.Generate(context.Background(), commitmsg.Options{
 		LLMEnabled: ac.LLMEnabled,
 		Template:   commitmsg.Template(tpl),
@@ -296,6 +303,7 @@ func autoCommitAfterSave(group, name, op string) {
 		// LLM 闭包从 commitmsg 全局注册器里取 — 由 cskillversion 在
 		// init() 时注入;不可用时返 nil → 走模板路径。
 	})
+	loggerWarn("autoCommitAfterSave AFTER commitmsg.Generate: msg=%q source=%s err=%v", result.Message, result.Source, result.Err)
 	if result.Err != nil {
 		loggerWarn("skillversion: commitmsg %s: source=%s err=%v", rel, result.Source, result.Err)
 	}
@@ -305,7 +313,9 @@ func autoCommitAfterSave(group, name, op string) {
 		Paths:   []string{rel},
 	})
 	if err != nil {
-		loggerWarn("skillversion: AutoCommitAndPush %s: %v", rel, err)
+		loggerWarn("AutoCommitAndPush %s: %v", rel, err)
+	} else {
+		loggerWarn("autoCommitAfterSave OK: rel=%s msg=%q", rel, result.Message)
 	}
 }
 
@@ -316,7 +326,25 @@ var skillversionRepo = func() (*skillversion.Repo, error) {
 
 // loggerWarn 占位 logger,替换为 stderr 输出(skillversion 失败仅用于调试)。
 var loggerWarn = func(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "[skillversion] "+format+"\n", args...)
+	msg := fmt.Sprintf("[skillversion] "+format+"\n", args...)
+	_, _ = fmt.Fprint(os.Stderr, msg)
+	// 2026-07-18 增:同时写到 ~/.skill-box/logs/skillversion-debug.log,
+	// dev 模式下 wails 不暴露 api-server stderr,这里单独开一个文件方便排查。
+	if f, err := os.OpenFile(filepath.Join(homeDir(), "logs", "skillversion-debug.log"),
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		_, _ = f.WriteString(time.Now().Format("2006-01-02 15:04:05.000 ") + msg)
+		_ = f.Close()
+	}
+}
+
+// homeDir 返回 ~/.skill-box,跟 skillversion.Default().Root() 不一样(后者是 skills 子目录),
+// 这里要写到 ~/.skill-box/logs/ 而不是 ~/.skill-box/skills/logs/。
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, ".skill-box")
 }
 
 // copyFileAtomic 把 src 单文件复制到 dst(读 src 内容 → writeFileAtomic dst)。

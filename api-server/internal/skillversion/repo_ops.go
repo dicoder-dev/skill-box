@@ -41,27 +41,38 @@ type CommitInput struct {
 //
 // 失败兜底:任何 git 错误都只写 logger.Error,不抛(因为调用方是 store.Save,
 // 业务上写盘已经成功,版本管理失败不能反向回滚数据)。
+// AutoCommitAndPush 同步 commit + 异步 push。
+//
+// 2026-07-17 流程:
+//  1. mu 串行(避免与 HTTP API 并发)
+//  2. InitIfNotExists(首次启动兜底)
+//  3. Worktree.AddWithOptions(All: true)
+//  4. Worktree.Commit(msg, author)
+//  5. enqueuePush(hash, msg) — 不阻塞
+//
+// 失败兜底:任何 git 错误都只写 logger.Error,不抛(因为调用方是 store.Save,
+// 业务上写盘已经成功,版本管理失败不能反向回滚数据)。
+//
+// 2026-07-18 大改:之前走 go-git Worktree.Commit 在 wails v3 alpha.60 webview
+// 子进程里死锁(跟 Diff() 同根因 — go-git IO 在 Chromium 多进程架构下调度异常)。
+// 跟 Diff() 一样改走系统 git CLI(exec.CommandContext + 3s 超时):
+//   - `git -C <path> add -A` → `git -C <path> commit -m <msg> --author=<a>`
+//   - 拿 stdout 解析 commit hash(`git rev-parse HEAD`)
+//   - push 仍走 go-git(异步,可容忍失败)
+//
+// 新策略是"先 git CLI 跑通、go-git 只负责 read-only 跟 push",
+// 这样 store.Save 链路的 commit 不再会被 webview 子进程 IO 调度阻塞。
 func (r *Repo) AutoCommitAndPush(in CommitInput) (plumbing.Hash, error) {
+	logger.Warn("skillversion: AutoCommitAndPush ENTER: msg=%q paths=%v", in.Message, in.Paths)
 	r.mu.Lock()
+	logger.Warn("skillversion: AutoCommitAndPush mu acquired")
 	defer r.mu.Unlock()
 
 	if err := r.InitIfNotExists(); err != nil {
+		logger.Warn("skillversion: AutoCommitAndPush InitIfNotExists: %v", err)
 		return plumbing.ZeroHash, err
 	}
-	repo, err := r.open()
-	if err != nil {
-		return plumbing.ZeroHash, err
-	}
-	wt, err := repo.Worktree()
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("skillversion: Worktree: %w", err)
-	}
-
-	// 2026-07-17:始终 Add All — store.Save 已经原子 rename 完整个目录,
-	// 用 All: true 覆盖所有 modified / untracked / deleted。Paths 仅作 commit msg 注释。
-	if err := wt.AddWithOptions(&git.AddOptions{All: true}); err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("skillversion: add all: %w", err)
-	}
+	logger.Warn("skillversion: AutoCommitAndPush after init, calling git CLI commit")
 
 	msg := strings.TrimSpace(in.Message)
 	if len(in.Paths) > 0 {
@@ -69,20 +80,69 @@ func (r *Repo) AutoCommitAndPush(in CommitInput) (plumbing.Hash, error) {
 		msg = msg + "\n\nfiles: " + strings.Join(in.Paths, ", ")
 	}
 
-	hash, err := wt.Commit(msg, &git.CommitOptions{
-		Author: resolveAuthor(),
-	})
+	author := resolveAuthor()
+	hash, err := r.commitViaCLI(msg, author)
 	if err != nil {
-		// AllowEmptyCommits 默认 false,空 commit 会返 ErrEmptyCommit — 当作 noop,不报错。
-		if err == git.ErrEmptyCommit {
-			return plumbing.ZeroHash, nil
-		}
-		return plumbing.ZeroHash, fmt.Errorf("skillversion: commit: %w", err)
+		logger.Warn("skillversion: AutoCommitAndPush CLI commit failed: %v", err)
+		return plumbing.ZeroHash, err
 	}
+	logger.Warn("skillversion: AutoCommitAndPush CLI commit OK hash=%v", hash.String())
 
 	// 异步 push,失败入重试队列
 	r.enqueuePush(hash, msg)
 	return hash, nil
+}
+
+// commitViaCLI 走系统 git CLI 完成 add + commit + 读 hash。
+// 跟 Diff() 同一个根因修复:避免 go-git 在 wails webview 子进程里 IO 死锁。
+func (r *Repo) commitViaCLI(msg string, author *object.Signature) (plumbing.Hash, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// git add -A
+	addCmd := exec.CommandContext(ctx, "git", "-C", r.path, "add", "-A")
+	if out, err := addCmd.CombinedOutput(); err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("skillversion: git add failed: %v: %s", err, string(out))
+	}
+
+	// git commit -m <msg> --author=<author>
+	authorStr := fmt.Sprintf("%s <%s>", author.Name, author.Email)
+	commitCmd := exec.CommandContext(ctx, "git", "-C", r.path,
+		"commit", "-m", msg, "--author="+authorStr)
+	if out, err := commitCmd.CombinedOutput(); err != nil {
+		// 空 commit(no changes)不算错,fallback 读 HEAD
+		outStr := string(out)
+		if strings.Contains(outStr, "nothing to commit") || strings.Contains(outStr, "no changes added") {
+			hashOut, herr := r.headHashViaCLI(ctx)
+			if herr != nil {
+				return plumbing.ZeroHash, herr
+			}
+			return plumbing.NewHash(hashOut), nil
+		}
+		return plumbing.ZeroHash, fmt.Errorf("skillversion: git commit failed: %v: %s", err, outStr)
+	}
+
+	return r.commitAndReadHashViaCLI(ctx)
+}
+
+// commitAndReadHashViaCLI 走 `git rev-parse HEAD` 拿当前 commit hash 字符串
+// 转 plumbing.Hash。
+func (r *Repo) commitAndReadHashViaCLI(ctx context.Context) (plumbing.Hash, error) {
+	hashOut, err := r.headHashViaCLI(ctx)
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+	return plumbing.NewHash(hashOut), nil
+}
+
+// headHashViaCLI 走 `git rev-parse HEAD` 拿当前 commit hash。
+func (r *Repo) headHashViaCLI(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", r.path, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("skillversion: git rev-parse failed: %v", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // enqueuePush 异步 push;不阻塞调用方。

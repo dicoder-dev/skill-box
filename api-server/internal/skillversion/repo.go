@@ -20,15 +20,18 @@
 package skillversion
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"ginp-api/configs"
+	"ginp-api/pkg/logger"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -126,8 +129,11 @@ func (r *Repo) open() (*git.Repository, error) {
 // 2026-07-17:不强制 isBare — 用户需要日常查看工作区(前端展示 commit、文件浏览),
 // bare 仓库 Worktree() 失败。
 func (r *Repo) InitIfNotExists() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	logger.Warn("skillversion: InitIfNotExists ENTER")
+	// 2026-07-18 改:不再持有 r.mu — init 是 io 操作,跟 push/commit 路径无冲突;
+	// 之前持锁导致 go-git 在 wails webview 里 IO 卡死后 mu 永远不被释放,
+	// 后续所有 AutoCommitAndPush 都死锁(因为 r.mu 串行化)。改成无锁后
+	// 即便本次 Init 卡住,下次调用还能再进来,git 仓库状态可观察可恢复。
 
 	if err := os.MkdirAll(r.path, 0o755); err != nil {
 		return fmt.Errorf("skillversion: mkdir %s: %w", r.path, err)
@@ -147,13 +153,16 @@ func (r *Repo) InitIfNotExists() error {
 		if err := repairHeadIfBroken(); err != nil {
 			return fmt.Errorf("skillversion: repair HEAD: %w", err)
 		}
+		logger.Warn("skillversion: InitIfNotExists already init, return")
 		return nil
 	}
+	logger.Warn("skillversion: InitIfNotExists PlainInit start")
 
 	repo, err := git.PlainInit(r.path, false)
 	if err != nil {
 		return fmt.Errorf("skillversion: PlainInit: %w", err)
 	}
+	logger.Warn("skillversion: InitIfNotExists PlainInit done")
 
 	// 2026-07-17:默认分支 main(go-git 5.7+ 支持,旧版会拿 master)。
 	_ = repo.CreateBranch(&config.Branch{Name: "main"})
@@ -161,23 +170,33 @@ func (r *Repo) InitIfNotExists() error {
 	_ = repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, plumbing.NewHash("")))
 
 	// 2026-07-17:空 init 后,做一次空 commit 让 HEAD 落到 main,后续 Log 才不会空指针。
-	wt, werr := repo.Worktree()
-	if werr != nil {
-		return fmt.Errorf("skillversion: Worktree: %w", werr)
-	}
+	// 2026-07-18 改:不再走 go-git wt.Commit(在 wails webview 子进程里 IO 死锁),
+	// 改走系统 git CLI(`git -C <path> commit --allow-empty -m <msg> --author=...`)。
 	author := resolveAuthor()
-	_, cerr := wt.Commit("chore(skills): initialize empty repository", &git.CommitOptions{
-		Author:            author,
-		AllowEmptyCommits: true,
-	})
-	if cerr != nil {
-		// 2026-07-17 改:不再静默 — wt.Commit 在仓库没 commit base 时会
-		// "object not found" 失败,这时退到 repairHeadIfBroken 走手工
-		// 建 commit object 绕过(go-git 5.x worktree commit 要求 base tree
-		// 关联到某个 commit,空仓库的 base 缺失就挂)。
+	if err := r.cliEmptyCommit("chore(skills): initialize empty repository", author); err != nil {
+		logger.Warn("skillversion: InitIfNotExists cliEmptyCommit failed: %v, fallback to repair", err)
 		if rerr := repairHeadIfBroken(); rerr != nil {
-			return fmt.Errorf("skillversion: commit + repair both failed: commit=%v repair=%v", cerr, rerr)
+			return fmt.Errorf("skillversion: commit + repair both failed: commit=%v repair=%v", err, rerr)
 		}
+	}
+	logger.Warn("skillversion: InitIfNotExists EXIT OK")
+	return nil
+}
+
+// cliEmptyCommit 走系统 git CLI 创建空 commit。
+//
+// 2026-07-18 增:替代 go-git wt.Commit,在 wails webview 子进程里 go-git IO 死锁
+// 跟 Diff 卡死、AutoCommitAndPush 卡死都是同根因。CLI 路径走 exec.Command
+// 隔离在子进程里,不受 webview sandbox 影响。
+func (r *Repo) cliEmptyCommit(msg string, author *object.Signature) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	authorStr := fmt.Sprintf("%s <%s>", author.Name, author.Email)
+	cmd := exec.CommandContext(ctx, "git", "-C", r.path,
+		"commit", "--allow-empty", "-m", msg, "--author="+authorStr)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git commit empty failed: %v: %s", err, string(out))
 	}
 	return nil
 }

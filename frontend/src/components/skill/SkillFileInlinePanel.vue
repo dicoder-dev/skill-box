@@ -179,6 +179,20 @@ const selectedKey = ref('')
 const localFiles = reactive(new Map())
 const dirtyPaths = ref(new Set())
 
+// 2026-07-18 增:editing baseline — 第一次收到 emit 时把 emit 内容写入 baseline,
+// 后续 emit 跟 baseline 比对。修复"进编辑模式就显示未保存"bug:
+//
+// 根因:Tiptap htmlToMarkdown round-trip 出来的 markdown 跟 props.files 里的原 markdown
+// 不完全等价(粗体/反引号/末尾 ProseMirror-trailingBreak 等差异)。如果 baseline
+// 在 setMode 时记 = 原 markdown,后续 emit 一定不等 → 误标 dirty。
+//
+// 现在策略:setMode 不写 baseline。第一次 onContentChange emit 进来时,如果 baseline
+// 还没有,把 emit 内容写入 baseline(吸收 Tiptap round-trip 差异)。第二次起再比较。
+// - 用户刚点编辑:Tiptap 初始化 emit → 第一次 → 写 baseline → not dirty
+// - 用户接着打字:第二次 emit → 跟 baseline 不等 → dirty
+// - 用户什么都没改就保存:baseline == emit → not dirty → setMode('view') 清 baseline
+const editingBaseline = reactive(new Map())
+
 // 2026-07-08 一刀切:不再用 reactive map 缓存每文件 mode,改用单个
 // `currentEditingPath` ref 表达当前正在编辑哪个 path(skillName|path)。
 // 任何"打开/切换"流程(进入组件 / 选文件 / 选 skill)都自动回到 view,
@@ -210,10 +224,10 @@ function setMode(skillName, path, m) {
   if (m === 'edit') {
     // 进编辑:写入唯一 currentEditingPath(覆盖式,单 editing 状态)
     currentEditingPath.value = k
-    // Tiptap/Monaco 初始化 emit 的尾随空白差异(归一化后跟 orig 相等)
-    // 不应判 dirty。同一 setMode 时打 enterEditGuard 时间窗,期间 emit 仅
-    // 同步 localFiles 不算 dirty(避免"刚点编辑就显示保存按钮")。
-    enterEditGuardUntil = Date.now() + 80
+    // 2026-07-18 改:不在 setMode 时写 baseline — 因为 Tiptap round-trip 出来的内容
+    // 跟原 markdown 不等,baseline 写原 markdown 会被立刻"超过" → 误判 dirty。
+    // 改成第一次 emit 进来时(由 onContentChange 处理)再写 baseline,这样能
+    // 吸收 round-trip 引入的差异。
     if (path && dirtyPaths.value.has(path)) {
       const s = new Set(dirtyPaths.value)
       s.delete(path)
@@ -224,6 +238,10 @@ function setMode(skillName, path, m) {
     // 退出编辑:如果退的是当前正在编辑的那个 → 清掉。
     if (currentEditingPath.value === k) {
       currentEditingPath.value = ''
+    }
+    // 2026-07-18 增:退出编辑时清掉 baseline,isDirty 退回用 selectedFile.content 比对。
+    if (path) {
+      editingBaseline.delete(path)
     }
     dlog('[sfip setMode → view]', { skillName, path, k, prev })
   }
@@ -236,6 +254,7 @@ function clearEditingState() {
   dlog('[sfip clearEditingState] before=', currentEditingPath.value)
   currentEditingPath.value = ''
   dirtyPaths.value = new Set()
+  editingBaseline.clear()  // 2026-07-18 增:清 baseline,isDirty 退回 selectedFile.content 比对
   resetLockUntil = 0
   enterEditGuardUntil = 0
 }
@@ -269,6 +288,9 @@ function _syncSelectedFile() {
     dlog('[sfip _syncSelectedFile] skillSwitched', { from: _lastSkillName, to: curName, wasEditing: currentEditingPath.value })
     currentEditingPath.value = ''
     dirtyPaths.value = new Set()
+    // 2026-07-18 增:切 skill 时清 baseline,避免新 skill 的 localFiles
+    // 被旧 baseline 误标 dirty(即使切到不同 skill,based on path key)。
+    editingBaseline.clear()
   }
   _lastFilesRef = curFilesRef
   _lastSkillName = curName
@@ -307,6 +329,10 @@ function _syncLocalFiles() {
     localFiles.set(f.path, stored)
   }
   dirtyPaths.value = new Set()
+  // 2026-07-18 增:props.files 是父级重新拉的"权威内容"(比如保存成功后
+  // 父级 emit('saved') → loadCurrent → 拉新 files),本地 localFiles 跟权威
+  // 一致了 → 清 baseline,isDirty 退回用 selectedFile.content 比对 = 也不脏。
+  editingBaseline.clear()
 }
 onUpdated(() => {
   _syncSelectedFile()
@@ -489,12 +515,18 @@ const isDirty = computed(() => {
   if (!path) return false
   if (!localFiles.has(path)) return false
   const current = localFiles.get(path) || ''
-  const origFull = selectedFile.value?.content || ''
-  const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
-  // 2026-07-08 改 v2:跟 onContentChange 内的 dirty 判断保持一致,走"去掉末尾
-  // 空白后比对"的归一化逻辑 —— 应对编辑器初始化时 emit 的尾随空白差异
-  // (Tiptap 标准化、Monaco createModel 触发 onDidChangeContent 等),只有真正
-  // 内容变更才视为 dirty。
+  // 2026-07-18 改:跟 onContentChange 一致 — 优先用 editingBaseline(第一次 emit 时的快照)。
+  // 编辑模式中没 baseline → 视为不脏(理论上 setMode 进 edit 后 Tiptap 初始化
+  // emit 进来会写入 baseline;中间窗口期内 baseline 还没写入,isDirty 返回 false)。
+  let orig
+  if (editingBaseline.has(path)) {
+    orig = editingBaseline.get(path) || ''
+  } else {
+    // 没 baseline:回退到 selectedFile.content(只在 view 模式走这里;
+    // 编辑模式中 baseline 一定有,这条 fallback 不会触发)
+    const origFull = selectedFile.value?.content || ''
+    orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
+  }
   const normTail = (s) => String(s || '').replace(/\s+$/g, '')
   return normTail(current) !== normTail(orig)
 })
@@ -507,28 +539,20 @@ function onContentChange(v) {
   if (Date.now() < resetLockUntil) return
   const path = selectedFile.value?.path
   if (!path) return
-  const origFull = selectedFile.value?.content || ''
-  const orig = path === 'SKILL.md' ? splitSkillMd(origFull).body : origFull
-  // 2026-07-08 改 v2:原来用 setMode 时打的 80ms enterEditGuardUntil 时间窗不可靠
-  // —— Tiptap/Monaco 初始化 emit 时机不可控(异步加载 worker + nextTick + ...
-  // 都可能滞后超过 80ms),导致"刚进编辑模式就因 emit 的内容跟 orig 不完全等价
-  // 而被判 dirty"。Tiptap 初始化会规范化末尾换行 / 空白;Monaco createModel
-  // 写完整字符串时会触发一次 onDidChangeContent。
-  //
-  // 改用**内容归一化比对**:把 emit 回来的 v 跟 orig 都做一次"取最后一行尾随空白
-  // 归一化"再比,只要去掉末尾 normalize 差异后内容相等,就不算 dirty。这是
-  // 编辑器初始化 emit 的本质特征,不影响用户真实输入(用户改中间任何字符 v
-  // 跟 orig 都不会归一化到相等)。
-  const normalizeTail = (s) => String(s || '').replace(/\s+$/g, '')
-  const v0 = Date.now() < enterEditGuardUntil
-  if (v0) {
-    // 锁窗内仍同步 localFiles(让编辑器状态对得上),但 dirtyPaths 不算 dirty
-    localFiles.set(path, v || '')
-    return
-  }
   localFiles.set(path, v || '')
-  if (normalizeTail(v) === normalizeTail(orig)) {
-    // 初始化 emit 的尾巴:不更新 dirtyPaths
+  // 2026-07-18 改:editingBaseline 是延迟写入 — 第一次 emit 进来时把 emit
+  // 内容写入 baseline,后续 emit 跟 baseline 比对。这样 Tiptap htmlToMarkdown
+  // round-trip 引入的差异(粗体/反引号/末尾 trailingBreak 等)被 baseline
+  // 吸收,避免"刚进编辑模式就误显示未保存"。
+  if (!editingBaseline.has(path)) {
+    editingBaseline.set(path, v || '')
+    return  // 第一次 emit → 写 baseline 即视为非脏
+  }
+  // 后续 emit:跟 baseline 比对
+  const normTail = (s) => String(s || '').replace(/\s+$/g, '')
+  const baseline = editingBaseline.get(path) || ''
+  if (normTail(v) === normTail(baseline)) {
+    // 内容跟 baseline 一致 → 没改
     if (dirtyPaths.value.has(path)) {
       const s = new Set(dirtyPaths.value)
       s.delete(path)
@@ -536,7 +560,7 @@ function onContentChange(v) {
     }
     return
   }
-  // v 跟 orig 不只是"尾随空白"差异,真正的内容变更 → 标 dirty
+  // v 跟 baseline 不等 → 真实修改 → 标 dirty
   const s = new Set(dirtyPaths.value)
   s.add(path)
   dirtyPaths.value = s
@@ -806,11 +830,15 @@ async function saveFrontmatterForm() {
       // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log(异步 commit 已落盘)。
       notifyGitRefresh({ source: 'frontmatter-save', name })
       // 本地同步:localFiles['SKILL.md'] 设为新 body(去掉 frontmatter 的部分)
-      localFiles.set('SKILL.md', splitSkillMd(newMd).body)
+      const newBody = splitSkillMd(newMd).body
+      localFiles.set('SKILL.md', newBody)
       // 清掉 dirty(刚保存)
       const s = new Set(dirtyPaths.value)
       s.delete('SKILL.md')
       dirtyPaths.value = s
+      // 2026-07-18 改:同步 baseline — frontmatter 保存后 SKILL.md body 内容变了,
+      // baseline 必须同步更新到新内容,否则 isDirty 仍会判定为脏。
+      editingBaseline.set('SKILL.md', newBody)
       // 弹窗关掉,emit saved 让父级刷新 currentFiles / listSkills
       editFmOpen.value = false
       emit('saved', { path: 'SKILL.md', content: newMd })
