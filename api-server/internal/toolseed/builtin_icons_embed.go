@@ -33,6 +33,18 @@ var builtinIconsFS embed.FS
 //   - codebuddy.png + .svg  codebuddy.tencent.com 真 favicon
 //   - jetbrains.ico jetbrains.com 官方 favicon
 //
+// 2026-07-18 大扩:内置工具从 9 增到 17,新增图标(已联网抓到):
+//   - copilot.ico   github.com 站点 favicon
+//   - windsurf.ico  windsurf.com 官方 favicon(原 codeium.com)
+//   - goose.ico     block.github.io/goose 官方 icon(对应 block/goose)
+//   - roo.ico       roomote.dev 官方 favicon(对应 RooCodeInc/Roo-Code)
+//   - continue.png  continuedev/continue 仓库 docs/static/img/logo.svg
+//
+// 没抓到官方 logo 的 3 个(openclaw / hermes / aider):
+// IconFile 留空,前端 ToolIcon.vue 自动走 mdi 兜底(mdi:rabbit-variant / mdi:brain / mdi:account-multiple-plus-outline)。
+// 后续如果官方补了 logo,直接下载覆盖 + 在 builtin.go 改 IconFile 字段,启动时
+// refreshSystemIconFiles 会自动 sync。
+//
 // codebuddy 同时保留 svg 和 png(原计划二选一,实际两个都放,seed 时工具
 // 视图用 svg,png 兜底/将来备查)。
 var builtinIconNames = []string{
@@ -46,4 +58,10 @@ var builtinIconNames = []string{
 	"codebuddy.svg",
 	"codebuddy.png",
 	"jetbrains.ico",
+	// 2026-07-18 新增
+	"copilot.ico",
+	"windsurf.ico",
+	"goose.ico",
+	"roo.ico",
+	"continue.png",
 }
