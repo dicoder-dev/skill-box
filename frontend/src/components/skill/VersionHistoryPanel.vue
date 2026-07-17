@@ -503,7 +503,13 @@ function formatTime(when) {
                   <code class="vhp-commit-hash">{{ shortHash(it.hash) }}</code>
                   <span class="vhp-commit-when" :title="it.when">{{ formatTime(it.when) }}</span>
                   <span v-if="(it.files || []).length" class="vhp-commit-files">
-                    <IconPark icon="FileText" :size="12" />
+                    <!-- 2026-07-18 改:用纯 CSS ::before 画文件图标,不再依赖 IconPark。
+                         根因:iconpark 组件渲染 SVG 在 wails webview 里 baseline 偏移,
+                         即便 align-items:center + 显式 svg display:inline-block,
+                         仍偶发渲染歪斜(本次会话第二次反馈)。CSS 伪元素走 font-mono 字符
+                         ▤(U+25A4 = 方形水平填充字符),font-size 跟父级文字一致,
+                         line-height:1 + flex-center 强制对齐,彻底可控。 -->
+                    <span class="vhp-files-icon" aria-hidden="true">▤</span>
                     {{ (it.files || []).length }}
                   </span>
                 </div>
@@ -791,27 +797,34 @@ function formatTime(when) {
   align-items: center;
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
-/* 2026-07-18 改:vhp-commit-files 改用 display:inline-flex + align-items:center
-   让 FileText 图标跟数字水平方向垂直对齐;之前的基线对齐在 10px 字号下
-   图标会显得"飘"。padding 上下 2px / 左右 6px 让 badge 视觉更厚实,
-   跟 hash / when 同高不显瘦。
-   2026-07-18 二次调:svg inline-block + 显式 vertical-align:middle 兜底
-   (iconpark 默认 svg 是 display:inline,某些 webview 渲染下 baseline 偏移
-   导致 svg 跟父级 baseline 不齐),确保 12px svg 跟 10px 数字严格垂直居中。 */
+/* 2026-07-18 改:vhp-commit-files 用纯 CSS 字符画文件图标,不再依赖
+   IconPark 组件。根因:iconpark SVG 在 wails webview 里 baseline 渲染
+   偏移反复出现,即便加 display:inline-block + vertical-align:middle
+   仍偶发歪斜。改用 CSS 字符 ▤ + 显式 font-size / line-height 控制,
+   跟父级 10px mono 字号完全等高,绝对跟数字 baseline 对齐。
+   字符选 ▤ (U+25A4 SQUARE WITH HORIZONTAL FILL) — mono 字体下渲染成
+   整齐的"方形带横线",跟"文件"语义贴合(多行文档感),也不依赖图标库。 */
 .vhp-commit-files {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   color: rgb(59, 130, 246);
   background: rgba(59, 130, 246, 0.1);
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 999px;
   font-weight: 500;
   line-height: 1;
+  /* 显式字体栈兜底,确保字符在所有 webview 都能用 mono 渲染方形。 */
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
 }
-.vhp-commit-files :deep(svg) {
+.vhp-files-icon {
   display: inline-block;
-  vertical-align: middle;
+  /* 跟父级一致 10px,line-height:1 + display:inline-block + 父级
+     align-items:center 三层兜底,跟数字 100% 垂直居中。 */
+  font-size: 10px;
+  line-height: 1;
+  /* 字符在 mono 字体下垂直方向有少量空白,微调 -1px 让它跟数字 cap 对齐。 */
+  transform: translateY(-1px);
 }
 
 /* =========================================================================
