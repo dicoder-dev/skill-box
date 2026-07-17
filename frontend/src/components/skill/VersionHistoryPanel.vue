@@ -226,16 +226,44 @@ function pickModalFile(filePath) {
 }
 
 // 2026-07-17:从全量 diff 里抽出指定文件的块(已用相对路径)
+// 2026-07-18 改:之前用 line.includes(' a/' + relPath) 严格匹配,但当
+// commit 涉及带子目录的文件(如 agents/demo-global-agent/SKILL.md),
+// git diff 输出是
+//   diff --git a/agents/demo-global-agent/SKILL.md b/agents/demo-global-agent/SKILL.md
+// 前端传的 relPath 是剥前缀后的 SKILL.md,严格匹配会丢掉,导致整段 diff
+// 在 modal 里"一片空白"。
+//
+// 修复:对 diff --git 行用正则解析 `a/<path>` / `b/<path>` 两个完整路径,
+// 然后比对每个路径的 tailSeg(尾部 basename)是否等于 relPath 的 tailSeg。
+// 两端 tailSeg 都匹配 + 整段路径完全等于 relPath 才算目标文件 — 同时避免
+// SKILL.md 误匹配其他同名顶层文件(例如 export/SKILL.md 也命中 SKILL.md)。
+//
+// 完整路径相等:后端 commitFiles 已经按 skillPath 过滤,modal 里看到的都是
+// 涉及当前 skill 的文件,a/path 跟 b/path 的相对路径都是一致的,等于 relPath 即可。
 function filterDiffByFile(diff, relPath) {
   if (!diff || !relPath) return diff
   const lines = diff.split('\n')
   const out = []
   let inTarget = false
+  // 匹配 diff --git a/<path1> b/<path2> — path 内部可能含空格 / 特殊字符,但 git 不允许
+  // 简单两段 split 即够用。
   for (const line of lines) {
     if (line.startsWith('diff --git ')) {
-      inTarget =
-        line.includes(' a/' + relPath) ||
-        line.includes(' b/' + relPath)
+      // diff --git a/<p1> b/<p2>
+      const m = line.match(/^diff --git a\/(.+?) b\/(.+?)$/)
+      if (!m) {
+        inTarget = false
+      } else {
+        const left = m[1]
+        const right = m[2]
+        // 严格相等 OR 整段路径 tail 等于 relPath
+        // (eg: relPath = "SKILL.md" → left/right = "agents/x/SKILL.md" → tail match OK)
+        inTarget =
+          left === relPath ||
+          right === relPath ||
+          left.endsWith('/' + relPath) ||
+          right.endsWith('/' + relPath)
+      }
     }
     if (inTarget) out.push(line)
   }
@@ -421,12 +449,12 @@ function formatTime(when) {
     </template>
 
     <div v-if="errorMsg" class="vhp-error">
-      <IconPark type="warning" :size="12" />
+      <IconPark icon="Prompt" :size="12" />
       <span>{{ errorMsg }}</span>
     </div>
 
     <div v-if="!status || !status.initialized" class="vhp-empty">
-      <IconPark type="github" :size="32" />
+      <IconPark icon="Github" :size="32" />
       <p>{{ t('git.history.initFirst') }}</p>
     </div>
 
@@ -484,7 +512,7 @@ function formatTime(when) {
                 :title="f"
                 @click.stop="openFileModal(it.hash, relativeFilePath(f, skillPath))"
               >
-                <IconPark type="right" :size="10" class="vhp-file-arrow" />
+                <IconPark icon="Right" :size="10" class="vhp-file-arrow" />
                 <span class="vhp-file-name">{{ shortFileName(f, skillPath) }}</span>
               </div>
             </div>
@@ -509,7 +537,7 @@ function formatTime(when) {
           <!-- modal header -->
           <div class="vhp-modal-header">
             <div class="vhp-modal-header-left">
-              <IconPark type="code" :size="14" />
+              <IconPark icon="Code" :size="14" />
               <span class="vhp-modal-title">
                 {{ modalFile || (modalCommit && modalCommit._title.full) || shortHash(modalCommitHash) }}
               </span>
@@ -523,7 +551,7 @@ function formatTime(when) {
                 :disabled="loading"
                 @click="doCheckout"
               >
-                <IconPark type="undo" :size="11" />
+                <IconPark icon="Undo" :size="11" />
                 {{ t('git.history.checkout') }}
               </button>
               <button
@@ -532,7 +560,7 @@ function formatTime(when) {
                 :disabled="loading"
                 @click="doPush"
               >
-                <IconPark type="upload" :size="11" />
+                <IconPark icon="Upload" :size="11" />
                 {{ t('git.history.push') }}
               </button>
               <button
@@ -541,7 +569,7 @@ function formatTime(when) {
                 :disabled="loading"
                 @click="doPull"
               >
-                <IconPark type="download" :size="11" />
+                <IconPark icon="Download" :size="11" />
                 {{ t('git.history.pull') }}
               </button>
               <button
@@ -550,7 +578,7 @@ function formatTime(when) {
                 :disabled="loading"
                 @click="doDiscard"
               >
-                <IconPark type="undo" :size="11" />
+                <IconPark icon="Undo" :size="11" />
                 {{ t('git.discard') }}
               </button>
               <button
@@ -558,7 +586,7 @@ function formatTime(when) {
                 :title="t('common.close')"
                 @click="closeModal"
               >
-                <IconPark type="close" :size="14" />
+                <IconPark icon="Close" :size="14" />
               </button>
             </div>
           </div>
@@ -571,7 +599,7 @@ function formatTime(when) {
                 :class="['vhp-modal-file', { active: !modalFile }]"
                 @click="pickModalFile('')"
               >
-                <IconPark type="file" :size="11" />
+                <IconPark icon="File" :size="11" />
                 <span class="vhp-modal-file-name">{{ t('git.history.allFiles') }}</span>
               </div>
               <div
@@ -580,7 +608,7 @@ function formatTime(when) {
                 :class="['vhp-modal-file', { active: f === modalFile }]"
                 @click="pickModalFile(f)"
               >
-                <IconPark type="file" :size="11" />
+                <IconPark icon="File" :size="11" />
                 <span class="vhp-modal-file-name" :title="f">{{ f }}</span>
               </div>
               <div v-if="!modalFileList.length" class="vhp-modal-files-empty">
@@ -594,10 +622,10 @@ function formatTime(when) {
                 {{ t('common.loading') }}
               </div>
               <div v-else-if="modalDiffHint" class="vhp-modal-diff-empty">
-                <IconPark type="warning" :size="14" />
+                <IconPark icon="Prompt" :size="14" />
                 <p>{{ modalDiffHint }}</p>
                 <button class="vhp-btn" @click="copyDiffCmd">
-                  <IconPark type="copy" :size="11" />
+                  <IconPark icon="Copy" :size="11" />
                   {{ t('git.copyCmd') }}
                 </button>
               </div>
