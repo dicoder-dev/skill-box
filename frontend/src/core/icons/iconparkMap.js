@@ -153,6 +153,11 @@ export const MDI_TO_ICONPARK = {
   'chevron-down':                 'ArrowDown',
   'chevron-up':                   'ArrowUp',
 
+  // 2026-07-14 增:升级角标(顶栏右侧)图标。
+  // iconpark 里 ArrowCircleUp(圆环 + 上箭头)与 mdi:arrow-up-circle 一一对应。
+  // App.vue 升级角标使用 mdi:arrow-up-circle,此前未映射会 fallback Help(问号),
+  // 用户视觉上不显示。ArrowCircleUp 是 iconpark 原生导出,语义最贴合。
+  'arrow-up-circle':              'ArrowCircleUp',
   // 全屏
   // 2026-07-13 增:iconpark 里没有直接的 arrow-expand,改用 FullScreen(标准全屏图标)。
   // AIRightPanel 输入框的「全屏编辑」按钮此前映射缺失,fallback 到 Help(问号),
@@ -252,6 +257,38 @@ export const MDI_TO_ICONPARK = {
   'application-menu':             'ApplicationMenu',
   'file-text-outline':            'FileText',
   'list-view':                    'ListView',
+
+  // 2026-07-18 增:统一图标扫描,补齐未映射 mdi key,避免 fallback Help(问号)。
+  // 选图原则:iconpark 原生 + 语义最贴近;iconpark 没复合图标就用最相近的
+  // 通用图标(Info / Copy / List 等)。
+  'alert-circle':                 'Info',             // 圆环警告 → Info 描边版
+  'anthropic':                    'Robot',            // Anthropic logo → AI 助手语义
+  'application-outline':          'Application',      // 应用格子
+  'auto-fix':                     'Magic',            // 自动修复 → 魔法
+  'cart-arrow-down':              'ShoppingCart',     // 购物车箭头
+  'check-all':                    'CheckSmall',       // 全选小对勾
+  'close-circle':                 'CloseOne',         // 圆环关闭
+  'content-duplicate':            'Copy',             // 复制
+  'content-paste':                'FileText',         // 粘贴到文本
+  'file-alert-outline':           'FileFailed',       // 大文件警告 → 失败标记(不可读)
+  'file-image-outline':           'Picture',          // 图片文件
+  'folder-alert-outline':         'FolderFailed',     // 目录不存在提示
+  'folder-arrow-right-outline':   'FolderClose',      // 箭头文件夹
+  'format-list-bulleted-square':  'List',             // 方块列表
+  'home-outline':                 'Home',             // 主屏(Home 入口)
+  'key-remove':                   'DeleteKey',        // 移除密钥
+  'key-variant':                  'Key',              // 钥匙
+  'lan-connect':                  'Connection',       // 网络连接
+  'language-markdown-outline':    'FileCode',         // markdown → 代码文件
+  'language-python':              'Code',             // python → 代码
+  'package-variant-closed-plus': 'Box',              // 加号箱
+  'package-variant-closed-remove':'Box',             // 减号箱
+  'radiobox-blank':               'Radio',            // 单选空圆
+  'restore':                      'History',          // 恢复 → 历史
+  'star-circle-outline':          'Star',             // 星标
+  'timer-sand':                   'Timer',            // 沙漏 → 计时器
+  'update':                       'UpdateRotation',   // 更新旋转
+  'web':                          'WebPage',          // 浏览器网页
 }
 
 export default MDI_TO_ICONPARK

@@ -57,12 +57,12 @@ function toggle() {
       :aria-expanded="expanded"
       @click="toggle"
     >
-      <IconPark v-if="icon" :type="icon" :size="13" />
+      <IconPark v-if="icon" :icon="icon" :size="13" />
       <span class="cp-title">{{ title }}</span>
       <span class="cp-meta">
         <slot name="title-meta" />
       </span>
-      <IconPark :type="chevronIcon" :size="13" class="cp-chevron" />
+      <IconPark :icon="chevronIcon" :size="13" class="cp-chevron" />
     </button>
     <div v-if="expanded || forceMount" class="cp-body">
       <slot />
