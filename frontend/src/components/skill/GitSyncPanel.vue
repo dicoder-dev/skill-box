@@ -175,6 +175,21 @@ async function saveConfig() {
 onMounted(() => {
   // 不主动 refresh,等用户点开再拉(避免面板未显示就发请求)
 })
+
+// 2026-07-17 增:用户切 skill 时,如果面板已经展开,主动 refresh 一次
+// (否则会显示上一个 skill 的缓存状态;同时 GitInit 是异步,切回时
+// 状态可能已就绪)。仅在展开状态 refresh,避免每个 skill 都拉。
+watch(
+  () => props.skillPath,
+  () => {
+    if (gitExpanded.value) refresh()
+  },
+)
+// 2026-07-17 增:用户首次展开面板时立即 refresh,确保 status 是最新的
+// (解决"首次打开 + 切到该 skill 后 init 已完成"的状态滞后)
+watch(gitExpanded, (open) => {
+  if (open && !cfgLoaded.value) refresh()
+})
 </script>
 
 <template>
