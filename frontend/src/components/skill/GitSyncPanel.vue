@@ -4,7 +4,7 @@
 // 2026-07-17 改:用通用 CollapsiblePanel 包裹,header 样式与作用域面板一致。
 // 默认折叠,点 header 展开;accordion 模式:同 parent 内任一面板展开会收起其他。
 
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getGitStatus,
