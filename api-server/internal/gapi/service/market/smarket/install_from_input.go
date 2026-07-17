@@ -37,6 +37,11 @@ type InstallFromInputInput struct {
 	ConflictMode string
 	// 2026-07-09 增:ConflictMode=rename 时使用的目标名(可选,空 = 自动生成)
 	RenameTo string
+	// 2026-07-18 增:导入目标分组路径(可空)。空 = 走默认派生(按 source_type 规则:
+	// skillhub → "skillhub-cn" / skillssh → "skills.sh" / github → 按 owner 拆)。
+	// 非空 = 直接写 manifest.GroupPath + CreateGroup(走 NormalizeGroupName 折叠,
+	// 与 sskill.CreateGroup 对齐,避免物理目录跟 GroupPath 字段不一致)。
+	GroupPath string
 }
 
 // InstallFromInputResult 落盘结果(2026-07-09 增)。
@@ -209,7 +214,15 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 	// StoreRoot/skills.sh/pdf.lock 的父目录 StoreRoot/skills.sh/ 不存在 → ENOENT。
 	// 修法:groupPath 走 NormalizeGroupName 规范化,CreateGroup 跟 Manifest.GroupPath
 	// 用同一个规范化值,保证物理目录跟 GroupPath 字段对齐。
-	groupPath := normalizeGroupPathForMarket(deriveGroupPath(resolved.SourceType, resolved.RemoteID))
+	// 2026-07-18 改:用户显式指定 group_path 时,优先用用户输入(走 NormalizeGroupName
+	// 二次规范化,与 sskill.CreateGroup 对齐);空时才走默认派生。
+	// 直接用 user input 而不补 NormalizeGroupName 会导致 "frontend/react/" 等
+	// 末段空 / 含 "." 的路径物理目录跟 GroupPath 字段不一致 → resolveSkillDir
+	// 拼出的 lock 路径 ENOENT。
+	groupPath := normalizeGroupPathForMarket(strings.TrimSpace(in.GroupPath))
+	if groupPath == "" {
+		groupPath = normalizeGroupPathForMarket(deriveGroupPath(resolved.SourceType, resolved.RemoteID))
+	}
 	can.Manifest.GroupPath = groupPath
 	if ssvc != nil && groupPath != "" {
 		if gerr := ssvc.CreateGroup(groupPath); gerr != nil {

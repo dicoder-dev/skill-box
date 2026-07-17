@@ -29,6 +29,13 @@ import (
 //   - 空 / "prompt" = 同名已存在 → 返 409(响应体含 conflict_existing_* 字段,前端弹确认)
 //   - "overwrite" = 覆盖同名 skill
 //   - "rename" = 自动加 -2/-3 后缀(或用 RenameTo 字段)
+//
+// GroupPath(2026-07-18 增):
+//   - 空 = 走默认派生(同 source_type 规则:skillhub → "skillhub-cn" /
+//     skillssh → "skills.sh" / github → 按 owner)
+//   - 非空 = 落到指定分组路径(走 NormalizeGroupName 二次规范化),
+//     前端 OnboardingImportDialog 顶部"目标分组"选择器传下来,
+//     4 个 tab 共享同一选中态(本次只 market tab 实际生效)
 type RequestInstallFromInput struct {
 	SourceHint   string `json:"source_hint"`
 	Input        string `json:"input"`
@@ -36,6 +43,8 @@ type RequestInstallFromInput struct {
 	ProjectID    uint   `json:"project_id"`
 	ConflictMode string `json:"conflict_mode"`
 	RenameTo     string `json:"rename_to"`
+	// 2026-07-18 增:导入目标分组路径(可空)
+	GroupPath string `json:"group_path"`
 }
 
 // RespondInstallFromInput 落盘结果(2026-07-09 增)。
@@ -68,6 +77,8 @@ func InstallFromInput(c *ginp.ContextPlus, req *RequestInstallFromInput) {
 		ProjectID:    req.ProjectID,
 		ConflictMode: req.ConflictMode,
 		RenameTo:     req.RenameTo,
+		// 2026-07-18 增:目标分组透传(空 = 走默认派生)
+		GroupPath: req.GroupPath,
 	})
 	if err != nil {
 		switch {
