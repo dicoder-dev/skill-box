@@ -271,6 +271,14 @@ const error = computed(() => tools.error)
 
 const ALLOWED_MATURITY = ['stable', 'experimental', 'deprecated']
 
+// 2026-07-18 改:弹窗表格只展示 category=user 的格子。
+// system 格子在 PATH_SLOTS 里依然存在(对应 store.form.slots 中固定位置),
+// 后续编辑带 system 路径的工具时,后端真实数据会被原封不动保留,不会丢路径。
+// 我们只是不在 UI 上让用户配/看/改 system 路径(用户的诉求:"重点是用户路径")。
+const visiblePathSlots = computed(() =>
+  PATH_SLOTS.map((slot, idx) => ({ slot, idx })).filter((x) => x.slot.category === 'user'),
+)
+
 onMounted(async () => {
   bindIconUploadDocListener()
   try {
@@ -666,25 +674,32 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
+              <!--
+                2026-07-18 改:UI 上只展示 category=user 的格子(category=system 的格子
+                仍然在 store.form.slots 里保留,只是不渲染)。这样:
+                  - 用户编辑带 system 路径的工具时,后端真实数据不丢
+                  - 不影响 buildPayload 拍平和 clearSlotPath 逻辑(走原 store 索引)
+                  - 用户新建工具时,只能配置 user 路径,与"重点是用户路径"诉求一致
+              -->
               <tr
-                v-for="(slot, idx) in PATH_SLOTS"
-                :key="`${slot.scope}-${slot.category}`"
-                :class="{ 'paths-slot-empty': !slot.path }"
+                v-for="item in visiblePathSlots"
+                :key="`${item.slot.scope}-${item.slot.category}-ui`"
+                :class="{ 'paths-slot-empty': !tools.form.slots[item.idx].path }"
               >
                 <td>
                   <span class="paths-slot-readonly">
-                    {{ slot.scope === 'global' ? t('tools.paths.scopeGlobal') : t('tools.paths.scopeProject') }}
+                    {{ item.slot.scope === 'global' ? t('tools.paths.scopeGlobal') : t('tools.paths.scopeProject') }}
                   </span>
                 </td>
                 <td>
                   <span class="paths-slot-readonly">
-                    {{ slot.category === 'user' ? t('tools.paths.categoryUser') : t('tools.paths.categorySystem') }}
+                    {{ item.slot.category === 'user' ? t('tools.paths.categoryUser') : t('tools.paths.categorySystem') }}
                   </span>
                 </td>
                 <td>
                   <div class="input-with-action">
                     <input
-                      v-model="tools.form.slots[idx].path"
+                      v-model="tools.form.slots[item.idx].path"
                       :placeholder="t('tools.paths.pathHint')"
                       :disabled="tools.saving"
                     />
@@ -693,7 +708,7 @@ onMounted(async () => {
                       class="ghost icon-btn"
                       :disabled="tools.saving"
                       :title="t('tools.paths.pickFolder')"
-                      @click="pickPath(tools.form.slots[idx])"
+                      @click="pickPath(tools.form.slots[item.idx])"
                     >
                       <IconPark icon="mdi:folder-open" width="14" height="14" />
                     </button>
@@ -701,13 +716,13 @@ onMounted(async () => {
                 </td>
                 <td class="paths-action-cell">
                   <IconPark
-                    v-if="tools.form.slots[idx].path"
+                    v-if="tools.form.slots[item.idx].path"
                     icon="mdi:close-circle-outline"
                     class="action-icon action-icon-danger"
                     :title="t('common.delete')"
                     width="14"
                     height="14"
-                    @click="tools.clearSlotPath(idx)"
+                    @click="tools.clearSlotPath(item.idx)"
                   />
                 </td>
               </tr>
