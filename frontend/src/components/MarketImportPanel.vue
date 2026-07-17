@@ -67,8 +67,8 @@ const sources = [
     id: 'github',
     level: 'main',
     name: 'GitHub',
-    // 2026-07-18 改:Github 主页 → GitHub skills 主题页
-    url: 'https://github.com/topics/agent-skills',
+    // 2026-07-18 改:用户指定跳到 openai/skills 的 .curated 子目录
+    url: 'https://github.com/openai/skills/tree/main/skills/.curated',
     accent: '#1f2328',
     accentSoft: '#656d76',
     icon: 'mdi:github',
