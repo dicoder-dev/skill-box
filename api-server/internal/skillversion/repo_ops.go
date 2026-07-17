@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -306,6 +307,11 @@ func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) 
 			Message: strings.SplitN(c.Message, "\n", 2)[0],
 			When:    c.Author.When,
 		}
+		// 2026-07-17 增:第一 parent hash(供前端 diff 用,避免发 "<hash>^"
+		// 让 go-git ResolveRevision 卡 15s)。root commit 留空。
+		if c.NumParents() > 0 {
+			entry.ParentHash = c.ParentHashes[0].String()
+		}
 		// 2026-07-17 改:commitFiles 用 recover + error 双重兜底 —
 		// go-git c.Stats() / Tree() 在合并 / squash / 孤儿 commit
 		// 上会返 "object not found" 错误(不是 panic),这里捕获到
@@ -492,71 +498,29 @@ func (r *Repo) CheckoutRestore(commit string) error {
 // Diff 两个 commit 之间的 diff(unified 文本)。
 //
 // 2026-07-17 大改:go-git 5.19.1 的 Tree.Patch() 在本地仓库上返空 patch
-// (不是 panic,只是 len=0),即使两个 tree 明确有 file 差异。所以这里
-// 走手工实现:walk fromTree / toTree,比较 blob hash,对变更的文件
-// 用 difflib 生成 unified diff。性能 OK,因为只对一个 commit 的
-// 几个 file 跑。
+// (不是 panic,只是 len=0);而且 wails webview sandbox 里 go-git 的
+// commitObject / Tree().Files() 在某些路径上会 hang 15s+ 超时(实测)。
+// 这里走系统 `git diff` CLI — 稳定且无 sandbox 限制。
+//
+// from 传空字符串 = git 会跟"空 tree"对比,等价于"列出 to 全部新增文件"。
 func (r *Repo) Diff(from, to string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	repo, err := r.open()
-	if err != nil {
-		return "", err
-	}
-	// 解析 from(失败时退化到空 tree,模拟 root commit 全量 diff)
-	fromCommit, ferr := resolveCommit(repo, from)
-	var fromFiles map[string]plumbing.Hash
-	if ferr == nil && fromCommit != nil {
-		fromTree, err := fromCommit.Tree()
-		if err != nil {
-			return "", err
-		}
-		fromFiles = map[string]plumbing.Hash{}
-		_ = fromTree.Files().ForEach(func(f *object.File) error {
-			fromFiles[f.Name] = f.Hash
-			return nil
-		})
-	} else {
-		fromFiles = map[string]plumbing.Hash{}
-	}
-	// 解析 to
-	toCommit, terr := resolveCommit(repo, to)
-	if terr != nil {
-		return "", terr
-	}
-	toTree, err := toCommit.Tree()
-	if err != nil {
-		return "", err
-	}
-	toFiles := map[string]plumbing.Hash{}
-	_ = toTree.Files().ForEach(func(f *object.File) error {
-		toFiles[f.Name] = f.Hash
-		return nil
-	})
 
-	var out strings.Builder
-	// 找出 added/modified
-	for name, toHash := range toFiles {
-		fromHash, ok := fromFiles[name]
-		if !ok {
-			// 新增 — 整文件作为 + 行
-			appendAddedFile(&out, repo, name, toHash)
-		} else if fromHash != toHash {
-			// 修改 — 从 blob 读两端内容,生成 unified diff
-			if err := appendModifiedFile(&out, repo, name, fromHash, toHash); err != nil {
-				return "", err
-			}
-		}
+	args := []string{"diff", "--no-color"}
+	if from != "" {
+		args = append(args, from, to)
+	} else {
+		// root commit 退化:用 4b825dc... 空 tree hash 作为 from,等价于"全文件新增"
+		args = append(args, "4b825dc642cb6eb9a060e54bf8d69288fbee4904", to)
 	}
-	// 找出 deleted
-	for name, fromHash := range fromFiles {
-		if _, ok := toFiles[name]; !ok {
-			if err := appendDeletedFile(&out, repo, name, fromHash); err != nil {
-				return "", err
-			}
-		}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.path
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("skillversion: git diff: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
-	return out.String(), nil
+	return string(out), nil
 }
 
 // appendAddedFile 输出 "新增" 文件的 unified diff(+ 全部行)。
@@ -777,6 +741,9 @@ func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {
 		}
 		ref = h.Hash().String()
 	}
+	// 2026-07-17 改:go-git 的 ResolveRevision 在 "<hash>^" / "<hash>~" 后缀
+	// 上会 hang 15s+ 超时(实测)。前端现在直接发 parent hash,
+	// 所以这里只处理完整 hash / HEAD,不再解析 ^。
 	hash := plumbing.NewHash(ref)
 	if h, err := repo.ResolveRevision(plumbing.Revision(ref)); err == nil && h != nil {
 		hash = *h

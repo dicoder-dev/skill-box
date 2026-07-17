@@ -285,6 +285,9 @@ type CommitEntry struct {
 	Email   string    `json:"email"`
 	Message string    `json:"message"`
 	When    time.Time `json:"when"`
+	// 2026-07-17 增:parent 哈希(空 = root commit)— 前端 diff 用真实 parent
+	// 避免发 "<hash>^" 让 go-git ResolveRevision 卡死。
+	ParentHash string `json:"parent_hash,omitempty"`
 	// 2026-07-17:涉及的文件路径列表(相对 repo root)。空数组 = 不展示。
 	Files []string `json:"files,omitempty"`
 }

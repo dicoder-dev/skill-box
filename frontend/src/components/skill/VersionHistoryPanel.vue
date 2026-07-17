@@ -1,14 +1,16 @@
 <script setup>
-// VersionHistoryPanel - VSCode 风格 commit 列表 + 抽屉 diff(2026-07-17 重构)
+// VersionHistoryPanel - VSCode 风格 commit 列表 + 独立 modal diff(2026-07-17 重构)
 //
-// 2026-07-17 大改:从原 Grid 左右分栏改成:
-//   - 上方单列 commit 列表(紧凑,左圆点 + 连线 + scope 浅蓝 + 描述白字)
-//   - 点 commit 后底部抽屉(drawer)显示文件列表 + diff 预览
+// 2026-07-17 v2 大改:
+//   - 底部抽屉改成独立 modal(全屏居中 + 大尺寸,看清楚 diff)
+//   - 文件列表只显示文件名(不显示目录路径),hover title 看完整路径
+//   - 历史面板**只显示当前 skill 的 commits**(强制传 skillPath,
+//     父级 SkillScopePanel 已经传,这里直接用 props.skillPath)
 //
-// 这样长 commit message / 短 hash / 时间都能在一行展示,跟 VSCode Source
-// Control 视图一致;选中态高亮,文件列表 hover 整行变浅灰。
+// 跟原 VersionHistoryModal 行为差异:无弹窗(嵌入面板内) + 弹窗(看 diff);
+// commit 列表永远 inline,看具体文件差异才弹 modal。
 
-import { ref, computed, watch, inject } from 'vue'
+import { ref, computed, watch, inject, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getGitLog,
@@ -23,8 +25,8 @@ import IconPark from '@/components/IconPark.vue'
 import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 
 const props = defineProps({
-  // 2026-07-17 增:可选 skillPath(相对 repo root,例如 "frontend/code-review"),
-  // 非空时只显示涉及该路径的 commit(per-skill 修改历史)。
+  // 当前 skill 在仓库内的路径(相对 repo root,例如 "frontend/code-review")
+  // — 仅显示涉及该路径的 commit + 仅显示该路径下的文件变更。
   skillPath: { type: String, default: '' },
 })
 const emit = defineEmits(['checked-out'])
@@ -51,10 +53,6 @@ const loading = ref(false)
 const errorMsg = ref('')
 const items = ref([])
 
-// 2026-07-17 改:status 默认空对象(原 null)— 模板里有 status.remote_url
-// / status.working_clean 等访问没全部加 guard,status=null 时访问属性
-// 报 'object not found'(Vue 内部包装的 TypeError)。默认 {} 让所有
-// 属性访问返 undefined,模板 v-if 会正确隐藏。
 const status = ref({
   initialized: false,
   branch: '',
@@ -71,20 +69,21 @@ const status = ref({
   last_push_error: '',
 })
 
-// 2026-07-17 改:展开的文件列表 — 跟每个 commit 独立,key 是 commit hash
-// (不是 index,避免切换 commit 时复用错状态)。
+// 2026-07-17:展开的文件列表(每个 commit 独立 toggle)
 const expandedCommits = ref(new Set())
-// 抽屉显示的 commit hash(底部抽屉只显示一个 diff)
-const drawerHash = ref('')
-const drawerFile = ref('') // 单文件过滤(diff 只显示这一文件)
-const diffText = ref('')
-const diffLoading = ref(false)
 
-// 2026-07-17:解析 conventional commit 头,提取 type(scope) + 描述 —
-// 跟 VSCode 显示一致。"fix(scope): 描述" → { type: 'fix', scope: 'scope', rest: '描述' }
+// 2026-07-17:diff modal — 不再是底部抽屉,是独立全屏 modal
+const modalOpen = ref(false)
+const modalCommitHash = ref('')
+const modalFile = ref('')
+const modalFileList = ref([]) // 当前 commit 的全部变更文件列表(过滤掉 skillPath 前缀)
+const modalDiffText = ref('')
+const modalDiffHint = ref('')
+const modalDiffLoading = ref(false)
+
+// 2026-07-17:解析 conventional commit 头
 function parseCommitTitle(msg) {
   const firstLine = (msg || '').split('\n', 1)[0] || ''
-  // 匹配 type(scope)?: ...
   const m = firstLine.match(/^([a-zA-Z]+)(\(([^)]+)\))?:\s*(.*)$/)
   if (m) {
     return {
@@ -97,37 +96,34 @@ function parseCommitTitle(msg) {
   return { type: '', scope: '', desc: firstLine, full: firstLine }
 }
 
-// 推断单文件状态(M/A/D) — 走文件名启发式 + diff 文本头(后续 diff API 可
-// 扩展 status 字段,这里先用 patch 第一行 "@@ +++ b/<file>" 之前的 +/-)。
-function fileStatusHint(filePath, diffText) {
-  if (!diffText) return 'M'
-  // 简化版:统计 +/- 行数
-  const lines = diffText.split('\n')
-  let added = 0
-  let removed = 0
-  for (const line of lines) {
-    if (line.startsWith('+') && !line.startsWith('+++')) added++
-    else if (line.startsWith('-') && !line.startsWith('---')) removed++
+// 2026-07-17:只取文件名(去掉当前 skill 路径前缀 + 全部目录)。
+function shortFileName(filePath, skillPath) {
+  if (!filePath) return ''
+  let rest = filePath
+  if (skillPath && filePath.startsWith(skillPath + '/')) {
+    rest = filePath.slice(skillPath.length + 1)
   }
-  if (added > 0 && removed === 0) return 'A'
-  if (removed > 0 && added === 0) return 'D'
-  return 'M'
+  const idx = Math.max(rest.lastIndexOf('/'), rest.lastIndexOf('\\'))
+  return idx < 0 ? rest : rest.slice(idx + 1)
 }
 
-// 文件路径拆成目录 + 文件名,渲染时目录暗灰 / 文件名亮。
-function splitDirAndFile(filePath) {
-  const idx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  if (idx < 0) return { dir: '', name: filePath }
-  return { dir: filePath.slice(0, idx + 1), name: filePath.slice(idx + 1) }
+// 过滤掉当前 skillPath 前缀,得到内部相对路径
+function relativeFilePath(filePath, skillPath) {
+  if (skillPath && filePath.startsWith(skillPath + '/')) {
+    return filePath.slice(skillPath.length + 1)
+  }
+  return filePath
 }
 
-// 2026-07-17 改:同时 watch isExpanded 和 skillPath,都强制刷新。
 watch(() => props.skillPath, () => {
-  // 切 skill 时清掉展开 / 抽屉状态,避免上一 skill 的状态泄露。
+  // 切 skill 时清掉展开 / modal
   expandedCommits.value = new Set()
-  drawerHash.value = ''
-  drawerFile.value = ''
-  diffText.value = ''
+  modalOpen.value = false
+  modalFile.value = ''
+  modalCommitHash.value = ''
+  modalFileList.value = []
+  modalDiffText.value = ''
+  modalDiffHint.value = ''
   loadAll()
 })
 watch(isExpanded, (open) => {
@@ -138,24 +134,14 @@ async function loadAll() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const [log, st] = await Promise.all([
-      getGitLog(50, props.skillPath || undefined),
-      getGitStatus(),
-    ])
+    // 2026-07-17:强制传 skillPath — 只显示当前 skill 范围内的 commit
+    const log = await getGitLog(50, props.skillPath || undefined)
     items.value = (log.items || []).map((it) => ({
       ...it,
       _title: parseCommitTitle(it.message),
     }))
+    const st = await getGitStatus()
     status.value = st
-    if (drawerHash.value) {
-      // 重新拉后保留抽屉选中,重新拉 diff
-      const exists = items.value.some((it) => it.hash === drawerHash.value)
-      if (!exists) {
-        drawerHash.value = ''
-        drawerFile.value = ''
-        diffText.value = ''
-      }
-    }
   } catch (e) {
     errorMsg.value = (e && e.message) || String(e)
   } finally {
@@ -169,83 +155,117 @@ function toggleCommitFiles(hash) {
     set.delete(hash)
   } else {
     set.add(hash)
-    // 选中并打开抽屉显示该 commit 的文件列表(抽屉默认不开,等点文件再开)
-    drawerHash.value = hash
-    drawerFile.value = ''
-    diffText.value = ''
   }
   expandedCommits.value = set
 }
 
-async function openFileDiff(commitHash, filePath) {
-  drawerHash.value = commitHash
-  drawerFile.value = filePath
-  diffLoading.value = true
-  diffText.value = ''
+// 2026-07-17:点文件弹 modal。打开 modal 时拉取该 commit 的全量 diff,
+// 前端按文件路径切分渲染(避免反复拉 API)。
+// 2026-07-17 改:用 commit.parent_hash 作为 from(避免发 "<hash>^"
+// 让 go-git ResolveRevision 卡 15s);root commit 没 parent → from=""
+// 后端会退化到空 tree,生成"全文件新增"diff。
+async function openFileModal(commitHash, filePath) {
+  const commit = items.value.find((it) => it.hash === commitHash)
+  modalCommitHash.value = commitHash
+  modalFile.value = filePath
+  modalDiffLoading.value = true
+  modalDiffText.value = ''
+  modalDiffHint.value = ''
+  modalOpen.value = true
   try {
-    // 2026-07-17:用 commit 的第一个 parent hash(若 root commit 则用空 tree)
-    // 作为 from,这样能拿到 commit 引入的全部变更。getGitDiff
-    // 内部走 git rev-parse,后端 resolveCommit 会把空 tree / 零
-    // hash 退化成 Tree().Patch 兜底,不会卡死。
-    const r = await getGitDiff(commitHash + '^', commitHash)
-    // 过滤只保留该文件的 diff 块(简化:按文件路径分行)
-    if (filePath) {
-      diffText.value = filterDiffByFile(r.diff || '', filePath)
-    } else {
-      diffText.value = r.diff || ''
-    }
+    // 文件列表 = 该 commit 的所有变更文件(已过滤 skillPath 前缀)
+    modalFileList.value = (commit?.files || []).map((f) => relativeFilePath(f, props.skillPath))
+    const fromRef = commit?.parent_hash || ''
+    const r = await getGitDiff(fromRef, commitHash)
+    modalDiffText.value = r.diff || ''
+    modalDiffHint.value = r.hint || ''
   } catch (e) {
     errorMsg.value = (e && e.message) || String(e)
-    diffText.value = ''
+    modalDiffText.value = ''
   } finally {
-    diffLoading.value = false
+    modalDiffLoading.value = false
   }
 }
 
-function closeDrawer() {
-  drawerHash.value = ''
-  drawerFile.value = ''
-  diffText.value = ''
+function closeModal() {
+  modalOpen.value = false
+  modalFile.value = ''
+  modalCommitHash.value = ''
+  modalFileList.value = []
+  modalDiffText.value = ''
+  modalDiffHint.value = ''
 }
 
-// 从完整 diff 里抽出指定文件的块(diff 格式以 "diff --git a/x b/x" 分段)
-//
-// 2026-07-17 改:用 startsWith + 包含 " b/<path>" 判断,不再死磕
-// "a/<path> " 字符串。git diff 的标准格式:
-//   diff --git a/<path> b/<path>
-// 目标文件: 路径名出现在 diff --git 行内(完整出现,不被空白拆分)。
-function filterDiffByFile(diff, filePath) {
-  if (!diff || !filePath) return diff
+// 2026-07-17:modal 内点文件名 → 切 modalFile;不重新拉 API(diff 已存在)
+function pickModalFile(filePath) {
+  modalFile.value = filePath
+}
+
+// 2026-07-17:从全量 diff 里抽出指定文件的块(已用相对路径)
+function filterDiffByFile(diff, relPath) {
+  if (!diff || !relPath) return diff
   const lines = diff.split('\n')
   const out = []
   let inTarget = false
   for (const line of lines) {
     if (line.startsWith('diff --git ')) {
-      // 判定是否目标文件:命中 a/<path> 或 b/<path> 子串
-      // (git 在 rename 时会把 b/ 写成 b/旧名,所以也要匹)
       inTarget =
-        line.includes(' a/' + filePath) ||
-        line.includes(' b/' + filePath)
+        line.includes(' a/' + relPath) ||
+        line.includes(' b/' + relPath)
     }
     if (inTarget) out.push(line)
   }
   return out.join('\n')
 }
 
-const drawerCommit = computed(() =>
-  items.value.find((it) => it.hash === drawerHash.value) || null,
+const modalCommit = computed(() =>
+  items.value.find((it) => it.hash === modalCommitHash.value) || null,
 )
 
+const modalFilteredDiff = computed(() => {
+  if (!modalFile.value) return modalDiffText.value
+  return filterDiffByFile(modalDiffText.value, modalFile.value)
+})
+
+// 2026-07-17:diff 行级拆 + 染色
+const modalDiffLines = computed(() => {
+  if (!modalFilteredDiff.value) return []
+  return modalFilteredDiff.value.split('\n')
+})
+function diffLineClass(line) {
+  if (!line) return ''
+  if (line.startsWith('@@')) return 'diff-hunk'
+  if (line.startsWith('+++') || line.startsWith('---')) return 'diff-meta'
+  if (line.startsWith('diff --git ')) return 'diff-meta'
+  if (line.startsWith('+')) return 'diff-add'
+  if (line.startsWith('-')) return 'diff-del'
+  if (line.startsWith(' ')) return 'diff-ctx'
+  return ''
+}
+
+// 2026-07-17:ESC 关 modal
+function onKeydown(e) {
+  if (e.key === 'Escape' && modalOpen.value) {
+    closeModal()
+  }
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
+
 async function doCheckout() {
-  if (!drawerHash.value) return
-  if (!confirm(t('git.checkoutConfirm', { hash: drawerHash.value.slice(0, 7) }))) {
+  if (!modalCommitHash.value) return
+  if (!confirm(t('git.checkoutConfirm', { hash: modalCommitHash.value.slice(0, 7) }))) {
     return
   }
   loading.value = true
   try {
-    await checkoutGit(drawerHash.value)
+    await checkoutGit(modalCommitHash.value)
     errorMsg.value = ''
-    emit('checked-out', drawerHash.value)
+    emit('checked-out', modalCommitHash.value)
   } catch (e) {
     errorMsg.value = (e && e.message) || String(e)
   } finally {
@@ -290,30 +310,12 @@ async function doDiscard() {
   }
 }
 
-// 2026-07-17:diff 文本拆行,每行根据首字符渲染不同颜色 —
-// + 行绿、- 行红、空格行灰、@@ 行蓝、diff/--- /+++ 行灰粗。
-const diffLines = computed(() => {
-  if (!diffText.value) return []
-  return diffText.value.split('\n')
-})
-function diffLineClass(line) {
-  if (!line) return ''
-  if (line.startsWith('@@')) return 'diff-hunk'
-  if (line.startsWith('+++') || line.startsWith('---')) return 'diff-meta'
-  if (line.startsWith('diff --git ')) return 'diff-meta'
-  if (line.startsWith('+')) return 'diff-add'
-  if (line.startsWith('-')) return 'diff-del'
-  if (line.startsWith(' ')) return 'diff-ctx'
-  return ''
-}
-
 function shortHash(h) {
   return (h || '').slice(0, 7)
 }
 
 function formatTime(when) {
   if (!when) return ''
-  // 2026-07-17:简化显示 — 只取日期(YYYY-MM-DD),更紧凑;hover 时看完整时间。
   return when.slice(0, 10)
 }
 </script>
@@ -331,10 +333,6 @@ function formatTime(when) {
         {{ status.head_short || t('git.noCommits') }}
       </span>
       <span v-else-if="status" class="vhp-badge warn">{{ t('git.notInit') }}</span>
-      <!-- per-skill 模式标识 — 让用户知道当前看的是哪个 skill 的历史 -->
-      <span v-if="skillPath" class="vhp-skill-path" :title="skillPath">
-        {{ skillPath }}
-      </span>
     </template>
 
     <div v-if="errorMsg" class="vhp-error">
@@ -348,7 +346,7 @@ function formatTime(when) {
     </div>
 
     <div v-else class="vhp-shell">
-      <!-- 顶部 commit 列表(单列紧凑,VSCode 风格) -->
+      <!-- 单列 commit 列表(只显示当前 skill 范围) -->
       <div class="vhp-list">
         <div v-if="loading && !items.length" class="vhp-loading">
           {{ t('common.loading') }}
@@ -359,20 +357,16 @@ function formatTime(when) {
             :key="it.hash"
             class="vhp-commit"
           >
-            <!-- commit 行:圆点 + 连线 + scope + 描述 + 时间 -->
+            <!-- commit 行 -->
             <div
-              :class="['vhp-commit-row', {
-                active: it.hash === drawerHash,
-              }]"
+              class="vhp-commit-row"
               @click="toggleCommitFiles(it.hash)"
             >
-              <!-- 左侧圆点 + 连线 (VSCode 节点风格) -->
               <div class="vhp-node">
                 <div class="vhp-node-line vhp-node-line-top" />
                 <div class="vhp-node-dot" />
                 <div class="vhp-node-line vhp-node-line-bot" />
               </div>
-              <!-- commit 主体 -->
               <div class="vhp-commit-body">
                 <div class="vhp-commit-msg">
                   <span v-if="it._title.type" class="vhp-commit-type">{{ it._title.type }}</span>
@@ -386,7 +380,6 @@ function formatTime(when) {
                   <span class="vhp-commit-author">{{ it.author }}</span>
                 </div>
               </div>
-              <!-- 右侧展开箭头 -->
               <IconPark
                 :type="expandedCommits.has(it.hash) ? 'down' : 'right'"
                 :size="10"
@@ -394,7 +387,7 @@ function formatTime(when) {
               />
             </div>
 
-            <!-- 展开的文件列表 -->
+            <!-- 展开的文件列表(只显示文件名) -->
             <div v-if="expandedCommits.has(it.hash)" class="vhp-files">
               <div v-if="!it.files || !it.files.length" class="vhp-files-empty">
                 {{ t('git.history.noFiles') }}
@@ -403,71 +396,140 @@ function formatTime(when) {
                 v-for="f in (it.files || [])"
                 :key="f"
                 class="vhp-file-row"
-                @click.stop="openFileDiff(it.hash, f)"
+                :title="f"
+                @click.stop="openFileModal(it.hash, relativeFilePath(f, skillPath))"
               >
                 <IconPark type="right" :size="10" class="vhp-file-arrow" />
-                <span class="vhp-file-status" :data-status="fileStatusHint(f, '')">·</span>
-                <span class="vhp-file-path" :title="f">
-                  <span v-if="splitDirAndFile(f).dir" class="vhp-file-dir">{{ splitDirAndFile(f).dir }}</span><span class="vhp-file-name">{{ splitDirAndFile(f).name }}</span>
-                </span>
+                <span class="vhp-file-name">{{ shortFileName(f, skillPath) }}</span>
               </div>
             </div>
           </div>
         </div>
         <div v-else class="vhp-empty">
-          <p>{{ skillPath ? t('git.history.emptySkill') : t('git.history.empty') }}</p>
+          <p>{{ t('git.history.emptySkill') }}</p>
         </div>
       </div>
-
-      <!-- 底部抽屉:选中 commit 的 diff 预览 -->
-      <transition name="vhp-drawer">
-        <div v-if="drawerHash" class="vhp-drawer">
-          <div class="vhp-drawer-header">
-            <IconPark type="code" :size="12" />
-            <span class="vhp-drawer-title">
-              {{ drawerFile || (drawerCommit && drawerCommit._title.full) || shortHash(drawerHash) }}
-            </span>
-            <span class="vhp-drawer-range">
-              {{ shortHash(drawerHash + '^') }} → {{ shortHash(drawerHash) }}
-            </span>
-            <button class="vhp-drawer-close" :title="t('common.close', '关闭')" @click="closeDrawer">
-              <IconPark type="close" :size="12" />
-            </button>
-          </div>
-          <div class="vhp-drawer-body">
-            <div v-if="diffLoading" class="vhp-drawer-loading">{{ t('common.loading') }}</div>
-            <pre v-else-if="diffText" class="vhp-drawer-pre"><template v-for="(line, i) in diffLines" :key="i"><span :class="diffLineClass(line)">{{ line }}</span>
-</template></pre>
-            <div v-else class="vhp-drawer-empty">
-              {{ t('git.history.pickCommit') }}
-            </div>
-          </div>
-          <div class="vhp-drawer-actions">
-            <button class="vhp-btn" :disabled="loading" @click="doCheckout">
-              <IconPark type="undo" :size="12" />
-              {{ t('git.history.checkout') }}
-            </button>
-            <button v-if="status.remote_url" class="vhp-btn" :disabled="loading" @click="doPush">
-              <IconPark type="upload" :size="12" />
-              {{ t('git.history.push') }}
-            </button>
-            <button v-if="status.remote_url" class="vhp-btn" :disabled="loading" @click="doPull">
-              <IconPark type="download" :size="12" />
-              {{ t('git.history.pull') }}
-            </button>
-            <button v-if="!status.working_clean" class="vhp-btn warn" :disabled="loading" @click="doDiscard">
-              <IconPark type="undo" :size="12" />
-              {{ t('git.discard') }}
-            </button>
-          </div>
-        </div>
-      </transition>
     </div>
   </CollapsiblePanel>
+
+  <!-- 2026-07-17:diff 用独立 modal 全屏显示 — 抽屉位置太小看不清 -->
+  <teleport to="body">
+    <transition name="vhp-modal">
+      <div
+        v-if="modalOpen"
+        class="vhp-modal-mask"
+        @click.self="closeModal"
+      >
+        <div class="vhp-modal" role="dialog">
+          <!-- modal header -->
+          <div class="vhp-modal-header">
+            <div class="vhp-modal-header-left">
+              <IconPark type="code" :size="14" />
+              <span class="vhp-modal-title">
+                {{ modalFile || (modalCommit && modalCommit._title.full) || shortHash(modalCommitHash) }}
+              </span>
+              <span v-if="modalCommitHash" class="vhp-modal-range">
+                {{ shortHash(modalCommitHash) }}
+              </span>
+            </div>
+            <div class="vhp-modal-header-right">
+              <button
+                class="vhp-btn"
+                :disabled="loading"
+                @click="doCheckout"
+              >
+                <IconPark type="undo" :size="11" />
+                {{ t('git.history.checkout') }}
+              </button>
+              <button
+                v-if="status.remote_url"
+                class="vhp-btn"
+                :disabled="loading"
+                @click="doPush"
+              >
+                <IconPark type="upload" :size="11" />
+                {{ t('git.history.push') }}
+              </button>
+              <button
+                v-if="status.remote_url"
+                class="vhp-btn"
+                :disabled="loading"
+                @click="doPull"
+              >
+                <IconPark type="download" :size="11" />
+                {{ t('git.history.pull') }}
+              </button>
+              <button
+                v-if="!status.working_clean"
+                class="vhp-btn warn"
+                :disabled="loading"
+                @click="doDiscard"
+              >
+                <IconPark type="undo" :size="11" />
+                {{ t('git.discard') }}
+              </button>
+              <button
+                class="vhp-modal-close"
+                :title="t('common.close')"
+                @click="closeModal"
+              >
+                <IconPark type="close" :size="14" />
+              </button>
+            </div>
+          </div>
+
+          <!-- modal body:左侧文件列表 + 右侧 diff -->
+          <div class="vhp-modal-body">
+            <!-- 左:文件列表(只文件名,选中的高亮) -->
+            <div class="vhp-modal-files">
+              <div
+                :class="['vhp-modal-file', { active: !modalFile }]"
+                @click="pickModalFile('')"
+              >
+                <IconPark type="file" :size="11" />
+                <span class="vhp-modal-file-name">{{ t('git.history.allFiles') }}</span>
+              </div>
+              <div
+                v-for="f in modalFileList"
+                :key="f"
+                :class="['vhp-modal-file', { active: f === modalFile }]"
+                @click="pickModalFile(f)"
+              >
+                <IconPark type="file" :size="11" />
+                <span class="vhp-modal-file-name" :title="f">{{ f }}</span>
+              </div>
+              <div v-if="!modalFileList.length" class="vhp-modal-files-empty">
+                {{ t('git.history.noFiles') }}
+              </div>
+            </div>
+
+            <!-- 右:diff 内容 -->
+            <div class="vhp-modal-diff">
+              <div v-if="modalDiffLoading" class="vhp-modal-diff-loading">
+                {{ t('common.loading') }}
+              </div>
+              <div v-else-if="modalDiffHint" class="vhp-modal-diff-empty">
+                <IconPark type="warning" :size="14" />
+                <p>{{ modalDiffHint }}</p>
+              </div>
+              <pre
+                v-else-if="modalDiffText"
+                class="vhp-modal-diff-pre"
+              ><template v-for="(line, i) in modalDiffLines" :key="i"><span :class="diffLineClass(line)">{{ line || ' ' }}</span>
+</template></pre>
+              <div v-else class="vhp-modal-diff-empty">
+                {{ t('git.history.pickCommit') }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <style scoped>
-/* 2026-07-17 大改:VSCode 风格重写整个面板 — 单列 commit 列表 + 抽屉 diff */
+/* 2026-07-17 v2:VSCode 风格 + 独立 modal */
 
 .vhp-badge {
   display: inline-flex;
@@ -481,19 +543,6 @@ function formatTime(when) {
 }
 .vhp-badge.ok { background: rgba(34, 197, 94, 0.15); color: rgb(34, 197, 94); }
 .vhp-badge.warn { background: rgba(245, 158, 11, 0.15); color: rgb(245, 158, 11); }
-
-.vhp-skill-path {
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  color: var(--text-muted, rgba(127, 127, 127, 0.7));
-  background: rgba(127, 127, 127, 0.06);
-  padding: 1px 6px;
-  border-radius: 3px;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .vhp-error {
   display: flex;
@@ -524,23 +573,15 @@ function formatTime(when) {
   font-size: 12px;
 }
 
-/* shell = 列表 + 抽屉,纵向 flex */
-.vhp-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+.vhp-shell { display: flex; flex-direction: column; min-height: 0; }
 
-/* commit 列表区 */
 .vhp-list {
   overflow: auto;
-  max-height: 360px;
+  max-height: 480px;
 }
 .vhp-commits { display: flex; flex-direction: column; }
-
 .vhp-commit { display: flex; flex-direction: column; }
 
-/* commit 行:左圆点 + 连线 + 主体 + 箭头 */
 .vhp-commit-row {
   display: flex;
   align-items: center;
@@ -552,11 +593,7 @@ function formatTime(when) {
   transition: background 80ms;
 }
 .vhp-commit-row:hover { background: rgba(127, 127, 127, 0.05); }
-.vhp-commit-row.active {
-  background: rgba(59, 130, 246, 0.12);
-}
 
-/* 左侧节点(圆点 + 上下连线) */
 .vhp-node {
   flex: 0 0 14px;
   display: flex;
@@ -575,19 +612,10 @@ function formatTime(when) {
   z-index: 1;
   box-shadow: 0 0 0 2px var(--bg-primary, transparent);
 }
-.vhp-commit-row.active .vhp-node-dot {
-  background: rgb(96, 165, 250);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-}
-.vhp-node-line {
-  width: 1px;
-  flex: 1;
-  background: rgba(127, 127, 127, 0.25);
-}
+.vhp-node-line { width: 1px; flex: 1; background: rgba(127, 127, 127, 0.25); }
 .vhp-node-line-top { margin-bottom: -3.5px; }
 .vhp-node-line-bot { margin-top: -3.5px; }
 
-/* commit 主体 */
 .vhp-commit-body {
   flex: 1 1 auto;
   min-width: 0;
@@ -603,19 +631,9 @@ function formatTime(when) {
   font-size: 12px;
   overflow: hidden;
 }
-.vhp-commit-type {
-  color: #9cdcfe;
-  flex-shrink: 0;
-}
-.vhp-commit-scope {
-  color: #9cdcfe;
-  flex-shrink: 0;
-}
-.vhp-commit-sep {
-  color: rgba(127, 127, 127, 0.7);
-  margin: 0 1px;
-  flex-shrink: 0;
-}
+.vhp-commit-type { color: #9cdcfe; flex-shrink: 0; }
+.vhp-commit-scope { color: #9cdcfe; flex-shrink: 0; }
+.vhp-commit-sep { color: rgba(127, 127, 127, 0.7); margin: 0 1px; flex-shrink: 0; }
 .vhp-commit-desc {
   color: var(--text-primary, currentColor);
   overflow: hidden;
@@ -624,7 +642,6 @@ function formatTime(when) {
   min-width: 0;
   flex: 1;
 }
-
 .vhp-commit-meta {
   display: flex;
   gap: 8px;
@@ -633,8 +650,6 @@ function formatTime(when) {
   font-family: var(--font-mono, monospace);
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
-.vhp-commit-when { }
-.vhp-commit-author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .vhp-commit-arrow {
   flex-shrink: 0;
@@ -642,7 +657,7 @@ function formatTime(when) {
   margin-right: 4px;
 }
 
-/* 展开的文件列表 */
+/* 文件列表 — 只显示文件名 */
 .vhp-files {
   margin-left: 14px;
   border-left: 1px solid rgba(127, 127, 127, 0.15);
@@ -668,125 +683,107 @@ function formatTime(when) {
   transition: background 80ms;
 }
 .vhp-file-row:hover { background: rgba(127, 127, 127, 0.08); }
-.vhp-file-arrow {
-  flex-shrink: 0;
-  color: rgba(127, 127, 127, 0.4);
+.vhp-file-arrow { flex-shrink: 0; color: rgba(127, 127, 127, 0.4); }
+.vhp-file-name { color: var(--text-primary, currentColor); }
+
+/* =========================================================================
+   Diff Modal — 全屏居中独立弹窗,看清楚差异
+   ========================================================================= */
+
+.vhp-modal-enter-active,
+.vhp-modal-leave-active {
+  transition: opacity 150ms ease;
 }
-.vhp-file-status {
-  flex-shrink: 0;
-  font-weight: 700;
-  width: 10px;
-  text-align: center;
+.vhp-modal-enter-from,
+.vhp-modal-leave-to {
+  opacity: 0;
 }
-.vhp-file-status[data-status="M"] { color: rgb(245, 158, 11); }
-.vhp-file-status[data-status="A"] { color: rgb(34, 197, 94); }
-.vhp-file-status[data-status="D"] { color: rgb(239, 68, 68); }
-.vhp-file-path {
+.vhp-modal-enter-active .vhp-modal,
+.vhp-modal-leave-active .vhp-modal {
+  transition: transform 200ms ease;
+}
+.vhp-modal-enter-from .vhp-modal,
+.vhp-modal-leave-to .vhp-modal {
+  transform: scale(0.96) translateY(8px);
+}
+
+.vhp-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  padding: 32px;
+}
+
+.vhp-modal {
+  width: min(1100px, calc(100vw - 64px));
+  height: min(720px, calc(100vh - 64px));
+  background: var(--bg-primary, #fff);
+  border-radius: 8px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.vhp-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
+  background: var(--bg-elevated, rgba(127, 127, 127, 0.03));
+  flex-shrink: 0;
+}
+.vhp-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.vhp-modal-title {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1;
 }
-.vhp-file-dir { color: rgba(127, 127, 127, 0.55); }
-.vhp-file-name { color: var(--text-primary, currentColor); }
-
-/* 底部抽屉 */
-.vhp-drawer-enter-active,
-.vhp-drawer-leave-active {
-  transition: transform 200ms ease, opacity 150ms ease;
-  overflow: hidden;
+.vhp-modal-range {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-muted, rgba(127, 127, 127, 0.7));
+  flex-shrink: 0;
 }
-.vhp-drawer-enter-from,
-.vhp-drawer-leave-to {
-  transform: translateY(20px);
-  opacity: 0;
-}
-
-.vhp-drawer {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
-  background: var(--bg-elevated, rgba(127, 127, 127, 0.02));
-  max-height: 320px;
-  margin-top: 4px;
-}
-.vhp-drawer-header {
+.vhp-modal-header-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.1));
-  font-size: 11px;
-  font-weight: 600;
-}
-.vhp-drawer-title {
-  font-family: var(--font-mono, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-.vhp-drawer-range {
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  color: var(--text-muted, rgba(127, 127, 127, 0.7));
   flex-shrink: 0;
 }
-.vhp-drawer-close {
+
+.vhp-modal-close {
   background: transparent;
   border: 0;
-  padding: 2px;
+  padding: 4px;
   cursor: pointer;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
-  border-radius: 3px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.vhp-drawer-close:hover {
+.vhp-modal-close:hover {
   background: rgba(127, 127, 127, 0.08);
   color: var(--text-primary, currentColor);
 }
 
-.vhp-drawer-body {
-  flex: 1 1 auto;
-  overflow: auto;
-  min-height: 100px;
-  max-height: 220px;
-}
-.vhp-drawer-loading,
-.vhp-drawer-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 16px;
-  font-size: 11px;
-  color: var(--text-muted, rgba(127, 127, 127, 0.7));
-  text-align: center;
-}
-.vhp-drawer-pre {
-  margin: 0;
-  padding: 6px 8px;
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  line-height: 1.45;
-  white-space: pre;
-  background: transparent;
-}
-/* 2026-07-17:diff 行染色 — + 绿、- 红、空格灰、hunk 蓝粗、meta 灰粗 */
-.vhp-drawer-pre .diff-add { color: rgb(34, 197, 94); }
-.vhp-drawer-pre .diff-del { color: rgb(239, 68, 68); }
-.vhp-drawer-pre .diff-ctx { color: var(--text-muted, rgba(127, 127, 127, 0.7)); }
-.vhp-drawer-pre .diff-hunk { color: rgb(59, 130, 246); font-weight: 600; }
-.vhp-drawer-pre .diff-meta { color: rgba(127, 127, 127, 0.85); font-weight: 500; }
-
-.vhp-drawer-actions {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
-  padding: 4px 8px;
-  border-top: 1px solid var(--border-color, rgba(127, 127, 127, 0.1));
-}
 .vhp-btn {
   display: inline-flex;
   align-items: center;
@@ -801,8 +798,81 @@ function formatTime(when) {
 }
 .vhp-btn:hover:not(:disabled) { background: rgba(127, 127, 127, 0.08); }
 .vhp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.vhp-btn.warn {
-  border-color: rgb(245, 158, 11);
-  color: rgb(245, 158, 11);
+.vhp-btn.warn { border-color: rgb(245, 158, 11); color: rgb(245, 158, 11); }
+
+/* modal body:左文件列表 + 右 diff */
+.vhp-modal-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
 }
+
+.vhp-modal-files {
+  flex: 0 0 220px;
+  border-right: 1px solid var(--border-color, rgba(127, 127, 127, 0.15));
+  overflow: auto;
+  padding: 6px 4px;
+  background: var(--bg-elevated, rgba(127, 127, 127, 0.02));
+}
+.vhp-modal-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 80ms;
+}
+.vhp-modal-file:hover { background: rgba(127, 127, 127, 0.08); }
+.vhp-modal-file.active {
+  background: rgba(59, 130, 246, 0.15);
+  color: rgb(59, 130, 246);
+}
+.vhp-modal-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.vhp-modal-files-empty {
+  padding: 12px 8px;
+  font-size: 10px;
+  color: rgba(127, 127, 127, 0.5);
+  font-style: italic;
+  text-align: center;
+}
+
+.vhp-modal-diff {
+  flex: 1 1 auto;
+  overflow: auto;
+  background: var(--bg-primary, #fff);
+  position: relative;
+}
+.vhp-modal-diff-loading,
+.vhp-modal-diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  color: var(--text-muted, rgba(127, 127, 127, 0.7));
+}
+.vhp-modal-diff-pre {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+}
+/* 行级染色 */
+.vhp-modal-diff-pre .diff-add { color: rgb(34, 197, 94); }
+.vhp-modal-diff-pre .diff-del { color: rgb(239, 68, 68); }
+.vhp-modal-diff-pre .diff-ctx { color: var(--text-muted, rgba(127, 127, 127, 0.7)); }
+.vhp-modal-diff-pre .diff-hunk { color: rgb(59, 130, 246); font-weight: 600; }
+.vhp-modal-diff-pre .diff-meta { color: rgba(127, 127, 127, 0.85); font-weight: 500; }
 </style>

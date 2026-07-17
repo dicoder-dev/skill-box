@@ -1171,6 +1171,8 @@ const messages = {
       pull: 'Pull',
       // 2026-07-17 增:VSCode-style expanded commit with no files
       noFiles: 'This commit touches no specific files',
+      // 2026-07-17 增:diff modal "All files" pseudo-file entry
+      allFiles: 'All files',
     },
     checkoutConfirm: 'Reset working tree to commit {hash}? This will overwrite any unsaved local changes.',
   },
