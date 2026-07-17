@@ -33,6 +33,13 @@ import { chatStream, listProviders } from '@/api/skillbox/ai'
 import { useAiStore } from '@/core/store/ai'
 import { renderMarkdownView } from '@/core/utils/markdown_view'
 import { useToastStore } from '@/core/store/toast'
+// 2026-07-17 改:模板从 i18n 字典迁出,根除 vue-i18n ICU 解析器
+//   "Invalid token in placeholder" 报错(见 promptTemplates.js 注释)。
+import {
+  TRANSLATE_PROMPT_TEMPLATE,
+  REVIEW_PROMPT_TEMPLATE,
+  CUSTOM_PROMPT_HINT,
+} from '@/core/ai/promptTemplates'
 
 const props = defineProps({
   filePath: { type: String, required: true },
@@ -123,8 +130,8 @@ function onTranslateClick() {
 
 function confirmTranslate() {
   const label = langLabelOf(targetLang.value)
-  const tmpl = t('skills.aiPanel.translatePromptTemplate')
-  const prompt = tmpl
+  // 2026-07-17 改:模板从 i18n 迁出,绕开 ICU 解析器对 "needs_apply": 字面 JSON 的报错。
+  const prompt = TRANSLATE_PROMPT_TEMPLATE
     .replace(/\{target_lang\}/g, label)
     .replace(/\{skill_md\}/g, props.fileContent || '')
   inputText.value = prompt
@@ -141,8 +148,8 @@ function onReviewClick() {
     toast.error(t('skills.aiPanel.noContent'))
     return
   }
-  const tmpl = t('skills.aiPanel.reviewPromptTemplate')
-  inputText.value = tmpl.replace(/\{skill_md\}/g, props.fileContent || '')
+  // 2026-07-17 改:模板从 i18n 迁出,绕开 ICU 解析器对 "needs_apply": 字面 JSON 的报错。
+  inputText.value = REVIEW_PROMPT_TEMPLATE.replace(/\{skill_md\}/g, props.fileContent || '')
   nextTick(() => inputEl.value?.focus())
 }
 
@@ -166,7 +173,8 @@ function buildUserPrompt(text) {
   if (text.includes('```json') || text.includes('"needs_apply"')) {
     return text
   }
-  return `${t('skills.aiPanel.customPromptHint')}\n\n${text}`
+  // 2026-07-17 改:hint 从 i18n 迁出,绕开 ICU 解析器对 "needs_apply": 字面 JSON 的报错。
+  return `${CUSTOM_PROMPT_HINT}\n\n${text}`
 }
 
 // ===== JSON 解析与 retry =====
@@ -256,7 +264,6 @@ async function sendMessage() {
 
   // 复用同一个 aiMsg id 多次 patch(每次 patchAssistant 都自动 persistLocal)
   const baseMessages = [{ role: 'user', content: userText }]
-  const systemHint = t('skills.aiPanel.customPromptHint')
 
   for (let attempt = 0; attempt <= MAX_PARSE_RETRIES; attempt++) {
     if (attempt > 0) {
