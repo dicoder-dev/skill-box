@@ -550,24 +550,21 @@ function iconStack(node) {
   align-items: center;
   flex-shrink: 0;
 }
-/* 单个图标槽:圆形 + 描边 + 卡片底色,重叠靠 margin-left 负值 */
+/* 2026-07-17 改:去掉圆圈轮廓 — 用户反馈图标外的圆圈描边/底色多余。
+   现在是纯图标重叠,无 border / background / border-radius。 */
 .tree-icon-slot {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  width: 16px;
+  height: 16px;
   color: var(--text-dim);
   box-sizing: border-box;
-  overflow: hidden;
 }
 /* 第二个及之后的槽向左重叠,盖在前一个上(zIndex 在模板里按序递减) */
 .tree-icon-slot + .tree-icon-slot {
-  margin-left: -7px;
+  margin-left: -4px;
 }
 /* 默认图标(无工具启用 / 全局 Agent):不重叠,单独一个 */
 .tree-icon-slot.is-default {

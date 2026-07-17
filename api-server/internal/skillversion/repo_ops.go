@@ -490,9 +490,11 @@ func (r *Repo) CheckoutRestore(commit string) error {
 
 // Diff 两个 commit 之间的 diff(unified 文本)。
 //
-// 2026-07-17 改:from 解析失败(常见 root commit 用 "<hash>^" 想拿
-// parent 但 parent 不存在)时退化为空 tree 4b825dc...,这样 root
-// commit 也能 diff 出所有新增文件,不会 hang 在 resolveRevision。
+// 2026-07-17 大改:go-git 5.19.1 的 Tree.Patch() 在本地仓库上返空 patch
+// (不是 panic,只是 len=0),即使两个 tree 明确有 file 差异。所以这里
+// 走手工实现:walk fromTree / toTree,比较 blob hash,对变更的文件
+// 用 difflib 生成 unified diff。性能 OK,因为只对一个 commit 的
+// 几个 file 跑。
 func (r *Repo) Diff(from, to string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -500,25 +502,23 @@ func (r *Repo) Diff(from, to string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// 2026-07-17:from 解析失败时改走"空 tree → to tree"路径 —
-	// 空 tree hash 是固定常量 4b825dc642cb6eb9a060e54bf8d69288fbee4904,
-	// 在仓库里 PlainInit 时已被建好,直接 storer 拿即可,不需要
-	// ResolveRevision 也不会 hang。
+	// 解析 from(失败时退化到空 tree,模拟 root commit 全量 diff)
 	fromCommit, ferr := resolveCommit(repo, from)
-	var fromTree *object.Tree
+	var fromFiles map[string]plumbing.Hash
 	if ferr == nil && fromCommit != nil {
-		fromTree, err = fromCommit.Tree()
+		fromTree, err := fromCommit.Tree()
 		if err != nil {
 			return "", err
 		}
+		fromFiles = map[string]plumbing.Hash{}
+		_ = fromTree.Files().ForEach(func(f *object.File) error {
+			fromFiles[f.Name] = f.Hash
+			return nil
+		})
 	} else {
-		// fallback:拿空 tree
-		emptyHash := plumbing.NewHash("4b825dc642cb6eb9a060e54bf8d69288fbee4904")
-		fromTree, err = repo.TreeObject(emptyHash)
-		if err != nil {
-			return "", fmt.Errorf("skillversion: diff from-fallback load empty tree: %w", err)
-		}
+		fromFiles = map[string]plumbing.Hash{}
 	}
+	// 解析 to
 	toCommit, terr := resolveCommit(repo, to)
 	if terr != nil {
 		return "", terr
@@ -527,11 +527,229 @@ func (r *Repo) Diff(from, to string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	patch, err := fromTree.Patch(toTree)
-	if err != nil {
-		return "", err
+	toFiles := map[string]plumbing.Hash{}
+	_ = toTree.Files().ForEach(func(f *object.File) error {
+		toFiles[f.Name] = f.Hash
+		return nil
+	})
+
+	var out strings.Builder
+	// 找出 added/modified
+	for name, toHash := range toFiles {
+		fromHash, ok := fromFiles[name]
+		if !ok {
+			// 新增 — 整文件作为 + 行
+			appendAddedFile(&out, repo, name, toHash)
+		} else if fromHash != toHash {
+			// 修改 — 从 blob 读两端内容,生成 unified diff
+			if err := appendModifiedFile(&out, repo, name, fromHash, toHash); err != nil {
+				return "", err
+			}
+		}
 	}
-	return patch.Message(), nil
+	// 找出 deleted
+	for name, fromHash := range fromFiles {
+		if _, ok := toFiles[name]; !ok {
+			if err := appendDeletedFile(&out, repo, name, fromHash); err != nil {
+				return "", err
+			}
+		}
+	}
+	return out.String(), nil
+}
+
+// appendAddedFile 输出 "新增" 文件的 unified diff(+ 全部行)。
+func appendAddedFile(out *strings.Builder, repo *git.Repository, name string, hash plumbing.Hash) {
+	blob, err := repo.BlobObject(hash)
+	if err != nil {
+		return
+	}
+	content, err := blob.Reader().ReadAll()
+	if err != nil {
+		return
+	}
+	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
+	out.WriteString("new file mode 100644\n")
+	out.WriteString("--- /dev/null\n")
+	out.WriteString(fmt.Sprintf("+++ b/%s\n", name))
+	for _, line := range splitLines(string(content)) {
+		out.WriteString("+" + line + "\n")
+	}
+}
+
+// appendDeletedFile 输出 "删除" 文件的 unified diff(- 全部行)。
+func appendDeletedFile(out *strings.Builder, repo *git.Repository, name string, hash plumbing.Hash) error {
+	blob, err := repo.BlobObject(hash)
+	if err != nil {
+		return err
+	}
+	content, err := blob.Reader().ReadAll()
+	if err != nil {
+		return err
+	}
+	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
+	out.WriteString("deleted file mode 100644\n")
+	out.WriteString(fmt.Sprintf("--- a/%s\n", name))
+	out.WriteString("+++ /dev/null\n")
+	for _, line := range splitLines(string(content)) {
+		out.WriteString("-" + line + "\n")
+	}
+	return nil
+}
+
+// appendModifiedFile 用 LCS-based unified diff 生成两个 blob 间的差异。
+func appendModifiedFile(out *strings.Builder, repo *git.Repository, name string, fromHash, toHash plumbing.Hash) error {
+	fromBlob, err := repo.BlobObject(fromHash)
+	if err != nil {
+		return err
+	}
+	toBlob, err := repo.BlobObject(toHash)
+	if err != nil {
+		return err
+	}
+	fromContent, err := fromBlob.Reader().ReadAll()
+	if err != nil {
+		return err
+	}
+	toContent, err := toBlob.Reader().ReadAll()
+	if err != nil {
+		return err
+	}
+	fromLines := splitLines(string(fromContent))
+	toLines := splitLines(string(toContent))
+
+	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
+	out.WriteString(fmt.Sprintf("--- a/%s\n", name))
+	out.WriteString(fmt.Sprintf("+++ b/%s\n", name))
+	// 简化 unified diff:context=3,无 hunk 头(因为我们从整文件算
+	// diff,hunk 头算起来要后端再处理 line offset,前端展示不严格
+	// 需要 hunk 头)。直接列 +/- 行,context 用 3 行。
+	const ctx = 3
+	ops := unifiedDiff(fromLines, toLines, ctx)
+	for _, op := range ops {
+		switch op.kind {
+		case ' ':
+			out.WriteString(" " + op.text + "\n")
+		case '+':
+			out.WriteString("+" + op.text + "\n")
+		case '-':
+			out.WriteString("-" + op.text + "\n")
+		}
+	}
+	return nil
+}
+
+// splitLines 按 \n 切行;保留空行(末尾无 \n 也算一行)。
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	lines := strings.Split(s, "\n")
+	// 末尾 \n 会产生空串,丢掉
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+type diffOp struct {
+	kind byte // ' ' / '+' / '-'
+	text string
+}
+
+// unifiedDiff LCS 算法计算编辑脚本,然后合并相邻 ctx 区间输出。
+//
+// 算法:经典 LCS table → backtrack → 简化输出(无 hunk 头)。
+func unifiedDiff(a, b []string, ctx int) []diffOp {
+	n, m := len(a), len(b)
+	// LCS length table
+	dp := make([][]int, n+1)
+	for i := range dp {
+		dp[i] = make([]int, m+1)
+	}
+	for i := 1; i <= n; i++ {
+		for j := 1; j <= m; j++ {
+			if a[i-1] == b[j-1] {
+				dp[i][j] = dp[i-1][j-1] + 1
+			} else {
+				if dp[i-1][j] > dp[i][j-1] {
+					dp[i][j] = dp[i-1][j]
+				} else {
+					dp[i][j] = dp[i][j-1]
+				}
+			}
+		}
+	}
+	// backtrack → 原始编辑脚本
+	type rawOp struct {
+		kind byte
+		text string
+	}
+	var raw []rawOp
+	i, j := n, m
+	for i > 0 || j > 0 {
+		switch {
+		case i > 0 && j > 0 && a[i-1] == b[j-1]:
+			raw = append(raw, rawOp{' ', a[i-1]})
+			i--
+			j--
+		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
+			raw = append(raw, rawOp{'+', b[j-1]})
+			j--
+		default:
+			raw = append(raw, rawOp{'-', a[i-1]})
+			i--
+		}
+	}
+	// reverse
+	for l, r := 0, len(raw)-1; l < r; l, r = l+1, r-1 {
+		raw[l], raw[r] = raw[r], raw[l]
+	}
+	// 合并 + 应用 ctx:扫描 raw,找出 +/- 区间,在其前后保留 ctx 行 ' '。
+	type span struct {
+		kind   byte // '+' / '-'
+		start  int  // raw 索引
+		end    int  // raw 索引(含)
+	}
+	var spans []span
+	for k, op := range raw {
+		if op.kind == '+' || op.kind == '-' {
+			if len(spans) > 0 && spans[len(spans)-1].end+1 == k &&
+				(spans[len(spans)-1].kind == op.kind || isAdjacentSameKind(spans[len(spans)-1], op.kind)) {
+				spans[len(spans)-1].end = k
+			} else {
+				spans = append(spans, span{kind: op.kind, start: k, end: k})
+			}
+		}
+	}
+	// 简化:不严格合并相邻 +/- 区,直接对每个 +/- 区间前后输出 ctx 行。
+	used := make([]bool, len(raw))
+	for _, sp := range spans {
+		from := sp.start - ctx
+		if from < 0 {
+			from = 0
+		}
+		to := sp.end + ctx
+		if to >= len(raw) {
+			to = len(raw) - 1
+		}
+		for k := from; k <= to; k++ {
+			used[k] = true
+		}
+	}
+	var out []diffOp
+	for k, op := range raw {
+		if used[k] {
+			out = append(out, diffOp{kind: op.kind, text: op.text})
+		}
+	}
+	return out
+}
+
+func isAdjacentSameKind(s span, kind byte) bool {
+	// 简化:相邻 +/- 区合并到前一个 span
+	_ = kind
+	return true
 }
 
 // resolveCommit 解析 ref/短 hash/全 hash → commit object。
