@@ -16,9 +16,10 @@
 // 参考 MarketView.vue L49-138 (sources 硬编码) + L345-432 (install + conflict)
 // + L699-729 (conflict 弹窗模板) + L1357-1480 (conflict CSS)。
 
-import { ref, inject, computed, nextTick } from 'vue'
+import { ref, inject, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
+import InstallProgress from '@/components/InstallProgress.vue'
 import { installFromInput } from '@/api/skillbox/market'
 import { platform } from '@/platform'
 import { useToastStore } from '@/core/store/toast'
@@ -176,9 +177,17 @@ function fillExample(text) {
   installError.value = ''
 }
 
+// 2026-07-18 增:进度条组件引用(参考 MarketView 的 4 阶段进度条封装)
+const progressRef = ref(null)
+
 async function doInstall(input, conflictMode) {
   installing.value = true
   installError.value = ''
+  // 2026-07-18 改:启动 4 阶段进度条(跟 MarketView 同款节奏)
+  progressRef.value?.reset()
+  progressRef.value?.advance('resolve')
+  await new Promise((r) => setTimeout(r, 350))
+  progressRef.value?.advance('download')
   try {
     const out = await installFromInput({
       // 2026-07-18:source_hint 不传 — 后端按 URL 域名 auto 识别,支持任意源
@@ -188,6 +197,11 @@ async function doInstall(input, conflictMode) {
       // 2026-07-18 增:目标分组(从 OnboardingImportDialog 注入的 ref 取)
       group_path: targetGroupPath.value || '',
     })
+    progressRef.value?.advance('extract')
+    await new Promise((r) => setTimeout(r, 350))
+    progressRef.value?.advance('write')
+    await new Promise((r) => setTimeout(r, 250))
+    progressRef.value?.markDone()
     lastResult.value = out
     toast.success(t('market.success.msg', {
       name: out.skill_name,
@@ -199,6 +213,8 @@ async function doInstall(input, conflictMode) {
     if (notifyImportDone) notifyImportDone(payload)
     if (emit) emit('done', payload)
   } catch (e) {
+    // 2026-07-18 改:fail 阶段标红(标记前先记录"卡哪步",跟 MarketView 同款)
+    progressRef.value?.markFailed()
     const status = e?.response?.status || e?.status
     const data = e?.response?.data || e?.data || {}
     if (status === 409) {
@@ -296,7 +312,6 @@ function inferSkillNameFromUrl(input) {
 // 2026-07-18 增:从 useSkillTreeStore().tree 递归走所有叶子,提取所有
 // skill_meta.name 到一个 Set。组件 mount 时算一次,tree 变化后(installed
 // skill 成功)再重算一次。同名检测走 Set.has(name) O(1)。
-import { watch } from 'vue'
 import { useSkillTreeStore } from '@/core/store/skill-tree'
 const skillTree = useSkillTreeStore()
 const localSkillNames = ref(new Set())
@@ -429,6 +444,8 @@ function reset() {
   userInput.value = ''
   installError.value = ''
   conflict.value = null
+  // 2026-07-18 增:重置进度条
+  progressRef.value?.reset()
   if (resetImportDoneSig) resetImportDoneSig()
 }
 
@@ -560,6 +577,9 @@ const matchedSource = computed(() => {
         <span>{{ t('onboarding.market.btnPasteAndImport') }}</span>
       </button>
     </div>
+
+    <!-- 2026-07-18 增:4 阶段导入进度条(封装自 MarketView,跟市场界面同款体感) -->
+    <InstallProgress ref="progressRef" />
 
     <!-- 错误条 -->
     <p v-if="installError" class="mip-error">
