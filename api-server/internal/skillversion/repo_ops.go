@@ -249,7 +249,16 @@ func (r *Repo) Status() (Status, error) {
 // 2026-07-17 增:可选 pathPrefix 参数过滤 — 非空时只返回涉及该路径前缀的
 // commit(用 go-git LogOptions.FileName + 跳过未涉及文件,O(N) walk 树)。
 // 这是 per-skill 修改历史的实现核心:传 "<group>/<name>/" 即可只显示该 skill 的 commit。
-func (r *Repo) Log(limit int, pathPrefix string) ([]CommitEntry, error) {
+func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) {
+	// 2026-07-17 加 recover 兜底 — go-git 内部 commitFiles 走 parent.Patch
+	// 在某些 commit shape 下会 panic(runtime error: slice bounds out of range),
+	// 这里兜住返空,让接口返 200 而不是 500。
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("skillversion: Log panic: %v", r)
+			out = nil
+		}
+	}()
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
@@ -261,35 +270,31 @@ func (r *Repo) Log(limit int, pathPrefix string) ([]CommitEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	cIter, err := repo.Log(&git.LogOptions{From: head.Hash()})
+	// 2026-07-17 改:per-skill 过滤走 go-git 原生 PathFilter(内部走
+	// commit-tree diff 索引),不再在 ForEach 里手工 commitFiles —
+	// 之前手工 commitFiles 走 parent.Patch 在某些 commit shape 下会
+	// panic(slice bounds out of range),改成 PathFilter 让 go-git 自己处理。
+	var cIter object.CommitIter
+	if pathPrefix != "" {
+		prefix := pathPrefix
+		cIter, err = repo.Log(&git.LogOptions{
+			From:       head.Hash(),
+			PathFilter: func(p string) bool { return strings.HasPrefix(p, prefix) },
+		})
+	} else {
+		cIter, err = repo.Log(&git.LogOptions{From: head.Hash()})
+	}
 	if err != nil {
 		return nil, err
 	}
-	var out []CommitEntry
 	count := 0
 	_ = cIter.ForEach(func(c *object.Commit) error {
 		if count >= limit {
 			return errStop
 		}
-		// 2026-07-17 增:per-path 过滤。空 prefix = 不过滤,走全量;
-		// 非空时用 commitFiles 拿该 commit 涉及的文件,任何一个以 prefix
-		// 开头就保留。
-		if pathPrefix != "" {
-			files, ferr := commitFiles(repo, c)
-			if ferr != nil {
-				return nil // 拿不到文件列表,跳过(不返回错误,继续走下一条)
-			}
-			matched := false
-			for _, f := range files {
-				if strings.HasPrefix(f, pathPrefix) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				return nil
-			}
-		}
+		// 2026-07-17 改:per-path 过滤已由 git.LogOptions.PathFilter 接管,
+		// 这里不再手工 commitFiles(可能 panic)。commitFiles 仅在
+		// 给 entry.Files 字段用,且独立包 recover 兜底。
 		entry := CommitEntry{
 			Hash:    c.Hash.String(),
 			Short:   c.Hash.String()[:7],
@@ -298,9 +303,15 @@ func (r *Repo) Log(limit int, pathPrefix string) ([]CommitEntry, error) {
 			Message: strings.SplitN(c.Message, "\n", 2)[0],
 			When:    c.Author.When,
 		}
-		if files, ferr := commitFiles(repo, c); ferr == nil {
-			entry.Files = files
-		}
+		// 2026-07-17 改:commitFiles 包 recover 兜底 — go-git parent.Patch
+		// 在某些 commit shape 下会 panic(runtime error: slice bounds out of range),
+		// 这里只是给 entry.Files 填值,出错就跳过。
+		func() {
+			defer func() { _ = recover() }()
+			if files, ferr := commitFiles(repo, c); ferr == nil {
+				entry.Files = files
+			}
+		}()
 		out = append(out, entry)
 		count++
 		return nil

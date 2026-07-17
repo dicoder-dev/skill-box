@@ -196,6 +196,7 @@ func GitLog(c *ginp.ContextPlus, req *struct {
 	}
 	entries, lerr := repo.Log(req.Limit, req.Path)
 	if lerr != nil {
+		logger.Error("git log: limit=%d path=%q err=%v", req.Limit, req.Path, lerr)
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return
 	}
