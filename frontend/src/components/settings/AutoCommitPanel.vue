@@ -87,17 +87,23 @@ async function persist() {
     const errData = e?.response?.data || e?.data || null
     const reason = errData?.reason || (typeof msg === 'string' && msg.includes('unavailable') ? 'unavailable' : '')
     if (reason === 'unavailable') {
-      toast.action(
-        t('git.autoCommit.goAiSetup', '跳到 AI 设置'),
-        () => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('skillbox:tab-change', { detail: 'settings' }))
-            // settings tab 内有 AI 设置子项,emit 子事件让 SettingsView 切过去
-            window.dispatchEvent(new CustomEvent('skillbox:settings-subtab', { detail: 'ai' }))
-          }
+      // 2026-07-18 改:用 toast.push 直接传 action 字段,而不是 toast.action shortcut,
+      // 同上规避 HMR 偶发不挂 action 问题。
+      toast.push({
+        type: 'error',
+        message: msg,
+        duration: 8000,
+        action: {
+          label: t('git.autoCommit.goAiSetup', '跳到 AI 设置'),
+          onClick: () => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('skillbox:tab-change', { detail: 'settings' }))
+              // settings tab 内有 AI 设置子项,emit 子事件让 SettingsView 切过去
+              window.dispatchEvent(new CustomEvent('skillbox:settings-subtab', { detail: 'ai' }))
+            }
+          },
         },
-        { type: 'error', message: msg, duration: 8000 },
-      )
+      })
     }
   } finally {
     saving.value = false
@@ -111,11 +117,12 @@ async function runTest() {
   try {
     const r = await testLLM()
     if (r.ok) {
-      // 2026-07-18 改:测试通过用 strongSuccess — 绿色背景醒目变体,跟
-      // 普通 success(浅底)区分开,用户一眼能识别"通过 / 一般成功"。
+      // 2026-07-18 改:测试通过用 strong-success 变体(绿底白字)—
+      // 直接调 toast.push(strong:true) 而不依赖 strongSuccess action,
+      // 规避 vite HMR 偶发不重挂 action 的问题(toast.strongSuccess undefined)。
       const msg = t('git.autoCommit.testOk', { model: r.model, output: r.output })
       testResult.value = msg
-      toast.strongSuccess(msg)
+      toast.push({ type: 'success', message: msg, strong: true })
       // 测试通过后刷新可用性 — 后端可能没返回 reason,所以拉一次 status
       await load()
     } else {
