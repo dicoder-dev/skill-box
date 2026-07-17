@@ -746,25 +746,36 @@ const matchedSource = computed(() => {
   border-color: var(--accent);
 }
 
-/* 2026-07-18 改:子卡样式(.mip-source-sub) — GitHub 仓库独立成同级卡片,
-   跟主卡在同一 .mip-sources 容器 3 列 grid 平铺,而不是嵌在主卡里。
-   视觉上跟主卡区分:浅色背景 + 仓库 icon block + 显眼的 owner/repo 字样。 */
+/* 2026-07-18 改:GitHub 子卡视觉跟主卡完全同级 — 同样的渐变底色 + 4px 左侧色条 +
+   同样的 hover 效果,只继承 GitHub 主题色(#1f2328)。"GitHub 仓库"没有任何
+   视觉低一级的说法,6 张卡看起来一致。 */
 .mip-source-sub {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border, #2a2a2a);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px 12px;
+  text-align: left;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 8%, var(--surface-2, transparent)),
+    var(--surface-2, rgba(255, 255, 255, 0.03))
+  );
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border, #2a2a2a));
   border-left: 4px solid var(--accent, #1f2328);
   border-radius: 8px;
-  padding: 14px 14px 12px;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .mip-source-sub:hover {
-  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.03));
-  border-color: var(--accent, #1f2328);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border, #2a2a2a));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 14%, var(--surface-2, transparent)),
+    var(--surface-2, rgba(255, 255, 255, 0.03))
+  );
 }
-/* 2026-07-18 改:子卡下方简介(谁提供的),不再用"GitHub 仓库"标签。 */
 .mip-source-sub-desc {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-dim, #999);
   line-height: 1.4;
   margin-top: 2px;
