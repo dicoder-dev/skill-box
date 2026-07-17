@@ -848,8 +848,10 @@ const messages = {
       detectedSource: 'Detected {name}',
       gotoSite: 'Open {name} website',
       fillExample: 'Fill example',
-      // 2026-07-18: GitHub repo sub-card sub-label
-      subLabel: 'GitHub repo',
+      // 2026-07-18: GitHub repo sub-card description (who provides it)
+      repoAnthropics: 'Maintained by Anthropic, Claude ecosystem skills',
+      repoVercelLabs: 'Maintained by Vercel Labs, frontend / Next.js skills',
+      repoGoogle: 'Official Google repo, search / engineering skills',
       // paste & import
       btnPasteAndImport: 'Paste & Import',
       btnPasteTitle: 'Read clipboard and auto-install',

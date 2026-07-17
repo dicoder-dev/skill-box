@@ -866,8 +866,10 @@ const messages = {
       detectedSource: '已识别为 {name}',
       gotoSite: '前往 {name} 官网',
       fillExample: '填入示例',
-      // 2026-07-18 增:GitHub 仓库子卡下方的副标签
-      subLabel: 'GitHub 仓库',
+      // 2026-07-18 增:GitHub 仓库子卡下方简介(谁提供的)
+      repoAnthropics: 'Anthropic 官方维护,Claude 生态技能',
+      repoVercelLabs: 'Vercel Labs 维护,前端 / Next.js 相关技能',
+      repoGoogle: 'Google 官方仓库,搜索 / 工程类技能',
       // 粘贴并导入
       btnPasteAndImport: '粘贴并导入',
       btnPasteTitle: '读取剪贴板并自动安装',

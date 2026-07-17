@@ -86,6 +86,7 @@ const sources = [
     url: 'https://github.com/anthropics/skills/tree/main/skills',
     accent: '#1f2328',
     icon: 'mdi:github',
+    descKey: 'onboarding.market.repoAnthropics',
     example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
   },
   {
@@ -96,17 +97,20 @@ const sources = [
     url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills',
     accent: '#1f2328',
     icon: 'mdi:github',
+    descKey: 'onboarding.market.repoVercelLabs',
     example: 'https://github.com/vercel-labs/agent-skills/tree/main/skills/vercel-react-best-practices',
   },
   {
-    id: 'repo-mattpocock',
+    // 2026-07-18 改:mattpocock/skills → google/skills(用户要求)
+    id: 'repo-google',
     level: 'sub',
     parent: 'github',
-    name: 'mattpocock/skills',
-    url: 'https://github.com/mattpocock/skills/tree/main/skills',
+    name: 'google/skills',
+    url: 'https://github.com/google/skills',
     accent: '#1f2328',
     icon: 'mdi:github',
-    example: 'https://github.com/mattpocock/skills/tree/main/skills',
+    descKey: 'onboarding.market.repoGoogle',
+    example: 'https://github.com/google/skills',
   },
 ]
 
@@ -463,11 +467,9 @@ const matchedSource = computed(() => {
           <div class="mip-source-meta">
             <div class="mip-source-name">{{ s.name }}</div>
             <div v-if="s.level === 'main'" class="mip-source-desc">{{ t(s.descKey) }}</div>
-            <!-- 子卡下方显示「GitHub 仓库」标签,让用户知道这些是 GitHub 分类下的 -->
-            <div v-else class="mip-source-sub-label">
-              <IconPark icon="mdi:github" width="9" height="9" />
-              {{ t('onboarding.market.subLabel') }}
-            </div>
+            <!-- 2026-07-18 改:子卡下方显示 descKey(谁提供的简介),让用户
+                 知道每个 GitHub 仓库背后的来源 / 角色。 -->
+            <div v-else class="mip-source-sub-desc">{{ t(s.descKey) }}</div>
           </div>
           <IconPark icon="mdi:open-in-new" width="12" height="12" class="mip-source-open-icon" />
         </div>
@@ -760,12 +762,11 @@ const matchedSource = computed(() => {
   background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.03));
   border-color: var(--accent, #1f2328);
 }
-.mip-source-sub-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
+/* 2026-07-18 改:子卡下方简介(谁提供的),不再用"GitHub 仓库"标签。 */
+.mip-source-sub-desc {
+  font-size: 11px;
   color: var(--text-dim, #999);
+  line-height: 1.4;
   margin-top: 2px;
 }
 .mip-source-open-icon {
