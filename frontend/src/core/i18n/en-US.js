@@ -795,7 +795,7 @@ const messages = {
       hintDownload: 'Downloading zip from GitHub codeload…',
       hintExtract: 'Extracting and validating SKILL.md…',
       hintWrite: 'Writing to local skill-box store…',
-      hintDone: 'Installed, ready to jump',
+      hintDone: 'Install complete',
       hintFailResolve: 'Failed during resolve, no request sent',
       hintFailDownload: 'Failed during download (zipball 404 / network / rate limit)',
       hintFailExtract: 'Failed during extract (SKILL.md parse error)',
@@ -803,7 +803,7 @@ const messages = {
       hintFailUnknown: 'Unknown stage failure, see error below',
     },
     success: {
-      msg: '✅ Installed {name} v{version}',
+      msg: 'Install complete, skill path: {path}',
       goHome: 'View on home',
     },
     conflict: {

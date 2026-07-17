@@ -203,10 +203,12 @@ async function doInstall(input, conflictMode) {
     await new Promise((r) => setTimeout(r, 250))
     progressRef.value?.markDone()
     lastResult.value = out
-    toast.success(t('market.success.msg', {
-      name: out.skill_name,
-      version: out.skill_version || '0.1.0',
-    }))
+    // 2026-07-18 改:toast 改成"安装完成,skill 路径:xxx"格式,
+    // path = group_path(可空) + '/' + name(空 group 时直接 name)。
+    const skillPath = out.group_path
+      ? `${out.group_path}/${out.skill_name}`
+      : (out.skill_name || '')
+    toast.success(t('market.success.msg', { path: skillPath }))
     installing.value = false
     // 通知 OnboardingImportDialog → SkillsView 立即 reload
     const payload = { ok: 1, failed: 0, results: [{ ok: true, name: out.skill_name }] }
