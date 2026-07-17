@@ -29,11 +29,20 @@ const ICON_MAP = {
       <div
         v-for="item in toast.items"
         :key="item.id"
-        :class="['toast-item', `toast-${item.type}`]"
+        :class="['toast-item', `toast-${item.type}`, item.strong ? 'toast-strong' : '']"
         role="status"
       >
         <IconPark :icon="ICON_MAP[item.type] || ICON_MAP.info" width="16" height="16" class="toast-icon" />
         <span class="toast-message">{{ item.message }}</span>
+        <!-- 2026-07-18 增:action 按钮 — 用户点 action 时执行 onClick 并立即
+             dismiss 当前 toast。label 用主色,点击区域 ≥ 24px 适配触屏。 -->
+        <button
+          v-if="item.action"
+          class="toast-action"
+          @click="() => { try { item.action.onClick && item.action.onClick() } finally { toast.dismiss(item.id) } }"
+        >
+          {{ item.action.label }}
+        </button>
         <button class="toast-close" :aria-label="'close'" @click="toast.dismiss(item.id)">
           <IconPark icon="mdi:close" width="12" height="12" />
         </button>
@@ -102,6 +111,47 @@ const ICON_MAP = {
   flex-shrink: 0;
 }
 .toast-close:hover { background: var(--bg-hover); color: var(--text); }
+
+/* 2026-07-18 增:strong 变体 — 背景填语义色 + 白色字 + 强调阴影,
+   用于"测试通过"这类需要高优可见的成功提示。
+   只在 toast-strong + toast-success 同时存在时生效,避免普通成功 toast 被误染。 */
+.toast-item.toast-strong.toast-success {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.25);
+}
+.toast-item.toast-strong.toast-success .toast-icon { color: #fff; }
+.toast-item.toast-strong.toast-success .toast-close { color: rgba(255, 255, 255, 0.85); }
+.toast-item.toast-strong.toast-success .toast-close:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+/* 2026-07-18 增:action 按钮 — 跟 toast 同色系,按下立刻 dismiss */
+.toast-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease;
+}
+.toast-action:hover { background: rgba(255, 255, 255, 0.32); }
+/* 非 strong 变体的 toast:action 用主色文本 + 主色浅底 */
+.toast-item:not(.toast-strong) .toast-action {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--primary);
+}
+.toast-item:not(.toast-strong) .toast-action:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
 
 /* transition-group 动画 */
 .toast-enter-from {

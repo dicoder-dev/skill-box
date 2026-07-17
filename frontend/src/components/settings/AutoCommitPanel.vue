@@ -79,6 +79,26 @@ async function persist() {
     const msg = e?.message || String(e)
     saveHint.value = t('git.autoCommit.saveFail', { msg })
     toast.error(saveHint.value)
+    // 2026-07-18 增:LLM 不可用(后端 reason=unavailable)时,弹 toast 带
+    // "跳到 AI 设置"action 按钮。后端 SaveAutoCommit handler 在 LLMEnabled=true
+    // 但 provider/api_key 缺失时返 400 + reason=unavailable,这里识别这个状态
+    // 给用户一个一键修复路径,而不是只看到红字"启用失败"。
+    // axios/ofetch 风格的错误对象 e.response.data 拿不到时,fallback 看 error msg。
+    const errData = e?.response?.data || e?.data || null
+    const reason = errData?.reason || (typeof msg === 'string' && msg.includes('unavailable') ? 'unavailable' : '')
+    if (reason === 'unavailable') {
+      toast.action(
+        t('git.autoCommit.goAiSetup', '跳到 AI 设置'),
+        () => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('skillbox:tab-change', { detail: 'settings' }))
+            // settings tab 内有 AI 设置子项,emit 子事件让 SettingsView 切过去
+            window.dispatchEvent(new CustomEvent('skillbox:settings-subtab', { detail: 'ai' }))
+          }
+        },
+        { type: 'error', message: msg, duration: 8000 },
+      )
+    }
   } finally {
     saving.value = false
     setTimeout(() => (saveHint.value = ''), 5000)
@@ -91,14 +111,20 @@ async function runTest() {
   try {
     const r = await testLLM()
     if (r.ok) {
-      testResult.value = t('git.autoCommit.testOk', { model: r.model, output: r.output })
+      // 2026-07-18 改:测试通过用 strongSuccess — 绿色背景醒目变体,跟
+      // 普通 success(浅底)区分开,用户一眼能识别"通过 / 一般成功"。
+      const msg = t('git.autoCommit.testOk', { model: r.model, output: r.output })
+      testResult.value = msg
+      toast.strongSuccess(msg)
       // 测试通过后刷新可用性 — 后端可能没返回 reason,所以拉一次 status
       await load()
     } else {
       testResult.value = t('git.autoCommit.testFail', { msg: r.reason || 'unknown' })
+      toast.error(testResult.value)
     }
   } catch (e) {
     testResult.value = t('git.autoCommit.testFail', { msg: e?.message || e })
+    toast.error(testResult.value)
   } finally {
     testing.value = false
     setTimeout(() => (testResult.value = ''), 8000)
@@ -143,7 +169,7 @@ if (typeof window !== 'undefined') {
             <input
               type="checkbox"
               :checked="llmEnabled"
-              :disabled="saving || !available"
+              :disabled="saving"
               @change="(e) => onToggleLLM(e.target.checked)"
             />
             <span class="toggle-slider"></span>

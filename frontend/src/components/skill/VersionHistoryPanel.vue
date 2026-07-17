@@ -503,7 +503,7 @@ function formatTime(when) {
                   <code class="vhp-commit-hash">{{ shortHash(it.hash) }}</code>
                   <span class="vhp-commit-when" :title="it.when">{{ formatTime(it.when) }}</span>
                   <span v-if="(it.files || []).length" class="vhp-commit-files">
-                    <IconPark icon="Folder" :size="10" />
+                    <IconPark icon="FileText" :size="12" />
                     {{ (it.files || []).length }}
                   </span>
                 </div>
@@ -792,9 +792,12 @@ function formatTime(when) {
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
 /* 2026-07-18 改:vhp-commit-files 改用 display:inline-flex + align-items:center
-   让 Folder 图标跟数字水平方向垂直对齐;之前的基线对齐在 10px 字号下
+   让 FileText 图标跟数字水平方向垂直对齐;之前的基线对齐在 10px 字号下
    图标会显得"飘"。padding 上下 2px / 左右 6px 让 badge 视觉更厚实,
-   跟 hash / when 同高不显瘦。 */
+   跟 hash / when 同高不显瘦。
+   2026-07-18 二次调:svg inline-block + 显式 vertical-align:middle 兜底
+   (iconpark 默认 svg 是 display:inline,某些 webview 渲染下 baseline 偏移
+   导致 svg 跟父级 baseline 不齐),确保 12px svg 跟 10px 数字严格垂直居中。 */
 .vhp-commit-files {
   display: inline-flex;
   align-items: center;
@@ -805,6 +808,10 @@ function formatTime(when) {
   border-radius: 999px;
   font-weight: 500;
   line-height: 1;
+}
+.vhp-commit-files :deep(svg) {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* =========================================================================
