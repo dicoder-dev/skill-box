@@ -478,20 +478,21 @@ function formatTime(when) {
                 <div class="vhp-node-line vhp-node-line-bot" />
               </div>
               <div class="vhp-commit-body">
+                <!-- 2026-07-18 大改:commit 行精简 — 窄列里只显示这次提交的标题文字,
+                     type/scope 标签移除(都是 skill 自动 commit 没意义)。鼠标 hover
+                     完整 first-line 全文可见。 -->
                 <div class="vhp-commit-msg">
-                  <span v-if="it._title.type" class="vhp-commit-type">{{ it._title.type }}</span>
-                  <span v-if="it._title.scope" class="vhp-commit-scope">({{ it._title.scope }})</span>
-                  <span class="vhp-commit-sep">:</span>
-                  <span class="vhp-commit-desc" :title="it._title.full">{{ it._title.desc || it._title.full }}</span>
+                  <span class="vhp-commit-desc" :title="it._title.full">{{ it._title.full }}</span>
                 </div>
+                <!-- 2026-07-18 大改:meta 行只保留 hash + 日期 + 文件数。
+                     author 移到 modal 头部(更详细的语境才需要看作者)。
+                     文件数 icon 用 Folder 替代 "·" prefix 让语义清晰。 -->
                 <div class="vhp-commit-meta">
                   <code class="vhp-commit-hash">{{ shortHash(it.hash) }}</code>
                   <span class="vhp-commit-when" :title="it.when">{{ formatTime(it.when) }}</span>
-                  <span class="vhp-commit-author">{{ it.author }}</span>
-                  <!-- 2026-07-18 增:inline 显示该 commit 涉及的文件数 —
-                       一眼能看出这次改了哪几个文件,不一定非要进 modal。 -->
                   <span v-if="(it.files || []).length" class="vhp-commit-files">
-                    · {{ (it.files || []).length }} {{ t('git.history.fileCountUnit', 'files') }}
+                    <IconPark icon="Folder" :size="9" />
+                    {{ (it.files || []).length }}
                   </span>
                 </div>
               </div>
@@ -527,8 +528,16 @@ function formatTime(when) {
               <span v-if="modalCommitHash" class="vhp-modal-range">
                 {{ shortHash(modalCommitHash) }}
               </span>
-              <span v-if="modalCommit && modalCommit._title && modalCommit._title.scope" class="vhp-modal-scope">
-                ({{ modalCommit._title.scope }})
+              <!-- 2026-07-18 大改:modal 顶栏去掉 scope chip(从 commit 行挪过来
+                   没意义),改为显示作者 — 配 IconPark User 图标 + 时间 —
+                   让 modal 头部成为这次提交的"完整身份卡"。 -->
+              <span v-if="modalCommit && modalCommit.author" class="vhp-modal-author">
+                <IconPark icon="User" :size="10" />
+                {{ modalCommit.author }}
+              </span>
+              <span v-if="modalCommit && modalCommit.when" class="vhp-modal-when">
+                <IconPark icon="Time" :size="10" />
+                {{ modalCommit.when.slice(0, 10) }}
               </span>
             </div>
             <div class="vhp-modal-header-right">
@@ -747,13 +756,12 @@ function formatTime(when) {
   display: flex;
   align-items: baseline;
   gap: 0;
-  font-family: var(--font-mono, monospace);
   font-size: 12px;
   overflow: hidden;
 }
-.vhp-commit-type { color: #9cdcfe; flex-shrink: 0; }
-.vhp-commit-scope { color: #9cdcfe; flex-shrink: 0; }
-.vhp-commit-sep { color: rgba(127, 127, 127, 0.7); margin: 0 1px; flex-shrink: 0; }
+/* 2026-07-18 大改:vhp-commit-type / vhp-commit-scope / vhp-commit-sep 删除 —
+   commit 行精简后只显示 desc,不再显示 conventional commit 头标签。
+   vhp-commit-desc 直接继承父级颜色 + 全宽撑开,跟窄列布局匹配。 */
 .vhp-commit-desc {
   color: var(--text-primary, currentColor);
   overflow: hidden;
@@ -764,15 +772,20 @@ function formatTime(when) {
 }
 .vhp-commit-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   font-size: 10px;
   color: rgba(127, 127, 127, 0.6);
   font-family: var(--font-mono, monospace);
+  align-items: center;
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
-/* 2026-07-18 增:commit 行 inline 显示该提交修改文件数 — 即便不进 modal
-   也能知道这次改了哪些文件。淡蓝灰底 + mono 字号,跟 hash / author 同高。 */
+/* 2026-07-18 大改:vhp-commit-author 样式删除(已挪到 modal 头部展示)。
+   vhp-commit-files 改成"icon + 数字"形态,跟 hash / when 同高,icon 用 Folder
+   表达"这次提交涉及的文件数",语义比 "·1 files" 清晰。 */
 .vhp-commit-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: rgb(59, 130, 246);
   background: rgba(59, 130, 246, 0.1);
   padding: 1px 6px;
@@ -866,17 +879,18 @@ function formatTime(when) {
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
   flex-shrink: 0;
 }
-/* 2026-07-18 增:modal 标题里的 scope chip(commit message 里
-   "feat(scope): desc" 的 scope 部分),跟 hash 短码并排,跟 commit row
-   里的 scope 着色一致 — 看一眼就知道这是哪类改动。 */
-.vhp-modal-scope {
+/* 2026-07-18 大改:vhp-modal-scope 删除(原 commit 行 type/scope 已下线,
+   modal 顶部这个 chip 也跟着下线),改为 vhp-modal-author + vhp-modal-when —
+   把"作者 + 时间"挪到 modal 头部,跟 commit message 一起作为这次提交的
+   完整身份卡(commit 行不再展示,留给窄列布局更多空间)。 */
+.vhp-modal-author,
+.vhp-modal-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
-  color: rgb(59, 130, 246);
-  background: rgba(56, 139, 253, 0.12);
-  padding: 1px 6px;
-  border-radius: 4px;
+  color: var(--text-muted, rgba(127, 127, 127, 0.7));
   flex-shrink: 0;
-  font-weight: 500;
 }
 .vhp-modal-header-right {
   display: flex;
