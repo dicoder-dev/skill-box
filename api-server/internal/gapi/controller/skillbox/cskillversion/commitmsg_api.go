@@ -257,9 +257,20 @@ func TestLLM(c *ginp.ContextPlus) {
 // ----------------------------------------------------------------------------
 
 func init() {
-	// 每次 Generate 调用都现场判定可不可用。cheap(不持有 DB conn)。
-	// BuildCommitLLMSender 本身就是 commitmsg.LLMGenerate 形态。
-	commitmsg.SetGlobalLLMGenerator(BuildCommitLLMSender())
+	// 2026-07-18 fix:不要在 init() 阶段立即调 BuildCommitLLMSender() —
+	// 它内部 newAutoCommitContext() 会走 dbs.GetWriteDb(),彼时 InitDb
+	// 还没跑,直接 panic("数据库未初始化")。
+	//
+	// 注册一个"现场拼"的外层闭包:每次 commitmsg.Generate 真要调 LLM
+	// 时才 BuildCommitLLMSender,DB 已就绪;DB 仍不可用就返 nil 让
+	// commitmsg 走模板路径。生成器本身 cheap,不持有 conn。
+	commitmsg.SetGlobalLLMGenerator(func(ctx context.Context, prompt string) (string, error) {
+		sender := BuildCommitLLMSender()
+		if sender == nil {
+			return "", errors.New("auto_commit: llm sender unavailable")
+		}
+		return sender(ctx, prompt)
+	})
 }
 
 func firstNonEmpty(a, b string) string {
