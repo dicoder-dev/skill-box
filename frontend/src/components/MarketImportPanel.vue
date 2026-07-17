@@ -203,6 +203,58 @@ function onImport() {
   doInstall(input, '')
 }
 
+// 2026-07-18 增:粘贴并导入按钮(参考 MarketView.vue 的 pasteAndInstall)。
+// 读系统剪贴板 → trim → 写回 userInput → 自动调 doInstall(走正常下载流程)。
+// 失败(剪贴板空 / 读异常)只 toast 不触发安装。
+//
+// _safeStringify:兼容 wails binding 偶尔返回 {text: 'xxx'} / string[] 的情况,
+// 跟 MarketView 同款防御,避免出现 '[object Object]'。
+function _safeStringify(raw) {
+  if (raw == null) return ''
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw)) {
+    return raw.map((v) => (typeof v === 'string' ? v : String(v || ''))).join('')
+  }
+  if (typeof raw === 'object') {
+    if (typeof raw.text === 'string') return raw.text
+    if (typeof raw.content === 'string') return raw.content
+    if (typeof raw.value === 'string') return raw.value
+  }
+  try {
+    return JSON.stringify(raw)
+  } catch (_) {
+    return ''
+  }
+}
+
+async function pasteAndImport() {
+  if (installing.value) return
+  let raw = null
+  try {
+    raw = await platform.platform.clipboardText()
+  } catch (e) {
+    const errMsg = (e && (e.message || e.error)) || (typeof e === 'string' ? e : '')
+    toast.error(t('onboarding.market.btnPasteFailed', { msg: errMsg || 'unknown' }))
+    return
+  }
+  const text = _safeStringify(raw).trim()
+  if (!text) {
+    toast.error(t('onboarding.market.btnPasteEmpty'))
+    return
+  }
+  userInput.value = text
+  installError.value = ''
+  // 主动把焦点移回 input,光标定位末尾
+  if (inputEl.value) {
+    inputEl.value.focus()
+    try {
+      inputEl.value.setSelectionRange(text.length, text.length)
+    } catch (_) { /* 静默 */ }
+  }
+  // 直接调 doInstall(走正常的解析 → 下载 → 写盘流程)
+  await doInstall(text, '')
+}
+
 async function resolveConflict(mode) {
   if (mode === 'cancel' || !conflict.value) {
     conflict.value = null
@@ -239,31 +291,9 @@ const matchedSource = computed(() => {
 
 <template>
   <div class="mip">
-    <!-- 2026-07-18 改:输入示例区(三个来源各一条,放在输入框上方,让用户知道怎么输入)
-         点击示例 = 填入输入框。比卡片底部的 example 更显眼。 -->
-    <div class="mip-examples">
-      <div class="mip-examples-label">
-        <IconPark icon="mdi:lightbulb-on-outline" width="12" height="12" />
-        {{ t('onboarding.market.examplesLabel') }}
-      </div>
-      <div class="mip-examples-list">
-        <button
-          v-for="s in sources"
-          :key="`ex-${s.id}`"
-          type="button"
-          class="mip-example"
-          :style="{ '--accent': s.accent }"
-          :title="t('onboarding.market.fillExample')"
-          @click="fillExample(s.example)"
-        >
-          <IconPark :icon="s.icon || 'mdi:link-variant'" width="11" height="11" />
-          <code class="mip-example-url">{{ s.example }}</code>
-        </button>
-      </div>
-    </div>
-
-    <!-- 2026-07-18 改:三个市场源卡片 — 提高标识度(加深底色 + 更大 padding + 显眼图标 +
-         GitHub 卡片显示具体仓库)。 -->
+    <!-- 2026-07-18 改:三个市场源卡片(放最上方)。
+         2026-07-18 再改:GitHub 卡片里的 repos 不再聚集,每个仓库一个独立卡片,
+         跟在 skillhub / skillssh 卡后面单列展示。 -->
     <div class="mip-sources">
       <div
         v-for="s in sources"
@@ -291,20 +321,45 @@ const matchedSource = computed(() => {
             <IconPark icon="mdi:open-in-new" width="12" height="12" />
           </button>
         </div>
-        <!-- 2026-07-18 增:GitHub 卡显示具体仓库快捷链接 -->
-        <div v-if="s.repos && s.repos.length" class="mip-source-repos">
+        <!-- 2026-07-18 改:GitHub 卡里的 repos 改为独立子卡片(去掉原来的 inline
+             chip 列表);其它源没有 repos 字段,直接不渲染。 -->
+        <div v-if="s.repos && s.repos.length" class="mip-source-subcards">
           <button
             v-for="r in s.repos"
             :key="r.url"
             type="button"
-            class="mip-source-repo"
+            class="mip-source-subcard"
             :title="r.url"
             @click="openInExternal(r.url)"
           >
-            <IconPark icon="mdi:github" width="10" height="10" />
+            <IconPark icon="mdi:github" width="11" height="11" />
             <code>{{ r.display }}</code>
+            <IconPark icon="mdi:open-in-new" width="9" height="9" class="mip-source-subcard-arrow" />
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 2026-07-18 改:输入示例区(放来源卡片下方,即输入框上方,跟用户期望一致)
+         点击示例 = 填入输入框。比卡片底部的 example 更显眼。 -->
+    <div class="mip-examples">
+      <div class="mip-examples-label">
+        <IconPark icon="mdi:lightbulb-on-outline" width="12" height="12" />
+        {{ t('onboarding.market.examplesLabel') }}
+      </div>
+      <div class="mip-examples-list">
+        <button
+          v-for="s in sources"
+          :key="`ex-${s.id}`"
+          type="button"
+          class="mip-example"
+          :style="{ '--accent': s.accent }"
+          :title="t('onboarding.market.fillExample')"
+          @click="fillExample(s.example)"
+        >
+          <IconPark :icon="s.icon || 'mdi:link-variant'" width="11" height="11" />
+          <code class="mip-example-url">{{ s.example }}</code>
+        </button>
       </div>
     </div>
 
@@ -312,7 +367,9 @@ const matchedSource = computed(() => {
     <!-- 2026-07-18 改:在 input-row 容器挂 @paste,容许用户在容器内任意位置(包
          括左侧 icon / 右侧 clear 按钮之间的空白)粘贴;同时 input 也挂 @paste
          兜底,显式把 e.clipboardData 写回 userInput。解决"焦点在卡片按钮上时
-         CTRL+V 失效"的问题。 -->
+         CTRL+V 失效"的问题。
+         2026-07-18 再改:右侧新增"粘贴并导入"按钮(参考 MarketView.vue 风格),
+         主按钮 + 副按钮视觉:左 [导入] 右 [粘贴并导入]。 -->
     <div
       class="mip-input-row"
       tabindex="0"
@@ -340,6 +397,7 @@ const matchedSource = computed(() => {
           <IconPark icon="mdi:close-circle" width="12" height="12" />
         </button>
       </div>
+      <!-- 2026-07-18 改:主按钮(导入)+ 副按钮(粘贴并导入)并列,跟 MarketView 风格一致 -->
       <button
         type="button"
         class="mip-btn"
@@ -349,6 +407,18 @@ const matchedSource = computed(() => {
         <IconPark v-if="!installing" icon="mdi:download" width="13" height="13" />
         <span v-else class="spinner-inline"></span>
         {{ installing ? t('onboarding.market.btnImporting') : t('onboarding.market.btnImport') }}
+      </button>
+      <!-- 2026-07-18 增:粘贴并导入按钮(参考 MarketView 的 paste-btn 风格 + pasteAndInstall)
+           读剪贴板 → 自动调 onImport 走正常下载流程 -->
+      <button
+        type="button"
+        class="mip-paste-btn"
+        :title="t('onboarding.market.btnPasteTitle')"
+        :disabled="installing"
+        @click="pasteAndImport"
+      >
+        <IconPark icon="mdi:content-paste" width="13" height="13" />
+        <span>{{ t('onboarding.market.btnPasteAndImport') }}</span>
       </button>
     </div>
 
@@ -500,37 +570,55 @@ const matchedSource = computed(() => {
   border-color: var(--accent);
 }
 
-/* 2026-07-18 增:GitHub 卡显示的具体仓库快捷链接 */
-.mip-source-repos {
+/* 2026-07-18 改:GitHub 卡里的 repos 改为独立子卡片(去掉原来的 inline chip 列表);
+   每个 repo 一个独立按钮,带 11×11 github icon + display name + 9×9 跳转箭头。 */
+.mip-source-subcards {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding-top: 6px;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
   border-top: 1px dashed var(--border, #2a2a2a);
 }
-.mip-source-repo {
-  display: inline-flex;
+.mip-source-subcard {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
+  gap: 8px;
+  padding: 7px 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border, #2a2a2a);
-  border-radius: 4px;
+  border-left: 3px solid var(--accent, #1f2328);
+  border-radius: 5px;
   color: var(--text, #ddd);
   font: inherit;
-  font-size: 10.5px;
+  font-size: 12px;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.mip-source-repo:hover {
-  background: var(--accent);
-  color: #fff;
+.mip-source-subcard:hover {
+  background: color-mix(in srgb, var(--accent) 12%, rgba(255, 255, 255, 0.04));
   border-color: var(--accent);
+  color: var(--accent);
 }
-.mip-source-repo code {
+.mip-source-subcard code {
+  flex: 1;
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.mip-source-subcard-arrow {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+.mip-source-subcard:hover .mip-source-subcard-arrow {
+  opacity: 1;
 }
 
 /* 2026-07-18 增:输入示例区(三个来源各一条,放在输入框上方) */
@@ -675,6 +763,35 @@ const matchedSource = computed(() => {
 }
 .mip-btn:hover:not(:disabled) {
   opacity: 0.85;
+}
+
+/* 2026-07-18 增:粘贴并导入副按钮(参考 MarketView.vue .paste-btn 风格:
+   边框 + 浅底色 + 普通文字色,跟主按钮形成主副对比) */
+.mip-paste-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-card, #1a1a1a);
+  color: var(--text-dim, #aaa);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.mip-paste-btn:hover:not(:disabled) {
+  border-color: var(--accent-blue, #3b82f6);
+  color: var(--accent-blue, #3b82f6);
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 8%, var(--bg-card, #1a1a1a));
+}
+.mip-paste-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .spinner-inline {

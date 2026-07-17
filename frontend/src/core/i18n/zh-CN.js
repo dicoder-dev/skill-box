@@ -866,6 +866,11 @@ const messages = {
       detectedSource: '已识别为 {name}',
       gotoSite: '前往 {name} 官网',
       fillExample: '填入示例',
+      // 2026-07-18 增:粘贴并导入按钮(参考 MarketView 的 market.btnPaste*)
+      btnPasteAndImport: '粘贴并导入',
+      btnPasteTitle: '读取剪贴板并自动安装',
+      btnPasteFailed: '读取剪贴板失败:{msg}',
+      btnPasteEmpty: '剪贴板为空,请先复制一个详情页 URL',
     },
     // 2026-07-18 增:4 tab 共享的「目标分组」选择器 i18n
     targetGroup: {

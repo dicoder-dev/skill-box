@@ -848,6 +848,11 @@ const messages = {
       detectedSource: 'Detected {name}',
       gotoSite: 'Open {name} website',
       fillExample: 'Fill example',
+      // 2026-07-18: paste-and-import button (refs MarketView's market.btnPaste*)
+      btnPasteAndImport: 'Paste & Import',
+      btnPasteTitle: 'Read clipboard and auto-install',
+      btnPasteFailed: 'Read clipboard failed: {msg}',
+      btnPasteEmpty: 'Clipboard is empty, please copy a detail page URL first',
     },
     // 2026-07-18: target group selector shared by all 4 tabs
     targetGroup: {
