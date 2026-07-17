@@ -17,6 +17,13 @@ import {
 import IconPark from '@/components/IconPark.vue'
 import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 
+// 2026-07-17 fix:useI18n() 必须在所有 define* 之后调用,否则 Vue 3 编译器
+// 编译 template 时拿不到 $setup.t(返回 undefined)。之前在顶部 useI18n()
+// 是在 defineProps 之前,导致编译产物 E(e)("git.title") 里 e.t 是 undefined。
+// 移到所有 define* 之后,问题解决。
+const props = defineProps({
+  skillPath: { type: String, default: '' },
+})
 const { t } = useI18n()
 
 // 2026-07-17 增:可选 skillPath,非空时"查看历史"按钮会 emit 这个路径,
@@ -24,9 +31,6 @@ const { t } = useI18n()
 // 2026-07-17 改:历史面板改成 inline 自动展示,GitSyncPanel 不再需要
 // emit show-history 事件;button 也删除,避免重复入口。
 // (面板位置:Git 同步面板正下方,默认折叠)
-const props = defineProps({
-  skillPath: { type: String, default: '' },
-})
 
 // 2026-07-17 改:从本地 ref 改成走 AccordionGroup 协调器(注入式)。
 // 没包 AccordionGroup 时退化为本地 ref,行为跟旧版一致。
