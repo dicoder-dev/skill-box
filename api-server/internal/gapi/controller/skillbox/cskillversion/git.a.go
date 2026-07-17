@@ -268,9 +268,10 @@ func GitCommit(c *ginp.ContextPlus) {
 // GitDiff GET /api/skillbox/git/diff?from=A&to=B
 //
 // 2026-07-17:实测 repo.Diff 在 wails webview sandbox 进程内 hang 15s+
-// 超时(go-git 和 git CLI 都试过,go run 单测 39ms 正常,webview 内死锁)。
-// 怀疑 Repo.r.mu mutex 在 sandbox goroutine 调度下死锁。
-// 临时方案:把 Diff 放独立 goroutine + 2s 超时,fallback 返 stub。
+// 超时(go-git / git CLI / fork 都试过,go run 单测秒返正常,webview 内
+// 就是 hang)。临时方案:2s 超时 + stub 返 hint 命令行提示,前端 modal
+// 能正常打开显示"diff 暂不可用,请用 git CLI"。等找到 sandbox 兼容
+// 方案再恢复。
 func GitDiff(c *ginp.ContextPlus, req *RequestGitDiff) {
 	type result struct {
 		diff string

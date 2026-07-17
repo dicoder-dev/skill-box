@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -498,29 +497,75 @@ func (r *Repo) CheckoutRestore(commit string) error {
 // Diff 两个 commit 之间的 diff(unified 文本)。
 //
 // 2026-07-17 大改:go-git 5.19.1 的 Tree.Patch() 在本地仓库上返空 patch
-// (不是 panic,只是 len=0);而且 wails webview sandbox 里 go-git 的
-// commitObject / Tree().Files() 在某些路径上会 hang 15s+ 超时(实测)。
-// 这里走系统 `git diff` CLI — 稳定且无 sandbox 限制。
+// (不是 panic,只是 len=0)。所以这里走手工实现:walk fromTree / toTree,
+// 比较 blob hash,对变更的文件用 LCS-like 算法生成 unified diff。
 //
-// from 传空字符串 = git 会跟"空 tree"对比,等价于"列出 to 全部新增文件"。
+// 历史:之前试过 exec.Command("git diff") — 但 wails webview sandbox 拦
+// 截 fork/exec,go run 单测秒返,在 webview 内 hang 15s 超时。
+// go-git 自己内部读 .git/ 不需要 fork,虽然 Tree.Patch 返空,但我们
+// 自己 walk + 比较 hash 不依赖 go-git 的 patch 算法,所以能正常跑。
+//
+// from 传空字符串 = "root commit"退化,fromFiles 留空,所有 to 文件
+// 都被视为新增。
 func (r *Repo) Diff(from, to string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	args := []string{"diff", "--no-color"}
-	if from != "" {
-		args = append(args, from, to)
-	} else {
-		// root commit 退化:用 4b825dc... 空 tree hash 作为 from,等价于"全文件新增"
-		args = append(args, "4b825dc642cb6eb9a060e54bf8d69288fbee4904", to)
-	}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = r.path
-	out, err := cmd.Output()
+	repo, err := r.open()
 	if err != nil {
-		return "", fmt.Errorf("skillversion: git diff: %w (%s)", err, strings.TrimSpace(string(out)))
+		return "", err
 	}
-	return string(out), nil
+	// 解析 from(失败时退化到空 fromFiles,模拟 root commit 全量 diff)
+	fromCommit, ferr := resolveCommit(repo, from)
+	var fromFiles map[string]plumbing.Hash
+	if ferr == nil && fromCommit != nil {
+		fromTree, err := fromCommit.Tree()
+		if err != nil {
+			return "", err
+		}
+		fromFiles = map[string]plumbing.Hash{}
+		_ = fromTree.Files().ForEach(func(f *object.File) error {
+			fromFiles[f.Name] = f.Hash
+			return nil
+		})
+	} else {
+		fromFiles = map[string]plumbing.Hash{}
+	}
+	// 解析 to
+	toCommit, terr := resolveCommit(repo, to)
+	if terr != nil {
+		return "", terr
+	}
+	toTree, err := toCommit.Tree()
+	if err != nil {
+		return "", err
+	}
+	toFiles := map[string]plumbing.Hash{}
+	_ = toTree.Files().ForEach(func(f *object.File) error {
+		toFiles[f.Name] = f.Hash
+		return nil
+	})
+
+	var out strings.Builder
+	// 找出 added/modified
+	for name, toHash := range toFiles {
+		fromHash, ok := fromFiles[name]
+		if !ok {
+			appendAddedFile(&out, repo, name, toHash)
+		} else if fromHash != toHash {
+			if err := appendModifiedFile(&out, repo, name, fromHash, toHash); err != nil {
+				return "", err
+			}
+		}
+	}
+	// 找出 deleted
+	for name, fromHash := range fromFiles {
+		if _, ok := toFiles[name]; !ok {
+			if err := appendDeletedFile(&out, repo, name, fromHash); err != nil {
+				return "", err
+			}
+		}
+	}
+	return out.String(), nil
 }
 
 // appendAddedFile 输出 "新增" 文件的 unified diff(+ 全部行)。

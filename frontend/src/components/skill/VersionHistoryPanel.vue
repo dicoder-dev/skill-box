@@ -196,6 +196,21 @@ function closeModal() {
   modalDiffHint.value = ''
 }
 
+// 2026-07-17:把 hint 里嵌入的 git diff 命令复制到剪贴板,方便用户
+// 直接粘贴到终端跑。
+async function copyDiffCmd() {
+  if (!modalDiffHint.value) return
+  // 从 hint 文本里抠出 `git diff A B` 这一段(在反引号里)
+  const m = modalDiffHint.value.match(/`([^`]+)`/)
+  const cmd = m ? m[1] : modalDiffHint.value
+  try {
+    await navigator.clipboard.writeText(cmd)
+    errorMsg.value = t('git.copied', { cmd })
+  } catch (e) {
+    errorMsg.value = t('git.copyFailed', { msg: String(e) })
+  }
+}
+
 // 2026-07-17:modal 内点文件名 → 切 modalFile;不重新拉 API(diff 已存在)
 function pickModalFile(filePath) {
   modalFile.value = filePath
@@ -511,6 +526,10 @@ function formatTime(when) {
               <div v-else-if="modalDiffHint" class="vhp-modal-diff-empty">
                 <IconPark type="warning" :size="14" />
                 <p>{{ modalDiffHint }}</p>
+                <button class="vhp-btn" @click="copyDiffCmd">
+                  <IconPark type="copy" :size="11" />
+                  {{ t('git.copyCmd') }}
+                </button>
               </div>
               <pre
                 v-else-if="modalDiffText"

@@ -1174,6 +1174,10 @@ const messages = {
       // 2026-07-17 增:diff modal "All files" pseudo-file entry
       allFiles: 'All files',
     },
+    // 2026-07-17 增:diff unavailable fallback — copy git CLI command
+    copyCmd: 'Copy git diff command',
+    copied: 'Copied to clipboard: {cmd}',
+    copyFailed: 'Copy failed: {msg}',
     checkoutConfirm: 'Reset working tree to commit {hash}? This will overwrite any unsaved local changes.',
   },
 }

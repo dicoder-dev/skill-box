@@ -1195,6 +1195,10 @@ const messages = {
       // 2026-07-17 增:diff modal 里的"所有文件"选项(列出完整 commit diff)
       allFiles: '所有文件',
     },
+    // 2026-07-17 增:diff 暂不可用时给用户的提示 + 复制按钮
+    copyCmd: '复制 git diff 命令',
+    copied: '已复制到剪贴板:{cmd}',
+    copyFailed: '复制失败:{msg}',
     checkoutConfirm: '确定要 reset 工作区到 commit {hash}?此操作会覆盖本地未保存的改动。',
   },
 }
