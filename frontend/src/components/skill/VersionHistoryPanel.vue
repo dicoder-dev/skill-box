@@ -69,8 +69,9 @@ const status = ref({
   last_push_error: '',
 })
 
-// 2026-07-17:展开的文件列表(每个 commit 独立 toggle)
-const expandedCommits = ref(new Set())
+// 2026-07-18:不再需要 commit-row 内嵌展开 — 直接弹 modal 看该 commit
+// 修改的文件 + diff。原来 expandedCommits / toggleCommitFiles 整套删除。
+// (commit 列表 = 简化版 + 行点击直弹 modal,UX 更接近 GitHub Desktop / Sourcetree)
 
 // 2026-07-17:diff modal — 不再是底部抽屉,是独立全屏 modal
 const modalOpen = ref(false)
@@ -116,8 +117,8 @@ function relativeFilePath(filePath, skillPath) {
 }
 
 watch(() => props.skillPath, () => {
-  // 切 skill 时清掉展开 / modal
-  expandedCommits.value = new Set()
+  // 2026-07-18:切 skill 时清掉 modal 状态 + 重拉 log。
+  // expandedCommits 已删(commit row 不再内嵌展开),不用再清理。
   modalOpen.value = false
   modalFile.value = ''
   modalCommitHash.value = ''
@@ -156,16 +157,6 @@ async function refreshStatus() {
     const st = await getGitStatus()
     status.value = st
   } catch (_) {}
-}
-
-function toggleCommitFiles(hash) {
-  const set = new Set(expandedCommits.value)
-  if (set.has(hash)) {
-    set.delete(hash)
-  } else {
-    set.add(hash)
-  }
-  expandedCommits.value = set
 }
 
 // 2026-07-17:点文件弹 modal。打开 modal 时拉取该 commit 的全量 diff,
@@ -332,13 +323,18 @@ function diffLineClass(line) {
 }
 
 // 2026-07-18 增:跨组件事件 — 保存后通知本 panel 重拉 log。
-// store.Save 末尾走 goroutine 异步 commit,前端 save 调用方 dispatch
-// 'skillbox:git-refresh'。本 panel 仅在已展开 + 绑定了 skillPath 时
-// 才重新拉,折叠态不触发 IO。
+// 2026-07-18 改:dispatch 后 setTimeout 600ms 再 loadAll,等 store.Save
+// 末尾 go autoCommitAfterSave 异步 git commit 落盘 — 否则 loadAll 跑得
+// 比 commit 快,拉到的是旧 log,新 commit 仍看不到。
+// 600ms 是经验值(commit 在 macOS 本地 repo < 200ms,再放宽 3 倍兜底)。
+// 折叠态不拉 log(省 IO),只更新 status 已由 watch(skillPath) 兜底。
 function onGitRefresh() {
   if (!props.skillPath) return
   if (!isExpanded.value) return
-  loadAll()
+  setTimeout(() => {
+    if (!isExpanded.value) return
+    loadAll()
+  }, 600)
 }
 
 // 2026-07-17:ESC 关 modal
@@ -470,10 +466,11 @@ function formatTime(when) {
             :key="it.hash"
             class="vhp-commit"
           >
-            <!-- commit 行 -->
+            <!-- 2026-07-18 改:commit 行点击直接弹 modal 看该 commit 修改的文件 +
+                 diff(同 GitHub Desktop / Sourcetree 的 UX),不再内嵌展开。 -->
             <div
               class="vhp-commit-row"
-              @click="toggleCommitFiles(it.hash)"
+              @click="openFileModal(it.hash, '')"
             >
               <div class="vhp-node">
                 <div class="vhp-node-line vhp-node-line-top" />
@@ -491,29 +488,12 @@ function formatTime(when) {
                   <code class="vhp-commit-hash">{{ shortHash(it.hash) }}</code>
                   <span class="vhp-commit-when" :title="it.when">{{ formatTime(it.when) }}</span>
                   <span class="vhp-commit-author">{{ it.author }}</span>
+                  <!-- 2026-07-18 增:inline 显示该 commit 涉及的文件数 —
+                       一眼能看出这次改了哪几个文件,不一定非要进 modal。 -->
+                  <span v-if="(it.files || []).length" class="vhp-commit-files">
+                    · {{ (it.files || []).length }} {{ t('git.history.fileCountUnit', 'files') }}
+                  </span>
                 </div>
-              </div>
-              <IconPark
-                :type="expandedCommits.has(it.hash) ? 'down' : 'right'"
-                :size="10"
-                class="vhp-commit-arrow"
-              />
-            </div>
-
-            <!-- 展开的文件列表(只显示文件名) -->
-            <div v-if="expandedCommits.has(it.hash)" class="vhp-files">
-              <div v-if="!it.files || !it.files.length" class="vhp-files-empty">
-                {{ t('git.history.noFiles') }}
-              </div>
-              <div
-                v-for="f in (it.files || [])"
-                :key="f"
-                class="vhp-file-row"
-                :title="f"
-                @click.stop="openFileModal(it.hash, relativeFilePath(f, skillPath))"
-              >
-                <IconPark icon="Right" :size="10" class="vhp-file-arrow" />
-                <span class="vhp-file-name">{{ shortFileName(f, skillPath) }}</span>
               </div>
             </div>
           </div>
@@ -539,10 +519,16 @@ function formatTime(when) {
             <div class="vhp-modal-header-left">
               <IconPark icon="Code" :size="14" />
               <span class="vhp-modal-title">
-                {{ modalFile || (modalCommit && modalCommit._title.full) || shortHash(modalCommitHash) }}
+                <!-- 2026-07-18 改:以 commit message 为主标题(后跟 hash 短码副标),
+                     让用户一眼能看出"我点的是哪次提交"。原版以 filename 为主标题
+                     在多文件 commit 时信息量不足。 -->
+                {{ (modalCommit && modalCommit._title && modalCommit._title.full) || shortHash(modalCommitHash) }}
               </span>
               <span v-if="modalCommitHash" class="vhp-modal-range">
                 {{ shortHash(modalCommitHash) }}
+              </span>
+              <span v-if="modalCommit && modalCommit._title && modalCommit._title.scope" class="vhp-modal-scope">
+                ({{ modalCommit._title.scope }})
               </span>
             </div>
             <div class="vhp-modal-header-right">
@@ -591,16 +577,23 @@ function formatTime(when) {
             </div>
           </div>
 
-          <!-- modal body:左侧文件列表 + 右侧 diff -->
+          <!-- modal body:左侧"本提交修改的文件"列表 + 右侧 diff -->
           <div class="vhp-modal-body">
-            <!-- 左:文件列表(只文件名,选中的高亮) -->
+            <!-- 左:文件列表(本 commit 改的;第一个 "全部" 项,后续单独文件) -->
             <div class="vhp-modal-files">
+              <!-- 2026-07-18 增:小标题让用户知道左边这一列是哪个 commit 的文件 -->
+              <div class="vhp-modal-files-header">
+                <span class="vhp-modal-files-title">
+                  {{ t('git.history.filesOfCommit', '本次提交修改的文件') }}
+                </span>
+                <span class="vhp-modal-files-count">{{ modalFileList.length }}</span>
+              </div>
               <div
                 :class="['vhp-modal-file', { active: !modalFile }]"
                 @click="pickModalFile('')"
               >
                 <IconPark icon="File" :size="11" />
-                <span class="vhp-modal-file-name">{{ t('git.history.allFiles') }}</span>
+                <span class="vhp-modal-file-name">{{ t('git.history.allFiles', '全部') }}</span>
               </div>
               <div
                 v-for="f in modalFileList"
@@ -777,41 +770,21 @@ function formatTime(when) {
   font-family: var(--font-mono, monospace);
 }
 .vhp-commit-hash { color: rgba(127, 127, 127, 0.7); }
-
-.vhp-commit-arrow {
-  flex-shrink: 0;
-  color: rgba(127, 127, 127, 0.5);
-  margin-right: 4px;
+/* 2026-07-18 增:commit 行 inline 显示该提交修改文件数 — 即便不进 modal
+   也能知道这次改了哪些文件。淡蓝灰底 + mono 字号,跟 hash / author 同高。 */
+.vhp-commit-files {
+  color: rgb(59, 130, 246);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 500;
 }
 
-/* 文件列表 — 只显示文件名 */
-.vhp-files {
-  margin-left: 14px;
-  border-left: 1px solid rgba(127, 127, 127, 0.15);
-  padding: 2px 0 4px 6px;
-  display: flex;
-  flex-direction: column;
-}
-.vhp-files-empty {
-  padding: 4px 8px;
-  font-size: 10px;
-  color: rgba(127, 127, 127, 0.5);
-  font-style: italic;
-}
-.vhp-file-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-family: var(--font-mono, monospace);
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 80ms;
-}
-.vhp-file-row:hover { background: rgba(127, 127, 127, 0.08); }
-.vhp-file-arrow { flex-shrink: 0; color: rgba(127, 127, 127, 0.4); }
-.vhp-file-name { color: var(--text-primary, currentColor); }
+/* =========================================================================
+   2026-07-18 删除:.vhp-commit-arrow / .vhp-files / .vhp-files-empty /
+   .vhp-file-row / .vhp-file-arrow / .vhp-file-name — commit row 不再
+   内嵌展开文件列表(改为直接弹 modal),对应 CSS 全部下线。
+   ========================================================================= */
 
 /* =========================================================================
    Diff Modal — 全屏居中独立弹窗,看清楚差异
@@ -892,6 +865,18 @@ function formatTime(when) {
   font-size: 11px;
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
   flex-shrink: 0;
+}
+/* 2026-07-18 增:modal 标题里的 scope chip(commit message 里
+   "feat(scope): desc" 的 scope 部分),跟 hash 短码并排,跟 commit row
+   里的 scope 着色一致 — 看一眼就知道这是哪类改动。 */
+.vhp-modal-scope {
+  font-size: 11px;
+  color: rgb(59, 130, 246);
+  background: rgba(56, 139, 253, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-weight: 500;
 }
 .vhp-modal-header-right {
   display: flex;
@@ -976,6 +961,31 @@ function formatTime(when) {
   color: rgba(127, 127, 127, 0.5);
   font-style: italic;
   text-align: center;
+}
+/* 2026-07-18 增:左列文件列表头部小标题 — "本次提交修改的文件" + 数量徽章。
+   让用户一眼看出这个 modal 是"哪次提交 + 改了什么文件"的语境。 */
+.vhp-modal-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, 0.12));
+  margin-bottom: 4px;
+}
+.vhp-modal-files-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim, rgba(127, 127, 127, 0.85));
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+.vhp-modal-files-count {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-card, rgba(127, 127, 127, 0.08));
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-dim, rgba(127, 127, 127, 0.85));
 }
 
 .vhp-modal-diff {
