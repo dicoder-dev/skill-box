@@ -22,6 +22,12 @@ import IconPark from '@/components/IconPark.vue'
 
 const { t } = useI18n()
 
+// 2026-07-18 增:父组件传入的 skill 路径(可空)。done 阶段显示
+// "安装完成,skill 路径:openai/skills/pdf";fallback 走 hintDone 文案。
+const props = defineProps({
+  path: { type: String, default: '' },
+})
+
 // 内部状态
 const stage = ref('')           // '' | 'resolve' | 'download' | 'extract' | 'write' | 'done' | 'fail'
 const percent = ref(0)          // 0-100
@@ -50,7 +56,12 @@ const stageIconSpin = computed(() => {
 // 当前阶段文案 + 提示
 const stageLabel = computed(() => t(`market.progress.${stage.value}`))
 const stageHint = computed(() => {
-  if (stage.value === 'done') return t('market.progress.hintDone')
+  // 2026-07-18 改:done 阶段如果父组件传了 path,显示完整路径
+  if (stage.value === 'done') {
+    return props.path
+      ? t('market.progress.hintDoneWithPath', { path: props.path })
+      : t('market.progress.hintDone')
+  }
   if (stage.value === 'fail') {
     const k = lastFailedStage.value
       ? k.charAt(0).toUpperCase() + k.slice(1)

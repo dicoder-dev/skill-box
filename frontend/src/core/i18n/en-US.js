@@ -796,6 +796,7 @@ const messages = {
       hintExtract: 'Extracting and validating SKILL.md…',
       hintWrite: 'Writing to local skill-box store…',
       hintDone: 'Install complete',
+      hintDoneWithPath: 'Install complete, skill path: {path}',
       hintFailResolve: 'Failed during resolve, no request sent',
       hintFailDownload: 'Failed during download (zipball 404 / network / rate limit)',
       hintFailExtract: 'Failed during extract (SKILL.md parse error)',

@@ -812,6 +812,7 @@ const messages = {
       hintExtract: '正在解压并校验 SKILL.md…',
       hintWrite: '正在写入本地 skill-box store…',
       hintDone: '安装完成',
+      hintDoneWithPath: '安装完成,skill 路径:{path}',
       // fail 阶段 hint(显示具体卡哪步 + 错误码,便于排查)
       hintFailResolve: '解析阶段失败,未真正发请求',
       hintFailDownload: '下载阶段失败(可能 zipball 404 / 网络 / 限流)',

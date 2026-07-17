@@ -125,6 +125,8 @@ const inputEl = ref(null)
 const conflict = ref(null)
 // 上次成功结果(用于 emit('done') 的 payload)
 const lastResult = ref(null)
+// 2026-07-18 增:刚装入的 skill 路径(给 InstallProgress 显示 "安装完成,skill 路径:xxx")
+const installedSkillPath = ref('')
 
 // 2026-07-18 增:容器粘贴兜底。用户焦点有时落在 mip-input-row 容器上
 // (卡在 icon 旁边空白 / 焦点跑偏),CTRL+V 不会进入 input。这种情况
@@ -203,11 +205,12 @@ async function doInstall(input, conflictMode) {
     await new Promise((r) => setTimeout(r, 250))
     progressRef.value?.markDone()
     lastResult.value = out
-    // 2026-07-18 改:toast 改成"安装完成,skill 路径:xxx"格式,
-    // path = group_path(可空) + '/' + name(空 group 时直接 name)。
+    // 2026-07-18 改:拼 skill 路径(group_path/skill_name,无 group 时直 name),
+    // 一份给 toast,一份存到 installedSkillPath 给 InstallProgress done 阶段显示。
     const skillPath = out.group_path
       ? `${out.group_path}/${out.skill_name}`
       : (out.skill_name || '')
+    installedSkillPath.value = skillPath
     toast.success(t('market.success.msg', { path: skillPath }))
     installing.value = false
     // 通知 OnboardingImportDialog → SkillsView 立即 reload
@@ -446,6 +449,7 @@ function reset() {
   userInput.value = ''
   installError.value = ''
   conflict.value = null
+  installedSkillPath.value = ''
   // 2026-07-18 增:重置进度条
   progressRef.value?.reset()
   if (resetImportDoneSig) resetImportDoneSig()
@@ -581,7 +585,7 @@ const matchedSource = computed(() => {
     </div>
 
     <!-- 2026-07-18 增:4 阶段导入进度条(封装自 MarketView,跟市场界面同款体感) -->
-    <InstallProgress ref="progressRef" />
+    <InstallProgress ref="progressRef" :path="installedSkillPath" />
 
     <!-- 错误条 -->
     <p v-if="installError" class="mip-error">
