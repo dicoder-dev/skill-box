@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillversion"
@@ -265,18 +266,40 @@ func GitCommit(c *ginp.ContextPlus) {
 }
 
 // GitDiff GET /api/skillbox/git/diff?from=A&to=B
+//
+// 2026-07-17:实测 repo.Diff 在 wails webview sandbox 进程内 hang 15s+
+// 超时(go-git 和 git CLI 都试过,go run 单测 39ms 正常,webview 内死锁)。
+// 怀疑 Repo.r.mu mutex 在 sandbox goroutine 调度下死锁。
+// 临时方案:把 Diff 放独立 goroutine + 2s 超时,fallback 返 stub。
 func GitDiff(c *ginp.ContextPlus, req *RequestGitDiff) {
-	repo, err := skillversion.Default()
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
+	type result struct {
+		diff string
+		err  error
 	}
-	diff, derr := repo.Diff(req.From, req.To)
-	if derr != nil {
-		c.JSON(500, gin.H{"error": derr.Error()})
-		return
+	done := make(chan result, 1)
+	go func() {
+		repo, err := skillversion.Default()
+		if err != nil {
+			done <- result{"", err}
+			return
+		}
+		d, e := repo.Diff(req.From, req.To)
+		done <- result{d, e}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			c.JSON(500, gin.H{"error": r.err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"diff": r.diff})
+	case <-time.After(2 * time.Second):
+		// 超时 fallback:返空 diff + 提示信息(前端会展示在 modal)
+		c.JSON(200, gin.H{
+			"diff": "",
+			"hint": "diff 暂不可用(wails sandbox 兼容性问题),请用命令行 `git diff " + req.From + " " + req.To + "` 查看",
+		})
 	}
-	c.JSON(200, gin.H{"diff": diff})
 }
 
 // GitCheckout POST /api/skillbox/git/checkout {hash}
