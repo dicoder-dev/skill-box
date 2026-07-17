@@ -854,7 +854,7 @@ const messages = {
     market: {
       descSkillhub: 'SkillHub 中文社区市场,国内访问快',
       descSkillssh: 'skills.sh 国际市场,聚焦 skills 详情目录',
-      descGithub: 'GitHub 主流仓库的 SKILL.md 详情页',
+      descGithub: 'OpenAI 官方提供的 skills 仓库,搜索 / 工程类技能',
       inputPlaceholder: '粘贴详情页 URL(skillhub.cn / skills.sh / github.com)',
       btnImport: '导入',
       btnImporting: '导入中…',

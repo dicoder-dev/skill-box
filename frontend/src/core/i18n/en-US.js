@@ -836,7 +836,7 @@ const messages = {
     market: {
       descSkillhub: 'SkillHub Chinese community market, fast in CN',
       descSkillssh: 'skills.sh international market, focused skill directory',
-      descGithub: 'GitHub mainstream repos with SKILL.md detail pages',
+      descGithub: 'OpenAI official skills repo, search / engineering skills',
       inputPlaceholder: 'Paste detail page URL (skillhub.cn / skills.sh / github.com)',
       btnImport: 'Import',
       btnImporting: 'Importing…',
