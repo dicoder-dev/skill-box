@@ -1256,6 +1256,8 @@ const messages = {
       checkout: 'Reset 到此 commit',
       push: 'Push',
       pull: 'Pull',
+      // 2026-07-17 增:VSCode 风格 — 展开 commit 后没有可显示的文件时提示
+      noFiles: '本次提交未涉及具体文件',
     },
     checkoutConfirm: '确定要 reset 工作区到 commit {hash}?此操作会覆盖本地未保存的改动。',
   },

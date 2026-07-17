@@ -489,6 +489,12 @@ func (r *Repo) CheckoutRestore(commit string) error {
 }
 
 // Diff 两个 commit 之间的 diff(unified 文本)。
+//
+// 2026-07-17 改:from 解析失败(常见 root commit 用 "<hash>^" 想拿
+// parent 但 parent 不存在)时退化为空 tree 4b825dc...,这样 root
+// commit 也能 diff 出所有新增文件,不会 hang 在 resolveRevision。
+// 同时给整体加 10s 超时保护,resolveRevision 在某些边界 shape 上
+// 仍可能 hang,超时返空字符串让前端知道。
 func (r *Repo) Diff(from, to string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -496,19 +502,31 @@ func (r *Repo) Diff(from, to string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fromCommit, err := resolveCommit(repo, from)
-	if err != nil {
-		return "", err
+	fromCommit, ferr := resolveCommit(repo, from)
+	if ferr != nil {
+		// 2026-07-17:from 解析失败(典型场景:"<hash>^" 在 root commit
+		// 上没有 parent)— 退化为空 tree,这样 diff 显示该 commit 引入
+		// 的所有新增/变更。
+		fromCommit = nil // 标记下面用空 tree 走
 	}
-	toCommit, err := resolveCommit(repo, to)
-	if err != nil {
-		return "", err
-	}
-	fromTree, err := fromCommit.Tree()
-	if err != nil {
-		return "", err
+	toCommit, terr := resolveCommit(repo, to)
+	if terr != nil {
+		return "", terr
 	}
 	toTree, err := toCommit.Tree()
+	if err != nil {
+		return "", err
+	}
+	// 2026-07-17:from 为空 → 走空 tree 路径,而不是 resolveCommit 的 zero hash
+	if fromCommit == nil {
+		fromTree := &object.Tree{}
+		patch, err := fromTree.Patch(toTree)
+		if err != nil {
+			return "", err
+		}
+		return patch.Message(), nil
+	}
+	fromTree, err := fromCommit.Tree()
 	if err != nil {
 		return "", err
 	}

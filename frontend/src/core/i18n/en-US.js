@@ -1230,6 +1230,8 @@ Booleans use true / false (not the strings "true" / "false"). Output nothing out
       checkout: 'Reset to this commit',
       push: 'Push',
       pull: 'Pull',
+      // 2026-07-17 增:VSCode-style expanded commit with no files
+      noFiles: 'This commit touches no specific files',
     },
     checkoutConfirm: 'Reset working tree to commit {hash}? This will overwrite any unsaved local changes.',
   },

@@ -145,19 +145,8 @@ function onDragStart(node, e) {
   setTimeout(() => ghost.remove(), 0)
 }
 
-// 应用工具 chip 列表(给 skill 叶子用)
-// 2026-07-16 改:优先从 toolsById 拿 display_name(完整可读名,如 "Claude Code"),
-// 拿不到再回退到 toolShort 大写首字母(如 "Claude")。用户反馈 chip 只显示
-// "Claude"/"Agent" 这种语言标识,缺少具体工具名,体验模糊。
-function toolShort(toolID) {
-  if (!toolID) return '?'
-  const meta = props.toolsById?.[toolID]
-  if (meta?.display_name) return meta.display_name
-  if (meta?.display) return meta.display
-  return toolID.charAt(0).toUpperCase() + toolID.slice(1)
-}
-// 2026-07-16 增:chip 悬浮提示 — 显示完整的可读名(优先 display_name,否则 tool_id),
-// 避免用户看到短标识想确认"这是哪个工具"时无处可查。
+// 2026-07-17 增:图标栈的悬浮提示 — 显示完整的可读名(优先 display_name,否则 tool_id),
+// 避免用户看到重叠图标想确认"这是哪个工具"时无处可查。
 function toolFullTitle(toolID) {
   const meta = props.toolsById?.[toolID]
   if (meta?.display_name) return meta.display_name
@@ -229,13 +218,58 @@ function isGlobalAgent(node) {
   return /[\\/]\.agents[\\/]skills[\\/]/.test(src)
 }
 
-// 2026-07-11 增:全局 Agent 卡片的 chip 收敛 — 不显示任何 chip。
-// 设计依据:全局 Agent 已被用户从 ~/.agents/skills/ 导入,该目录是
-// 跨工具共享的全局 skills 池,工具会从该目录自动读取,无需在首页卡片上
-// 重复列出"已被哪些工具全局启用"。普通 skill 仍按原逻辑显示全部 applied_tools。
-function visibleTools(node) {
-  if (isGlobalAgent(node)) return []
-  return node.skill_meta?.applied_tools || []
+// 2026-07-17 增:卡片前的「图标栈」— 把原来底部完整工具名 chip 列表收敛成
+// head 最左侧的重叠工具图标,节省卡片纵向空间,让列表更简洁。
+// 规则(用户需求):
+//   - 全局 Agent:只显示当前默认图标(mdi:earth,emerald),不叠工具图标;
+//   - 没有任何工具启用:显示默认图标(mdi:puzzle-outline);
+//   - 有工具启用:用各工具自己的图标横向重叠排列,最多显示 3 个;
+//   - 启用工具 > 3 个:前 2 个显示工具图标,第 3 个位置显示「+N」表示还有更多。
+// 每个栈元素结构:
+//   { key, kind:'default'|'tool'|'more', icon?, img?, title?, accent? }
+const MAX_ICON_STACK = 3
+function iconStack(node) {
+  // 全局 Agent:单独一个 earth 图标,语义已足够,不再叠工具图标
+  if (isGlobalAgent(node)) {
+    return [{
+      key: '__global__',
+      kind: 'default',
+      icon: 'mdi:earth',
+      accent: 'is-global-agent',
+      title: t('skills.treeNode.globalAgentTip'),
+    }]
+  }
+  const tools = node.skill_meta?.applied_tools || []
+  // 无任何工具启用:回退默认拼图图标
+  if (!tools.length) {
+    return [{ key: '__default__', kind: 'default', icon: 'mdi:puzzle-outline' }]
+  }
+  // 有工具启用:构造工具图标栈
+  const stack = []
+  // 超过上限时,前 (MAX-1) 个显示真实工具图标,最后一格留给「+N」
+  const showCount = tools.length > MAX_ICON_STACK ? MAX_ICON_STACK - 1 : tools.length
+  for (let i = 0; i < showCount; i++) {
+    const tid = tools[i]
+    stack.push({
+      key: tid,
+      kind: 'tool',
+      img: toolIconFile(tid) ? toolIconURL(toolIconFile(tid)) : '',
+      icon: toolIcon(tid),
+      accent: TOOL_ACCENT[tid] || 'default',
+      title: toolFullTitle(tid),
+    })
+  }
+  // 溢出:最后一格显示「+N」,hover 提示剩余工具完整名
+  if (tools.length > MAX_ICON_STACK) {
+    const rest = tools.slice(showCount)
+    stack.push({
+      key: '__more__',
+      kind: 'more',
+      more: rest.length,
+      title: rest.map((tid) => toolFullTitle(tid)).join('、'),
+    })
+  }
+  return stack
 }
 </script>
 
@@ -311,53 +345,43 @@ function visibleTools(node) {
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
-            <!-- 2026-07-16 增:卡片前加 skill 图标,让用户一眼看出这是技能。
-                 全局 Agent 卡片用 mdi:earth(跟 SkillScopePanel 的图标保持一致,
-                 强化"全局共享"的视觉语义);普通 skill 卡片用 mdi:puzzle-outline
-                 (拼图块,契合 skill 模块化语义)。
-                 注意:放在 head 最左侧而不是 badge 前面,badge 跟 name 同行紧凑,
-                 图标单独一格,避免跟 emerald 色胶囊挤在一起。 -->
-            <IconPark
-              :icon="isGlobalAgent(node) ? 'mdi:earth' : 'mdi:puzzle-outline'"
-              width="14"
-              height="14"
-              :class="['tree-skill-icon', isGlobalAgent(node) ? 'is-global-agent' : '']"
-              :title="isGlobalAgent(node) ? t('skills.treeNode.globalAgentTip') : ''"
-            />
-            <!-- 2026-07-16 删:全局 Agent 卡片不再渲染「Agent」badge。
-                 前面的图标已经用 mdi:earth(全局 Agent)替代 mdi:puzzle-outline,
-                 视觉语义足够强;再叠一个 badge 占用横向空间,挤压 skill name。
-                 顺序简化为:图标 → skill name,跟普通 skill 卡片一致,
-                 区别仅在于图标样式(emerald + earth 图标)。
-                 想要看提示文案仍可 hover 图标(后续若需要可补 :title 或 :data-tip)。 -->
+            <!-- 2026-07-17 改:卡片前的图标从「单个 skill 类型图标」升级为「工具图标栈」。
+                 - 全局 Agent:单个 earth 图标(emerald);
+                 - 无工具启用:默认拼图图标;
+                 - 有工具启用:各工具真实图标横向重叠,最多 3 个,超出末位显「+N」。
+                 重叠靠 margin-left 负值实现,后一个盖在前一个上,视觉更紧凑。
+                 移除了原底部完整工具名 chip 列表(tree-skill-tools),节省卡片空间。 -->
+            <div class="tree-skill-iconstack" :title="iconStack(node).length === 1 ? iconStack(node)[0].title : ''">
+              <span
+                v-for="(it, idx) in iconStack(node)"
+                :key="it.key"
+                class="tree-icon-slot"
+                :class="[
+                  it.kind === 'default' ? 'is-default' : '',
+                  it.kind === 'more' ? 'is-more' : '',
+                  it.accent ? 'accent-' + it.accent : '',
+                ]"
+                :style="{ zIndex: iconStack(node).length - idx }"
+                :title="it.title || ''"
+              >
+                <!-- 溢出「+N」 -->
+                <span v-if="it.kind === 'more'" class="tree-icon-more">+{{ it.more }}</span>
+                <!-- 工具真实 logo -->
+                <img
+                  v-else-if="it.img"
+                  :src="it.img"
+                  :alt="it.key"
+                  width="14"
+                  height="14"
+                  class="tree-icon-img"
+                />
+                <!-- 兜底 mdi 图标(默认图标 / 工具无 icon_file) -->
+                <IconPark v-else :icon="it.icon" width="14" height="14" />
+              </span>
+            </div>
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
             <!-- 2026-07-16 改:列表项不再显示版本号,给右侧详情腾出更多横向空间;
                  版本号仍在详情区顶栏 badge 展示。 -->
-          </div>
-          <div v-if="visibleTools(node).length" class="tree-skill-tools">
-            <span
-              v-for="tid in visibleTools(node)"
-              :key="tid"
-              class="tree-tool-chip"
-              :class="['tool-chip-' + (TOOL_ACCENT[tid] || 'default')]"
-              :title="toolFullTitle(tid)"
-            >
-              <!--
-                2026-07-03 改:优先用 icon_file 真 logo,回退 mdi。
-                注意 <img> 直接放 chip 里 10x10 看起来小,但 chip 高度有限,
-                让用户能看清 logo 比保留大尺寸更重要。
-              -->
-              <img
-                v-if="toolIconFile(tid)"
-                :src="toolIconURL(toolIconFile(tid))"
-                :alt="tid"
-                width="10"
-                height="10"
-                class="tree-tool-chip-img"
-              />
-              <IconPark v-else :icon="toolIcon(tid)" width="10" height="10" />
-              <span>{{ toolShort(tid) }}</span>
-            </span>
           </div>
         </div>
       </div>
@@ -437,7 +461,7 @@ function visibleTools(node) {
   margin-left: -12px; /* 吸收 li padding(4) + .tree-row padding(8) */
   flex-shrink: 0;
 }
-.tree-group-icon, .tree-skill-icon {
+.tree-group-icon {
   color: var(--text-dim);
   flex-shrink: 0;
 }
@@ -519,18 +543,79 @@ function visibleTools(node) {
   gap: 6px;
   min-width: 0;
 }
-/* 2026-07-16 改:tree-skill-icon 真正被模板使用了(skill 卡片 head 最左侧)。
-   全局 Agent 卡片:emerald 色,跟 badge / chip 同色相,形成"全局"语义闭环;
-   普通 skill:accent dim 色,不抢 name 主体色,只起类型指示作用。 */
-.tree-skill-head .tree-skill-icon {
+/* 2026-07-17 改:tree-skill-icon 系列样式退役,替换为「工具图标栈」样式。
+   图标栈:head 最左侧一排重叠的圆形图标(工具 logo / 默认图标 / +N)。 */
+.tree-skill-iconstack {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
 }
-/* 全局 Agent 的图标必须用 emerald — 通过 Vue :class 动态加 .is-global-agent */
-.tree-skill-head .tree-skill-icon.is-global-agent {
-  color: var(--accent-emerald);
-}
-.tree-skill-head .tree-skill-icon:not(.is-global-agent) {
+/* 单个图标槽:圆形 + 描边 + 卡片底色,重叠靠 margin-left 负值 */
+.tree-icon-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   color: var(--text-dim);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+/* 第二个及之后的槽向左重叠,盖在前一个上(zIndex 在模板里按序递减) */
+.tree-icon-slot + .tree-icon-slot {
+  margin-left: -7px;
+}
+/* 默认图标(无工具启用 / 全局 Agent):不重叠,单独一个 */
+.tree-icon-slot.is-default {
+  color: var(--text-dim);
+}
+.tree-icon-slot.accent-is-global-agent {
+  color: var(--accent-emerald);
+  border-color: var(--accent-emerald-border);
+  background: var(--accent-emerald-bg);
+}
+/* 工具槽按工具分色:边框 + 淡底,主色由变量控制(暗黑模式自动切换) */
+.tree-icon-slot.accent-accent-blue {
+  border-color: var(--accent-blue-border);
+  background: var(--accent-blue-bg);
+}
+.tree-icon-slot.accent-accent-emerald {
+  border-color: var(--accent-emerald-border);
+  background: var(--accent-emerald-bg);
+}
+.tree-icon-slot.accent-accent-amber {
+  border-color: var(--accent-amber-border);
+  background: var(--accent-amber-bg);
+}
+.tree-icon-slot.accent-accent-violet {
+  border-color: var(--accent-violet-border);
+  background: var(--accent-violet-bg);
+}
+.tree-icon-slot.accent-accent-rose {
+  border-color: var(--accent-rose-border);
+  background: var(--accent-rose-bg);
+}
+/* 溢出「+N」槽:灰底 + 主色数字,提示还有更多工具 */
+.tree-icon-slot.is-more {
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+}
+.tree-icon-more {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  font-family: 'JetBrains Mono', monospace;
+}
+/* 工具真实 logo:圆内居中,不拉伸 */
+.tree-icon-img {
+  display: block;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 .tree-skill-head .tree-name {
   font-size: 13px;
@@ -544,69 +629,6 @@ function visibleTools(node) {
   font-size: 10px;
   color: var(--text-faint);
   font-family: 'JetBrains Mono', monospace;
-  flex-shrink: 0;
-}
-.tree-skill-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.tree-tool-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  /* 2026-07-11 改:padding 5px → 6px,给 chip 文字更舒展 */
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  font-size: 10px;
-  line-height: 1;
-  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease, filter 0.1s ease;
-}
-/* 2026-07-11 增:chip 按工具分色 — 5 个变体覆盖 bg / border-color / color 三联,
-   颜色取自 style.css 已有的 --accent-*-bg(50-tint 浅底) / -border(200-tint 浅边) / *(600-tint 主色)。
-   暗黑模式下变量自动切换成深色版,无需单独写规则。 */
-.tree-tool-chip.tool-chip-accent-blue {
-  background: var(--accent-blue-bg);
-  border-color: var(--accent-blue-border);
-  color: var(--accent-blue);
-}
-.tree-tool-chip.tool-chip-accent-emerald {
-  background: var(--accent-emerald-bg);
-  border-color: var(--accent-emerald-border);
-  color: var(--accent-emerald);
-}
-.tree-tool-chip.tool-chip-accent-amber {
-  background: var(--accent-amber-bg);
-  border-color: var(--accent-amber-border);
-  color: var(--accent-amber);
-}
-.tree-tool-chip.tool-chip-accent-violet {
-  background: var(--accent-violet-bg);
-  border-color: var(--accent-violet-border);
-  color: var(--accent-violet);
-}
-.tree-tool-chip.tool-chip-accent-rose {
-  background: var(--accent-rose-bg);
-  border-color: var(--accent-rose-border);
-  color: var(--accent-rose);
-}
-/* 2026-07-11 增:chip 统一 hover 加深,filter:brightness 比改 background 更通用 */
-.tree-tool-chip:hover {
-  filter: brightness(0.97);
-}
-
-/* 2026-07-03 加:chip 前的 icon_file 真 logo 渲染样式。
-   10x10 像素很小,只确保不被拉伸/模糊,不抢主体字色。 */
-.tree-tool-chip-img {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  object-fit: contain;
-  vertical-align: middle;
   flex-shrink: 0;
 }
 
