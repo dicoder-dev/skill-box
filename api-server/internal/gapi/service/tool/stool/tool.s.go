@@ -240,8 +240,15 @@ func (s *Service) Delete(toolID string) error {
 }
 
 // List 列出所有工具(给前端用,含 path)。
+//
+// 2026-07-18 改:加 ORDER BY sort_order ASC, id ASC 兜底,保证前端首页按
+// "用户最常用在前"的稳定顺序展示;此前未排序,依赖 DB 物理插入序,新工具加进来
+// 会落到表尾或随机位置,体验不一致。
 func (s *Service) List() ([]ToolView, error) {
-	tools, _, err := s.toolM().FindList(nil, nil)
+	tools, _, err := s.toolM().FindList(nil, &where.Extra{
+		OrderByColumn: "sort_order",
+		OrderByDesc:   false, // ASC:数字越小越靠前
+	})
 	if err != nil {
 		return nil, err
 	}

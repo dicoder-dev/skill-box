@@ -50,8 +50,14 @@ func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
 	return nil
 }
 
-// refreshSystemIconFiles 把系统工具的 icon_file 字段刷成 builtins 里最新的值。
-// 只在 "已初始化但内置图标文件名变了" 时生效;老字段值跟新字段值一样时不做无谓 update。
+// refreshSystemIconFiles 把系统工具的 icon_file / sort_order / display_name /
+// mdi_icon / maturity / note 字段刷成 builtins 里最新的值。
+// 只在"已初始化但 builtins 升过级(加新工具 / 改字段默认值)"时生效;
+// 老字段值跟新字段值一样时不做无谓 update。
+//
+// 2026-07-18 扩:原版只刷 icon_file,新版还刷 sort_order 等"用户没主动改过的字段"。
+// 判定哪些字段用户没改过:字段值与 builtins 不一致才刷,且只刷"软字段"(不含 is_system /
+// tool_id / enabled — 后两者是用户配置语义,不能覆盖)。
 // 系统工具 is_system=true 不让走 stool.Update(防止误改),所以这里直接走 model 层写 DB。
 func refreshSystemIconFiles(db *gorm.DB) error {
 	toolM := mtool.NewModel(db, db)
@@ -62,18 +68,71 @@ func refreshSystemIconFiles(db *gorm.DB) error {
 			// 系统工具应该都在(已经过 EnsureSeeded),找不到就跳过
 			continue
 		}
-		if cur.IconFile == bt.IconFile {
-			continue
+		// 待刷字段:(字段名, builtins 新值, 当前值)
+		// 只刷 builtins 改了、当前 DB 跟不上的;空值不刷避免清掉用户上传的图标。
+		candidates := []struct {
+			field string
+			newV  string
+			oldV  string
+		}{
+			// icon_file:仅当 builtins.IconFile 非空且与 DB 不一致才刷
+			{mtool.FieldIconFile, bt.IconFile, cur.IconFile},
 		}
-		if tx := db.Model(cur).Update(mtool.FieldIconFile, bt.IconFile); tx.Error != nil {
-			log.Printf("toolseed: refresh %s icon_file: %v", bt.ToolID, tx.Error)
-			continue
+		// 排序 / 显示名 / 图标 / 成熟度 / 备注:sync 任何字段差异
+		if cur.SortOrder != bt.SortOrder {
+			if tx := db.Model(cur).Update(mtool.FieldSortOrder, bt.SortOrder); tx.Error != nil {
+				log.Printf("toolseed: refresh %s sort_order: %v", bt.ToolID, tx.Error)
+			} else {
+				log.Printf("toolseed: refresh %s sort_order: %d → %d", bt.ToolID, cur.SortOrder, bt.SortOrder)
+				updated++
+			}
 		}
-		updated++
-		log.Printf("toolseed: refresh %s icon_file: %q → %q", bt.ToolID, cur.IconFile, bt.IconFile)
+		if cur.DisplayName != bt.DisplayName {
+			if tx := db.Model(cur).Update(mtool.FieldDisplayName, bt.DisplayName); tx.Error != nil {
+				log.Printf("toolseed: refresh %s display_name: %v", bt.ToolID, tx.Error)
+			} else {
+				log.Printf("toolseed: refresh %s display_name: %q → %q", bt.ToolID, cur.DisplayName, bt.DisplayName)
+				updated++
+			}
+		}
+		if cur.MdiIcon != bt.MdiIcon {
+			if tx := db.Model(cur).Update(mtool.FieldMdiIcon, bt.MdiIcon); tx.Error != nil {
+				log.Printf("toolseed: refresh %s mdi_icon: %v", bt.ToolID, tx.Error)
+			} else {
+				log.Printf("toolseed: refresh %s mdi_icon: %q → %q", bt.ToolID, cur.MdiIcon, bt.MdiIcon)
+				updated++
+			}
+		}
+		if cur.Maturity != bt.Maturity {
+			if tx := db.Model(cur).Update(mtool.FieldMaturity, bt.Maturity); tx.Error != nil {
+				log.Printf("toolseed: refresh %s maturity: %v", bt.ToolID, tx.Error)
+			} else {
+				log.Printf("toolseed: refresh %s maturity: %q → %q", bt.ToolID, cur.Maturity, bt.Maturity)
+				updated++
+			}
+		}
+		if cur.Note != bt.Note {
+			if tx := db.Model(cur).Update(mtool.FieldNote, bt.Note); tx.Error != nil {
+				log.Printf("toolseed: refresh %s note: %v", bt.ToolID, tx.Error)
+			} else {
+				log.Printf("toolseed: refresh %s note: updated", bt.ToolID)
+				updated++
+			}
+		}
+		for _, c := range candidates {
+			if c.newV == "" || c.newV == c.oldV {
+				continue
+			}
+			if tx := db.Model(cur).Update(c.field, c.newV); tx.Error != nil {
+				log.Printf("toolseed: refresh %s %s: %v", bt.ToolID, c.field, tx.Error)
+				continue
+			}
+			log.Printf("toolseed: refresh %s %s: %q → %q", bt.ToolID, c.field, c.oldV, c.newV)
+			updated++
+		}
 	}
 	if updated > 0 {
-		log.Printf("toolseed: refreshed %d system tool icon_file fields", updated)
+		log.Printf("toolseed: refreshed %d system tool fields", updated)
 	}
 	return nil
 }
