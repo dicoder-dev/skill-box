@@ -17,124 +17,150 @@ import (
 // ErrAlreadySeeded DB 里已有工具,跳过 seed(非错误;只是"无需再 seed")。
 var ErrAlreadySeeded = errors.New("toolseed: already initialized, skip seed")
 
-// EnsureSeeded 启动期调用:若 e_tool 表空,seed 9 个默认工具 + 内置图标写盘。
+// EnsureSeeded 启动期调用:e_tool 表非空时,upsert 所有内置工具行;
+// e_tool 表为空时,第一次 seed 全部内置工具。
 //
-// 判定:用 e_tool.Count(),为 0 才 seed;为 >0 直接返回 nil(已初始化)。
-// 失败:DB 错误透传,seed 写入失败透传(包事务内回滚)。
-// 图标写盘:在 DB 事务外执行(写文件失败不影响 DB;反之 DB 失败就别写文件)。
+// 2026-07-18 升级:从"只刷已有系统工具的软字段"升级为"增量 upsert"。
+// 判定逻辑:
+//   - DB 空 → runSeedInTx,事务内批量 insert 全量 builtins
+//   - DB 非空 → upsertBuiltinTools,事务内每条 builtin:
+//       *  DB 已存在(按 tool_id 查) → 更新软字段(sort_order / display_name /
+//          mdi_icon / icon_file / maturity / note),保留用户改过的 is_system /
+//          enabled / 独立字段
+//       *  DB 不存在 → insert 新工具行(is_system=true,enabled=true,sort_order
+//          来自 builtins)+ 写 paths
+// 这样 builtin.go 新增条目后,老用户重启一次就自动补上新增内置。
+// 用户自定义工具(is_system=false)不受影响。
 //
-// 调用方:cmd/bootstrap/start_db.go 在 AutoMigrate 之后启 HTTP 之前。
+// 图标写盘独立于 DB(失败仅 log),refresh 软字段 / 新增条目都共用。
 func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
 	m := mtool.NewModel(dbWrite, dbRead)
 	count, err := m.Count()
 	if err != nil {
 		return fmt.Errorf("toolseed: count tools: %w", err)
 	}
-	if count > 0 {
-		log.Printf("toolseed: skip (e_tool already has %d rows)", count)
-		// 即使跳过 seed,也要同步内置图标到磁盘 + 刷新系统工具的 icon_file 字段
-		// (2026-07-03 加:之前占位图标名如 cursor.png 已被替换成 cursor.ico,
-		// 老 DB 里 icon_file 字段还指向不存在的旧名,前端会拿到 404)
-		writeBuiltinIcons()
-		if err := refreshSystemIconFiles(dbWrite); err != nil {
-			log.Printf("toolseed: refreshSystemIconFiles: %v", err)
+	if count == 0 {
+		log.Printf("toolseed: seeding %d default tools (empty DB)", len(builtins))
+		if err := runSeedInTx(dbWrite); err != nil {
+			return fmt.Errorf("toolseed: seed: %w", err)
 		}
+		writeBuiltinIcons() // best-effort,失败也只是图标回退 mdi
+		log.Printf("toolseed: seeded %d default tools", len(builtins))
 		return nil
 	}
-	log.Printf("toolseed: seeding %d default tools", len(builtins))
-	if err := runSeedInTx(dbWrite); err != nil {
-		return fmt.Errorf("toolseed: seed: %w", err)
+	// DB 非空:upsert + 图标写盘
+	if err := upsertBuiltinTools(dbWrite); err != nil {
+		return fmt.Errorf("toolseed: upsert: %w", err)
 	}
-	writeBuiltinIcons() // best-effort,失败也只是图标回退 mdi
-	log.Printf("toolseed: seeded %d default tools", len(builtins))
+	writeBuiltinIcons()
+	log.Printf("toolseed: upsert complete (DB had %d rows)", count)
 	return nil
 }
 
-// refreshSystemIconFiles 把系统工具的 icon_file / sort_order / display_name /
-// mdi_icon / maturity / note 字段刷成 builtins 里最新的值。
-// 只在"已初始化但 builtins 升过级(加新工具 / 改字段默认值)"时生效;
-// 老字段值跟新字段值一样时不做无谓 update。
+// upsertBuiltinTools 单事务内对每条 builtin 做"在 → 刷软字段 / 不在 → insert"两路处理。
 //
-// 2026-07-18 扩:原版只刷 icon_file,新版还刷 sort_order 等"用户没主动改过的字段"。
-// 判定哪些字段用户没改过:字段值与 builtins 不一致才刷,且只刷"软字段"(不含 is_system /
-// tool_id / enabled — 后两者是用户配置语义,不能覆盖)。
-// 系统工具 is_system=true 不让走 stool.Update(防止误改),所以这里直接走 model 层写 DB。
-func refreshSystemIconFiles(db *gorm.DB) error {
-	toolM := mtool.NewModel(db, db)
-	updated := 0
-	for _, bt := range builtins {
-		cur, err := toolM.FindByToolID(bt.ToolID)
-		if err != nil {
-			// 系统工具应该都在(已经过 EnsureSeeded),找不到就跳过
-			continue
-		}
-		// 待刷字段:(字段名, builtins 新值, 当前值)
-		// 只刷 builtins 改了、当前 DB 跟不上的;空值不刷避免清掉用户上传的图标。
-		candidates := []struct {
-			field string
-			newV  string
-			oldV  string
-		}{
-			// icon_file:仅当 builtins.IconFile 非空且与 DB 不一致才刷
-			{mtool.FieldIconFile, bt.IconFile, cur.IconFile},
-		}
-		// 排序 / 显示名 / 图标 / 成熟度 / 备注:sync 任何字段差异
-		if cur.SortOrder != bt.SortOrder {
-			if tx := db.Model(cur).Update(mtool.FieldSortOrder, bt.SortOrder); tx.Error != nil {
-				log.Printf("toolseed: refresh %s sort_order: %v", bt.ToolID, tx.Error)
-			} else {
+// 保留不动:
+//   - 用户对系统工具改过的 is_system / enabled(后者是用户开关语义)
+//   - 用户对系统工具改过的图标(icon_file 字段值不为空 + 与 builtins 不同时不刷;
+//      但 builtins 从空改为非空时刷,因为 builtin 优先;用户上传图片的兜底路径仍由
+//      ctool upload 覆盖,这里只是把"系统内置默认 icon"刷成内置图标名)
+//   - 用户对系统工具改过的 tool_id(unique 不可变,也不刷)
+//
+// 刷(差异才刷):
+//   - sort_order / display_name / mdi_icon / maturity / note
+//
+// 新增:builtins[i] 不在 DB → insert 一行 + 它的 paths。
+func upsertBuiltinTools(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		toolM := mtool.NewModel(tx, tx)
+		pathM := mtool.NewToolPathModel(tx, tx)
+		inserted := 0
+		updated := 0
+		for _, bt := range builtins {
+			cur, err := toolM.FindByToolID(bt.ToolID)
+			if err != nil {
+				// 找不到 = 内置工具 DB 缺失 → 新增
+				tool := &entity.Tool{
+					ToolID:      bt.ToolID,
+					DisplayName: bt.DisplayName,
+					MdiIcon:     bt.MdiIcon,
+					IconFile:    bt.IconFile,
+					Maturity:    bt.Maturity,
+					Note:        bt.Note,
+					IsSystem:    true,
+					Enabled:     true,
+					SortOrder:   bt.SortOrder,
+				}
+				created, err := toolM.Create(tool)
+				if err != nil {
+					return fmt.Errorf("upsert insert %s: %w", bt.ToolID, err)
+				}
+				for _, p := range bt.Paths {
+					if _, err := pathM.Create(&entity.ToolPath{
+						ToolID:    created.ID,
+						Scope:     p.Scope,
+						Category:  p.Category,
+						Path:      p.Path,
+						PathOrder: p.PathOrder,
+					}); err != nil {
+						return fmt.Errorf("upsert insert %s path %s: %w", bt.ToolID, p.Path, err)
+					}
+				}
+				inserted++
+				log.Printf("toolseed: inserted new builtin tool %q (sort_order=%d)", bt.ToolID, bt.SortOrder)
+				continue
+			}
+			// 已存在:差异才刷 5 个软字段
+			n := 0
+			if cur.SortOrder != bt.SortOrder {
+				if err := tx.Model(cur).Update(mtool.FieldSortOrder, bt.SortOrder).Error; err != nil {
+					return fmt.Errorf("upsert update %s sort_order: %w", bt.ToolID, err)
+				}
 				log.Printf("toolseed: refresh %s sort_order: %d → %d", bt.ToolID, cur.SortOrder, bt.SortOrder)
-				updated++
+				n++
 			}
-		}
-		if cur.DisplayName != bt.DisplayName {
-			if tx := db.Model(cur).Update(mtool.FieldDisplayName, bt.DisplayName); tx.Error != nil {
-				log.Printf("toolseed: refresh %s display_name: %v", bt.ToolID, tx.Error)
-			} else {
+			if cur.DisplayName != bt.DisplayName {
+				if err := tx.Model(cur).Update(mtool.FieldDisplayName, bt.DisplayName).Error; err != nil {
+					return fmt.Errorf("upsert update %s display_name: %w", bt.ToolID, err)
+				}
 				log.Printf("toolseed: refresh %s display_name: %q → %q", bt.ToolID, cur.DisplayName, bt.DisplayName)
-				updated++
+				n++
 			}
-		}
-		if cur.MdiIcon != bt.MdiIcon {
-			if tx := db.Model(cur).Update(mtool.FieldMdiIcon, bt.MdiIcon); tx.Error != nil {
-				log.Printf("toolseed: refresh %s mdi_icon: %v", bt.ToolID, tx.Error)
-			} else {
+			if cur.MdiIcon != bt.MdiIcon {
+				if err := tx.Model(cur).Update(mtool.FieldMdiIcon, bt.MdiIcon).Error; err != nil {
+					return fmt.Errorf("upsert update %s mdi_icon: %w", bt.ToolID, err)
+				}
 				log.Printf("toolseed: refresh %s mdi_icon: %q → %q", bt.ToolID, cur.MdiIcon, bt.MdiIcon)
-				updated++
+				n++
 			}
-		}
-		if cur.Maturity != bt.Maturity {
-			if tx := db.Model(cur).Update(mtool.FieldMaturity, bt.Maturity); tx.Error != nil {
-				log.Printf("toolseed: refresh %s maturity: %v", bt.ToolID, tx.Error)
-			} else {
+			if cur.Maturity != bt.Maturity {
+				if err := tx.Model(cur).Update(mtool.FieldMaturity, bt.Maturity).Error; err != nil {
+					return fmt.Errorf("upsert update %s maturity: %w", bt.ToolID, err)
+				}
 				log.Printf("toolseed: refresh %s maturity: %q → %q", bt.ToolID, cur.Maturity, bt.Maturity)
-				updated++
+				n++
 			}
-		}
-		if cur.Note != bt.Note {
-			if tx := db.Model(cur).Update(mtool.FieldNote, bt.Note); tx.Error != nil {
-				log.Printf("toolseed: refresh %s note: %v", bt.ToolID, tx.Error)
-			} else {
+			if cur.Note != bt.Note {
+				if err := tx.Model(cur).Update(mtool.FieldNote, bt.Note).Error; err != nil {
+					return fmt.Errorf("upsert update %s note: %w", bt.ToolID, err)
+				}
 				log.Printf("toolseed: refresh %s note: updated", bt.ToolID)
-				updated++
+				n++
 			}
+			// icon_file 单独规则:仅当 builtins.IconFile 非空 且 DB 为空时刷。
+			// 避免把用户上传的自定义 icon 给覆盖回去(用户的非空 icon_file 保留)。
+			if bt.IconFile != "" && cur.IconFile == "" {
+				if err := tx.Model(cur).Update(mtool.FieldIconFile, bt.IconFile).Error; err != nil {
+					return fmt.Errorf("upsert update %s icon_file: %w", bt.ToolID, err)
+				}
+				log.Printf("toolseed: refresh %s icon_file: %q → %q", bt.ToolID, cur.IconFile, bt.IconFile)
+				n++
+			}
+			updated += n
 		}
-		for _, c := range candidates {
-			if c.newV == "" || c.newV == c.oldV {
-				continue
-			}
-			if tx := db.Model(cur).Update(c.field, c.newV); tx.Error != nil {
-				log.Printf("toolseed: refresh %s %s: %v", bt.ToolID, c.field, tx.Error)
-				continue
-			}
-			log.Printf("toolseed: refresh %s %s: %q → %q", bt.ToolID, c.field, c.oldV, c.newV)
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("toolseed: refreshed %d system tool fields", updated)
-	}
-	return nil
+		log.Printf("toolseed: upsertBuiltinTools inserted=%d updated=%d (no-op fields skipped)", inserted, updated)
+		return nil
+	})
 }
 
 // runSeedInTx 把 9 个默认工具 + paths 写进 DB,事务内。
