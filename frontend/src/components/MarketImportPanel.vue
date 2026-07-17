@@ -76,8 +76,10 @@ const sources = [
     descKey: 'onboarding.market.descGithub',
     example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
   },
-  // 2026-07-18 改:GitHub 三个仓库独立成同级子卡(level='sub'),与 skillhub /
+  // 2026-07-18 改:GitHub 仓库独立成同级子卡(level='sub'),与 skillhub /
   // skillssh / github 三张主卡在同一 .mip-sources 容器里 3 列 grid 平铺。
+  // 2026-07-18 再改:用户要求只保留 1 个,选 anthropics/skills(官方,主流,
+  // 收录最多 skill)。
   {
     id: 'repo-anthropics',
     level: 'sub',
@@ -87,26 +89,6 @@ const sources = [
     accent: '#1f2328',
     icon: 'mdi:github',
     example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
-  },
-  {
-    id: 'repo-vercel-labs',
-    level: 'sub',
-    parent: 'github',
-    name: 'vercel-labs/agent-skills',
-    url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills',
-    accent: '#1f2328',
-    icon: 'mdi:github',
-    example: 'https://github.com/vercel-labs/agent-skills/tree/main/skills/vercel-react-best-practices',
-  },
-  {
-    id: 'repo-mattpocock',
-    level: 'sub',
-    parent: 'github',
-    name: 'mattpocock/skills',
-    url: 'https://github.com/mattpocock/skills/tree/main/skills',
-    accent: '#1f2328',
-    icon: 'mdi:github',
-    example: 'https://github.com/mattpocock/skills/tree/main/skills',
   },
 ]
 
@@ -482,8 +464,10 @@ const matchedSource = computed(() => {
         {{ t('onboarding.market.examplesLabel') }}
       </div>
       <div class="mip-examples-list">
+        <!-- 2026-07-18 改:只渲染 3 个主卡的 example,GitHub 子卡不重复
+             (子卡有专属的仓库入口,主卡 GitHub 已经有 GitHub 仓库示例) -->
         <button
-          v-for="s in sources"
+          v-for="s in sources.filter((x) => x.level !== 'sub')"
           :key="`ex-${s.id}`"
           type="button"
           class="mip-example"
