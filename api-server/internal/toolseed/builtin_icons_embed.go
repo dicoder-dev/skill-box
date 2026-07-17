@@ -40,13 +40,17 @@ var builtinIconsFS embed.FS
 //   - roo.ico       roomote.dev 官方 favicon(对应 RooCodeInc/Roo-Code)
 //   - continue.png  continuedev/continue 仓库 docs/static/img/logo.svg
 //
-// 没抓到官方 logo 的 3 个(openclaw / hermes / aider):
-// IconFile 留空,前端 ToolIcon.vue 自动走 mdi 兜底(mdi:rabbit-variant / mdi:brain / mdi:account-multiple-plus-outline)。
-// 后续如果官方补了 logo,直接下载覆盖 + 在 builtin.go 改 IconFile 字段,启动时
-// refreshSystemIconFiles 会自动 sync。
+// 2026-07-18 暂时回退:
+//   - windsurf / goose / hermes 的官方真 logo 暂时拿不到(自动抓的 webfetch
+//     缓存 hash 撞了,sha 一致证明是同一张图,显然不对),删 IconFile 让前端
+//     走 mdi 兜底。
+//   - codebuddy.png 是早期的占位 HTML 文件(<!DOCTYPE html>...开头),不是
+//     真 PNG;前端实际是 codebuddy.svg,这里 builtinIconNames 撤掉 codebuddy.png
+//     避免 embed.FS 把它读进去 writeBuiltinIcons 时报错。
 //
-// codebuddy 同时保留 svg 和 png(原计划二选一,实际两个都放,seed 时工具
-// 视图用 svg,png 兜底/将来备查)。
+// 用户手动提供的话:文件名后缀须在 allowedExts 白名单内(.png/.svg/.jpg/.jpeg/
+// .webp/.ico/.gif),下载下来 cp 到 builtin-icons/ + 改 builtin.go IconFile +
+// builtin_icons_embed.go builtinIconNames,启动时 upsertBuiltinTools 刷新老 DB。
 var builtinIconNames = []string{
 	"claude.ico",
 	"codex.png",
@@ -56,12 +60,12 @@ var builtinIconNames = []string{
 	"antigravity.ico",
 	"cline.png",
 	"codebuddy.svg",
-	"codebuddy.png",
 	"jetbrains.ico",
-	// 2026-07-18 新增
+	// 2026-07-18 联网抓
 	"copilot.ico",
-	"windsurf.ico",
-	"goose.ico",
 	"roo.ico",
 	"continue.png",
+	// 2026-07-18 用户手动提供
+	"openclaw.svg",
+	"aider.svg",
 }
