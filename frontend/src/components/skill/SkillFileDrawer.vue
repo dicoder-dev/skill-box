@@ -17,6 +17,7 @@ import IconPark from '@/components/IconPark.vue'
 import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import { updateSkill, getStoreInfo } from '@/api/skillbox/skills'
+import { notifyGitRefresh } from '@/api/skillbox/git'
 import { useToastStore } from '@/core/store/toast'
 
 const { t } = useI18n()
@@ -144,6 +145,8 @@ async function saveCurrent() {
       },
       files: updatedFiles,
     })
+    // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
+    notifyGitRefresh({ source: 'drawer-edit', name: props.skill.name })
     // 同步到 selectedFile.content(去掉 dirty)
     selectedFile.value = { ...selectedFile.value, content: newContent }
     const s = new Set(dirtyPaths.value)

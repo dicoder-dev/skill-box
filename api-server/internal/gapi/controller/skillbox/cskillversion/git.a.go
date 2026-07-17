@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillversion"
@@ -267,40 +266,28 @@ func GitCommit(c *ginp.ContextPlus) {
 
 // GitDiff GET /api/skillbox/git/diff?from=A&to=B
 //
-// 2026-07-17:实测 repo.Diff 在 wails webview sandbox 进程内 hang 15s+
-// 超时(go-git / git CLI / fork 都试过,go run 单测秒返正常,webview 内
-// 就是 hang)。临时方案:2s 超时 + stub 返 hint 命令行提示,前端 modal
-// 能正常打开显示"diff 暂不可用,请用 git CLI"。等找到 sandbox 兼容
-// 方案再恢复。
+// 2026-07-18 重写:repo.Diff 改走系统 git CLI(exec.CommandContext,3s 超时),
+// webview sandbox 拦 fork 时返 ErrSandboxUnavailable → 这里转 stub hint。
+// 之前的 2s goroutine 超时逻辑删掉(已下沉到 repo.Diff 内部 ctx timeout)。
 func GitDiff(c *ginp.ContextPlus, req *RequestGitDiff) {
-	type result struct {
-		diff string
-		err  error
+	repo, err := skillversion.Default()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
 	}
-	done := make(chan result, 1)
-	go func() {
-		repo, err := skillversion.Default()
-		if err != nil {
-			done <- result{"", err}
+	d, e := repo.Diff(req.From, req.To)
+	if e != nil {
+		if errors.Is(e, skillversion.ErrSandboxUnavailable) {
+			c.JSON(200, gin.H{
+				"diff": "",
+				"hint": "diff 暂不可用(wails sandbox 兼容性问题),请用命令行 `git diff " + req.From + " " + req.To + "` 查看",
+			})
 			return
 		}
-		d, e := repo.Diff(req.From, req.To)
-		done <- result{d, e}
-	}()
-	select {
-	case r := <-done:
-		if r.err != nil {
-			c.JSON(500, gin.H{"error": r.err.Error()})
-			return
-		}
-		c.JSON(200, gin.H{"diff": r.diff})
-	case <-time.After(2 * time.Second):
-		// 超时 fallback:返空 diff + 提示信息(前端会展示在 modal)
-		c.JSON(200, gin.H{
-			"diff": "",
-			"hint": "diff 暂不可用(wails sandbox 兼容性问题),请用命令行 `git diff " + req.From + " " + req.To + "` 查看",
-		})
+		c.JSON(500, gin.H{"error": e.Error()})
+		return
 	}
+	c.JSON(200, gin.H{"diff": d})
 }
 
 // GitCheckout POST /api/skillbox/git/checkout {hash}

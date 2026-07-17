@@ -15,6 +15,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, onUpdated, nextTick, i
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
+import { notifyGitRefresh } from '@/api/skillbox/git'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 // 2026-07-17 改造:tag 弹窗 → version 历史 inline panel(嵌入 SkillScopePanel 内部),
@@ -154,6 +155,8 @@ async function saveInlineEdit() {
       },
       files: [{ path: 'SKILL.md', content: newMd }],
     })
+    // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
+    notifyGitRefresh({ source: 'ai-frontmatter', name: targetSkill.name })
     currentMd.value = newMd
     currentBody.value = extractBody(newMd)
     editing.value = false
@@ -350,6 +353,8 @@ async function onAIApply(text) {
       },
       files: [{ path: 'SKILL.md', content: newBody }],
     })
+    // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
+    notifyGitRefresh({ source: 'ai-apply', name: target.name })
     // 落盘后再同步前端状态
     currentMd.value = newBody
     currentBody.value = extractBody(newBody)
@@ -783,6 +788,8 @@ async function submit() {
   try {
     if (editingKey.value) await updateSkill(payload)
     else await createSkill(payload)
+    // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
+    notifyGitRefresh({ source: 'apply-rollback', name: payload.name })
     // 2026-06-26 增:创建/更新后,遍历勾选的工具调 apply 让 skill 在目标工具生效
     // 失败不阻断保存(apply 是"额外"动作),但要弹 toast 提示
     if (draft.applyTools.length) {

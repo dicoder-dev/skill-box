@@ -1,9 +1,10 @@
 package skillversion
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+
+	"ginp-api/pkg/logger"
 )
 
 // CommitInput 自动 commit 的入参。
@@ -277,9 +280,11 @@ func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) 
 	// commit-tree diff 索引),不再在 ForEach 里手工 commitFiles —
 	// 之前手工 commitFiles 走 parent.Patch 在某些 commit shape 下会
 	// panic(slice bounds out of range),改成 PathFilter 让 go-git 自己处理。
+	// 2026-07-18 改:把 prefix 提到 if 分支外面,这样 else 分支也是空字符串,
+	// commitFiles 调用一致地拿到 prefix(空 = 不过滤)。
 	var cIter object.CommitIter
+	prefix := pathPrefix
 	if pathPrefix != "" {
-		prefix := pathPrefix
 		cIter, err = repo.Log(&git.LogOptions{
 			From:       head.Hash(),
 			PathFilter: func(p string) bool { return strings.HasPrefix(p, prefix) },
@@ -323,7 +328,10 @@ func (r *Repo) Log(limit int, pathPrefix string) (out []CommitEntry, err error) 
 					fmt.Fprintf(os.Stderr, "[skillversion] commitFiles panic on %s: %v\n", c.Hash.String()[:7], pv)
 				}
 			}()
-			if files, ferr := commitFiles(repo, c); ferr == nil {
+			// 2026-07-18 改:传 pathPrefix 给 commitFiles — 让 commit 涉及
+			// 的文件列表在源头就按 skill 过滤,前端 modal 展开时不再
+			// 看到其他 skill 的文件。
+			if files, ferr := commitFiles(c, prefix); ferr == nil {
 				entry.Files = files
 			}
 		}()
@@ -359,9 +367,15 @@ var errStop = errStopSentinel{}
 // bounds out of range),改用 commit 自带的 stats 接口,go-git 内部已
 // 处理好边界。Stats() 返 []CommitStats,每条 .Name 就是变更的文件名。
 //
+// 2026-07-18 增:pathPrefix 非空时只返该前缀下的文件(per-skill 过滤)。
+// 前端 VersionHistoryPanel 展开 commit 时只显示当前 skill 的文件,
+// 不传 pathPrefix 走原全量返回(给"全仓 log"接口用)。
+//
 // 对 root commit(无 parent)走 Tree().Files() 列全部文件 — Stats() 在
 // root commit 上也是空 slice(没有 parent 没法 diff),所以仍走 Tree。
-func commitFiles(repo *git.Repository, c *object.Commit) ([]string, error) {
+func commitFiles(c *object.Commit, pathPrefix string) ([]string, error) {
+	hasPrefix := pathPrefix != ""
+	prefixSlash := pathPrefix + "/"
 	if c.NumParents() == 0 {
 		tree, err := c.Tree()
 		if err != nil {
@@ -369,6 +383,9 @@ func commitFiles(repo *git.Repository, c *object.Commit) ([]string, error) {
 		}
 		var files []string
 		_ = tree.Files().ForEach(func(f *object.File) error {
+			if hasPrefix && !strings.HasPrefix(f.Name, prefixSlash) {
+				return nil
+			}
 			files = append(files, f.Name)
 			return nil
 		})
@@ -383,6 +400,11 @@ func commitFiles(repo *git.Repository, c *object.Commit) ([]string, error) {
 	}
 	files := make([]string, 0, len(stats))
 	for _, s := range stats {
+		// 2026-07-18 增:pathPrefix 过滤 — 用 prefixSlash 而非裸 prefix,
+		// 避免 "agents/demo-global" 误匹配 "agents/demo-global-extra/..."。
+		if hasPrefix && !strings.HasPrefix(s.Name, prefixSlash) {
+			continue
+		}
 		files = append(files, s.Name)
 	}
 	return files, nil
@@ -494,306 +516,52 @@ func (r *Repo) CheckoutRestore(commit string) error {
 	return repo.Storer.SetReference(plumbing.NewHashReference(plumbing.HEAD, plumbing.NewHash(commit)))
 }
 
-// Diff 两个 commit 之间的 diff(unified 文本)。
+// Diff 两个 commit 之间的 unified diff(走系统 git CLI,不走 go-git)。
 //
-// 2026-07-17 大改:go-git 5.19.1 的 Tree.Patch() 在本地仓库上返空 patch
-// (不是 panic,只是 len=0)。所以这里走手工实现:walk fromTree / toTree,
-// 比较 blob hash,对变更的文件用 LCS-like 算法生成 unified diff。
+// 2026-07-18 重写:之前用 go-git Tree walk + 手写 LCS(原 repo_ops.go 注释
+// 里说"go-git 自己内部读 .git/ 不需要 fork"),实测在 wails v3 alpha.60
+// webview 子进程里 hang 15s+ — webview 是 Chromium 多进程架构,go-git
+// 大量小对象读 + ObjectIter 在子进程里 IO 调度异常,go run 单测秒返,
+// webview 内卡死。
 //
-// 历史:之前试过 exec.Command("git diff") — 但 wails webview sandbox 拦
-// 截 fork/exec,go run 单测秒返,在 webview 内 hang 15s 超时。
-// go-git 自己内部读 .git/ 不需要 fork,虽然 Tree.Patch 返空,但我们
-// 自己 walk + 比较 hash 不依赖 go-git 的 patch 算法,所以能正常跑。
+// 现在优先走 `git -C <path> diff A B`,3s ctx 超时:
+//   - 系统装了 git 且 wails sandbox 没拦 fork → 秒返,正常 diff
+//   - wails sandbox 拦 fork / exec.Command hang / git 不在 PATH → 返
+//     ErrSandboxUnavailable,GitDiff handler 转成 stub + hint 提示用户
+//     用 CLI。
 //
-// from 传空字符串 = "root commit"退化,fromFiles 留空,所有 to 文件
-// 都被视为新增。
+// 为什么不再尝试手写 LCS:它本身是对的,但 webview 内 IO 卡死的根因是
+// go-git 库本身而非 walk 逻辑。LCS 代码删除避免误导后人"以为是这里卡"。
+//
+// from 传空 = 不传 from 参数,git 会从 to 的第一个 parent 开始 diff
+// (等价于 `git diff <to>`,适合 root commit 场景)。
 func (r *Repo) Diff(from, to string) (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	repo, err := r.open()
-	if err != nil {
-		return "", err
+	if !r.IsInitialized() {
+		return "", ErrRepoNotInitialized
 	}
-	// 解析 from(失败时退化到空 fromFiles,模拟 root commit 全量 diff)
-	fromCommit, ferr := resolveCommit(repo, from)
-	var fromFiles map[string]plumbing.Hash
-	if ferr == nil && fromCommit != nil {
-		fromTree, err := fromCommit.Tree()
-		if err != nil {
-			return "", err
+	// 2026-07-18:不持 r.mu — exec.Command 是外部进程,跟 go-git 仓库对
+	// 象访问无关,不需要序列化 git 命令。
+	args := []string{"-C", r.path, "diff"}
+	if from != "" {
+		args = append(args, from)
+	}
+	args = append(args, to)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		// 2026-07-18:任何错误(ENOENT / EACCES / 沙箱拦 / 超时 / git
+		// 进程非零退出)统一转 ErrSandboxUnavailable,GitDiff handler
+		// 据此返 stub。stderr 信息丢 logger 方便排查。
+		if ee, ok := err.(*exec.ExitError); ok {
+			logger.Warn("skillversion: git diff failed: stderr=%s err=%v", string(ee.Stderr), err)
+		} else {
+			logger.Warn("skillversion: git diff exec failed: %v", err)
 		}
-		fromFiles = map[string]plumbing.Hash{}
-		_ = fromTree.Files().ForEach(func(f *object.File) error {
-			fromFiles[f.Name] = f.Hash
-			return nil
-		})
-	} else {
-		fromFiles = map[string]plumbing.Hash{}
+		return "", ErrSandboxUnavailable
 	}
-	// 解析 to
-	toCommit, terr := resolveCommit(repo, to)
-	if terr != nil {
-		return "", terr
-	}
-	toTree, err := toCommit.Tree()
-	if err != nil {
-		return "", err
-	}
-	toFiles := map[string]plumbing.Hash{}
-	_ = toTree.Files().ForEach(func(f *object.File) error {
-		toFiles[f.Name] = f.Hash
-		return nil
-	})
-
-	var out strings.Builder
-	// 找出 added/modified
-	for name, toHash := range toFiles {
-		fromHash, ok := fromFiles[name]
-		if !ok {
-			appendAddedFile(&out, repo, name, toHash)
-		} else if fromHash != toHash {
-			if err := appendModifiedFile(&out, repo, name, fromHash, toHash); err != nil {
-				return "", err
-			}
-		}
-	}
-	// 找出 deleted
-	for name, fromHash := range fromFiles {
-		if _, ok := toFiles[name]; !ok {
-			if err := appendDeletedFile(&out, repo, name, fromHash); err != nil {
-				return "", err
-			}
-		}
-	}
-	return out.String(), nil
-}
-
-// appendAddedFile 输出 "新增" 文件的 unified diff(+ 全部行)。
-func appendAddedFile(out *strings.Builder, repo *git.Repository, name string, hash plumbing.Hash) {
-	blob, err := repo.BlobObject(hash)
-	if err != nil {
-		return
-	}
-	rc, err := blob.Reader()
-	if err != nil {
-		return
-	}
-	defer rc.Close()
-	content, err := io.ReadAll(rc)
-	if err != nil {
-		return
-	}
-	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
-	out.WriteString("new file mode 100644\n")
-	out.WriteString("--- /dev/null\n")
-	out.WriteString(fmt.Sprintf("+++ b/%s\n", name))
-	for _, line := range splitLines(string(content)) {
-		out.WriteString("+" + line + "\n")
-	}
-}
-
-// appendDeletedFile 输出 "删除" 文件的 unified diff(- 全部行)。
-func appendDeletedFile(out *strings.Builder, repo *git.Repository, name string, hash plumbing.Hash) error {
-	blob, err := repo.BlobObject(hash)
-	if err != nil {
-		return err
-	}
-	rc, err := blob.Reader()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	content, err := io.ReadAll(rc)
-	if err != nil {
-		return err
-	}
-	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
-	out.WriteString("deleted file mode 100644\n")
-	out.WriteString(fmt.Sprintf("--- a/%s\n", name))
-	out.WriteString("+++ /dev/null\n")
-	for _, line := range splitLines(string(content)) {
-		out.WriteString("-" + line + "\n")
-	}
-	return nil
-}
-
-// appendModifiedFile 用 LCS-based unified diff 生成两个 blob 间的差异。
-func appendModifiedFile(out *strings.Builder, repo *git.Repository, name string, fromHash, toHash plumbing.Hash) error {
-	fromBlob, err := repo.BlobObject(fromHash)
-	if err != nil {
-		return err
-	}
-	fromRC, err := fromBlob.Reader()
-	if err != nil {
-		return err
-	}
-	defer fromRC.Close()
-	fromContent, err := io.ReadAll(fromRC)
-	if err != nil {
-		return err
-	}
-	toBlob, err := repo.BlobObject(toHash)
-	if err != nil {
-		return err
-	}
-	toRC, err := toBlob.Reader()
-	if err != nil {
-		return err
-	}
-	defer toRC.Close()
-	toContent, err := io.ReadAll(toRC)
-	if err != nil {
-		return err
-	}
-	fromLines := splitLines(string(fromContent))
-	toLines := splitLines(string(toContent))
-
-	out.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", name, name))
-	out.WriteString(fmt.Sprintf("--- a/%s\n", name))
-	out.WriteString(fmt.Sprintf("+++ b/%s\n", name))
-	// 简化 unified diff:context=3,无 hunk 头(因为我们从整文件算
-	// diff,hunk 头算起来要后端再处理 line offset,前端展示不严格
-	// 需要 hunk 头)。直接列 +/- 行,context 用 3 行。
-	const ctx = 3
-	ops := unifiedDiff(fromLines, toLines, ctx)
-	for _, op := range ops {
-		switch op.kind {
-		case ' ':
-			out.WriteString(" " + op.text + "\n")
-		case '+':
-			out.WriteString("+" + op.text + "\n")
-		case '-':
-			out.WriteString("-" + op.text + "\n")
-		}
-	}
-	return nil
-}
-
-// splitLines 按 \n 切行;保留空行(末尾无 \n 也算一行)。
-func splitLines(s string) []string {
-	if s == "" {
-		return nil
-	}
-	lines := strings.Split(s, "\n")
-	// 末尾 \n 会产生空串,丢掉
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
-}
-
-type diffOp struct {
-	kind byte // ' ' / '+' / '-'
-	text string
-}
-
-// diffSpan 一个 +/- 区间(原始编辑脚本中的连续删除或连续增加)。
-type diffSpan struct {
-	kind  byte
-	start int // raw 索引
-	end   int // raw 索引(含)
-}
-
-// unifiedDiff LCS 算法计算编辑脚本,然后合并相邻 ctx 区间输出。
-//
-// 算法:经典 LCS table → backtrack → 简化输出(无 hunk 头)。
-func unifiedDiff(a, b []string, ctx int) []diffOp {
-	n, m := len(a), len(b)
-	// LCS length table
-	dp := make([][]int, n+1)
-	for i := range dp {
-		dp[i] = make([]int, m+1)
-	}
-	for i := 1; i <= n; i++ {
-		for j := 1; j <= m; j++ {
-			if a[i-1] == b[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
-			} else {
-				if dp[i-1][j] > dp[i][j-1] {
-					dp[i][j] = dp[i-1][j]
-				} else {
-					dp[i][j] = dp[i][j-1]
-				}
-			}
-		}
-	}
-	// backtrack → 原始编辑脚本
-	type rawOp struct {
-		kind byte
-		text string
-	}
-	var raw []rawOp
-	i, j := n, m
-	for i > 0 || j > 0 {
-		switch {
-		case i > 0 && j > 0 && a[i-1] == b[j-1]:
-			raw = append(raw, rawOp{' ', a[i-1]})
-			i--
-			j--
-		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
-			raw = append(raw, rawOp{'+', b[j-1]})
-			j--
-		default:
-			raw = append(raw, rawOp{'-', a[i-1]})
-			i--
-		}
-	}
-	// reverse
-	for l, r := 0, len(raw)-1; l < r; l, r = l+1, r-1 {
-		raw[l], raw[r] = raw[r], raw[l]
-	}
-	// 合并 + 应用 ctx:扫描 raw,找出 +/- 区间,在其前后保留 ctx 行 ' '。
-	var spans []diffSpan
-	for k, op := range raw {
-		if op.kind == '+' || op.kind == '-' {
-			if len(spans) > 0 && spans[len(spans)-1].end+1 == k {
-				spans[len(spans)-1].end = k
-			} else {
-				spans = append(spans, diffSpan{kind: op.kind, start: k, end: k})
-			}
-		}
-	}
-	// 简化:不严格合并相邻 +/- 区,直接对每个 +/- 区间前后输出 ctx 行。
-	used := make([]bool, len(raw))
-	for _, sp := range spans {
-		from := sp.start - ctx
-		if from < 0 {
-			from = 0
-		}
-		to := sp.end + ctx
-		if to >= len(raw) {
-			to = len(raw) - 1
-		}
-		for k := from; k <= to; k++ {
-			used[k] = true
-		}
-	}
-	var out []diffOp
-	for k, op := range raw {
-		if used[k] {
-			out = append(out, diffOp{kind: op.kind, text: op.text})
-		}
-	}
-	return out
-}
-
-// resolveCommit 解析 ref/短 hash/全 hash → commit object。
-func resolveCommit(repo *git.Repository, ref string) (*object.Commit, error) {
-	if ref == "" || ref == "HEAD" {
-		h, err := repo.Head()
-		if err != nil {
-			return nil, err
-		}
-		ref = h.Hash().String()
-	}
-	// 2026-07-17 改:go-git 的 ResolveRevision 在 "<hash>^" / "<hash>~" 后缀
-	// 上会 hang 15s+ 超时(实测)。前端现在直接发 parent hash,
-	// 所以这里只处理完整 hash / HEAD,不再解析 ^。
-	hash := plumbing.NewHash(ref)
-	if h, err := repo.ResolveRevision(plumbing.Revision(ref)); err == nil && h != nil {
-		hash = *h
-	}
-	return repo.CommitObject(hash)
+	return string(out), nil
 }
 
 // Push 手动 push(给"重试失败"用)。

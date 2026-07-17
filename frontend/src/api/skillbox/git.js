@@ -140,3 +140,22 @@ export function pullGit() {
 export function discardGit() {
   return http.post('/api/skillbox/git/discard')
 }
+
+/**
+ * 通知所有监听 VersionHistoryPanel 的组件:本地 git 仓库新增 commit,
+ * 请重新拉 log / status。
+ *
+ * 2026-07-18 增:之前前端 save 后 VersionHistoryPanel 不刷新,根因是
+ * skillstore.Save 末尾 goroutine 异步 commit OK 但前端没信号通知
+ * panel 重拉。所有 save 调用方在成功后 dispatch 一次,panel 监听后
+ * 自动 reload(仅 panel 已展开 + 绑定了 skillPath 时拉,折叠态不拉)。
+ *
+ * @param {Object} [detail]
+ * @param {string} [detail.source]  调用源,如 'inline-edit' / 'ai-apply' / 'file-delete'
+ * @param {string} [detail.scope]
+ * @param {string} [detail.name]
+ */
+export function notifyGitRefresh(detail = {}) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('skillbox:git-refresh', { detail }))
+}

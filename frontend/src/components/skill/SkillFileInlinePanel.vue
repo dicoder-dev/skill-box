@@ -24,6 +24,7 @@ import FileTreeView from './FileTreeView.vue'
 import CodeViewer from './CodeViewer.vue'
 import SkillScopePanel from './SkillScopePanel.vue'
 import { updateSkill, createSkill, getStoreInfo } from '@/api/skillbox/skills'
+import { notifyGitRefresh } from '@/api/skillbox/git'
 // 2026-07-13 改:右侧面板状态改用 useRightPanelMode(原 useMdOutlineVisible 不再使用,
 // import 也去掉)。CodeViewer 内也不再 import 这个 composable。
 import { useRightPanelMode } from '@/core/composables/useRightPanelMode'
@@ -802,6 +803,8 @@ async function saveFrontmatterForm() {
         },
         files: incomingFiles,
       })
+      // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log(异步 commit 已落盘)。
+      notifyGitRefresh({ source: 'frontmatter-save', name })
       // 本地同步:localFiles['SKILL.md'] 设为新 body(去掉 frontmatter 的部分)
       localFiles.set('SKILL.md', splitSkillMd(newMd).body)
       // 清掉 dirty(刚保存)
@@ -919,6 +922,8 @@ async function saveCurrent() {
       },
       files: incomingFiles,
     })
+    // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
+    notifyGitRefresh({ source: 'inline-edit', name: sk.name })
     const s = new Set(dirtyPaths.value)
     s.delete(path)
     dirtyPaths.value = s
@@ -1462,6 +1467,8 @@ async function persistFiles(files, deletedPaths) {
     payload.deleted_paths = [...deletedPaths]
   }
   await updateSkill(payload)
+  // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log(文件删除也生成 commit)。
+  notifyGitRefresh({ source: 'file-delete', name: payload.name })
   // 同步本地缓存 — 用 stripped 跟后端保持一致,避免占位条目留缓存里被下次
   // 编辑循环回带出。
   localFiles.clear()

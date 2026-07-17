@@ -52,6 +52,11 @@ var (
 
 	// ErrInvalidURL URL 不合法(非 https / 域名不在白名单)。
 	ErrInvalidURL = errors.New("skillversion: invalid remote url")
+
+	// 2026-07-18 增:diff 在当前进程环境不可用(wails webview sandbox 拦截
+	// exec.Command("git") 或 go-git IO 卡死)。前端 GitDiff handler 检测
+	// 到这个错误时返 stub hint,让用户用 CLI 查看。
+	ErrSandboxUnavailable = errors.New("skillversion: git diff unavailable in current sandbox")
 )
 
 // Repo 封装单个 git 仓库(目前永远指 ~/.skill-box/skills)。

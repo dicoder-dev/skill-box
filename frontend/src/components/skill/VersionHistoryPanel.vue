@@ -258,6 +258,16 @@ function diffLineClass(line) {
   return ''
 }
 
+// 2026-07-18 增:跨组件事件 — 保存后通知本 panel 重拉 log。
+// store.Save 末尾走 goroutine 异步 commit,前端 save 调用方 dispatch
+// 'skillbox:git-refresh'。本 panel 仅在已展开 + 绑定了 skillPath 时
+// 才重新拉,折叠态不触发 IO。
+function onGitRefresh() {
+  if (!props.skillPath) return
+  if (!isExpanded.value) return
+  loadAll()
+}
+
 // 2026-07-17:ESC 关 modal
 function onKeydown(e) {
   if (e.key === 'Escape' && modalOpen.value) {
@@ -266,9 +276,11 @@ function onKeydown(e) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('skillbox:git-refresh', onGitRefresh)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('skillbox:git-refresh', onGitRefresh)
 })
 
 async function doCheckout() {
