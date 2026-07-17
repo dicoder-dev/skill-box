@@ -381,8 +381,13 @@ func init() {
 	})
 	ginp.RouterAppend(ginp.RouterItem{
 		Path:           "/api/skillbox/git/log",
+		// 2026-07-17 改:BindParamsHandler 的占位 struct 必须跟 handler
+		// 签名完全一致(字段名/类型/数量)— reflect 用它生成 reflect.Value,
+		// 字段不对会 panic "Call using *struct{...} as type *struct{...}"。
+		// GitLog 签名加了 Path,所以这里也要带。
 		Handler:        ginp.BindParamsHandler(GitLog, &struct {
-			Limit int `json:"limit" form:"limit"`
+			Limit int    `json:"limit" form:"limit"`
+			Path  string `json:"path" form:"path"`
 		}{}),
 		HttpType:       ginp.HttpGet,
 		NeedLogin:      false,

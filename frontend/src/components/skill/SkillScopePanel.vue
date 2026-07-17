@@ -14,6 +14,7 @@ import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import GitSyncPanel from '@/components/skill/GitSyncPanel.vue'
+import VersionHistoryPanel from '@/components/skill/VersionHistoryPanel.vue'
 import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 import AccordionGroup from '@/components/AccordionGroup.vue'
 import { useToastStore } from '@/core/store/toast'
@@ -32,12 +33,12 @@ import { platform } from '@/platform'
 const props = defineProps({
   skill: { type: Object, default: () => ({}) },
 })
-// 2026-07-17 增:转发 show-history 事件给父级(SkillsView),让父级决定
-// 怎么打开 VersionHistoryModal(传 skillPath 实现 per-skill 历史)。
-defineEmits(['show-history'])
+// 2026-07-17 改:VersionHistoryPanel 现在是 inline 嵌入,不再需要 show-history
+// 事件转发;面板自带 emit('checked-out') 不需要外部协调。
+// (emit 移除,因为没有事件要发了)
 
 // 2026-07-17 增:从 props.skill 拿 groupPath + name 拼出 repo 相对路径,
-// 传给 GitSyncPanel 用于 per-skill 历史入口。
+// 传给 GitSyncPanel/VersionHistoryPanel 用于 per-skill 历史入口。
 const skillPath = computed(() => {
   const s = props.skill || {}
   const name = s.name || ''
@@ -847,7 +848,8 @@ onErrorCaptured((err) => {
        错误降级时不展示(避免噪音)。
        2026-07-17 改:接 show-history 事件转发,父组件打开 VersionHistoryModal;
        skillPath 传当前 skill 路径,实现 per-skill 修改历史入口。 -->
-  <GitSyncPanel v-if="!localError" :skill-path="skillPath" @show-history="$emit('show-history', $event)" />
+  <VersionHistoryPanel v-if="!localError" :skill-path="skillPath" />
+  <GitSyncPanel v-if="!localError" :skill-path="skillPath" />
   </AccordionGroup>
 
   <!-- 2026-07-07 增:自管确认弹窗,替代 window.confirm。

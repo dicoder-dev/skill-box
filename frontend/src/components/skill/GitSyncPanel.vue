@@ -21,10 +21,12 @@ const { t } = useI18n()
 
 // 2026-07-17 增:可选 skillPath,非空时"查看历史"按钮会 emit 这个路径,
 // 让父组件打开 VersionHistoryModal 并传 skillPath 实现 per-skill 历史。
+// 2026-07-17 改:历史面板改成 inline 自动展示,GitSyncPanel 不再需要
+// emit show-history 事件;button 也删除,避免重复入口。
+// (面板位置:Git 同步面板正下方,默认折叠)
 const props = defineProps({
   skillPath: { type: String, default: '' },
 })
-const emit = defineEmits(['show-history'])
 
 // 2026-07-17 改:从本地 ref 改成走 AccordionGroup 协调器(注入式)。
 // 没包 AccordionGroup 时退化为本地 ref,行为跟旧版一致。
@@ -260,13 +262,8 @@ onMounted(() => {
           <IconPark type="undo" :size="12" />
           {{ t('git.discard') }}
         </button>
-        <!-- 2026-07-17 增:查看修改历史按钮 — 有 skillPath 时 emit 路径,
-             父组件打开 VersionHistoryModal(skillPath) 进入 per-skill 模式;
-             没传 skillPath 时 emit 空字符串,父组件走全仓历史。 -->
-        <button class="gsp-btn" :disabled="loading" @click="emit('show-history', props.skillPath)">
-          <IconPark type="history" :size="12" />
-          {{ t('git.showHistory') }}
-        </button>
+        <!-- 2026-07-17 删:'查看历史'按钮 — 历史面板改成 inline,直接
+             在 Git 同步下方展示,不需要按钮触发 -->
       </div>
 
       <div v-if="configOpen" class="gsp-config-form">

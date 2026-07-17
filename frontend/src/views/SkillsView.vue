@@ -17,8 +17,8 @@ import IconPark from '@/components/IconPark.vue'
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, forceUndoApply, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
-// 2026-07-17 改造:tag 弹窗 → version 历史弹窗,版本管理改走 git commit。
-import VersionHistoryModal from '@/components/skill/VersionHistoryModal.vue'
+// 2026-07-17 改造:tag 弹窗 → version 历史 inline panel(嵌入 SkillScopePanel 内部),
+// 这里不再 import VersionHistoryModal。
 // 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
 // (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
@@ -1311,27 +1311,23 @@ async function openGroupInFolder(groupPath) {
 }
 
 // ====== Version 历史弹窗(2026-07-17 增,替代旧 tag 弹窗) ======
-const versionOpen = ref(false)
-// 2026-07-17 增:per-skill 历史模式 — VersionHistoryModal 可选 skillPath prop,
-// 非空时只显示该 skill 的 commit。GitSyncPanel 的"查看历史"按钮会传这个值。
-const versionSkillPath = ref('')
-// 2026-07-17 增:SkillFileInlinePanel @show-history 转发 → 打开 VersionHistoryModal。
-// skillPath 参数有值时走 per-skill 模式,空时走全仓模式(节点右键菜单触发)。
+// 2026-07-17 改:VersionHistoryModal 改成 VersionHistoryPanel(已 inline 嵌入
+// SkillScopePanel),所以这里不再需要 versionOpen ref;右键菜单的"查看版本历史"
+// 现在只是辅助入口,直接聚焦历史面板。但因为面板跟当前选中 skill 绑定,
+// 右键菜单其实没意义了 — 删掉 openVersionDialog,改成跳到详情页(打开详情区)。
+
+// 2026-07-17:历史改成 inline panel 后,SkillsView 侧不再需要管理 version 弹窗状态。
+// (右键菜单暂时保留 entry 但 emit 一个新事件给父级触发聚焦 inline panel — 暂未实现,留 TODO)
 function onShowHistory(skillPath) {
-  versionSkillPath.value = skillPath || ''
-  versionOpen.value = true
+  // inline panel 已通过 SkillScopePanel 自动显示,SkillsView 侧无需动作
+  // (保留函数避免 InlinePanel 的 @show-history 事件报错)
+  // eslint-disable-next-line no-console
+  console.log('[SkillsView] show-history for:', skillPath)
 }
 function openVersionDialog(node) {
-  const name = node.skill_meta?.name || node.name
-  const path = node.path || name
-  const row = items.value.find((x) => x.path === path)
-  if (!row) {
-    selectItem({ name, path })
-  } else {
-    selectItem(row)
-  }
-  versionSkillPath.value = '' // 节点右键 → 全仓历史
-  versionOpen.value = true
+  // 2026-07-17 删:从 Modal 改成 inline panel 后,openVersionDialog 变成 no-op
+  // (留 stub 防止其他引用报错,实际不再打开弹窗)
+  onShowHistory('')
 }
 
 // 2026-07-17 增:VersionHistoryModal 在 reset 完成后 emit checked-out,这里 reload 当前 skill,
@@ -1843,8 +1839,8 @@ onUnmounted(() => {
     <!-- 2026-07-04 改:文件浏览器改成正文右侧内联面板(不再用抽屉),挂载点已合并到 detail-body-split 里。 -->
     <!-- (旧) <SkillFileDrawer v-model="fileDrawerOpen" ... /> -->
 
-    <!-- 2026-07-17 增:Version 历史弹窗(go-git commit 时间线 + diff + checkout + push) -->
-    <VersionHistoryModal v-model:open="versionOpen" :skill="current" :skill-path="versionSkillPath" @checked-out="onCheckedOut" />
+    <!-- 2026-07-17 改:VersionHistoryPanel 改成 inline 嵌入 SkillScopePanel,
+         不再需要 SkillsView 侧弹窗;如果以后要"全仓历史"独立入口再补 -->
 
     <!-- 测试结果弹窗 -->
     <Modal
