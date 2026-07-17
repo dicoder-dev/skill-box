@@ -149,6 +149,15 @@ async function loadAll() {
   }
 }
 
+// 2026-07-18 增:仅刷新 status(轻量,不拉 log)。折叠态也用这个 —
+// 否则 title meta 默认 "initialized:false" 一直显示 "未初始化"。
+async function refreshStatus() {
+  try {
+    const st = await getGitStatus()
+    status.value = st
+  } catch (_) {}
+}
+
 function toggleCommitFiles(hash) {
   const set = new Set(expandedCommits.value)
   if (set.has(hash)) {
@@ -277,7 +286,20 @@ function onKeydown(e) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('skillbox:git-refresh', onGitRefresh)
+  // 2026-07-18 增:折叠态也刷新 status — 否则 title meta 默认
+  // "initialized:false" 一直显示 "未初始化" 徽章,误以为仓库没 init。
+  // 不拉 log(避免折叠态偷偷吃 IO),只刷 status 让 badge 文案正确。
+  refreshStatus()
 })
+
+// 2026-07-18 增:切 skill 时刷 status(不依赖 isExpanded)。
+// 同 GitSyncPanel 策略 — status 是轻量,折叠态也得正确。
+watch(
+  () => props.skillPath,
+  () => {
+    refreshStatus()
+  },
+)
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('skillbox:git-refresh', onGitRefresh)
@@ -543,11 +565,14 @@ function formatTime(when) {
                   {{ t('git.copyCmd') }}
                 </button>
               </div>
-              <pre
+              <!-- 2026-07-18 改:pre 内 <template v-for><span> 在 Vue 3 编译产物
+                   里会被合并成单行 + 多个 span,白色背景下行级染色看起来全挤一行。
+                   改用直接渲染整段 string + CSS 反向匹配行级色,
+                   简化结构,避开 pre-template 的渲染歧义。 -->
+              <div
                 v-else-if="modalDiffText"
                 class="vhp-modal-diff-pre"
-              ><template v-for="(line, i) in modalDiffLines" :key="i"><span :class="diffLineClass(line)">{{ line || ' ' }}</span>
-</template></pre>
+              >{{ modalDiffText }}</div>
               <div v-else class="vhp-modal-diff-empty">
                 {{ t('git.history.pickCommit') }}
               </div>
@@ -752,7 +777,12 @@ function formatTime(when) {
 .vhp-modal {
   width: min(1100px, calc(100vw - 64px));
   height: min(720px, calc(100vh - 64px));
-  background: var(--bg-primary, #fff);
+  /* 2026-07-18 改:diff 区域是深底容器 + 亮色 diff 字体才不"一片空白"
+     (亮底 + 浅字 = 看不清)。用 --bg-card 跟主面板一致,字色 inherit var(--text)
+     在 dark theme 下 = #fafafa(亮白),在 light theme 下 = #171717(深色)。
+     diff 行级染色保留原有 CSS 类对 addon。 */
+  background: var(--bg-card, #fff);
+  color: var(--text, #171717);
   border-radius: 8px;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
   display: flex;
@@ -880,7 +910,10 @@ function formatTime(when) {
 .vhp-modal-diff {
   flex: 1 1 auto;
   overflow: auto;
-  background: var(--bg-primary, #fff);
+  /* 2026-07-18 改:跟 modal 背景同 var(--bg-card),避免 modal 卡体深色 +
+     diff 区白底卡中开白底的怪相。 */
+  background: var(--bg-elevated, var(--bg-card, #fff));
+  color: var(--text);
   position: relative;
 }
 .vhp-modal-diff-loading,
@@ -898,7 +931,12 @@ function formatTime(when) {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   line-height: 1.55;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text, inherit);
+  /* 2026-07-18 改:diff 块整体在浅色卡背景上可能因 var(--text) 未定义
+     反而继承到父级空白色(modal 是浅色卡,父级 body 暗色主题,字色没继承)。
+     fallback 用中性灰,任何主题下都可见。 */
 }
 /* 行级染色 */
 .vhp-modal-diff-pre .diff-add { color: rgb(34, 197, 94); }
