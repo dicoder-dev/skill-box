@@ -322,12 +322,17 @@ function _syncLocalFiles() {
   // 跟 _syncSelectedFile 共享判断,省一次比较
   _lastFilesRef = curFilesRef
   _lastSkillName = curName
-  localFiles.clear()
+  // 2026-07-18 改:先填再清 dirtyPaths,避免 fill 期间 isDirty computed 重算
+  // 命中旧 localFiles(空)瞬间返回 false,看似保存成功但其实是空指针。
+  // 改顺序:先 build 一个新 Map → 一次性替换 localFiles → 再清 dirty。
+  const next = new Map()
   for (const f of props.files || []) {
     const c = f.content || ''
     const stored = f.path === 'SKILL.md' ? splitSkillMd(c).body : c
-    localFiles.set(f.path, stored)
+    next.set(f.path, stored)
   }
+  localFiles.clear()
+  for (const [k, v] of next) localFiles.set(k, v)
   dirtyPaths.value = new Set()
   // 2026-07-18 增:props.files 是父级重新拉的"权威内容"(比如保存成功后
   // 父级 emit('saved') → loadCurrent → 拉新 files),本地 localFiles 跟权威
@@ -952,20 +957,39 @@ async function saveCurrent() {
     })
     // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
     notifyGitRefresh({ source: 'inline-edit', name: sk.name })
+    // 2026-07-18 改:saveCurrent 跟 resetCurrent 一样打 resetLock — Tiptap/Monaco
+    // 在 await updateSkill 期间可能还有一帧 onUpdate 在飞行,await 返回后这帧 emit
+    // 触发 onContentChange 把"用户实时编辑的内容"重新写回 localFiles,跟后端
+    // 已经收到的不完全等价(round-trip 差异),导致 isDirty 重新变 true → 保存按钮
+    // 不消失 → 用户要点第二次。resetLock 期间所有 update:content 全部丢弃,
+    // 跟 resetCurrent 同款机制,只是窗口期稍长(200ms 覆盖整次 HTTP roundtrip)。
+    resetLockUntil = Date.now() + 200
+    // 2026-07-18 改:不再手动写 localFiles — 之前 saveCurrent 末尾的
+    // localFiles.set(f.path, stored) + setMode('view') + emit('saved') 链路
+    // 跟父级 onUpdated 触发的 _syncLocalFiles 重复,且先后时序不确定:
+    //   - 如果 saveCurrent 先写 → _syncLocalFiles 后清空重填 → 一致
+    //   - 如果 _syncLocalFiles 先跑(父级 props.files 先到,onUpdated 先触发)
+    //     → localFiles 已经是新内容 → saveCurrent 再写一遍 → 但写入的是
+    //     localFiles.get(path) 即"旧 localFiles 中用户编辑过 + round-trip 后的版本"
+    //     这个值在 _syncLocalFiles clear() 后已丢失,localFiles.get(path) 返 undefined
+    //     → fallback 到 '' → 把空字符串写进 localFiles → displayContent 空白!
+    //     (Bug B 根因:保存后内容变成别的文档)
+    // 修法:saveCurrent 不动 localFiles,留给 _syncLocalFiles 用父级新 props.files
+    // 自然重填;清 dirtyPaths + 清 baseline + setMode('view') 后 emit('saved')。
     const s = new Set(dirtyPaths.value)
-    s.delete(path)
-    dirtyPaths.value = s
-    // 同步 clean 所有"刚被发出去"的文件(包括 SKILL.md 重建后的新内容)
     for (const f of incomingFiles) {
-      const stored = f.path === 'SKILL.md' ? splitSkillMd(f.content || '').body : (f.content || '')
-      localFiles.set(f.path, stored)
       s.delete(f.path)
     }
     dirtyPaths.value = s
-    const savedContent = path === 'SKILL.md' ? rebuildSkillMd() : (localFiles.get(path) || '')
+    // 2026-07-18 改:统一清掉所有相关 path 的 baseline,避免下次 setMode('edit')
+    // 之后第一次 emit 跟后端拉回来的内容有差异时,误判 dirty(基线对齐到磁盘真值)。
+    for (const f of incomingFiles) {
+      if (f.path) editingBaseline.delete(f.path)
+    }
     // 2026-07-08 改:保存成功后退出编辑态,跟 resetCurrent 一致。"放弃/保存"
     // 按钮自动消失,工具栏恢复显示"编辑"铅笔图标。
     setMode(props.skill?.name, path, 'view')
+    const savedContent = path === 'SKILL.md' ? rebuildSkillMd() : (localFiles.get(path) || '')
     emit('saved', { path, content: savedContent })
   } catch (e) {
     saveError.value = e?.message || String(e)
