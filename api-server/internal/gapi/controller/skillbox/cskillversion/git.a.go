@@ -185,6 +185,15 @@ func GitInit(c *ginp.ContextPlus) {
 //
 // 2026-07-17 增:可选 path 参数 — 非空时只返回涉及该路径前缀的 commit
 // (per-skill 修改历史的核心)。path 用正斜杠,跟 skills 目录布局一致。
+//
+// 2026-07-17 改:前端进入每个 skill 默认都拉一次 log,BootstrapInit 是异步
+// 提交首个 commit,首次启动期间 git 仓库可能未 init 或 head 不存在,
+// 直接调 repo.Log() 会返 500 + plumbing.ErrReferenceNotFound,UI 一片空白。
+// 这里在 handler 层兜底:
+//   - 仓库未 init → 返空数组(等 bootstrap / 用户主动 init 后再拉)
+//   - head 不存在(空仓库但已 init)→ 返空数组
+// 返 200 而不是 500,前端 VersionHistoryPanel 就只是"还没提交过 commit"
+// 的空态,符合用户预期。
 func GitLog(c *ginp.ContextPlus, req *struct {
 	Limit int    `json:"limit" form:"limit"`
 	Path  string `json:"path" form:"path"`
@@ -194,8 +203,18 @@ func GitLog(c *ginp.ContextPlus, req *struct {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	// 2026-07-17 增:未 init 兜底返空,避免 500 打断 UI。
+	if !repo.IsInitialized() {
+		c.JSON(200, gin.H{"items": []any{}, "total": 0})
+		return
+	}
 	entries, lerr := repo.Log(req.Limit, req.Path)
 	if lerr != nil {
+		// 2026-07-17 改:head 不存在(空仓库)也是正常状态,不是错误。
+		if errors.Is(lerr, skillversion.ErrRepoNotInitialized) || strings.Contains(lerr.Error(), "reference not found") {
+			c.JSON(200, gin.H{"items": []any{}, "total": 0})
+			return
+		}
 		logger.Error("git log: limit=%d path=%q err=%v", req.Limit, req.Path, lerr)
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return
@@ -204,6 +223,9 @@ func GitLog(c *ginp.ContextPlus, req *struct {
 }
 
 // GitCommit GET /api/skillbox/git/log/:hash
+//
+// 2026-07-17 改:同 GitLog,未 init / 空仓库时返 404 + 友好文案,避免首次
+// 启动 bootstrap 异步提交前的 500 打断 UI。
 func GitCommit(c *ginp.ContextPlus) {
 	hash := c.Param("hash")
 	repo, err := skillversion.Default()
@@ -211,8 +233,16 @@ func GitCommit(c *ginp.ContextPlus) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	if !repo.IsInitialized() {
+		c.JSON(404, gin.H{"error": "repo not initialized"})
+		return
+	}
 	entries, lerr := repo.Log(500, "")
 	if lerr != nil {
+		if errors.Is(lerr, skillversion.ErrRepoNotInitialized) || strings.Contains(lerr.Error(), "reference not found") {
+			c.JSON(404, gin.H{"error": "no commits yet"})
+			return
+		}
 		c.JSON(500, gin.H{"error": lerr.Error()})
 		return
 	}
