@@ -52,9 +52,9 @@ var builtins = []builtinTool{
 		IconFile:    "claude.ico",
 		Maturity:    "stable",
 		SortOrder:   10,
-		Note:        "Anthropic 推行的 Agent Skills 标准;写盘根 ~/.agents/skills(共享标准),项目级 .claude/skills。",
+		Note:        "Anthropic 推行的 Claude Code;全局 skills 目录 ~/.claude/skills,项目级 .claude/skills。",
 		Paths: []builtinPath{
-			{skilladapter.ScopeGlobal, "user", "~/.agents/skills", 0},
+			{skilladapter.ScopeGlobal, "user", "~/.claude/skills", 0},
 			{skilladapter.ScopeGlobal, "system", "~/.claude/plugins/marketplaces", 0},
 			{skilladapter.ScopeProject, "user", ".claude/skills", 0},
 		},

@@ -141,9 +141,23 @@ export const useToolsStore = defineStore('tools', {
      *       'system' → 仅 is_system=true
      *       'user'   → 仅 is_system=false
      */
+    /**
+     * 客户端过滤 + 排序后的列表(view 直接 v-for 这个,view 不再二次过滤/排序)。
+     * 过滤规则:
+     *   - keyword(忽略大小写)在 display_name 或 tool_id 中任一包含
+     *   - source:
+     *       'all'    → 不过滤
+     *       'system' → 仅 is_system=true
+     *       'user'   → 仅 is_system=false
+     * 排序规则(2026-07-18 加):启用的工具优先展示在前面,禁用沉底,组内按 sort_order
+     *   升序,sort_order 相等时按 tool_id 字母序稳定排序(避免视觉抖动):
+     *     1) enabled desc(启用在前)
+     *     2) sort_order asc(数字小的在前)
+     *     3) tool_id asc(打破平局,稳定排序)
+     */
     filteredItems: (s) => {
       const kw = (s.filter.keyword || '').trim().toLowerCase()
-      return s.items.filter((x) => {
+      const filtered = s.items.filter((x) => {
         if (s.filter.source === 'system' && !x.is_system) return false
         if (s.filter.source === 'user' && x.is_system) return false
         if (!kw) return true
@@ -152,6 +166,21 @@ export const useToolsStore = defineStore('tools', {
           (x.tool_id || '').toLowerCase().includes(kw)
         )
       })
+      // 拷贝再排:不污染 s.items(避免无意中影响其他读取者)
+      return filtered
+        .slice()
+        .sort((a, b) => {
+          // 1) 启用在前(true 比 false 大,减出来为负 → a 排在前)
+          const ea = Number(!!a.enabled)
+          const eb = Number(!!b.enabled)
+          if (ea !== eb) return eb - ea
+          // 2) sort_order 升序(后端默认 ASC;缺失的视为 0)
+          const sa = typeof a.sort_order === 'number' ? a.sort_order : 0
+          const sb = typeof b.sort_order === 'number' ? b.sort_order : 0
+          if (sa !== sb) return sa - sb
+          // 3) tool_id 字母序,稳定 tie-breaker
+          return String(a.tool_id || '').localeCompare(String(b.tool_id || ''))
+        })
     },
   },
 
