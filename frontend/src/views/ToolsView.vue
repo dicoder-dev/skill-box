@@ -700,7 +700,7 @@ onMounted(async () => {
                   <div class="input-with-action">
                     <input
                       v-model="tools.form.slots[item.idx].path"
-                      :placeholder="t('tools.paths.pathHint')"
+                      :placeholder="item.slot.scope === 'global' ? t('tools.paths.pathHintGlobal') : t('tools.paths.pathHintProject')"
                       :disabled="tools.saving"
                     />
                     <button

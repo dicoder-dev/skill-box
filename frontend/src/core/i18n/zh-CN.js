@@ -1174,13 +1174,16 @@ const messages = {
       category: '类别',
       path: '路径',
       pathHint: '绝对路径,支持 ~/',
+      pathHintGlobal: '全局路径,例如 Claude Code 用 ~/.agents/skills',
+      pathHintProject: '项目路径,例如 Claude Code 用 .claude/skills',
       pickFolder: '选择本地目录',
       scopeGlobal: '全局',
       scopeProject: '项目',
       categoryUser: '用户',
       categorySystem: '系统',
       // 2026-07-04 改:4 格固定布局,提示文案改成"清空即不生效"
-      hint: '每个 (scope × category) 格子最多配置 1 条 path;留空 = 该档位不写入。',
+      // 2026-07-18 改:hint 末尾补上 Claude Code 示例呼应
+      hint: '每个 (scope × category) 格子最多配置 1 条 path;留空 = 该档位不写入。Claude Code 示例:全局 ~/.agents/skills,项目 .claude/skills。',
     },
 
     // 反馈

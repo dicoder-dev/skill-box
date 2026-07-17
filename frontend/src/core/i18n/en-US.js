@@ -1155,13 +1155,16 @@ const messages = {
       category: 'Category',
       path: 'Path',
       pathHint: 'absolute path, ~/ supported',
+      pathHintGlobal: 'global path, e.g. Claude Code uses ~/.agents/skills',
+      pathHintProject: 'project path, e.g. Claude Code uses .claude/skills',
       pickFolder: 'Pick a folder',
       scopeGlobal: 'Global',
       scopeProject: 'Project',
       categoryUser: 'User',
       categorySystem: 'System',
       // 2026-07-04 改:4 fixed slots, hint explains "empty = skip"
-      hint: 'Each (scope × category) slot allows at most 1 path; leave empty to skip that slot.',
+      // 2026-07-18 改:hint now also shows Claude Code sample paths
+      hint: 'Each (scope × category) slot allows at most 1 path; leave empty to skip that slot. Claude Code samples: global ~/.agents/skills, project .claude/skills.',
     },
 
     // feedback
