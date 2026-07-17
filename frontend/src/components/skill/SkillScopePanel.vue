@@ -19,10 +19,10 @@ import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 import AccordionGroup from '@/components/AccordionGroup.vue'
 import { useToastStore } from '@/core/store/toast'
 import { useToolsStore } from '@/core/store/tools'
+import { useI18n } from 'vue-i18n'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 import { listProjects } from '@/api/skillbox/projects'
-import { plainT } from '@/core/i18n/index.js'
 // 2026-07-12 增:folder 按钮需要 platform.fs.reveal / platform.openExternal,
 // 显式 import 而非依赖 wails3 全局变量(裸名 platform 在 Web 部署 / Vite dev
 // server 上找不到 → 报 "Can't find variable: platform",跟 SkillFileInlinePanel
@@ -76,9 +76,11 @@ function toolDisplay(toolID) {
 // 避免 v-if 懒挂载 + wails webview 下的 ProxyObject 异常)。
 // 同样复用 t(key, values) 包装 plainT,跟 SkillsView / SkillFileInlinePanel
 // 保持一致。
-function t(key, values) {
-  return plainT(key, values)
-}
+//
+// 2026-07-17 改:用 useI18n() 拿 t 函数 — 之前用 function t + plainT 自定义函数,
+// 在某些 setup 编译路径下 template 拿不到($setup.t undefined),改回 vue-i18n
+// 标准姿势最稳(其他组件都用 useI18n,只有这个文件用 plainT 是个例外)。
+const { t } = useI18n()
 const LABEL_SCOPE = 'skills.scope.title'
 const LABEL_GLOBAL = 'skills.scope.global'
 // 2026-07-16 改:target 显示真实项目名,不再硬拼 LABEL_PROJECT_PREFIX + id 文本。
