@@ -66,7 +66,8 @@ const sources = [
   {
     id: 'github',
     level: 'main',
-    name: 'GitHub',
+    // 2026-07-18 改:用户要求主卡标题跟跳转 URL 配套,从 GitHub 改成 OpenAI
+    name: 'OpenAI',
     // 2026-07-18 改:用户指定跳到 openai/skills 的 .curated 子目录
     url: 'https://github.com/openai/skills/tree/main/skills/.curated',
     accent: '#1f2328',
