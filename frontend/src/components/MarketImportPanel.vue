@@ -36,12 +36,14 @@ const resetImportDoneSig = inject('resetImportDoneSig', null)
 // 空 = 走后端默认派生。MarketImportPanel 始终透传这个值给后端。
 const targetGroupPath = inject('targetGroupPath', ref(''))
 
-// 2026-07-18 增:三个市场源(本组件硬编码,跟 MarketView 的 sources 同款数据)。
-// 2026-07-18 改:GitHub 卡不再只显示官网,改成显示"具体仓库列表"(参考 MarketView
-// famousRepos 块),点击仓库直接跳到该 repo 的 skills 目录。
+// 2026-07-18 改:把"主卡 + 子卡"统一拍平,GitHub 三个仓库独立成同级子卡。
+// 用 level 区分:level='main' 走 .mip-source(主卡,加深底色 + 4px 左侧色条);
+// level='sub' 走 .mip-source-sub(子卡,纯仓库入口样式,GitHub 子卡继承 GitHub 主题色)。
+// 渲染走 v-for 同一个 .mip-sources grid,3 列布局,主卡和子卡自然分行。
 const sources = [
   {
     id: 'skillhub-cn',
+    level: 'main',
     name: 'SkillHub-CN',
     url: 'https://skillhub.cn/skills',
     accent: '#0ea5e9',
@@ -52,6 +54,7 @@ const sources = [
   },
   {
     id: 'skillssh',
+    level: 'main',
     name: 'Skills.sh',
     url: 'https://www.skills.sh/hot',
     accent: '#10b981',
@@ -62,8 +65,9 @@ const sources = [
   },
   {
     id: 'github',
+    level: 'main',
     name: 'GitHub',
-    // 2026-07-18 改:Github 主页 → GitHub skills 目录(更具体,直接能搜到主流仓库)
+    // 2026-07-18 改:Github 主页 → GitHub skills 主题页
     url: 'https://github.com/topics/agent-skills',
     accent: '#1f2328',
     accentSoft: '#656d76',
@@ -71,12 +75,38 @@ const sources = [
     sourceType: 'github',
     descKey: 'onboarding.market.descGithub',
     example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
-    // 2026-07-18 增:GitHub 具体仓库快捷链接(从 MarketView 复用)
-    repos: [
-      { display: 'anthropics/skills', url: 'https://github.com/anthropics/skills/tree/main/skills' },
-      { display: 'vercel-labs/agent-skills', url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills' },
-      { display: 'mattpocock/skills', url: 'https://github.com/mattpocock/skills/tree/main/skills' },
-    ],
+  },
+  // 2026-07-18 改:GitHub 三个仓库独立成同级子卡(level='sub'),与 skillhub /
+  // skillssh / github 三张主卡在同一 .mip-sources 容器里 3 列 grid 平铺。
+  {
+    id: 'repo-anthropics',
+    level: 'sub',
+    parent: 'github',
+    name: 'anthropics/skills',
+    url: 'https://github.com/anthropics/skills/tree/main/skills',
+    accent: '#1f2328',
+    icon: 'mdi:github',
+    example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
+  },
+  {
+    id: 'repo-vercel-labs',
+    level: 'sub',
+    parent: 'github',
+    name: 'vercel-labs/agent-skills',
+    url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills',
+    accent: '#1f2328',
+    icon: 'mdi:github',
+    example: 'https://github.com/vercel-labs/agent-skills/tree/main/skills/vercel-react-best-practices',
+  },
+  {
+    id: 'repo-mattpocock',
+    level: 'sub',
+    parent: 'github',
+    name: 'mattpocock/skills',
+    url: 'https://github.com/mattpocock/skills/tree/main/skills',
+    accent: '#1f2328',
+    icon: 'mdi:github',
+    example: 'https://github.com/mattpocock/skills/tree/main/skills',
   },
 ]
 
@@ -200,6 +230,8 @@ function onImport() {
     installError.value = t('onboarding.market.errEmpty')
     return
   }
+  // 2026-07-18 增:先做本地同名预检,命中就弹"覆盖/另存为/取消",不走下载
+  if (preCheckLocal(input)) return
   doInstall(input, '')
 }
 
@@ -209,6 +241,123 @@ function onImport() {
 //
 // _safeStringify:兼容 wails binding 偶尔返回 {text: 'xxx'} / string[] 的情况,
 // 跟 MarketView 同款防御,避免出现 '[object Object]'。
+// 2026-07-18 增:导入前本地同名检测。
+// 流程:用户 click 导入 / paste-and-import → 先推断"URL 即将落地的 skill name"
+//   → 调 store 检查同名 → 命中就弹"覆盖/另存为/取消"三选一,不走下载。
+// 为什么不靠后端 409:用户要求"在下载前就提示",而不是请求发出去再弹。
+//
+// 推断规则(跟后端 install_input_resolve.go 对齐):
+//   - skillhub.cn/skills/{slug}            → {slug}
+//   - skills.sh/{owner}/{repo}/{skill}      → {skill}
+//   - github.com/.../blob/{branch}/{path}/SKILL.md → {path 末段父目录名}
+//   - 推断失败 → 不弹本地检测,直接走下载(让后端兜底)
+function inferSkillNameFromUrl(input) {
+  const raw = String(input || '').trim().toLowerCase()
+  if (!raw.includes('://')) return ''
+  let path = ''
+  try {
+    const u = new URL(raw)
+    path = u.pathname || ''
+  } catch (_) {
+    return ''
+  }
+  const segs = path.split('/').filter(Boolean)
+  if (!segs.length) return ''
+  if (raw.includes('skillhub.cn')) {
+    const i = segs.findIndex((s) => s === 'skills' || s === 'skill')
+    if (i >= 0 && i + 1 < segs.length) return segs[i + 1]
+    return segs[segs.length - 1]
+  }
+  if (raw.includes('skills.sh')) {
+    if (segs.length >= 3) return segs[segs.length - 1]
+    return ''
+  }
+  if (raw.includes('github.com')) {
+    if (segs.length < 5) return ''
+    const mode = segs[2]
+    if (mode !== 'blob' && mode !== 'raw' && mode !== 'tree') return ''
+    const rest = segs.slice(4)
+    if (!rest.length) return ''
+    const last = rest[rest.length - 1]
+    if (/^skill\.md$/i.test(last)) {
+      if (rest.length < 2) return segs[1]
+      return rest[rest.length - 2]
+    }
+    return rest[rest.length - 1]
+  }
+  return ''
+}
+
+// 2026-07-18 增:从 useSkillTreeStore().tree 递归走所有叶子,提取所有
+// skill_meta.name 到一个 Set。组件 mount 时算一次,tree 变化后(installed
+// skill 成功)再重算一次。同名检测走 Set.has(name) O(1)。
+import { watch } from 'vue'
+import { useSkillTreeStore } from '@/core/store/skill-tree'
+const skillTree = useSkillTreeStore()
+const localSkillNames = ref(new Set())
+const localSkillPaths = ref(new Map())
+
+function rebuildLocalIndex(nodes) {
+  const names = new Set()
+  const paths = new Map()
+  function walk(arr) {
+    if (!Array.isArray(arr)) return
+    for (const n of arr) {
+      if (!n) continue
+      if (n.is_group) {
+        walk(n.children)
+        continue
+      }
+      const name = n?.skill_meta?.name || n?.name
+      if (name) {
+        names.add(String(name))
+        paths.set(String(name), n.path || n.name || '')
+      }
+    }
+  }
+  walk(nodes)
+  localSkillNames.value = names
+  localSkillPaths.value = paths
+}
+
+watch(
+  () => skillTree.tree,
+  (newTree) => rebuildLocalIndex(newTree),
+  { immediate: true, deep: true },
+)
+
+// 2026-07-18 增:本地同名预检 → 弹 modal(代替后端 409 的预检)
+const localConflict = ref(null)
+
+function preCheckLocal(input) {
+  if (!input) return false
+  const name = inferSkillNameFromUrl(input)
+  if (!name) return false
+  if (localSkillNames.value.has(name)) {
+    localConflict.value = {
+      name,
+      path: localSkillPaths.value.get(name) || name,
+      input,
+    }
+    return true
+  }
+  return false
+}
+
+async function resolveLocalConflict(mode) {
+  if (mode === 'cancel' || !localConflict.value) {
+    localConflict.value = null
+    return
+  }
+  const c = localConflict.value
+  localConflict.value = null
+  if (mode === 'rename') {
+    await doInstall(c.input, 'rename')
+  } else if (mode === 'overwrite') {
+    await doInstall(c.input, 'overwrite')
+  }
+}
+
 function _safeStringify(raw) {
   if (raw == null) return ''
   if (typeof raw === 'string') return raw
@@ -244,14 +393,14 @@ async function pasteAndImport() {
   }
   userInput.value = text
   installError.value = ''
-  // 主动把焦点移回 input,光标定位末尾
   if (inputEl.value) {
     inputEl.value.focus()
     try {
       inputEl.value.setSelectionRange(text.length, text.length)
     } catch (_) { /* 静默 */ }
   }
-  // 直接调 doInstall(走正常的解析 → 下载 → 写盘流程)
+  // 2026-07-18 改:先做本地同名预检,命中就弹"覆盖/另存为/取消",不走下载
+  if (preCheckLocal(text)) return
   await doInstall(text, '')
 }
 
@@ -278,7 +427,8 @@ function reset() {
   if (resetImportDoneSig) resetImportDoneSig()
 }
 
-// 计算属性:当前用户输入解析后会走哪个 source(纯前端提示用,不传给后端)
+// 计算属性:当前用户输入解析后会走哪个 source(纯前端提示用,不传给后端)。
+// 2026-07-18 改:GitHub 子卡也匹配 github.com 域名(子卡 url 命中即认 GitHub)。
 const matchedSource = computed(() => {
   const v = userInput.value.trim().toLowerCase()
   if (!v.includes('://')) return null
@@ -291,18 +441,20 @@ const matchedSource = computed(() => {
 
 <template>
   <div class="mip">
-    <!-- 2026-07-18 改:三个市场源卡片(放最上方)。
-         2026-07-18 再改:GitHub 卡片里的 repos 不再聚集,每个仓库一个独立卡片,
-         跟在 skillhub / skillssh 卡后面单列展示。 -->
+    <!-- 2026-07-18 改:三个市场源 + GitHub 三个仓库子卡统一在 .mip-sources 平铺。
+         主卡(3) + 子卡(3) = 6 项,3 列 grid 自然分两行,GitHub 仓库跟主卡完全同级,
+         不再"装在 GitHub 卡片里"。-->
     <div class="mip-sources">
       <div
         v-for="s in sources"
         :key="s.id"
-        class="mip-source"
+        :class="['mip-source', { 'mip-source-sub': s.level === 'sub' }]"
         :style="{
           '--accent': s.accent,
           '--accent-soft': s.accentSoft || s.accent,
         }"
+        :title="s.level === 'sub' ? s.url : t('onboarding.market.gotoSite', { name: s.name })"
+        @click="s.level === 'sub' ? openInExternal(s.url) : openInExternal(s.url)"
       >
         <div class="mip-source-head">
           <div class="mip-source-icon" :style="{ background: s.accent, color: '#fff' }">
@@ -310,32 +462,14 @@ const matchedSource = computed(() => {
           </div>
           <div class="mip-source-meta">
             <div class="mip-source-name">{{ s.name }}</div>
-            <div class="mip-source-desc">{{ t(s.descKey) }}</div>
+            <div v-if="s.level === 'main'" class="mip-source-desc">{{ t(s.descKey) }}</div>
+            <!-- 子卡下方显示「GitHub 仓库」标签,让用户知道这些是 GitHub 分类下的 -->
+            <div v-else class="mip-source-sub-label">
+              <IconPark icon="mdi:github" width="9" height="9" />
+              {{ t('onboarding.market.subLabel') }}
+            </div>
           </div>
-          <button
-            type="button"
-            class="mip-source-open"
-            :title="t('onboarding.market.gotoSite', { name: s.name })"
-            @click="openInExternal(s.url)"
-          >
-            <IconPark icon="mdi:open-in-new" width="12" height="12" />
-          </button>
-        </div>
-        <!-- 2026-07-18 改:GitHub 卡里的 repos 改为独立子卡片(去掉原来的 inline
-             chip 列表);其它源没有 repos 字段,直接不渲染。 -->
-        <div v-if="s.repos && s.repos.length" class="mip-source-subcards">
-          <button
-            v-for="r in s.repos"
-            :key="r.url"
-            type="button"
-            class="mip-source-subcard"
-            :title="r.url"
-            @click="openInExternal(r.url)"
-          >
-            <IconPark icon="mdi:github" width="11" height="11" />
-            <code>{{ r.display }}</code>
-            <IconPark icon="mdi:open-in-new" width="9" height="9" class="mip-source-subcard-arrow" />
-          </button>
+          <IconPark icon="mdi:open-in-new" width="12" height="12" class="mip-source-open-icon" />
         </div>
       </div>
     </div>
@@ -474,6 +608,44 @@ const matchedSource = computed(() => {
         </p>
       </div>
     </div>
+
+    <!-- 2026-07-18 增:本地同名预检三选一(同后端 409 冲突 Modal 样式,
+         但文案独立:本地检测在下载前就触发,语义更"提前告知") -->
+    <div v-if="localConflict" class="mip-conflict-overlay" @click.self="resolveLocalConflict('cancel')">
+      <div class="mip-conflict-modal">
+        <h3 class="mip-conflict-title">
+          <IconPark icon="mdi:alert-circle-outline" width="14" height="14" style="vertical-align: -2px; margin-right: 4px; color: var(--accent-orange, #f59e0b);" />
+          {{ t('onboarding.market.localCheck.exists', { name: localConflict.name }) }}
+        </h3>
+        <p class="mip-conflict-desc">
+          {{ t('onboarding.market.localCheck.desc', { name: localConflict.name, path: localConflict.path }) }}
+        </p>
+        <div class="mip-conflict-actions">
+          <button class="mip-conflict-btn mip-conflict-overwrite" @click="resolveLocalConflict('overwrite')">
+            <IconPark icon="mdi:content-save-outline" width="13" height="13" />
+            {{ t('onboarding.market.localCheck.overwrite') }}
+          </button>
+          <button class="mip-conflict-btn mip-conflict-rename" @click="resolveLocalConflict('rename')">
+            <IconPark icon="mdi:content-duplicate" width="13" height="13" />
+            {{ t('onboarding.market.localCheck.rename') }}
+          </button>
+          <button class="mip-conflict-btn mip-conflict-cancel" @click="resolveLocalConflict('cancel')">
+            <IconPark icon="mdi:close" width="13" height="13" />
+            {{ t('onboarding.market.localCheck.cancel') }}
+          </button>
+        </div>
+        <p class="mip-conflict-hint">
+          <span class="mip-conflict-hint-row">
+            <strong>{{ t('onboarding.market.localCheck.overwrite') }}:</strong>
+            {{ t('onboarding.market.localCheck.overwriteTip', { name: localConflict.name }) }}
+          </span>
+          <span class="mip-conflict-hint-row">
+            <strong>{{ t('onboarding.market.localCheck.rename') }}:</strong>
+            {{ t('onboarding.market.localCheck.renameTip') }}
+          </span>
+        </p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -570,55 +742,35 @@ const matchedSource = computed(() => {
   border-color: var(--accent);
 }
 
-/* 2026-07-18 改:GitHub 卡里的 repos 改为独立子卡片(去掉原来的 inline chip 列表);
-   每个 repo 一个独立按钮,带 11×11 github icon + display name + 9×9 跳转箭头。 */
-.mip-source-subcards {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--border, #2a2a2a);
-}
-.mip-source-subcard {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.04);
+/* 2026-07-18 改:子卡样式(.mip-source-sub) — GitHub 仓库独立成同级卡片,
+   跟主卡在同一 .mip-sources 容器 3 列 grid 平铺,而不是嵌在主卡里。
+   视觉上跟主卡区分:浅色背景 + 仓库 icon block + 显眼的 owner/repo 字样。 */
+.mip-source-sub {
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border, #2a2a2a);
-  border-left: 3px solid var(--accent, #1f2328);
-  border-radius: 5px;
-  color: var(--text, #ddd);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
+  border-left: 4px solid var(--accent, #1f2328);
+  border-radius: 8px;
+  padding: 14px 14px 12px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.mip-source-subcard:hover {
-  background: color-mix(in srgb, var(--accent) 12%, rgba(255, 255, 255, 0.04));
-  border-color: var(--accent);
-  color: var(--accent);
+.mip-source-sub:hover {
+  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.03));
+  border-color: var(--accent, #1f2328);
 }
-.mip-source-subcard code {
-  flex: 1;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
+.mip-source-sub-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-dim, #999);
+  margin-top: 2px;
 }
-.mip-source-subcard-arrow {
+.mip-source-open-icon {
   flex: 0 0 auto;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-}
-.mip-source-subcard:hover .mip-source-subcard-arrow {
-  opacity: 1;
+  color: var(--text-dim, #aaa);
+  align-self: center;
+  margin-left: auto;
 }
 
 /* 2026-07-18 增:输入示例区(三个来源各一条,放在输入框上方) */

@@ -866,11 +866,23 @@ const messages = {
       detectedSource: '已识别为 {name}',
       gotoSite: '前往 {name} 官网',
       fillExample: '填入示例',
-      // 2026-07-18 增:粘贴并导入按钮(参考 MarketView 的 market.btnPaste*)
+      // 2026-07-18 增:GitHub 仓库子卡下方的副标签
+      subLabel: 'GitHub 仓库',
+      // 粘贴并导入
       btnPasteAndImport: '粘贴并导入',
       btnPasteTitle: '读取剪贴板并自动安装',
       btnPasteFailed: '读取剪贴板失败:{msg}',
       btnPasteEmpty: '剪贴板为空,请先复制一个详情页 URL',
+      // 2026-07-18 增:导入前本地同名检测
+      localCheck: {
+        exists: '本地已存在同名 skill「{name}」',
+        desc: '「{name}」已经存在于你的 Skill Box 库(路径:{path}),如何处理?',
+        overwrite: '覆盖',
+        overwriteTip: '把已有的 {name} 替换成新下载的版本',
+        rename: '另存为',
+        renameTip: '保留旧版,新版本自动加 -2 / -3 后缀',
+        cancel: '取消',
+      },
     },
     // 2026-07-18 增:4 tab 共享的「目标分组」选择器 i18n
     targetGroup: {

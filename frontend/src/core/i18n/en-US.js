@@ -848,11 +848,23 @@ const messages = {
       detectedSource: 'Detected {name}',
       gotoSite: 'Open {name} website',
       fillExample: 'Fill example',
-      // 2026-07-18: paste-and-import button (refs MarketView's market.btnPaste*)
+      // 2026-07-18: GitHub repo sub-card sub-label
+      subLabel: 'GitHub repo',
+      // paste & import
       btnPasteAndImport: 'Paste & Import',
       btnPasteTitle: 'Read clipboard and auto-install',
       btnPasteFailed: 'Read clipboard failed: {msg}',
       btnPasteEmpty: 'Clipboard is empty, please copy a detail page URL first',
+      // 2026-07-18: pre-import local same-name check
+      localCheck: {
+        exists: 'Local skill "{name}" already exists',
+        desc: '"{name}" already exists in your Skill Box library (path: {path}). How to proceed?',
+        overwrite: 'Overwrite',
+        overwriteTip: 'Replace the existing {name} with the new version',
+        rename: 'Save as new',
+        renameTip: 'Keep old version, new one will get -2 / -3 suffix',
+        cancel: 'Cancel',
+      },
     },
     // 2026-07-18: target group selector shared by all 4 tabs
     targetGroup: {

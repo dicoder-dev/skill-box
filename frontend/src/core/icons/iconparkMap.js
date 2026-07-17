@@ -119,6 +119,13 @@ export const MDI_TO_ICONPARK = {
   // 2026-07-09 增:地球图标,用于「在浏览器中打开」按钮
   // 比 external-link 箭头更柔和,语义"跳到外部站点"更准
   'earth':                        'Earth',
+  // 2026-07-18 增:GitHub / skills.sh / skillhub 等三方源卡片图标(iconpark 原生)。
+  // 历史:MarketImportPanel 用 mdi:github / mdi:lightning-bolt / mdi:earth,前两个没
+  // 映射,fallback 到 Help(问号)。改用 iconpark 原生 GithubOne(填充感强,适合
+  // 卡片图标块) / Lightning(技能市场"热门"感) / Earth(skillhub 区域感)。
+  'github':                       'GithubOne',
+  'lightning-bolt':               'Lightning',
+  'fire':                         'Fire',
 
   // 视图 / 复制 / 眼睛
   'eye-outline':                  'View',
