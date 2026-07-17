@@ -11,7 +11,7 @@
 | [README.md](./README.md) | 本文件,目录索引 + 何时读什么 | 第一次进入 |
 | [architecture.md](./architecture.md) | 架构关键信息(Claude 视角,精简版) | 改后端/前端代码前 |
 | [tech_stack.md](./tech_stack.md) | 技术栈 + 版本约束 | 装依赖 / 升级版本前 |
-| [conventions.md](./conventions.md) | 命名 / 目录 / 文件规范 | 任何写代码场景 |
+| [conventions.md](./conventions.md) | 命名 / 目录 / 文件规范 + AI 生成代码规范 | 任何写代码场景 |
 | [workflow.md](./workflow.md) | 开发 / 提 PR / 验证流程 | 提交前 |
 
 ## 何时读什么的强约束
