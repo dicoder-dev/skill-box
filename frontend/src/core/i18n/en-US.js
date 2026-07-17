@@ -843,6 +843,8 @@ const messages = {
       clear: 'Clear',
       errEmpty: 'Please paste a detail page URL',
       tip: 'Copy any detail page link from the sources above, paste into the input to import',
+      // 2026-07-18: input examples (one per source)
+      examplesLabel: 'Input examples (click to fill)',
       detectedSource: 'Detected {name}',
       gotoSite: 'Open {name} website',
       fillExample: 'Fill example',

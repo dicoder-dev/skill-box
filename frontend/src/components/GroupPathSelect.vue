@@ -109,20 +109,20 @@ onMounted(async () => {
 .gps {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
   border: 1px solid var(--border, #2a2a2a);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .gps-label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12.5px;
-  font-weight: 500;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text, #ddd);
   white-space: nowrap;
   cursor: pointer;
@@ -131,27 +131,54 @@ onMounted(async () => {
 .gps-select-wrap {
   flex: 1;
   position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* 2026-07-18 改:加深的下拉箭头 indicator,让用户一眼看出是可下拉控件 */
+.gps-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text, #ddd);
+  border-bottom: 2px solid var(--text, #ddd);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+  opacity: 0.7;
 }
 
 .gps-select {
+  /* 2026-07-18 改:加宽 padding + 加深背景 + 加粗字体 + 自绘下拉箭头空间 */
   width: 100%;
-  padding: 5px 8px;
+  padding: 9px 32px 9px 12px;
   background: var(--bg, #1a1a1a);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 4px;
-  color: inherit;
+  border: 1px solid var(--border-strong, #404040);
+  border-radius: 6px;
+  color: var(--text, #eee);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13.5px;
+  font-weight: 500;
   outline: none;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  /* 隐藏原生箭头(用自绘的右上角 chevron) */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.gps-select:hover {
+  border-color: var(--accent-blue, #3b82f6);
 }
 .gps-select:focus {
   border-color: var(--accent-blue, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
 }
 
 .gps-hint {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-dim, #999);
   white-space: nowrap;
 }

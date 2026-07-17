@@ -16,7 +16,7 @@
 // 参考 MarketView.vue L49-138 (sources 硬编码) + L345-432 (install + conflict)
 // + L699-729 (conflict 弹窗模板) + L1357-1480 (conflict CSS)。
 
-import { ref, inject, computed } from 'vue'
+import { ref, inject, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
 import { installFromInput } from '@/api/skillbox/market'
@@ -36,14 +36,16 @@ const resetImportDoneSig = inject('resetImportDoneSig', null)
 // 空 = 走后端默认派生。MarketImportPanel 始终透传这个值给后端。
 const targetGroupPath = inject('targetGroupPath', ref(''))
 
-// 三个市场源(2026-07-18 增:本组件硬编码,跟 MarketView 的 sources 数组同款来源,
-// 区别是这里每个源只展示"复制链接粘贴进来"的引导,不再做"装到 skill-box"按钮)。
+// 2026-07-18 增:三个市场源(本组件硬编码,跟 MarketView 的 sources 同款数据)。
+// 2026-07-18 改:GitHub 卡不再只显示官网,改成显示"具体仓库列表"(参考 MarketView
+// famousRepos 块),点击仓库直接跳到该 repo 的 skills 目录。
 const sources = [
   {
     id: 'skillhub-cn',
     name: 'SkillHub-CN',
     url: 'https://skillhub.cn/skills',
     accent: '#0ea5e9',
+    icon: 'mdi:earth',
     sourceType: 'skillhub-cn',
     descKey: 'onboarding.market.descSkillhub',
     example: 'https://skillhub.cn/skills/code-review',
@@ -53,6 +55,7 @@ const sources = [
     name: 'Skills.sh',
     url: 'https://www.skills.sh/hot',
     accent: '#10b981',
+    icon: 'mdi:lightning-bolt',
     sourceType: 'skillssh',
     descKey: 'onboarding.market.descSkillssh',
     example: 'https://skills.sh/anthropics/skills/pdf',
@@ -60,22 +63,68 @@ const sources = [
   {
     id: 'github',
     name: 'GitHub',
-    url: 'https://github.com',
+    // 2026-07-18 改:Github 主页 → GitHub skills 目录(更具体,直接能搜到主流仓库)
+    url: 'https://github.com/topics/agent-skills',
     accent: '#1f2328',
     accentSoft: '#656d76',
+    icon: 'mdi:github',
     sourceType: 'github',
     descKey: 'onboarding.market.descGithub',
     example: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
+    // 2026-07-18 增:GitHub 具体仓库快捷链接(从 MarketView 复用)
+    repos: [
+      { display: 'anthropics/skills', url: 'https://github.com/anthropics/skills/tree/main/skills' },
+      { display: 'vercel-labs/agent-skills', url: 'https://github.com/vercel-labs/agent-skills/tree/main/skills' },
+      { display: 'mattpocock/skills', url: 'https://github.com/mattpocock/skills/tree/main/skills' },
+    ],
   },
 ]
 
 const userInput = ref('')
 const installing = ref(false)
 const installError = ref('')
+// 2026-07-18 增:input 元素 ref(供 onInputPaste / 主动 focus 用)
+const inputEl = ref(null)
 // 2026-07-09 增:同名 skill 冲突 Modal(沿用 MarketView 的 conflict 三选一)
 const conflict = ref(null)
 // 上次成功结果(用于 emit('done') 的 payload)
 const lastResult = ref(null)
+
+// 2026-07-18 增:容器粘贴兜底。用户焦点有时落在 mip-input-row 容器上
+// (卡在 icon 旁边空白 / 焦点跑偏),CTRL+V 不会进入 input。这种情况
+// 直接接住 paste 事件,把剪贴板文本写进 userInput。
+function onContainerPaste(e) {
+  if (installing.value) return
+  const text = e?.clipboardData?.getData?.('text/plain') || e?.clipboardData?.getData?.('text') || ''
+  if (!text) return
+  e.preventDefault()
+  // 文本是空(用户复制了非文本) → 静默忽略
+  const next = (userInput.value || '') + text
+  userInput.value = next
+  installError.value = ''
+  // 主动把焦点 + 光标移回 input 末尾
+  if (inputEl.value) {
+    inputEl.value.focus()
+    try {
+      const len = next.length
+      inputEl.value.setSelectionRange(len, len)
+    } catch (_) { /* setSelectionRange 失败时静默 */ }
+  }
+}
+
+// 2026-07-18 增:input 自身 paste 兜底 — 显式 setData 写回 v-model。
+// 原生 <input> 默认支持 paste,但某些 webview / 桌面 wails 场景下
+// v-model 同步可能丢文本,显式补一刀最稳。
+function onInputPaste(e) {
+  const text = e?.clipboardData?.getData?.('text/plain') || e?.clipboardData?.getData?.('text') || ''
+  if (!text) return
+  // 不 preventDefault,让 input 自然处理;这里只是同步一下 v-model,
+  // 防止 v-model 与 DOM value 不一致。
+  nextTick(() => {
+    userInput.value = inputEl.value?.value ?? userInput.value
+    installError.value = ''
+  })
+}
 
 async function openInExternal(url) {
   try {
@@ -190,50 +239,96 @@ const matchedSource = computed(() => {
 
 <template>
   <div class="mip">
-    <!-- 三方源列表:让用户知道有哪些源,带跳转官网 -->
+    <!-- 2026-07-18 改:输入示例区(三个来源各一条,放在输入框上方,让用户知道怎么输入)
+         点击示例 = 填入输入框。比卡片底部的 example 更显眼。 -->
+    <div class="mip-examples">
+      <div class="mip-examples-label">
+        <IconPark icon="mdi:lightbulb-on-outline" width="12" height="12" />
+        {{ t('onboarding.market.examplesLabel') }}
+      </div>
+      <div class="mip-examples-list">
+        <button
+          v-for="s in sources"
+          :key="`ex-${s.id}`"
+          type="button"
+          class="mip-example"
+          :style="{ '--accent': s.accent }"
+          :title="t('onboarding.market.fillExample')"
+          @click="fillExample(s.example)"
+        >
+          <IconPark :icon="s.icon || 'mdi:link-variant'" width="11" height="11" />
+          <code class="mip-example-url">{{ s.example }}</code>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2026-07-18 改:三个市场源卡片 — 提高标识度(加深底色 + 更大 padding + 显眼图标 +
+         GitHub 卡片显示具体仓库)。 -->
     <div class="mip-sources">
-      <button
+      <div
         v-for="s in sources"
         :key="s.id"
-        type="button"
         class="mip-source"
         :style="{
           '--accent': s.accent,
           '--accent-soft': s.accentSoft || s.accent,
         }"
-        :title="t('onboarding.market.gotoSite', { name: s.name })"
-        @click="openInExternal(s.url)"
       >
-        <div class="mip-source-name">
-          <IconPark icon="mdi:open-in-new" width="11" height="11" />
-          {{ s.name }}
-        </div>
-        <div class="mip-source-desc">{{ t(s.descKey) }}</div>
-        <div class="mip-source-example">
-          <code>{{ s.example }}</code>
+        <div class="mip-source-head">
+          <div class="mip-source-icon" :style="{ background: s.accent, color: '#fff' }">
+            <IconPark :icon="s.icon || 'mdi:link-variant'" width="16" height="16" />
+          </div>
+          <div class="mip-source-meta">
+            <div class="mip-source-name">{{ s.name }}</div>
+            <div class="mip-source-desc">{{ t(s.descKey) }}</div>
+          </div>
           <button
             type="button"
-            class="mip-fill"
-            :title="t('onboarding.market.fillExample')"
-            @click.stop="fillExample(s.example)"
+            class="mip-source-open"
+            :title="t('onboarding.market.gotoSite', { name: s.name })"
+            @click="openInExternal(s.url)"
           >
-            <IconPark icon="mdi:content-copy" width="11" height="11" />
+            <IconPark icon="mdi:open-in-new" width="12" height="12" />
           </button>
         </div>
-      </button>
+        <!-- 2026-07-18 增:GitHub 卡显示具体仓库快捷链接 -->
+        <div v-if="s.repos && s.repos.length" class="mip-source-repos">
+          <button
+            v-for="r in s.repos"
+            :key="r.url"
+            type="button"
+            class="mip-source-repo"
+            :title="r.url"
+            @click="openInExternal(r.url)"
+          >
+            <IconPark icon="mdi:github" width="10" height="10" />
+            <code>{{ r.display }}</code>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- URL 输入框 + 导入按钮 -->
-    <div class="mip-input-row">
+    <!-- 2026-07-18 改:在 input-row 容器挂 @paste,容许用户在容器内任意位置(包
+         括左侧 icon / 右侧 clear 按钮之间的空白)粘贴;同时 input 也挂 @paste
+         兜底,显式把 e.clipboardData 写回 userInput。解决"焦点在卡片按钮上时
+         CTRL+V 失效"的问题。 -->
+    <div
+      class="mip-input-row"
+      tabindex="0"
+      @paste="onContainerPaste"
+    >
       <div class="mip-input-wrap">
         <IconPark icon="mdi:link-variant" width="14" height="14" class="mip-input-icon" />
         <input
+          ref="inputEl"
           v-model="userInput"
           type="text"
           class="mip-input"
           :placeholder="t('onboarding.market.inputPlaceholder')"
           :disabled="installing"
           @keyup.enter="onImport"
+          @paste="onInputPaste"
         />
         <button
           v-if="userInput"
@@ -319,82 +414,181 @@ const matchedSource = computed(() => {
   gap: 14px;
 }
 
-/* 三个源卡片(并排) */
+/* 三个源卡片(并排) — 2026-07-18 改:加深底色 + 加大 padding + 显眼图标 + 整卡 hover */
 .mip-sources {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .mip-source {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 14px 14px 12px;
   text-align: left;
-  background: var(--surface-2, transparent);
-  border: 1px solid var(--border, #2a2a2a);
-  border-left: 3px solid var(--accent, #3b82f6);
-  border-radius: 6px;
+  /* 2026-07-18 改:用更明显的渐变底色 + 加深边框,跟"工具"/"全局目录"/"本地" tab
+     的卡片形成明显区分,提升三方导入 tab 在弹窗里的视觉权重 */
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 8%, var(--surface-2, transparent)),
+    var(--surface-2, rgba(255, 255, 255, 0.03))
+  );
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border, #2a2a2a));
+  border-left: 4px solid var(--accent, #3b82f6);
+  border-radius: 8px;
   color: inherit;
   font: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .mip-source:hover {
-  background: var(--hover, rgba(255, 255, 255, 0.04));
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border, #2a2a2a));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 14%, var(--surface-2, transparent)),
+    var(--surface-2, rgba(255, 255, 255, 0.03))
+  );
 }
 
-.mip-source-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-}
-.mip-source-desc {
-  font-size: 11px;
-  color: var(--text-dim, #999);
-  line-height: 1.4;
-}
-.mip-source-example {
+.mip-source-head {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  color: var(--text-dim, #777);
-  margin-top: 2px;
+  align-items: flex-start;
+  gap: 10px;
 }
-.mip-source-example code {
-  flex: 1;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 10.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 2px 5px;
-  border-radius: 3px;
-}
-.mip-fill {
+.mip-source-icon {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text-dim, #999);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 3px;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
-.mip-fill:hover {
+.mip-source-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mip-source-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text, #f0f0f0);
+  letter-spacing: 0.01em;
+}
+.mip-source-desc {
+  font-size: 11.5px;
+  color: var(--text-dim, #999);
+  line-height: 1.4;
+}
+.mip-source-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 5px;
+  color: var(--text-dim, #aaa);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.mip-source-open:hover {
   color: var(--accent);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--accent);
 }
 
-/* URL 输入框 + 按钮 */
+/* 2026-07-18 增:GitHub 卡显示的具体仓库快捷链接 */
+.mip-source-repos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border, #2a2a2a);
+}
+.mip-source-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 4px;
+  color: var(--text, #ddd);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mip-source-repo:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.mip-source-repo code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* 2026-07-18 增:输入示例区(三个来源各一条,放在输入框上方) */
+.mip-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(59, 130, 246, 0.04);
+  border: 1px dashed color-mix(in srgb, var(--accent-blue, #3b82f6) 40%, var(--border, #2a2a2a));
+  border-radius: 6px;
+}
+.mip-examples-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim, #999);
+}
+.mip-examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mip-example {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text, #ddd);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mip-example:hover {
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mip-example-url {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* URL 输入框 + 按钮 — 2026-07-18 改:加深边框,看起来更像输入框 */
 .mip-input-row {
   display: flex;
   gap: 8px;
@@ -408,25 +602,35 @@ const matchedSource = computed(() => {
 }
 .mip-input-icon {
   position: absolute;
-  left: 10px;
-  color: var(--text-dim, #999);
+  left: 12px;
+  color: var(--accent-blue, #3b82f6);
   pointer-events: none;
 }
 .mip-input {
   flex: 1;
   width: 100%;
-  padding: 9px 28px 9px 32px;
-  background: var(--surface-2, transparent);
-  border: 1px solid var(--border, #2a2a2a);
+  padding: 11px 32px 11px 34px;
+  /* 2026-07-18 改:加深背景 + 加深边框 + 加深 placeholder,看起来明显是输入框 */
+  background: var(--bg, #141414);
+  border: 1.5px solid var(--border-strong, #4a4a4a);
   border-radius: 6px;
-  color: inherit;
+  color: var(--text, #f0f0f0);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 500;
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.mip-input::placeholder {
+  color: var(--text-dim, #888);
+  font-weight: 400;
+}
+.mip-input:hover {
+  border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 50%, var(--border-strong, #4a4a4a));
 }
 .mip-input:focus {
   border-color: var(--accent-blue, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 .mip-input:disabled {
   opacity: 0.5;
@@ -453,14 +657,14 @@ const matchedSource = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 16px;
+  padding: 0 18px;
   background: var(--accent-blue, #3b82f6);
   border: none;
   border-radius: 6px;
   color: #fff;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 0.15s ease;

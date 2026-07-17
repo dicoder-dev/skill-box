@@ -861,6 +861,8 @@ const messages = {
       clear: '清空',
       errEmpty: '请粘贴一个详情页 URL',
       tip: '复制上面任何一个源的详情页链接,粘贴到输入框即可一键导入',
+      // 2026-07-18 增:输入示例区(三个来源各一条)
+      examplesLabel: '输入示例(点击直接填入)',
       detectedSource: '已识别为 {name}',
       gotoSite: '前往 {name} 官网',
       fillExample: '填入示例',
