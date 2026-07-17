@@ -12,12 +12,14 @@
 | [architecture.md](./architecture.md) | 架构关键信息(Claude 视角,精简版) | 改后端/前端代码前 |
 | [tech_stack.md](./tech_stack.md) | 技术栈 + 版本约束 | 装依赖 / 升级版本前 |
 | [conventions.md](./conventions.md) | 命名 / 目录 / 文件规范 + AI 生成代码规范 | 任何写代码场景 |
+| [constraints.md](./constraints.md) | 项目级强制约束(MCP 工具 / iconpark / 测试策略) | **先于其他规范读** |
 | [workflow.md](./workflow.md) | 开发 / 提 PR / 验证流程 | 提交前 |
 
 ## 何时读什么的强约束
 
+- **任何 Claude 会话进来先读 `@constraints.md`** — MCP / iconpark / 测试都是硬规则
 - 改 **任意 Go 文件** → 必须先 `@conventions.md`,再按需读 `architecture.md`
-- 改 **任意 Vue 文件** → 必须先 `@conventions.md`,再按需读 `tech_stack.md`
+- 改 **任意 Vue 文件** → 必须先 `@conventions.md`,再按需读 `tech_stack.md` + `constraints.md`(iconpark 强制)
 - 写 **commit / PR** → 必须先 `@workflow.md`
 - 第一次进入项目(新会话 + 用户没指定子目录)→ 全部按需加载一次,缓存到当前会话
 
