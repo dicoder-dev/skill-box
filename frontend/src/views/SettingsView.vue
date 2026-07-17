@@ -398,13 +398,20 @@ function onWindowTabChange(e) {
       </div>
     </section>
 
+    <!-- 2026-07-18 改:卡片顺序调整 — AI 模型先,自动 commit 后,升级卡片最末。
+         AI 跟 commit message 是 LLM 上下游关系,放一起视觉聚合,便于用户配完后
+         顺手在自动 commit 里勾上。 -->
+    <!-- 2026-07-12 增:AI 模型配置(独立 card,可见即可用,不分 Web / 桌面端) -->
+    <AISettingsPanel />
+
+    <!-- 2026-07-18 增:自动 commit message 配置块(LLM/模板双路径)。
+         紧跟 AI 配置之下,让用户配完 provider 后能直接看到下方"启用 LLM"
+         开关亮起。内容嵌独立组件。 -->
+    <AutoCommitPanel v-if="showAutoCommitPanel" />
+
     <!-- 2026-07-14 增:应用自身升级卡片。
          全形态可见;桌面端"立即升级"按钮触发下载 + 替身脚本接管;
          Web 端跳外链。 -->
-    <!-- 2026-07-18 增:自动 commit message 配置块(LLM/模板双路径)。
-         放在通用偏好跟升级之间,所有形态可见;内容嵌独立组件。 -->
-    <AutoCommitPanel v-if="showAutoCommitPanel" />
-
     <section class="card" data-card="update">
       <header class="card-header">
         <h3>
@@ -415,9 +422,6 @@ function onWindowTabChange(e) {
       </header>
       <UpdatePanel />
     </section>
-
-    <!-- 2026-07-12 增:AI 模型配置(独立 card,可见即可用,不分 Web / 桌面端) -->
-    <AISettingsPanel />
 
     <!-- 桌面端设置 -->
     <section v-if="isDesktop" class="card">

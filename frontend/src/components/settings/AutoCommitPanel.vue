@@ -1,12 +1,16 @@
 <!--
-  AutoCommitPanel - 设置面板的"自动 commit message"配置块(2026-07-18 增)。
-  嵌在 SettingsView 里,可独立测试 LLM 后启用 + 选择模板。
+  AutoCommitPanel - 设置面板的"自动 commit message"配置块(2026-07-18 重构)。
 
   设计要点:
   - LLMEnabled 必须后端判定 LLM 可用(enabled provider + api_key)才允许勾选;
     不可用时 checkbox 自动 disabled + 显示原因 + "测试 LLM"按钮
   - 模板 3 选 1(timestamp / filename / op_files)— 即使 LLM 不可用也能选,
     LLM 失败时降级到选中的模板
+  - 2026-07-18 重构样式:
+    * LLM 开关与测试按钮放一行(参考 settings.desktop.toggle 范式)
+    * 模板区单独占一整行,分段式按钮组(参考 settings.applyMode.mode-segmented),
+      左对齐紧跟引导语下方,选中态主色填充 + check 图标(跟 copy/symlink 一致)
+    * status hint 用 .hint-box 全局组件,不自己画左 border
   - 保存成功 + 失败都有 hint message(setTimeout 清)
   - 与桌面 / web 均可见(无 platform 相关代码)
 -->
@@ -54,6 +58,7 @@ async function onToggleLLM(v) {
 }
 
 async function onTemplateChange(v) {
+  if (v === template.value) return
   template.value = v
   await persist()
 }
@@ -120,27 +125,28 @@ if (typeof window !== 'undefined') {
     </header>
 
     <div class="pref-list">
-      <!-- LLM 开关 + 可用性提示 -->
+      <!-- LLM 开关 + 可用性提示 + 测试按钮(右对齐控件组) -->
       <div class="pref-item">
-        <div class="pref-label">
-          <label>{{ t('git.autoCommit.llmEnabled.label') }}</label>
-          <p class="pref-desc">{{ t('git.autoCommit.llmEnabled.desc') }}</p>
-          <p v-if="!available" class="pref-warn">
-            ⚠️ {{ t('git.autoCommit.llmEnabled.unavailableReason') }}{{ reason ? ` (${reason})` : '' }}
-          </p>
-          <p v-else class="pref-meta">
+        <div class="pref-info">
+          <div class="pref-label">{{ t('git.autoCommit.llmEnabled.label') }}</div>
+          <div class="pref-hint">{{ t('git.autoCommit.llmEnabled.desc') }}</div>
+          <div v-if="!available" class="pref-warn">
+            <IconPark icon="mdi:alert-circle-outline" width="13" height="13" />
+            {{ t('git.autoCommit.llmEnabled.unavailableReason') }}{{ reason ? ` (${reason})` : '' }}
+          </div>
+          <div v-else class="pref-meta">
             <code>{{ providerName }}</code>
-          </p>
+          </div>
         </div>
-        <div class="pref-control">
-          <label class="switch">
+        <div class="acp-control">
+          <label class="toggle">
             <input
               type="checkbox"
               :checked="llmEnabled"
               :disabled="saving || !available"
               @change="(e) => onToggleLLM(e.target.checked)"
             />
-            <span class="slider" />
+            <span class="toggle-slider"></span>
           </label>
           <button
             class="acp-test-btn"
@@ -154,129 +160,314 @@ if (typeof window !== 'undefined') {
         </div>
       </div>
 
-      <!-- 模板单选 -->
-      <div class="pref-item">
-        <div class="pref-label">
-          <label>{{ t('git.autoCommit.template.label') }}</label>
-          <p class="pref-desc">{{ t('git.autoCommit.template.desc') }}</p>
+      <!-- 模板单选 — 单独占一整行,分段式按钮组,左对齐紧跟引导语下方 -->
+      <div class="pref-item pref-item-block">
+        <div class="pref-info">
+          <div class="pref-label">{{ t('git.autoCommit.template.label') }}</div>
+          <div class="pref-hint">{{ t('git.autoCommit.template.desc') }}</div>
         </div>
-        <div class="pref-control acp-tpl-row">
-          <label
+        <div class="tpl-segmented">
+          <button
             v-for="opt in [
               { v: 'filename',  d: t('git.autoCommit.template.filename') },
               { v: 'op_files',  d: t('git.autoCommit.template.opFiles') },
               { v: 'timestamp', d: t('git.autoCommit.template.timestamp') },
             ]"
             :key="opt.v"
-            class="acp-radio"
-            :class="{ active: template === opt.v }"
+            type="button"
+            :class="['tpl-btn', template === opt.v ? 'tpl-btn-active' : '']"
+            :disabled="saving"
+            @click="onTemplateChange(opt.v)"
           >
-            <input
-              type="radio"
-              name="acp-template"
-              :value="opt.v"
-              :checked="template === opt.v"
-              :disabled="saving"
-              @change="onTemplateChange(opt.v)"
+            <IconPark
+              v-if="template === opt.v"
+              icon="mdi:check-circle"
+              width="14"
+              height="14"
+              class="tpl-btn-icon"
             />
-            <span class="acp-radio-dot" />
-            <span class="acp-radio-text">{{ opt.d }}</span>
-          </label>
+            <IconPark
+              v-else
+              icon="mdi:radiobox-blank"
+              width="14"
+              height="14"
+              class="tpl-btn-icon"
+            />
+            <span class="tpl-btn-label">{{ opt.d }}</span>
+          </button>
         </div>
       </div>
 
-      <!-- status 提示 -->
+      <!-- status 提示(用全局 .hint-box 风格,跟其他 settings 卡片统一) -->
       <div v-if="saveHint || testResult" class="pref-status">
-        <span v-if="saveHint">{{ saveHint }}</span>
-        <span v-if="testResult">{{ testResult }}</span>
+        <IconPark
+          v-if="saveHint && !saveHint.startsWith('×')"
+          icon="mdi:check-circle"
+          width="14"
+          height="14"
+          class="hint-icon hint-success"
+        />
+        <IconPark
+          v-if="saveHint && saveHint.startsWith('×')"
+          icon="mdi:close-circle"
+          width="14"
+          height="14"
+          class="hint-icon hint-error"
+        />
+        <IconPark
+          v-if="!saveHint && testResult"
+          icon="mdi:information"
+          width="14"
+          height="14"
+          class="hint-icon"
+        />
+        <span>{{ saveHint || testResult }}</span>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.acp-icon {
-  font-size: 18px;
-  margin-right: 2px;
+/* ──────────────────────────────────────────────────────────────
+ * 2026-07-18:AutoCommitPanel 是独立组件,<style scoped> 隔离后
+ * SettingsView 里的 .pref-item / .pref-info / .toggle 等样式不生效
+ * (scoped 后选择器带 [data-v-xxx],跨组件匹配不上)。这里必须自带
+ * 一份"pref 范式"样式,跟 SettingsView 保持视觉一致。
+ * ────────────────────────────────────────────────────────────── */
+
+/* 列表 + 项(沿用 SettingsView 的 pref-list / pref-item 范式) */
+.pref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-.pref-warn { color: rgb(245, 158, 11); }
-.pref-meta { color: var(--text-faint, rgba(127,127,127,0.7)); }
+.pref-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+.pref-item:first-child {
+  padding-top: 0;
+}
+.pref-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+/* 模板区:占完整宽度,控件在右侧贴齐(对齐策略跟语言切换器一致) */
+.pref-item-block {
+  align-items: center;
+}
+
+.pref-info {
+  flex: 1;
+  min-width: 0;
+}
+.pref-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.pref-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 480px;
+}
+
+/* 开关(跟 SettingsView .toggle 完全一致) */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border);
+  transition: 0.3s;
+  border-radius: 26px;
+}
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--bg-card);
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.toggle input:checked + .toggle-slider {
+  background-color: var(--primary);
+}
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+}
+
+/* 右侧控件组:开关 + 测试按钮 横排 */
+.acp-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 警告文字 — 用 IconPark 替代 emoji ⚠️ */
+.pref-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 2px solid rgb(245, 158, 11);
+  border-radius: 3px;
+  color: rgb(245, 158, 11);
+  font-size: 12px;
+  max-width: 480px;
+}
+.pref-meta {
+  margin-top: 6px;
+  color: var(--text-faint, rgba(127,127,127,0.7));
+  font-size: 12px;
+}
 .pref-meta code {
-  background: var(--bg-card, rgba(127,127,127,0.08));
+  background: var(--bg-subtle);
   padding: 1px 6px;
   border-radius: 3px;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
 }
-.pref-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+
+/* 测试按钮 */
 .acp-test-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--border-color, rgba(127,127,127,0.2));
-  background: var(--bg-card, #fff);
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
   color: var(--text);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
-  transition: background 100ms ease;
+  font-weight: 500;
+  transition: all 0.12s ease;
+  white-space: nowrap;
 }
 .acp-test-btn:hover:not(:disabled) {
-  background: var(--bg-hover, rgba(127,127,127,0.05));
+  background: var(--bg-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 .acp-test-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.acp-tpl-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-end;
-}
-.acp-radio {
+
+/* 模板分段式按钮 — 复用 settings.applyMode.mode-segmented 范式:
+   浅底容器 + 选中态主色填充 + check 图标 + 阴影 */
+.tpl-segmented {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  user-select: none;
-}
-.acp-radio.active { background: rgba(59, 130, 246, 0.1); color: rgb(59, 130, 246); }
-.acp-radio input { display: none; }
-.acp-radio-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(127,127,127,0.4);
-  position: relative;
+  align-items: stretch;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
   flex-shrink: 0;
 }
-.acp-radio.active .acp-radio-dot { border-color: rgb(59, 130, 246); }
-.acp-radio.active .acp-radio-dot::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: rgb(59, 130, 246);
-}
-.pref-status {
-  margin-top: 8px;
-  padding: 6px 10px;
-  background: var(--bg-card, rgba(127,127,127,0.04));
-  border-left: 2px solid rgb(59, 130, 246);
-  border-radius: 3px;
-  font-size: 11px;
+.tpl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+.tpl-btn:hover:not(:disabled):not(.tpl-btn-active) {
+  color: var(--text);
+  background: var(--bg-card);
+}
+.tpl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tpl-btn-icon {
+  flex-shrink: 0;
+}
+.tpl-btn-label {
+  line-height: 1;
+}
+.tpl-btn.tpl-btn-active {
+  background: var(--primary);
+  color: var(--primary-contrast, #fff);
+  border-color: var(--primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+.tpl-btn.tpl-btn-active .tpl-btn-icon {
+  color: var(--primary-contrast, #fff);
+}
+
+/* status 提示 */
+.pref-status {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.pref-status .hint-icon {
+  flex-shrink: 0;
+}
+.pref-status .hint-success {
+  color: var(--success);
+}
+.pref-status .hint-error {
+  color: var(--danger);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .pref-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .acp-control,
+  .tpl-segmented {
+    align-self: flex-start;
+  }
 }
 </style>
