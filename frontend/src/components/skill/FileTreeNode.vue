@@ -168,7 +168,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
       :key="dir.path"
       role="treeitem"
       :class="['file-tree-dir', isCollapsed(dir) ? 'file-tree-collapsed' : '']"
-      :style="{ paddingLeft: `${depth * 12 + 4}px` }"
+      :style="{ paddingLeft: `${depth * 8 + 4}px` }"
       :aria-expanded="!isCollapsed(dir)"
     >
       <div class="file-row file-row-dir" @click="toggleCollapse(dir)" @contextmenu="onContextFolder(dir, $event)">
@@ -225,7 +225,7 @@ const visibleDirs = computed(() => (props.dirs || []).filter((d) => d.isEmpty ||
         'file-tree-file',
         selectedPath === file.path ? 'file-tree-selected' : '',
       ]"
-      :style="{ paddingLeft: `${depth * 12 + 4}px` }"
+      :style="{ paddingLeft: `${depth * 8 + 4}px` }"
       :aria-selected="selectedPath === file.path"
     >
       <div class="file-row file-row-file" @click="onClickFile(file, $event)" @contextmenu="onContextFile(file, $event)">
