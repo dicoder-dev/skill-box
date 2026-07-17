@@ -209,6 +209,11 @@ function closeDrawer() {
 }
 
 // 从完整 diff 里抽出指定文件的块(diff 格式以 "diff --git a/x b/x" 分段)
+//
+// 2026-07-17 改:用 startsWith + 包含 " b/<path>" 判断,不再死磕
+// "a/<path> " 字符串。git diff 的标准格式:
+//   diff --git a/<path> b/<path>
+// 目标文件: 路径名出现在 diff --git 行内(完整出现,不被空白拆分)。
 function filterDiffByFile(diff, filePath) {
   if (!diff || !filePath) return diff
   const lines = diff.split('\n')
@@ -216,11 +221,11 @@ function filterDiffByFile(diff, filePath) {
   let inTarget = false
   for (const line of lines) {
     if (line.startsWith('diff --git ')) {
-      // 判定是否目标文件:diff --git a/<path> b/<path>
-      inTarget = line.includes(' a/' + filePath + ' ') ||
-        line.endsWith(' a/' + filePath) ||
-        line.includes(' b/' + filePath + ' ') ||
-        line.endsWith(' b/' + filePath)
+      // 判定是否目标文件:命中 a/<path> 或 b/<path> 子串
+      // (git 在 rename 时会把 b/ 写成 b/旧名,所以也要匹)
+      inTarget =
+        line.includes(' a/' + filePath) ||
+        line.includes(' b/' + filePath)
     }
     if (inTarget) out.push(line)
   }

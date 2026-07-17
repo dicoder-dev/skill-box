@@ -575,33 +575,11 @@ function iconStack(node) {
 }
 .tree-icon-slot.accent-is-global-agent {
   color: var(--accent-emerald);
-  border-color: var(--accent-emerald-border);
-  background: var(--accent-emerald-bg);
 }
-/* 工具槽按工具分色:边框 + 淡底,主色由变量控制(暗黑模式自动切换) */
-.tree-icon-slot.accent-accent-blue {
-  border-color: var(--accent-blue-border);
-  background: var(--accent-blue-bg);
-}
-.tree-icon-slot.accent-accent-emerald {
-  border-color: var(--accent-emerald-border);
-  background: var(--accent-emerald-bg);
-}
-.tree-icon-slot.accent-accent-amber {
-  border-color: var(--accent-amber-border);
-  background: var(--accent-amber-bg);
-}
-.tree-icon-slot.accent-accent-violet {
-  border-color: var(--accent-violet-border);
-  background: var(--accent-violet-bg);
-}
-.tree-icon-slot.accent-accent-rose {
-  border-color: var(--accent-rose-border);
-  background: var(--accent-rose-bg);
-}
-/* 溢出「+N」槽:灰底 + 主色数字,提示还有更多工具 */
+/* 2026-07-17 改:去掉工具分色的边框/淡底 — 用户反馈图标外圈那层颜色多余。
+   现在所有槽统一中性描边 + 卡片底色,只保留重叠的视觉层次,不再按工具染色。 */
+/* 溢出「+N」槽:主色数字,提示还有更多工具 */
 .tree-icon-slot.is-more {
-  background: var(--bg-subtle);
   color: var(--text-dim);
 }
 .tree-icon-more {
