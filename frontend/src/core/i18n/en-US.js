@@ -869,12 +869,12 @@ const messages = {
         cancel: 'Cancel',
       },
       // 2026-07-18: marketplace tab group mode selector
+      // 2026-07-18 changed: drop user mode (author unified), hint "decided by actual"
       groupMode: {
         label: 'Group by',
         byAuthor: 'Author',
-        user: 'User',
         custom: 'Custom',
-        authorHint: 'Will go to: {author}',
+        authorHint: 'decided by actual',
       },
     },
     // 2026-07-18: target group selector shared by all 4 tabs

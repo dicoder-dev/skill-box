@@ -887,12 +887,12 @@ const messages = {
         cancel: '取消',
       },
       // 2026-07-18 增:三方导入 tab 专用的"分组方式"选择器
+      // 2026-07-18 改:删 user 模式(author 统一承担),hint 改为「由实际决定」
       groupMode: {
         label: '分组方式',
         byAuthor: '按作者',
-        user: '用户',
         custom: '自定义',
-        authorHint: '将落到分组:{author}',
+        authorHint: '由实际决定',
       },
     },
     // 2026-07-18 增:4 tab 共享的「目标分组」选择器 i18n

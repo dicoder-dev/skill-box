@@ -257,22 +257,26 @@ async function doInstall(input, conflictMode) {
 }
 
 // 2026-07-18 增:按 groupMode 解析 group_path,再交给 installFromInput
-//   - author:抽 GitHub owner(skillhub / skills.sh 没有 owner 概念,退回空)
-//   - user  :空字符串(走后端默认派生 / 根目录)
+//   - author:抽 owner(GitHub / skills.sh 都能抽,skills.sh 数据本质也是 GitHub
+//     来源;skillhub 走默认派生,空字符串返回)
 //   - custom:customGroupPath(用户自己选)
 function resolveGroupPathByMode(input) {
-  if (groupMode.value === 'user') return ''
   if (groupMode.value === 'custom') return customGroupPath.value || ''
   // author
   const v = (input || '').toLowerCase()
-  if (!v.includes('github.com')) return ''
-  try {
-    const u = new URL(v)
-    const segs = (u.pathname || '').split('/').filter(Boolean)
-    return segs[0] || ''
-  } catch (_) {
-    return ''
+  // skillhub → 走后端默认(skillhub-cn 分组),空 group_path
+  if (v.includes('skillhub.cn')) return ''
+  // github / skills.sh → 抽 owner 作分组名(skills.sh /anthropics/skills/pdf → anthropics)
+  if (v.includes('github.com') || v.includes('skills.sh')) {
+    try {
+      const u = new URL(v)
+      const segs = (u.pathname || '').split('/').filter(Boolean)
+      return segs[0] || ''
+    } catch (_) {
+      return ''
+    }
   }
+  return ''
 }
 
 function onImport() {
@@ -512,11 +516,11 @@ const matchedSource = computed(() => {
   return null
 })
 
-// 2026-07-18 增:从当前 userInput 推断 GitHub 仓库 owner,用于 author 模式
-// preview 提示(只支持 github.com 域名;其他源 user 模式直接走 user 即可)
+// 2026-07-18 增:从当前 userInput 推断仓库 owner,用于 author 模式 preview 提示
+// 支持 github.com + skills.sh(数据本质也是 GitHub 来源);skillhub 没有 owner 概念。
 const previewAuthor = computed(() => {
   const v = userInput.value.trim().toLowerCase()
-  if (!v.includes('github.com')) return ''
+  if (!v.includes('github.com') && !v.includes('skills.sh')) return ''
   try {
     const u = new URL(v)
     const segs = (u.pathname || '').split('/').filter(Boolean)
@@ -588,7 +592,6 @@ const previewAuthor = computed(() => {
     <!-- 2026-07-18 增:三方导入专用的"分组方式"选择器(只在该 tab 显示)
          模式:
          - author:按仓库作者(github.com/{owner}/{repo} → owner)建分组,默认
-         - user:把 skill 落到「用户」分组(可空,即根目录;沿用后端默认)
          - custom:用户自己选分组(走 GroupPathSelect,本组件内联一份精简版)
     -->
     <div class="mip-group-mode">
@@ -601,14 +604,6 @@ const previewAuthor = computed(() => {
         >
           <IconPark icon="mdi:account-circle-outline" width="12" height="12" />
           {{ t('onboarding.market.groupMode.byAuthor') }}
-        </button>
-        <button
-          type="button"
-          :class="['mip-group-mode-btn', { active: groupMode === 'user' }]"
-          @click="groupMode = 'user'"
-        >
-          <IconPark icon="mdi:account-outline" width="12" height="12" />
-          {{ t('onboarding.market.groupMode.user') }}
         </button>
         <button
           type="button"
