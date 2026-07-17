@@ -52,7 +52,25 @@ function onHistoryToggle(open) {
 const loading = ref(false)
 const errorMsg = ref('')
 const items = ref([])
-const status = ref(null)
+// 2026-07-17 改:status 默认空对象(原 null)— 模板里有 status.remote_url
+// / status.working_clean 等访问没全部加 guard,status=null 时访问属性
+// 报 'object not found'(Vue 内部包装的 TypeError)。默认 {} 让所有
+// 属性访问返 undefined,模板 v-if 会正确隐藏。
+const status = ref({
+  initialized: false,
+  branch: '',
+  remote_url: '',
+  remote_branch: '',
+  head_hash: '',
+  head_short: '',
+  head_message: '',
+  working_clean: true,
+  ahead: 0,
+  behind: 0,
+  has_token: false,
+  pending_push: 0,
+  last_push_error: '',
+})
 
 const selectedHash = ref('')
 const diffFrom = ref('')

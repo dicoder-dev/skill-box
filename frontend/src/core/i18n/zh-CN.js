@@ -1244,15 +1244,19 @@ const messages = {
     formUserEmail: 'Author 邮箱',
     invalidUrl: '远端 URL 必须以 https:// 开头',
     noToken: '无 Token',
-    historyTitle: '版本历史',
-    historyInitFirst: '请先在上方初始化 Git 仓库',
-    historyEmpty: '暂无 commit 记录',
-    historyEmptySkill: '该技能暂无修改记录',
-    historyDiff: '变更对比',
-    historyPickCommit: '点击左侧 commit 查看 diff',
-    historyCheckout: 'Reset 到此 commit',
-    historyPush: 'Push',
-    historyPull: 'Pull',
+    // 2026-07-17 改:history.* 改成嵌套对象 — 之前平铺 historyXxx 跟
+    // 模板 t('git.history.title') 点路径不匹配,显示成字面量。
+    history: {
+      title: '版本历史',
+      initFirst: '请先在上方初始化 Git 仓库',
+      empty: '暂无 commit 记录',
+      emptySkill: '该技能暂无修改记录',
+      diff: '变更对比',
+      pickCommit: '点击左侧 commit 查看 diff',
+      checkout: 'Reset 到此 commit',
+      push: 'Push',
+      pull: 'Pull',
+    },
     checkoutConfirm: '确定要 reset 工作区到 commit {hash}?此操作会覆盖本地未保存的改动。',
   },
 }
