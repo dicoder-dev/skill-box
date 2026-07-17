@@ -126,6 +126,9 @@ export const MDI_TO_ICONPARK = {
   'github':                       'GithubOne',
   'lightning-bolt':               'Lightning',
   'fire':                         'Fire',
+  // 2026-07-18 增:三方市场入口图标,iconpark 原生 Market(比 mdi:cart-arrow-down
+  // 更直观 — Market 是个带屋顶 + 价格的店面,跟"市场"语义贴合)
+  'market':                       'Market',
 
   // 视图 / 复制 / 眼睛
   'eye-outline':                  'View',

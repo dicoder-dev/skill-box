@@ -106,8 +106,11 @@ function onDone(result) {
       <IconPark icon="mdi:tray-arrow-down" width="18" height="18" />
     </template>
 
-    <!-- 2026-07-18 增:顶部 tab 上方一行「目标分组」选择器,4 tab 共享同一选中态 -->
-    <GroupPathSelect v-model="targetGroupPath" />
+    <!-- 2026-07-18 增:顶部 tab 上方一行「目标分组」选择器
+         2026-07-18 改:从三方导入(market)tab 不显示该选择器(分组逻辑走
+         "按作者 / 用户"二选一,见 MarketImportPanel 内部);其他 3 个
+         tab 共享同一选中态,保持现状。-->
+    <GroupPathSelect v-if="tab !== 'market'" v-model="targetGroupPath" />
 
     <!-- 顶部 tab 切换 -->
     <div class="oid-tabs" role="tablist">
@@ -119,7 +122,7 @@ function onDone(result) {
         :class="['oid-tab', { active: tab === 'market' }]"
         @click="tab = 'market'"
       >
-        <IconPark icon="mdi:cart-arrow-down" width="14" height="14" />
+        <IconPark icon="mdi:market" width="14" height="14" />
         {{ t('onboarding.tabs.market') }}
       </button>
       <button

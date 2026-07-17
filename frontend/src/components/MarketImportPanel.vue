@@ -117,6 +117,9 @@ const sources = [
 ]
 
 const userInput = ref('')
+// 2026-07-18 增:分组方式(author / user / custom)+ 自定义分组路径
+const groupMode = ref('author') // 默认按作者分组
+const customGroupPath = ref('')
 const installing = ref(false)
 const installError = ref('')
 // 2026-07-18 增:input 元素 ref(供 onInputPaste / 主动 focus 用)
@@ -196,8 +199,12 @@ async function doInstall(input, conflictMode) {
       input,
       scope: 'global',
       conflict_mode: conflictMode,
-      // 2026-07-18 增:目标分组(从 OnboardingImportDialog 注入的 ref 取)
-      group_path: targetGroupPath.value || '',
+      // 2026-07-18 改:目标分组按 groupMode 决定
+      //   - author:从 GitHub URL 抽 owner 当分组(只支持 github;非 github
+      //     源退回到 user 模式)
+      //   - user  :空字符串(走后端默认派生,落到用户根目录)
+      //   - custom:customGroupPath
+      group_path: resolveGroupPathByMode(input),
     })
     progressRef.value?.advance('extract')
     await new Promise((r) => setTimeout(r, 350))
@@ -246,6 +253,25 @@ async function doInstall(input, conflictMode) {
       installError.value = t('market.input.errGeneric', { msg })
     }
     toast.error(installError.value)
+  }
+}
+
+// 2026-07-18 增:按 groupMode 解析 group_path,再交给 installFromInput
+//   - author:抽 GitHub owner(skillhub / skills.sh 没有 owner 概念,退回空)
+//   - user  :空字符串(走后端默认派生 / 根目录)
+//   - custom:customGroupPath(用户自己选)
+function resolveGroupPathByMode(input) {
+  if (groupMode.value === 'user') return ''
+  if (groupMode.value === 'custom') return customGroupPath.value || ''
+  // author
+  const v = (input || '').toLowerCase()
+  if (!v.includes('github.com')) return ''
+  try {
+    const u = new URL(v)
+    const segs = (u.pathname || '').split('/').filter(Boolean)
+    return segs[0] || ''
+  } catch (_) {
+    return ''
   }
 }
 
@@ -321,6 +347,23 @@ import { useSkillTreeStore } from '@/core/store/skill-tree'
 const skillTree = useSkillTreeStore()
 const localSkillNames = ref(new Set())
 const localSkillPaths = ref(new Map())
+// 2026-07-18 增:custom 模式下的分组下拉选项(从 tree 递归走所有 group)
+const allGroups = computed(() => {
+  const out = []
+  function walk(arr) {
+    if (!Array.isArray(arr)) return
+    for (const n of arr) {
+      if (n && n.is_group && n.path) {
+        out.push({ path: n.path })
+        if (Array.isArray(n.children) && n.children.length) walk(n.children)
+      } else if (n && Array.isArray(n.children) && n.children.length) {
+        walk(n.children)
+      }
+    }
+  }
+  walk(skillTree.tree || [])
+  return out
+})
 
 function rebuildLocalIndex(nodes) {
   const names = new Set()
@@ -450,20 +493,37 @@ function reset() {
   installError.value = ''
   conflict.value = null
   installedSkillPath.value = ''
-  // 2026-07-18 增:重置进度条
+  // 2026-07-18 增:重置进度条 + 分组方式
   progressRef.value?.reset()
+  groupMode.value = 'author'
+  customGroupPath.value = ''
   if (resetImportDoneSig) resetImportDoneSig()
 }
 
 // 计算属性:当前用户输入解析后会走哪个 source(纯前端提示用,不传给后端)。
-// 2026-07-18 改:GitHub 子卡也匹配 github.com 域名(子卡 url 命中即认 GitHub)。
+// 2026-07-18 改:GitHub 域名统一显示"已识别为 GitHub"(主卡叫 OpenAI/skills
+// 但底层市场仍是 GitHub,识别文案跟实际后端 source 一致)。
 const matchedSource = computed(() => {
   const v = userInput.value.trim().toLowerCase()
   if (!v.includes('://')) return null
-  if (v.includes('skillhub.cn')) return sources[0]
-  if (v.includes('skills.sh')) return sources[1]
-  if (v.includes('github.com')) return sources[2]
+  if (v.includes('skillhub.cn')) return { key: 'skillhub', displayName: 'SkillHub' }
+  if (v.includes('skills.sh')) return { key: 'skillssh', displayName: 'Skills.sh' }
+  if (v.includes('github.com')) return { key: 'github', displayName: 'GitHub' }
   return null
+})
+
+// 2026-07-18 增:从当前 userInput 推断 GitHub 仓库 owner,用于 author 模式
+// preview 提示(只支持 github.com 域名;其他源 user 模式直接走 user 即可)
+const previewAuthor = computed(() => {
+  const v = userInput.value.trim().toLowerCase()
+  if (!v.includes('github.com')) return ''
+  try {
+    const u = new URL(v)
+    const segs = (u.pathname || '').split('/').filter(Boolean)
+    return segs[0] || ''
+  } catch (_) {
+    return ''
+  }
 })
 </script>
 
@@ -523,6 +583,55 @@ const matchedSource = computed(() => {
           <code class="mip-example-url">{{ s.example }}</code>
         </button>
       </div>
+    </div>
+
+    <!-- 2026-07-18 增:三方导入专用的"分组方式"选择器(只在该 tab 显示)
+         模式:
+         - author:按仓库作者(github.com/{owner}/{repo} → owner)建分组,默认
+         - user:把 skill 落到「用户」分组(可空,即根目录;沿用后端默认)
+         - custom:用户自己选分组(走 GroupPathSelect,本组件内联一份精简版)
+    -->
+    <div class="mip-group-mode">
+      <span class="mip-group-mode-label">{{ t('onboarding.market.groupMode.label') }}:</span>
+      <div class="mip-group-mode-tabs">
+        <button
+          type="button"
+          :class="['mip-group-mode-btn', { active: groupMode === 'author' }]"
+          @click="groupMode = 'author'"
+        >
+          <IconPark icon="mdi:account-circle-outline" width="12" height="12" />
+          {{ t('onboarding.market.groupMode.byAuthor') }}
+        </button>
+        <button
+          type="button"
+          :class="['mip-group-mode-btn', { active: groupMode === 'user' }]"
+          @click="groupMode = 'user'"
+        >
+          <IconPark icon="mdi:account-outline" width="12" height="12" />
+          {{ t('onboarding.market.groupMode.user') }}
+        </button>
+        <button
+          type="button"
+          :class="['mip-group-mode-btn', { active: groupMode === 'custom' }]"
+          @click="groupMode = 'custom'"
+        >
+          <IconPark icon="mdi:folder-arrow-right-outline" width="12" height="12" />
+          {{ t('onboarding.market.groupMode.custom') }}
+        </button>
+      </div>
+      <span v-if="groupMode === 'author'" class="mip-group-mode-hint">
+        {{ t('onboarding.market.groupMode.authorHint', { author: previewAuthor || '?' }) }}
+      </span>
+      <select
+        v-else-if="groupMode === 'custom'"
+        v-model="customGroupPath"
+        class="mip-group-mode-select"
+      >
+        <option value="">{{ t('onboarding.targetGroup.root') }}</option>
+        <option v-for="g in allGroups" :key="g.path" :value="g.path">
+          {{ g.path }}
+        </option>
+      </select>
     </div>
 
     <!-- URL 输入框 + 导入按钮 -->
@@ -598,7 +707,7 @@ const matchedSource = computed(() => {
       <IconPark icon="mdi:information-outline" width="12" height="12" />
       {{ t('onboarding.market.tip') }}
       <span v-if="matchedSource" class="mip-tip-source">
-        · {{ t('onboarding.market.detectedSource', { name: matchedSource.name }) }}
+        · {{ t('onboarding.market.detectedSource', { name: matchedSource.displayName }) }}
       </span>
     </p>
 
@@ -867,6 +976,73 @@ const matchedSource = computed(() => {
   background: transparent;
   padding: 0;
   border-radius: 0;
+}
+
+/* 2026-07-18 增:三方导入 tab 专用的"分组方式"选择器 */
+.mip-group-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.04);
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 25%, var(--border, #2a2a2a));
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.mip-group-mode-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text, #ddd);
+}
+.mip-group-mode-tabs {
+  display: inline-flex;
+  background: var(--bg, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 5px;
+  padding: 2px;
+}
+.mip-group-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-dim, #999);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mip-group-mode-btn:hover:not(.active) {
+  color: var(--text, #eee);
+}
+.mip-group-mode-btn.active {
+  background: var(--accent-blue, #3b82f6);
+  color: #fff;
+  font-weight: 500;
+}
+.mip-group-mode-hint {
+  font-size: 11px;
+  color: var(--text-dim, #999);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.mip-group-mode-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--bg, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 4px;
+  color: var(--text, #eee);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+.mip-group-mode-select:focus {
+  border-color: var(--accent-blue, #3b82f6);
 }
 
 /* URL 输入框 + 按钮 — 2026-07-18 改:加深边框,看起来更像输入框 */

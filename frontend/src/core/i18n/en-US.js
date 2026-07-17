@@ -828,10 +828,10 @@ const messages = {
     // 2026-07-18: tab order changed + "Scan tools" renamed to "Tools" + new "From marketplace" tab first
     tabs: {
       market: 'From marketplace',
-      scan: 'Tools',
+      scan: 'Agent tools',
       local: 'From local',
-      // 2026-07-10: list candidates under ~/.agents/skills, batch import
-      global: 'Global dir',
+      // 2026-07-18 改:Agent dir(跟 Agent tools 配套的全局目录)
+      global: 'Agent dir',
     },
     // 2026-07-18: marketplace import panel (3rd-party source list + URL input)
     market: {
@@ -867,6 +867,14 @@ const messages = {
         rename: 'Save as new',
         renameTip: 'Keep old version, new one will get -2 / -3 suffix',
         cancel: 'Cancel',
+      },
+      // 2026-07-18: marketplace tab group mode selector
+      groupMode: {
+        label: 'Group by',
+        byAuthor: 'Author',
+        user: 'User',
+        custom: 'Custom',
+        authorHint: 'Will go to: {author}',
       },
     },
     // 2026-07-18: target group selector shared by all 4 tabs

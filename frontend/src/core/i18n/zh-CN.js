@@ -846,8 +846,8 @@ const messages = {
     // 2026-07-18 改:tab 顺序调整 + 「扫描工具」改名「工具」+ 新增「从三方导入」首位
     tabs: {
       market: '从三方导入',
-      scan: '工具',
-      global: '全局目录',
+      scan: 'Agent 工具',
+      global: 'Agent 目录',
       local: '从本地导入',
     },
     // 2026-07-18 增:三方市场导入面板 i18n(参考 onboarding.local.* 结构)
@@ -876,7 +876,7 @@ const messages = {
       btnPasteTitle: '读取剪贴板并自动安装',
       btnPasteFailed: '读取剪贴板失败:{msg}',
       btnPasteEmpty: '剪贴板为空,请先复制一个详情页 URL',
-      // 2026-07-18 增:导入前本地同名检测
+      // 2026-07-18 增:本地同名预检
       localCheck: {
         exists: '本地已存在同名 skill「{name}」',
         desc: '「{name}」已经存在于你的 Skill Box 库(路径:{path}),如何处理?',
@@ -885,6 +885,14 @@ const messages = {
         rename: '另存为',
         renameTip: '保留旧版,新版本自动加 -2 / -3 后缀',
         cancel: '取消',
+      },
+      // 2026-07-18 增:三方导入 tab 专用的"分组方式"选择器
+      groupMode: {
+        label: '分组方式',
+        byAuthor: '按作者',
+        user: '用户',
+        custom: '自定义',
+        authorHint: '将落到分组:{author}',
       },
     },
     // 2026-07-18 增:4 tab 共享的「目标分组」选择器 i18n
