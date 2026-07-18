@@ -246,11 +246,24 @@ func NormalizeGroupName(s string) string {
 // (避免 caller 传只 Manifest 没 Files 时写出空 SKILL.md)。
 func RenderSkillMD(c Canonical) string {
 	body := ""
-	if len(c.Files) > 0 {
-		body = c.Files[0].Content
-		if _, existing, err := splitFrontmatter(body); err == nil && existing != "" {
-			body = existing
+	// 2026-07-18 修:必须按 path=="SKILL.md" 精确定位 body,不能盲取 c.Files[0]。
+	// 根因:BuildCanonical 原样透传前端 files 顺序,当 SKILL.md 不在数组首位
+	// (例如 anthropics/pdf 的 LICENSE.txt 排在 SKILL.md 之前)时,旧逻辑
+	// `c.Files[0].Content` 会把 LICENSE.txt 的内容当成 SKILL.md 的 body 渲染,
+	// 导致磁盘上 SKILL.md 被写成 LICENSE 内容(文件串味)。
+	for _, f := range c.Files {
+		if f.Path == "SKILL.md" {
+			body = f.Content
+			break
 		}
+	}
+	// 兜底:极端情况下前端没送 SKILL.md 条目(理论不该发生),退回取第一个
+	// 文件的内容,保持"至少有 body"的旧行为不崩。
+	if body == "" && len(c.Files) > 0 {
+		body = c.Files[0].Content
+	}
+	if _, existing, err := splitFrontmatter(body); err == nil && existing != "" {
+		body = existing
 	}
 	if body == "" {
 		body = "# " + c.Manifest.Name + "\n"

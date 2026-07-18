@@ -194,6 +194,28 @@ func TestRenderSkillMD_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestRenderSkillMD_SkillNotFirst 回归测试:SKILL.md 不在 Files 首位时(前面
+// 有 LICENSE.txt 等其它文件),RenderSkillMD 必须按 path=="SKILL.md" 精确取
+// body,绝不能盲取 Files[0] 把 LICENSE 内容渲染成 SKILL.md 的正文。
+// 这是 anthropics/pdf「保存后 SKILL.md 变成 LICENSE 内容」串味 bug 的根因。
+func TestRenderSkillMD_SkillNotFirst(t *testing.T) {
+	c := skilladapter.Canonical{
+		Manifest: skilladapter.Manifest{Name: "pdf", Version: "0.1.0"},
+		Files: []skilladapter.File{
+			{Path: "LICENSE.txt", Content: "© 2025 Anthropic, PBC. All rights reserved.\n"},
+			{Path: "SKILL.md", Content: "# PDF Processing Guide\n\n## Overview\n"},
+			{Path: "forms.md", Content: "form stuff\n"},
+		},
+	}
+	rendered := skilladapter.RenderSkillMD(c)
+	if !strings.Contains(rendered, "# PDF Processing Guide") {
+		t.Errorf("RenderSkillMD 未取到 SKILL.md 的 body,rendered=%q", rendered)
+	}
+	if strings.Contains(rendered, "Anthropic, PBC. All rights reserved") {
+		t.Errorf("RenderSkillMD 错误地把 LICENSE.txt 内容当成了 SKILL.md body,rendered=%q", rendered)
+	}
+}
+
 func TestAdapterApply_PopulatesSkillDir(t *testing.T) {
 	a, ok := skilladapter.Get(skilladapter.ToolTrae)
 	if !ok {
