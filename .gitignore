@@ -26,3 +26,6 @@ data.db
 # 小写 binary 是误产物,不入库)。
 /skill-box
 .screenshots/
+
+# AI 测试时的临时截图/快照(浏览器 MCP 生成,不入库)
+docs/agent/tmp-screens/

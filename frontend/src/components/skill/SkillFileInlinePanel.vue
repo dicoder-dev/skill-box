@@ -270,79 +270,100 @@ function splitSkillMd(text) {
 // 2026-07-07 改 v6:不依赖 vue 的 watch(esm cache 缺 watch 函数,
 // webview 拿到的 chunk 里 ReferenceError: Can't find variable: watch),
 // 改用 onUpdated + 手动依赖追踪 — 每次父组件 patch 后重新检查 props。
+//
+// 2026-07-18 重构(根治「文件串味 + 保存后按钮不消失」老顽疾):
+//
+// ── 旧实现的致命缺陷 ──
+// 旧版把「选中文件」和「填充 localFiles」拆成 _syncSelectedFile /
+// _syncLocalFiles 两个函数,却共享同一组模块级变量 _lastFilesRef /
+// _lastSkillName,而且比较条件不一致:
+//   - _syncSelectedFile 先跑,把 _lastFilesRef 更新成新 props.files 引用
+//   - _syncLocalFiles 后跑,一进来 curFilesRef === _lastFilesRef 就成立
+//     → 直接 early-return,**根本不重填 localFiles**
+// 结果 selectedFile 已指向新文件,localFiles 却残留上一个文件的内容,
+// 挂在错误的 path key 上 → displayContent 读到别的文件内容(串味);
+// 保存时 incomingFiles 从错的 localFiles 取值 → 把错内容写进当前文件;
+// 保存后 baseline 因为同一个 early-return 没被重填 → isDirty 判断失真
+// → 保存按钮不消失。
+//
+// ── 新实现:单一数据源 + 单一同步入口 ──
+// localFiles / selectedFile 全部由 props.files + props.skill 派生,
+// 一个 _syncFromProps() 原子完成「切文件 + 重填 localFiles + 对齐 baseline」,
+// 只用一组 signature 判断是否需要重跑,绝不出现「选中变了但 localFiles 没变」
+// 的半更新状态。
 let _lastFilesRef = null
 let _lastSkillName = null
 let _lastSkillVersion = null
-function _syncSelectedFile() {
+
+// 把 props.files 一条条转成 localFiles 该存的内容(SKILL.md 只存 body)。
+function _buildLocalMap(files) {
+  const next = new Map()
+  for (const f of files || []) {
+    if (!f || !f.path) continue
+    const c = f.content || ''
+    next.set(f.path, f.path === 'SKILL.md' ? splitSkillMd(c).body : c)
+  }
+  return next
+}
+
+// 唯一同步入口:props.files / props.skill 变化后,原子地重建
+// selectedFile + localFiles + baseline。resetLock 期间(保存/放弃刚发生)
+// 跳过重填,避免把用户飞行中的编辑覆盖掉。
+function _syncFromProps() {
   const sk = props.skill
   const files = props.files
   const curFilesRef = files
   const curName = sk?.name
   const curVersion = sk?.version
+  // signature 完全一致 → 什么都没变,直接返回
   if (curFilesRef === _lastFilesRef && curName === _lastSkillName && curVersion === _lastSkillVersion) return
-  // 2026-07-08 一刀切:切 skill(name/version 不同)时主动清掉编辑态 + dirty,
-  // 防止任何 stale 帧在 onUpdated 跑完之前展示残留 edit。配合 currentEditingPath
-  // 单点 ref,这里清完就一定回到 view,不会再有 module-level map 残留。
+
   const skillSwitched = curName !== _lastSkillName || curVersion !== _lastSkillVersion
+  const filesChanged = curFilesRef !== _lastFilesRef
+  // 2026-07-08 一刀切:切 skill 时主动清编辑态 + dirty,防止残留 edit。
   if (skillSwitched) {
-    dlog('[sfip _syncSelectedFile] skillSwitched', { from: _lastSkillName, to: curName, wasEditing: currentEditingPath.value })
+    dlog('[sfip _syncFromProps] skillSwitched', { from: _lastSkillName, to: curName, wasEditing: currentEditingPath.value })
     currentEditingPath.value = ''
-    dirtyPaths.value = new Set()
-    // 2026-07-18 增:切 skill 时清 baseline,避免新 skill 的 localFiles
-    // 被旧 baseline 误标 dirty(即使切到不同 skill,based on path key)。
-    editingBaseline.clear()
   }
+
   _lastFilesRef = curFilesRef
   _lastSkillName = curName
   _lastSkillVersion = curVersion
+
+  // 空文件列表:全清
   if (!files || !files.length) {
     selectedFile.value = null
     selectedKey.value = ''
     localFiles.clear()
     dirtyPaths.value = new Set()
+    editingBaseline.clear()
     return
   }
+
+  // 1) 先选中文件 —— 优先保留上次选中的 path(切文件不丢焦点),
+  //    否则回退 SKILL.md → 第一个文件。
   const prev = selectedKey.value
   const target = (prev && files.find((f) => f.path === prev))
     || files.find((f) => f.path === 'SKILL.md')
     || files[0]
-  // 2026-07-08 一刀切:_syncSelectedFile 重置 selectedFile 时,如果之前
-  // currentEditingPath 还在编辑某个 path,跟新 selectedFile 不一致则清掉。
-  // 但因为切 skill 已经清过,这里只需要"切文件"的兜底 —— 实际上组件是
-  // :key="selectedFile.path" 重建的,currentEditingPath 由调用方(父级
-  // selectItem 等)主动清掉更稳。这里**不再做**额外清理,保持单一来源。
   selectedFile.value = target
   selectedKey.value = target?.path || ''
-}
-function _syncLocalFiles() {
-  const sk = props.skill
-  const curFilesRef = props.files
-  const curName = sk?.name
-  if (curFilesRef === _lastFilesRef && curName === _lastSkillName) return
-  // 跟 _syncSelectedFile 共享判断,省一次比较
-  _lastFilesRef = curFilesRef
-  _lastSkillName = curName
-  // 2026-07-18 改:先填再清 dirtyPaths,避免 fill 期间 isDirty computed 重算
-  // 命中旧 localFiles(空)瞬间返回 false,看似保存成功但其实是空指针。
-  // 改顺序:先 build 一个新 Map → 一次性替换 localFiles → 再清 dirty。
-  const next = new Map()
-  for (const f of props.files || []) {
-    const c = f.content || ''
-    const stored = f.path === 'SKILL.md' ? splitSkillMd(c).body : c
-    next.set(f.path, stored)
+
+  // 2) files 引用变了才重填 localFiles —— 这是磁盘权威内容,一次性原子替换。
+  //    resetLock 期间(刚保存/放弃)跳过重填:此时 localFiles 已经是保存后
+  //    的最新内容,若被这里覆盖会引入 round-trip 差异误判 dirty。切 skill
+  //    永远强制重填(内容完全换了,不受 resetLock 约束)。
+  if (filesChanged && (skillSwitched || Date.now() >= resetLockUntil)) {
+    const next = _buildLocalMap(files)
+    localFiles.clear()
+    for (const [k, v] of next) localFiles.set(k, v)
+    // 3) dirty / baseline 全部对齐到磁盘真值 —— props.files 是权威,
+    //    重填后必然非脏,baseline 清空(下次进 edit 时由第一次 emit 重建)。
+    dirtyPaths.value = new Set()
+    editingBaseline.clear()
   }
-  localFiles.clear()
-  for (const [k, v] of next) localFiles.set(k, v)
-  dirtyPaths.value = new Set()
-  // 2026-07-18 改:同步 baseline 到磁盘真值 — 跟 saveCurrent 的"对齐到 disk" 策略一致。
-  // 父级 props.files 是磁盘权威内容,editingBaseline 里的所有 path 都应该有
-  // 对应的 disk baseline,避免下次进 edit 时 baseline 是旧值导致误判 dirty。
-  editingBaseline.clear()
 }
-onUpdated(() => {
-  _syncSelectedFile()
-  _syncLocalFiles()
-})
+onUpdated(_syncFromProps)
 // 首次同步在 onMounted 里跑一次
 // ===== 目录树面板宽度拖拽（写 CSS 变量 --sfip-left-w 到 .sfip-body）=====
 const sfipBodyEl = ref(null)
@@ -364,8 +385,7 @@ const {
 })
 
 onMounted(() => {
-  _syncSelectedFile()
-  _syncLocalFiles()
+  _syncFromProps()
   fetchStoreRoot()
   // 2026-07-13 增:注册全局 Ctrl+S / Cmd+S 快捷键保存。
   // 挂 window 而非组件根 div,这样焦点在 Monaco/Tiptap 编辑器内部时也能捕获。
@@ -982,26 +1002,15 @@ async function saveCurrent() {
     // 跟 resetCurrent 同款机制,只是窗口期稍长(200ms 覆盖整次 HTTP roundtrip)。
     resetLockUntil = Date.now() + 200
     // 2026-07-18 改:保存成功后立刻把 localFiles 同步到磁盘真值,editingBaseline
-    // 也对齐到磁盘真值 — 解决"保存后按钮依旧存在 + 再点无用"那个致命 bug。
+    // 也对齐到磁盘真值 — 保证保存按钮立即消失(不等父级 loadCurrent 回填)。
     //
-    // 旧逻辑(saveCurrent 不动 localFiles 等 _syncLocalFiles 自然重填)有两个
-    // 致命缺陷:
-    //   1. 中间帧空白:saveCurrent 末尾跑完 emit('saved') → 父级 loadCurrent
-    //      → await getSkill 之间,Vue 可能先重渲染 → isDirty 用 localFiles.get(path)
-    //      (用户改过的内容) vs selectedFile.value.content (旧 disk) → 不等 → true
-    //      → 按钮再次出现 → 用户看到"按钮还在" → 再点保存 → 走完流程 → 还是这样
-    //   2. _syncLocalFiles 触发晚:onUpdated 是 patch 后才跑,从 saveCurrent 完毕
-    //      到 patch 完成可能差几帧到几十帧,期间按钮一直可见。
-    //
-    // 根治:保存成功瞬间用本地 dirty 内容当作 disk 真值写回 localFiles,baseline
-    // 也写相同 — 等价于"基线对齐到本次保存的内容"。之后即便 props.files 没立即
-    // 更新、_syncLocalFiles 还没跑,isDirty 计算:
-    //   - baseline == localFiles (都是保存后的内容)
-    //   - 编辑模式已退出 → currentEditingPath 清空 → 后续进 edit 时 baseline
-    //     还在,可继续对比
-    //   - 不依赖 selectedFile.value.content 的时序
-    // 用 incomingFiles 的 dirty 部分内容作为 disk 真值 — 这是发出去被后端
-    // 接受的内容,跟磁盘 100% 一致(后端 store.Save 走 atomic 全量覆盖)。
+    // 跟 _syncFromProps 的协同:保存瞬间这里手动把 localFiles + baseline 对齐到
+    // 本次发出去的内容(= 后端 atomic 全量覆盖后的磁盘真值),按钮立即消失;
+    // resetLock 窗口(200ms)内 _syncFromProps 跳过重填,避免父级新 files 到达前
+    // 被中间态覆盖;窗口过后即便 _syncFromProps 用新 props.files 重填,内容也一致,
+    // 不会再误判 dirty。彻底不依赖 selectedFile.value.content 的时序。
+    // 用 incomingFiles 内容作为 disk 真值 — 这是发出去被后端接受的内容,跟磁盘
+    // 100% 一致(后端 store.Save 走 atomic 全量覆盖)。
     for (const f of incomingFiles) {
       if (!f.path) continue
       if (f.path === 'SKILL.md') {
