@@ -506,6 +506,23 @@ const isMarkdownFile = computed(() => {
   const p = selectedFile.value?.path || ''
   return p.toLowerCase().endsWith('.md')
 })
+// 2026-07-18 增:文件是否能在 InlinePanel 进入编辑模式 — 决定顶部"编辑"按钮可见性。
+// 排除 office 预览(.docx/.pdf/.xlsx/.xls/.pptx → 走 OfficeViewer 只读)和
+// 真的二进制文件(图片/压缩包 → cv-binary)。剩余文件:
+//   - .md / .markdown → RichTextEditor(Tiptap)
+//   - 其他文本(.txt / .py / .js / .json / ...) → Monaco
+// 都能 inline 编辑,显示编辑按钮。
+const OFFICE_EXTS = ['docx', 'pdf', 'xlsx', 'xls', 'pptx']
+const BINARY_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'zip', 'tar', 'gz', 'tgz', '7z', 'rar']
+const isEditableFile = computed(() => {
+  const p = selectedFile.value?.path || ''
+  if (!p) return false
+  const fname = p.slice(p.lastIndexOf('/') + 1).toLowerCase()
+  const ext = fname.includes('.') ? fname.slice(fname.lastIndexOf('.') + 1) : ''
+  if (OFFICE_EXTS.includes(ext)) return false
+  if (BINARY_EXTS.includes(ext)) return false
+  return true
+})
 
 const currentMode = computed(() => {
   const skillName = props.skill?.name
@@ -1758,8 +1775,15 @@ defineExpose({
                顶部 path + size 是冗余信息(用户从左边文件树知道当前选的是哪个)。
                只保留右侧的操作按钮(铅笔/眼睛 + dirty + 放弃/保存)。 -->
           <span class="sfip-viewer-spacer" />
+          <!-- 2026-07-18 改:编辑按钮仅对可编辑文件显示 — 排除 office 二进制预览(.docx/.pdf/.xlsx/.pptx)、
+               普通二进制(图片/压缩包)等 CodeViewer 无法挂编辑器的情况。
+               之前对所有文件一视同仁显示编辑按钮,导致 pdf/office 预览模式下:
+               1. 用户点编辑 → CodeViewer 走 OfficeViewer 只读预览(毫无反应,但 currentEditingPath 写入了);
+               2. 顶部右侧出现"放弃修改"按钮(currentMode === 'edit' 触发),用户以为这是"保存";
+               3. 编辑状态被锁死但内容毫无变化,反馈给"点了保存按钮依旧存在"的假象。
+               解法:isEditableFile 控制编辑按钮可见性,OfficeViewer/二进制不可编辑的文件不显示。 -->
           <button
-            v-if="selectedFile?.path && currentMode === 'view'"
+            v-if="selectedFile?.path && currentMode === 'view' && isEditableFile"
             class="sfip-mode-btn"
             :data-tip="t(LABEL_EDIT)"
             :aria-label="t(LABEL_EDIT)"
@@ -1775,7 +1799,7 @@ defineExpose({
           <!-- 大纲按钮:恢复原 ListView 图标,显示条件:md + view(没有标题时点开会进空态,
                用户至少能看到"该文件无标题大纲"的反馈) -->
           <button
-            v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile"
+            v-if="selectedFile?.path && currentMode === 'view' && isMarkdownFile && isEditableFile"
             class="sfip-mode-btn"
             :data-tip="outlineActive ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
             :aria-label="outlineActive ? t(LABEL_OUTLINE_HIDE) : t(LABEL_OUTLINE_SHOW)"
@@ -1784,9 +1808,9 @@ defineExpose({
           >
             <IconPark icon="ListView" width="14" height="14" />
           </button>
-          <!-- AI 按钮:view 模式下始终可见 -->
+          <!-- AI 按钮:view 模式下,仅对可编辑文件显示(office / 二进制没 AI 入口价值)。 -->
           <button
-            v-if="selectedFile?.path && currentMode === 'view'"
+            v-if="selectedFile?.path && currentMode === 'view' && isEditableFile"
             class="sfip-mode-btn"
             :data-tip="aiActive ? LABEL_AI_CLOSE : LABEL_AI_OPEN"
             :aria-label="aiActive ? LABEL_AI_CLOSE : LABEL_AI_OPEN"
@@ -1803,9 +1827,9 @@ defineExpose({
                 用户没改东西也能放弃(回到 view 模式,等于"取消编辑")。
                "保存" 只在 isDirty 时显示,避免空保存(没改任何东西调 saveCurrent
                 是浪费一次 HTTP)。同时 dirty 标签 ● 未保存 也只在 isDirty 时显示。 -->
-          <span v-if="isDirty" class="sfip-viewer-dirty">{{ t(LABEL_DIRTY) }}</span>
+          <span v-if="isDirty && isEditableFile" class="sfip-viewer-dirty">{{ t(LABEL_DIRTY) }}</span>
           <button
-            v-if="currentMode === 'edit' || isDirty"
+            v-if="(currentMode === 'edit' || isDirty) && isEditableFile"
             class="sfip-btn"
             :disabled="saving"
             :data-tip="t(LABEL_DISCARD)"
@@ -1813,7 +1837,7 @@ defineExpose({
             @click="resetCurrent"
           >{{ t(LABEL_DISCARD) }}</button>
           <button
-            v-if="isDirty"
+            v-if="isDirty && isEditableFile"
             class="sfip-btn sfip-btn-primary"
             :disabled="saving"
             :data-tip="saving ? t(LABEL_SAVING) : t(LABEL_SAVE)"
