@@ -177,7 +177,37 @@ export function htmlToMarkdown(html) {
     out += serializeBlock(child)
   }
 
-  return out
+  out = out
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^\s+|\s+$/g, '')
+
+  // 2026-07-18 增:HTML entity 反向解码 — 修复"只改标题却把全文转义了"bug。
+  //
+  // 链路:
+  //   1. renderMarkdown(md) 把源码 `<style>` 按 escapeHtml 规则转成 `<code>&lt;style&gt;</code>`
+  //   2. Tiptap onUpdate 调 htmlToMarkdown 把 `<code>&lt;style&gt;</code>` 转回 `` `&lt;style&gt;` ``
+  //   3. 这一串 `&lt;...&gt;` 写回 markdown 文件
+  //   4. 下次 renderMarkdown 解析 inline code `&lt;style&gt;` 时,line 44 走 escapeHtml(code)
+  //      → &lt; → &amp;lt; → 第二次保存时跟用户预期不一致(diff 显示多了一对 amp;)
+  //
+  // 修法:htmlToMarkdown 输出末尾把已知 HTML entity 反向解码回字面字符,因为
+  // 用户看到的"显示文本"就是 `<style>` 不是 `&lt;style&gt;`。
+  // Tiptap 走 DOMParser(text node 已经把 entity 解码),我们这里重新拿到的是
+  // 文字字面(`<style>`)—但 DOMParser 在 nodeValue 里已经是 `<` 而不是 `&lt;`?
+  // 需要校验:实测 DOMParser 解析 `<code>&lt;style&gt;</code>` 后,code.textContent
+  // 等于 `&lt;style&gt;`(DOM 不会自动解码 entity 到 textContent)。所以 inner
+  // 拼出来是 `&lt;style&gt;` 字符串字面。
+  // decodeEntities 把这些常见 entity 还原成字面字符,这样:
+  //   - 渲染回去时 renderMarkdown 看到 `<style>` 是字面字符,inline code 抽取 →
+  //     escapeHtml(`<style>`) → `&lt;style&gt;`(正常的 1 层 escape)
+  //   - 用户存的 markdown 跟磁盘上预期 markdown 一致,不会再多 amp;
+  out = out
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+  // 注意:&amp; 必须放最后,避免把已经解码的 &lt; 里的 & 当成 &amp; 再解码一次
+
+  return out
 }
