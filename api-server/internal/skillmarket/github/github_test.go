@@ -298,6 +298,176 @@ func TestCleanupOldZipFiles(t *testing.T) {
 	cleanupOldZipFiles()
 }
 
+// --- 2026-07-18 增:root-SKILL.md 场景矩阵 ---
+
+// setupRootSkillRepoDir 2026-07-18 增:模拟 SKILL.md 在 repo 根目录的仓库。
+//
+// 关键差异:相对路径不带 skills/pdf/ 这种 skill 目录前缀,所有文件直接挂在 tmpDir 下。
+// 模拟 Vi7QY/screenwriter-skill 的实际结构(SKILL.md + references/iron_rules.md +
+// templates/review_template.md 等)。
+func setupRootSkillRepoDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test")
+
+	files := map[string]string{
+		"SKILL.md":                            "---\nname: screenwriter-skill\ndescription: Screenwriter root skill\n---\n# Screenwriter\n",
+		"README.md":                           "# Top\n",
+		"LICENSE":                             "MIT\n",
+		"references/iron_rules.md":            "# iron rules\n",
+		"templates/review_template.md":        "# review tpl\n",
+		"templates/checklist.md":              "# checklist\n",
+		"examples/sample_review.md":           "# example\n",
+	}
+	for rel, content := range files {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("add", "-A")
+	run("commit", "-q", "-m", "init root skill repo")
+	return dir
+}
+
+// TestIsRootSkill 2026-07-18 增:root 仓库识别。
+func TestIsRootSkill(t *testing.T) {
+	cases := []struct {
+		skillPath, repoName string
+		want                bool
+	}{
+		{"screenwriter-skill", "screenwriter-skill", true}, // ROOT 仓库
+		{"pdf", "skills", false},                           // 子目录 skill
+		{"skills/pdf", "skills", false},                    // 嵌套子目录
+		{"  screenwriter-skill  ", "screenwriter-skill", true}, // TrimSpace 兜底
+		{"", "screenwriter-skill", false},                  // 空 skillPath 不是 ROOT
+		{"screenwriter-skill", "", false},                  // 空 repoName 也不是
+	}
+	for _, c := range cases {
+		t.Run(c.skillPath+"|"+c.repoName, func(t *testing.T) {
+			got := isRootSkill(c.skillPath, c.repoName)
+			if got != c.want {
+				t.Errorf("isRootSkill(%q, %q) = %v, want %v", c.skillPath, c.repoName, got, c.want)
+			}
+		})
+	}
+}
+
+// TestSplitRemoteID_RootSkill 2026-07-18 增:root 仓库 remoteID 拆解。
+//
+// remoteID "Vi7QY/screenwriter-skill@screenwriter-skill" 是 resolver 在
+// path 末段是 SKILL.md 且无上层目录时的产物,拆出来 repo=Vi7QY/screenwriter-skill
+// skillPath=screenwriter-skill,isRootSkill 也返 true。
+func TestSplitRemoteID_RootSkill(t *testing.T) {
+	repo, skill, ok := splitRemoteID("Vi7QY/screenwriter-skill@screenwriter-skill")
+	if !ok {
+		t.Fatal("splitRemoteID should succeed for root skill remoteID")
+	}
+	if repo != "Vi7QY/screenwriter-skill" {
+		t.Errorf("repo = %q, want %q", repo, "Vi7QY/screenwriter-skill")
+	}
+	if skill != "screenwriter-skill" {
+		t.Errorf("skill = %q, want %q", skill, "screenwriter-skill")
+	}
+	if !isRootSkill(skill, "screenwriter-skill") {
+		t.Errorf("isRootSkill should be true for extracted values")
+	}
+}
+
+// TestBranchNotFoundError 2026-07-18 增:验证 sentinel 错误信息格式。
+func TestBranchNotFoundError(t *testing.T) {
+	e := &branchNotFoundError{branch: "main", owner: "Vi7QY", repoName: "screenwriter-skill"}
+	msg := e.Error()
+	if !strings.Contains(msg, "main") || !strings.Contains(msg, "Vi7QY") || !strings.Contains(msg, "screenwriter-skill") {
+		t.Errorf("error msg should mention branch/owner/repo, got %q", msg)
+	}
+}
+
+// TestParseZipball_RootSkill 2026-07-18 增:root 仓库 zipball 解析。
+//
+// 关键:SKILL.md 在顶层目录根;wantSuffix 此时就是 "SKILL.md"(而非 "repo/SKILL.md")。
+func TestParseZipball_RootSkill(t *testing.T) {
+	repoDir := setupRootSkillRepoDir(t)
+	zipPath := filepath.Join(t.TempDir(), "root.zip")
+	if err := buildTestZip(repoDir, zipPath, "Vi7QY-screenwriter-skill-abc123"); err != nil {
+		t.Fatalf("build zip: %v", err)
+	}
+	can, err := parseZipball(zipPath, "Vi7QY", "screenwriter-skill", "screenwriter-skill", "Vi7QY/screenwriter-skill@screenwriter-skill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if can == nil {
+		t.Fatal("nil canonical")
+	}
+	// 期望:SKILL.md + 6 个其他 file(README/LICENSE/refs/templates/examples)
+	// 全部挂在顶层目录"Vi7QY-screenwriter-skill-abc123/" 之下
+	if can.Files[0].Path != "SKILL.md" {
+		t.Errorf("first file should be SKILL.md, got %q", can.Files[0].Path)
+	}
+	// 检查所有收集的 file path,确认 ROOT 仓库里 references/templates/examples 子目录
+	// 的文件也被保留(因为 ROOT 时锚点等于顶层目录根)
+	wantPaths := map[string]bool{
+		"README.md":                    false,
+		"LICENSE":                      false,
+		"references/iron_rules.md":     false,
+		"templates/review_template.md": false,
+		"templates/checklist.md":       false,
+		"examples/sample_review.md":    false,
+	}
+	for _, f := range can.Files {
+		if _, ok := wantPaths[f.Path]; ok {
+			wantPaths[f.Path] = true
+		}
+	}
+	for p, hit := range wantPaths {
+		if !hit {
+			t.Errorf("expected file %q in canonical.Files, not found", p)
+		}
+	}
+	if can.Manifest.Name != "screenwriter-skill" {
+		t.Errorf("Manifest.Name = %q, want %q", can.Manifest.Name, "screenwriter-skill")
+	}
+	if can.Manifest.Author != "Vi7QY" {
+		t.Errorf("Manifest.Author = %q, want %q", can.Manifest.Author, "Vi7QY")
+	}
+}
+
+// TestParseZipball_NonRoot_StillWorks 2026-07-18 增:回归保护 — 子目录仓库 zipball
+// 仍按原 wantSuffix="skills/pdf/SKILL.md" 走原有路径,不被 ROOT 改动破坏。
+func TestParseZipball_NonRoot_StillWorks(t *testing.T) {
+	repoDir := setupSkillRepoDir(t)
+	zipPath := filepath.Join(t.TempDir(), "nonroot.zip")
+	if err := buildTestZip(repoDir, zipPath, "anthropics-skills-abc123"); err != nil {
+		t.Fatalf("build zip: %v", err)
+	}
+	can, err := parseZipball(zipPath, "anthropics", "skills", "skills/pdf", "anthropics/skills@skills/pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if can.Files[0].Path != "SKILL.md" {
+		t.Errorf("first file should be SKILL.md, got %q", can.Files[0].Path)
+	}
+	// 子目录仓库 should 锚定到 "skills/pdf/",不收 outer "other-skill/SKILL.md"
+	for _, f := range can.Files {
+		if strings.HasPrefix(f.Path, "skills/other-skill/") {
+			t.Errorf("non-root parsing should not include other-skill files, got %s", f.Path)
+		}
+	}
+}
+
 // --- helpers ---
 
 // buildTestZip 2026-07-10 增:把 srcDir 打成 zipball,所有文件挂在

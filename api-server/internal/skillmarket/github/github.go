@@ -11,6 +11,15 @@
 // 都被限流(HTTPS 443 走不通),但 `git clone https://...` 能下。改用 go-git
 // PlainClone 走 Git 智能 HTTPS 协议,跟 `npx skills add` 走同样代码路径,绕开
 // codeload / raw 限流。
+//
+// 2026-07-18 改:root-SKILL.md 仓库支持。
+// 修复 https://github.com/Vi7QY/screenwriter-skill 这种 SKILL.md 在根目录的仓库
+// 报"branch master not found"的根因:旧版 anchorPrefix 硬拼 skillPath + "/",
+// ROOT 场景会让 tree 过滤空、触发 branch fallback、把无关的 master 404 误报上来。
+// 新版:
+//   1) 加 isRootSkill(skillPath, repoName) 判定 ROOT 语义
+//   2) 加 branchNotFoundError sentinel,Download 循环只对"真分支不存在"走 fallback
+//   3) fetchTreePaths / downloadFromTree / parseZipball 在 ROOT 时把锚点置 ""
 package github
 
 import (
@@ -156,6 +165,11 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 
 	// 2026-07-10 改:支持 main / master 自动 fallback。
 	// anthropics/skills 这种只有 main,有些老仓库只有 master。
+	//
+	// 2026-07-18 改(关键):fallback 只对"真分支不存在"(branchNotFoundError)
+	// 触发。anchor 错(ROOT 仓库 skillPath 被当子目录走)、parse 错、网络 5xx 等
+	// 都直接返,不浪费一次 master 请求,也不会把 master 404 误报成"ROOT 仓库
+	// 下载失败"的根因(参见 Vi7QY/screenwriter-skill 误报 master not found 修复)。
 	branches := []string{"main", "master"}
 	var lastErr error
 	for _, branch := range branches {
@@ -175,7 +189,12 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 		if isRateLimitedErr(err) {
 			return nil, fmt.Errorf("%w: GitHub rate limited on branch %s", skillmarket.ErrRemoteFetchFail, branch)
 		}
-		// 找不到 SKILL.md → 这个分支可能不对,继续下一个
+		// 2026-07-18 改:仅 branchNotFoundError 触发 fallback;其他错(anchor 空、
+		// SKILL.md 缺失、parse 错、网络错)直接返,不再吞掉真相去 fallback master。
+		var bne *branchNotFoundError
+		if !errors.As(err, &bne) {
+			return nil, fmt.Errorf("%w: %v", skillmarket.ErrRemoteFetchFail, err)
+		}
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no branch matched")
@@ -192,8 +211,20 @@ func (a *Adapter) downloadFromTree(ctx context.Context, owner, repoName, branch,
 	}
 
 	// 2. 锚点路径前缀(用于过滤 tree 里的所有 blob)
+	// 2026-07-18 改:root SKILL.md 仓库(例 Vi7QY/screenwriter-skill@screenwriter-skill,
+	// SKILL.md 在 repo 根)锚点为空字符串,所有 blob 都收。
 	anchorPrefix := strings.Trim(skillPath, "/") + "/"
-	skillMDP := anchorPrefix + "SKILL.md"
+	if isRootSkill(skillPath, repoName) {
+		anchorPrefix = ""
+	}
+	skillMDP := strings.Trim(skillPath, "/")
+	if !isRootSkill(skillPath, repoName) {
+		// 子目录场景:锚点下的 SKILL.md = "{skillPath}/SKILL.md"
+		skillMDP = strings.Trim(skillPath, "/") + "/SKILL.md"
+	} else {
+		// ROOT 场景:整个 repo 根目录下任意 SKILL.md 都算(通常只有 1 个)
+		skillMDP = "SKILL.md"
+	}
 
 	// 3. 并发下载所有 raw 文件
 	type fileResult struct {
@@ -222,6 +253,10 @@ func (a *Adapter) downloadFromTree(ctx context.Context, owner, repoName, branch,
 	wg.Wait()
 
 	// 4. 收集结果,SKILL.md 单独处理
+	//
+	// 2026-07-18 改:ROOT 场景下 anchorPrefix=="",SKILL.md 不带任何前缀,匹配
+	// 时直接用 "SKILL.md"。rel 也直接用 r.path,不要 TrimPrefix 空字符串(空
+	// TrimPrefix 会把路径原本的子目录关系误展平,虽然 ROOT 仓库通常无子目录)。
 	var skillMD string
 	files := make([]skilladapter.File, 0, len(paths))
 	for _, r := range results {
@@ -232,7 +267,12 @@ func (a *Adapter) downloadFromTree(ctx context.Context, owner, repoName, branch,
 			skillMD = r.content
 			continue
 		}
-		rel := strings.TrimPrefix(r.path, anchorPrefix)
+		var rel string
+		if anchorPrefix == "" {
+			rel = r.path
+		} else {
+			rel = strings.TrimPrefix(r.path, anchorPrefix)
+		}
 		files = append(files, skilladapter.File{
 			Path:    filepath.ToSlash(rel),
 			Content: r.content,
@@ -277,7 +317,9 @@ func (a *Adapter) fetchTreePaths(ctx context.Context, owner, repoName, branch, s
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("status 404: branch %s not found", branch)
+		// 2026-07-18 改:返 sentinel 让 Download 主循环判断走 fallback,不要被误报成
+		// 上层"下载失败"的根因。
+		return nil, &branchNotFoundError{branch: branch, owner: owner, repoName: repoName}
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("status 403: GitHub API rate limited")
@@ -306,19 +348,24 @@ func (a *Adapter) fetchTreePaths(ctx context.Context, owner, repoName, branch, s
 		return nil, fmt.Errorf("tree truncated (repo too large, %d+ entries)", len(treeResp.Tree))
 	}
 
+	// 2026-07-18 改:root skill 仓库(skillPath == repoName)锚点为空,所有 blob 都算
+	// skill 文件;非 root 场景保留原"锚点目录前缀"过滤。
 	anchorPrefix := strings.Trim(skillPath, "/") + "/"
+	if isRootSkill(skillPath, repoName) {
+		anchorPrefix = ""
+	}
 	paths := make([]string, 0, 8)
 	for _, e := range treeResp.Tree {
 		if e.Type != "blob" {
 			continue
 		}
-		if !strings.HasPrefix(e.Path, anchorPrefix) {
+		if anchorPrefix != "" && !strings.HasPrefix(e.Path, anchorPrefix) {
 			continue
 		}
 		paths = append(paths, e.Path)
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no files under %q in tree", skillPath)
+		return nil, fmt.Errorf("no files in tree (skillPath=%q, root=%v)", skillPath, isRootSkill(skillPath, repoName))
 	}
 	return paths, nil
 }
@@ -353,6 +400,10 @@ func (a *Adapter) fetchRawFile(ctx context.Context, owner, repoName, branch, pat
 //
 // 2026-07-10 重写:从 clone 目录扫描改为 zipball 流式解压。
 // zipball 顶层目录形如 "{owner}-{repo}-{sha}/",锚点路径 = 顶层目录 + skillPath。
+//
+// 2026-07-18 改:root skill 仓库(例 Vi7QY/screenwriter-skill@screenwriter-skill,
+// 即 SKILL.md 在 repo 根)走另一种定位:wantSuffix="SKILL.md",wantAnchorPrefix=
+// 顶层目录 + "/"(所有顶层目录下的文件都算 skill 自带)。
 func parseZipball(zipPath, owner, repo, skillPath, remoteID string) (*skilladapter.Canonical, error) {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -360,8 +411,13 @@ func parseZipball(zipPath, owner, repo, skillPath, remoteID string) (*skilladapt
 	}
 	defer zr.Close()
 
-	// 锚点后缀:skillPath 形如 "skills/pdf" → "skills/pdf/SKILL.md"
-	wantSuffix := strings.Trim(skillPath, "/") + "/SKILL.md"
+	rootSkill := isRootSkill(skillPath, repo)
+	// 锚点后缀:子目录场景 skillPath 形如 "skills/pdf" → "skills/pdf/SKILL.md";
+	// root 场景只有 "SKILL.md"。
+	wantSuffix := "SKILL.md"
+	if !rootSkill {
+		wantSuffix = strings.Trim(skillPath, "/") + "/SKILL.md"
+	}
 	// 锚点目录前缀:在 zip 内顶层目录下的锚点路径,所有 file 都要在这个前缀下
 	wantAnchorPrefix := ""
 
@@ -382,8 +438,13 @@ func parseZipball(zipPath, owner, repo, skillPath, remoteID string) (*skilladapt
 		rel := f.Name[idx+1:]
 		if rel == wantSuffix {
 			skillMDEntry = f
-			// 锚点目录前缀 = 顶层目录 + skillPath + "/"
-			wantAnchorPrefix = f.Name[:idx+1+len(wantSuffix)-len("/SKILL.md")]
+			if rootSkill {
+				// ROOT:锚点目录前缀 = 顶层目录 + "/"(整个顶层目录下全收)
+				wantAnchorPrefix = f.Name[:idx+1]
+			} else {
+				// 子目录:锚点目录前缀 = 顶层目录 + skillPath + "/"
+				wantAnchorPrefix = f.Name[:idx+1+len(wantSuffix)-len("/SKILL.md")]
+			}
 			break
 		}
 	}
@@ -502,6 +563,35 @@ func isRateLimitedErr(err error) bool {
 func dirExists(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
+}
+
+// branchNotFoundError 2026-07-18 增:哨兵错误,标识"指定分支不存在"。
+//
+// GitHub API 在拿不到指定 branch 的 tree 时返 404,Download 主循环要用 sentinel
+// 区分"分支真不存在(继续 fallback)"和"其他错(直接返)",否则会把 anchor 错、网络
+// 错等无关错误诱导到下一个分支、最后用 master 的 404 误报成"下载失败根因"。
+type branchNotFoundError struct {
+	branch   string
+	owner    string
+	repoName string
+}
+
+func (e *branchNotFoundError) Error() string {
+	return fmt.Sprintf("branch %q not found on %s/%s", e.branch, e.owner, e.repoName)
+}
+
+// isRootSkill 2026-07-18 增:判定"根目录单文件仓库"语义。
+//
+// resolver 在 URL 末段是 SKILL.md 且路径里无其他子段时,会把 skill 设成 repo 名
+// (例 Vi7QY/screenwriter-skill@screenwriter-skill),此时 SKILL.md 实际在 repo
+// 根目录。Download 走 tree API 时不应再用 skillPath 作"锚点目录前缀"过滤,
+// 否则会把 SKILL.md 自身过滤掉、抛出"no files under"误判。
+//
+// 规则:skillPath 去掉前后空白与斜杠后与 repoName 完全相等。
+// 容错 TrimSpace 是防御:splitRemoteID 自身不会产出含空格路径,但日后若 resolver
+// 演进传入 trimmed 值,这里不应误判。
+func isRootSkill(skillPath, repoName string) bool {
+	return strings.TrimSpace(strings.Trim(skillPath, "/")) == strings.TrimSpace(repoName)
 }
 
 // splitRemoteID 拆 "owner/repo@skill" → (owner/repo, skill)。
