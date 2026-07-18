@@ -619,6 +619,20 @@ func (s *Store) LoadByName(name string) (*skilladapter.Canonical, error) {
 	return s.loadFromDir(dir)
 }
 
+// SkillNameExistsAnywhere 全树(根 → 第一层子目录 → ...)按叶子 name 判断 skill
+// 是否存在;浅层优先,语义与 findByName 一致(根下同名覆盖嵌套同名)。
+//
+// 2026-07-18 增:为 RenameSkillInGroup / CreateSkill 等"新名必须全局唯一"约束
+// 提供 O(N) 一次查重 helper。直接复用 findByName 的 BFS,零新增 IO 路径。
+//
+// 注意点:它会"自命中"——用 newName 查重时,若被改名的 skill 自身就叫 newName
+// (即 oldName == newName),会返 true。但调用方在调本函数之前已经做了 oldName
+// vs newName 的相等性判断,所以这里不需要再特殊处理。
+func (s *Store) SkillNameExistsAnywhere(name string) bool {
+	_, _, err := s.findByName(name)
+	return err == nil
+}
+
 // ExistsByName 全树按 name 判断 skill 是否存在。
 //
 // 2026-07-03 增。
@@ -701,6 +715,11 @@ func (s *Store) MoveGroupPath(srcGroupPath string, name string, dstGroupPath str
 // 与 MoveGroupPath 区别:dst 仍走 srcGroupPath,只换 name;同时锁定 src + dst 防
 // 并发覆盖。校验 newName 非空 + 与 oldName 不一致 + 目标不存在。
 // 成功返回新相对路径(groupPath/newName,'/' 分隔,前端直接消费)。
+//
+// 2026-07-18 改:加全树查重 —— 旧版只在同分组 stat dstAbs,漏掉"根下 foo 改名 bar
+// 但 aa/bar 已存在"这种跨分组冲突。现在先用 SkillNameExistsAnywhere 做一次
+// 全树扫描,语义与用户预期一致(全 store 唯一),再走原有的同分组 stat + lock。
+// 错误消息保留"already exists"关键字,controller 仍映射到 409 + code=target_exists。
 func (s *Store) RenameSkillInGroup(srcGroupPath string, oldName string, newName string) (string, error) {
 	if oldName == "" {
 		return "", fmt.Errorf("skillstore: rename skill: old name is empty")
@@ -730,6 +749,13 @@ func (s *Store) RenameSkillInGroup(srcGroupPath string, oldName string, newName 
 			return "", ErrNotFound
 		}
 		return "", err
+	}
+	// 2026-07-18 增:全树查重。SkillNameExistsAnywhere 用 BFS 走 root → 子分组,
+	// 找到 newName 即返 true。注意此时 src(原目录)还在,oldName ≠ newName 已校,
+	// 这里命中的是"另一处"的同名(嵌套分组 / 同级其他分组 / 根下),符合用户
+	// "全局唯一"诉求。
+	if s.SkillNameExistsAnywhere(newName) {
+		return "", fmt.Errorf("skillstore: rename skill: target %q already exists", newName)
 	}
 	dstAbs, err := s.resolveSkillDir(cleanGroup, newName)
 	if err != nil {

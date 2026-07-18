@@ -1068,11 +1068,19 @@ function closeCtxMenu() {
   ctxMenu.items = []
 }
 
-// skill 右键:删除 / 打 tag / 在文件夹打开
+// skill 右键:重命名 / 在文件夹打开 / 复制路径 / 历史版本 / 删除
+// 2026-07-18 增:重命名入口 —— 与分组重命名对齐,放在第一项(用户对文件类
+// 操作的心智:重命名优先),icon 复用分组的 mdi:rename-outline。
 function onSkillContextMenu({ node, event }) {
   ctxMenu.x = event.clientX
   ctxMenu.y = event.clientY
   ctxMenu.items = [
+    {
+      key: 'rename',
+      label: t('skills.list.ctxRename'),
+      icon: 'mdi:rename-outline',
+      onClick: () => openRenameSkillDialog(node),
+    },
     {
       key: 'open-folder',
       label: t('skills.list.ctxOpenFolder'),
@@ -1259,6 +1267,75 @@ async function submitRenameGroup() {
     // 乐观更新已经改过 tree,这里不强制 reload(避免选中态被刷掉)
   } finally {
     renameGroupBusy.value = false
+  }
+}
+
+// ====== 2026-07-18 增:重命名 skill 弹窗(对齐 renameGroup 写法) ======
+// 全局唯一性由后端兜底:新名在 store 全树已有 → 409 + code=target_exists → 红字提示。
+const renameSkillOpen = ref(false)
+const renameSkillOldPath = ref('') // skill 在 tree 内的完整相对路径 "frontend/foo"
+const renameSkillOldName = ref('')
+const renameSkillGroupPath = ref('') // skill 所在分组(供后端定位 src_group_path)
+const renameSkillInput = ref('')
+const renameSkillBusy = ref(false)
+const renameSkillError = ref('')
+
+function openRenameSkillDialog(node) {
+  if (!node || !node.path) {
+    toast.error(t('skills.list.skillRenameNotFound'))
+    return
+  }
+  // node.path = "<group>/<name>" 或 "<name>"
+  renameSkillOldPath.value = node.path
+  renameSkillOldName.value = node.name
+  renameSkillGroupPath.value = pathDirname(node.path)
+  renameSkillInput.value = node.name
+  renameSkillError.value = ''
+  renameSkillOpen.value = true
+}
+function closeRenameSkillDialog() {
+  if (renameSkillBusy.value) return
+  renameSkillOpen.value = false
+}
+async function submitRenameSkill() {
+  if (renameSkillBusy.value) return
+  const seg = (renameSkillInput.value || '').trim()
+  if (!seg) {
+    renameSkillError.value = t('skills.list.skillRenameInvalid')
+    return
+  }
+  // 本地预校验:只允许 a-z0-9-_,避免送后端再被拒
+  if (!/^[a-z0-9_-]+$/.test(seg)) {
+    renameSkillError.value = t('skills.list.skillRenameInvalid')
+    return
+  }
+  renameSkillBusy.value = true
+  renameSkillError.value = ''
+  try {
+    const r = await skillTree.renameSkill({
+      srcGroupPath: renameSkillGroupPath.value,
+      oldName: renameSkillOldName.value,
+      newName: seg,
+    })
+    if (!r.ok) {
+      if (r.code === 'target_exists') {
+        // 用户原话:已存在,请换一个全局唯一的技能名称
+        renameSkillError.value = t('skills.list.skillRenameConflict')
+      } else if (r.code === 'not_found') {
+        renameSkillError.value = t('skills.list.skillRenameNotFound')
+      } else if (r.code === 'invalid_name') {
+        renameSkillError.value = t('skills.list.skillRenameInvalid')
+      } else {
+        renameSkillError.value = r.error || String(r.error || '')
+      }
+      return
+    }
+    renameSkillOpen.value = false
+    const newName = r.new_skill_path?.split('/').pop() || seg
+    toast.success(t('skills.list.skillRenameOk', { name: newName }))
+    // 乐观更新已改 tree,这里不强制 reload(避免选中态被刷掉)
+  } finally {
+    renameSkillBusy.value = false
   }
 }
 
@@ -2156,6 +2233,59 @@ onUnmounted(() => {
           @click="submitRenameGroup"
         >
           <span v-if="renameGroupBusy" class="spinner spinner-sm"></span>
+          <IconPark v-else icon="mdi:check" width="14" height="14" />
+          {{ t('common.save') }}
+        </button>
+      </template>
+    </Modal>
+
+    <!-- 2026-07-18 增:重命名 skill 弹窗 -->
+    <Modal v-model="renameSkillOpen" size="sm" :close-on-mask="!renameSkillBusy">
+      <template #header>
+        <h3 class="modal-title">
+          <IconPark icon="mdi:rename-outline" width="18" height="18" />
+          {{ t('skills.list.skillRenameTitle') }}
+        </h3>
+      </template>
+      <form class="new-group-form" @submit.prevent="submitRenameSkill">
+        <div class="editor-field-full">
+          <p class="muted small-hint">
+            {{ t('skills.list.skillRenamePrompt', { name: renameSkillOldName }) }}
+          </p>
+          <input
+            v-model="renameSkillInput"
+            class="group-input"
+            :placeholder="renameSkillOldName"
+            :disabled="renameSkillBusy"
+            autofocus
+            @keyup.enter="submitRenameSkill"
+          />
+          <p class="muted small-hint">
+            {{ t('skills.list.skillRenameHint') }}
+          </p>
+          <p v-if="renameSkillGroupPath" class="muted small-hint">
+            <code>{{ renameSkillGroupPath || '/' }}/<span style="color: var(--text)">{{ renameSkillInput || '...' }}</span></code>
+          </p>
+          <p v-else class="muted small-hint">
+            <code>/<span style="color: var(--text)">{{ renameSkillInput || '...' }}</span></code>
+          </p>
+          <p v-if="renameSkillError" class="message message-error" style="margin: 8px 0 0">
+            <IconPark icon="mdi:alert-circle-outline" width="12" height="12" />
+            {{ renameSkillError }}
+          </p>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="ghost" :disabled="renameSkillBusy" @click="closeRenameSkillDialog">
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="renameSkillBusy || !renameSkillInput.trim() || renameSkillInput.trim() === renameSkillOldName"
+          @click="submitRenameSkill"
+        >
+          <span v-if="renameSkillBusy" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
           {{ t('common.save') }}
         </button>

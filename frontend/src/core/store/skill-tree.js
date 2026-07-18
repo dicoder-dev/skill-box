@@ -26,6 +26,7 @@ import {
   moveSkill as apiMoveSkill,
   moveGroup as apiMoveGroup,
   renameGroup as apiRenameGroup,
+  renameSkill as apiRenameSkill,
   getStoreInfo as apiGetStoreInfo,
 } from '@/api/skillbox/skills'
 
@@ -553,6 +554,86 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     // 不需要 prune 步骤。
   }
 
+  // renameSkill 重命名 skill(改叶子节点的目录名,group_path 不变)。
+  // 2026-07-18 增:对应后端 POST /api/skillbox/skills/rename。与 renameGroup
+  // 是平行路径 — 区别是本接口作用对象是 skill 叶子(走 os.Rename 改最后一段),
+  // 不是 group。校验规则由后端兜底:全树同名冲突 → 409 + code=target_exists,
+  // 源不存在 → 404,非法名 → 400。
+  //
+  // 乐观更新:把 tree 内对应节点的 name + path 改了,失败时整体 reload 回滚。
+  // 不动 group_path、不动其他附属字段,只换"目录名 == skill 主键"。
+  async function renameSkill({ srcGroupPath, oldName, newName }) {
+    if (!oldName || !newName) return { ok: false, error: 'empty params' }
+    if (oldName === newName) {
+      // 同名,后端会返 same error;前端不动 state
+      return { ok: true, new_skill_path: srcGroupPath ? `${srcGroupPath}/${newName}` : newName }
+    }
+    const oldPath = srcGroupPath ? `${srcGroupPath}/${oldName}` : oldName
+    // 乐观更新:在 tree 内把该节点的 name + path 改掉
+    const ok = applySkillRenameInTree(oldPath, newName)
+    if (!ok) {
+      // 找不到节点 — 保守 reload 让状态对齐,返回 not_found
+      await load({ keyword: keyword.value }).catch(() => {})
+      return { ok: false, code: 'not_found', error: 'source skill not found in tree' }
+    }
+    try {
+      const resp = await apiRenameSkill({
+        src_group_path: srcGroupPath || '',
+        old_name: oldName,
+        new_name: newName,
+      })
+      const norm = resp?.new_skill_path || (srcGroupPath ? `${srcGroupPath}/${newName}` : newName)
+      // 同步把 state 里的 selectedPath 旧 path 换新 path(若当前选中就是它)
+      if (selectedPath.value === oldPath) selectedPath.value = norm
+      // localStorage 持久化的"最后选中"下次读出来仍指旧 path,这里直接覆盖
+      try {
+        localStorage.setItem('skillbox:skill-tree:last-selected-path', norm)
+      } catch (_) { /* 静默失败 */ }
+      return { ok: true, new_skill_path: norm }
+    } catch (e) {
+      // 回滚:reload 重新拉树(简单可靠,树规模 < 200 节点)
+      await load({ keyword: keyword.value }).catch(() => {})
+      const status = e?.response?.status
+      const data = e?.response?.data || e?.data
+      const code = data?.code
+      if (status === 409 || code === 'target_exists') {
+        return { ok: false, code: 'target_exists', error: data?.error || 'target already exists' }
+      }
+      if (status === 404 || code === 'not_found') {
+        return { ok: false, code: 'not_found', error: data?.error || 'source not found' }
+      }
+      if (status === 400 || code === 'invalid_name') {
+        return { ok: false, code: 'invalid_name', error: data?.error || 'invalid skill name' }
+      }
+      return { ok: false, error: e?.message || String(e) }
+    }
+  }
+
+  // 工具:把 tree 中 path === oldPath 的叶子 skill 节点的 name + path 改成 newName。
+  // 返回是否命中(true=已改,false=树里找不到)。
+  function applySkillRenameInTree(oldPath, newName) {
+    const newPath = computeRenamedPath(oldPath, newName)
+    if (!newPath) return false
+    const walk = (nodes) => {
+      for (const n of nodes || []) {
+        if (!n.is_group && n.path === oldPath) {
+          n.name = newName
+          n.path = newPath
+          return true
+        }
+        if (n.is_group && n.children && walk(n.children)) return true
+      }
+      return false
+    }
+    return walk(tree.value)
+  }
+  // 工具:从 "<group>/<oldName>" 或 "<oldName>" 派生 "<group>/<newName>" / "<newName>"
+  function computeRenamedPath(oldPath, newName) {
+    if (!oldPath) return newName
+    const i = oldPath.lastIndexOf('/')
+    return i < 0 ? newName : oldPath.slice(0, i + 1) + newName
+  }
+
   function pathDirname(p) {
     if (!p) return ''
     const i = p.lastIndexOf('/')
@@ -646,7 +727,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     // getters
     flatItems, totalSkills,
     // actions
-    load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup,
+    load, createGroup, deleteGroup, moveSkill, moveGroup, renameGroup, renameSkill,
     toggleCollapse, setSelected, clearSelected, setDropTarget, setPendingSelectName, consumePendingSelectName,
     // 2026-07-10 增:折叠/展开所有分组的批量操作
     collapseAllGroups,

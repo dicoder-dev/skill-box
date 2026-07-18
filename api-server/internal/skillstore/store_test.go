@@ -491,6 +491,81 @@ func TestRenameSkillInGroup_SameName(t *testing.T) {
 	}
 }
 
+// 2026-07-18 增:跨分组重名冲突。
+//   - 根下已有 foo;aa/ 分组下已有 bar
+//   - 重命名根下 alpha → bar(bar 在另一个分组下已存在)
+//   - 期望返回 "already exists",且 foo / bar / alpha 三者位置不变
+func TestRenameSkillInGroup_TargetExistsCrossGroup(t *testing.T) {
+	s := newTestStore(t)
+	// 1) 根下放 alpha(将被改名)
+	cAlpha := validCanonical()
+	cAlpha.Manifest.Name = "alpha"
+	if err := s.Save(cAlpha, nil); err != nil {
+		t.Fatalf("Save alpha: %v", err)
+	}
+	// 2) aa/ 分组下放 bar(冲突目标)
+	if err := s.CreateGroupDir("aa"); err != nil {
+		t.Fatalf("CreateGroupDir aa: %v", err)
+	}
+	cBar := validCanonical()
+	cBar.Manifest.Name = "bar"
+	cBar.Manifest.GroupPath = "aa"
+	if err := s.Save(cBar, nil); err != nil {
+		t.Fatalf("Save bar: %v", err)
+	}
+	// 3) 重命名 alpha → bar,期望被拒
+	_, err := s.RenameSkillInGroup("", "alpha", "bar")
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("err = %v; want 'already exists' error", err)
+	}
+	// 4) 三者位置应不变
+	if !s.ExistsByPath("", "alpha") {
+		t.Errorf("alpha should still exist at root")
+	}
+	if !s.ExistsByPath("aa", "bar") {
+		t.Errorf("bar should still exist under aa/")
+	}
+	if s.ExistsByPath("", "bar") {
+		t.Errorf("bar should NOT exist at root (rename rejected)")
+	}
+}
+
+// 2026-07-18 增:嵌套分组重名冲突。
+//   - aa/bb/ 下已有 bar;aa/ 下已有 alpha
+//   - 重命名 aa/alpha → bar(bar 在 aa/bb/ 嵌套层已存在)
+//   - 期望返回 "already exists"
+func TestRenameSkillInGroup_TargetExistsNested(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.CreateGroupDir("aa"); err != nil {
+		t.Fatalf("CreateGroupDir aa: %v", err)
+	}
+	if err := s.CreateGroupDir("aa/bb"); err != nil {
+		t.Fatalf("CreateGroupDir aa/bb: %v", err)
+	}
+	cAlpha := validCanonical()
+	cAlpha.Manifest.Name = "alpha"
+	cAlpha.Manifest.GroupPath = "aa"
+	if err := s.Save(cAlpha, nil); err != nil {
+		t.Fatalf("Save alpha: %v", err)
+	}
+	cBar := validCanonical()
+	cBar.Manifest.Name = "bar"
+	cBar.Manifest.GroupPath = "aa/bb"
+	if err := s.Save(cBar, nil); err != nil {
+		t.Fatalf("Save bar: %v", err)
+	}
+	_, err := s.RenameSkillInGroup("aa", "alpha", "bar")
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("err = %v; want 'already exists' error", err)
+	}
+	if !s.ExistsByPath("aa", "alpha") {
+		t.Errorf("alpha should still exist under aa/")
+	}
+	if !s.ExistsByPath("aa/bb", "bar") {
+		t.Errorf("bar should still exist under aa/bb/")
+	}
+}
+
 // 2026-07-11 增:listEmptyDirs 行为
 //   - 顶层空目录应被列出
 //   - 嵌套空目录应被列出
