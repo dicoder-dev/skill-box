@@ -112,13 +112,13 @@ func TestResolveInstallInput_GitHubTreeURL(t *testing.T) {
 		{
 			"blob 子目录 SKILL.md",
 			"https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md",
-			"anthropics/skills@pdf",
+			"anthropics/skills@skills/pdf",
 			false,
 		},
 		{
 			"tree 子目录(无 SKILL.md 末段)",
 			"https://github.com/anthropics/skills/tree/main/skills/pdf",
-			"anthropics/skills@pdf",
+			"anthropics/skills@skills/pdf",
 			false,
 		},
 		{
@@ -130,24 +130,42 @@ func TestResolveInstallInput_GitHubTreeURL(t *testing.T) {
 		{
 			"raw mode",
 			"https://github.com/owner/repo/raw/main/skills/foo/SKILL.md",
-			"owner/repo@foo",
+			"owner/repo@skills/foo",
 			false,
 		},
 		{
 			"master 分支",
 			"https://github.com/owner/repo/blob/master/skills/foo/SKILL.md",
-			"owner/repo@foo",
+			"owner/repo@skills/foo",
 			false,
 		},
 		{
 			"嵌套路径",
 			"https://github.com/owner/repo/blob/main/skills/sub/deep/SKILL.md",
-			"owner/repo@deep",
+			"owner/repo@skills/sub/deep",
 			false,
 		},
 		{
-			"路径过短",
-			"https://github.com/owner/repo",
+			"主页 URL(只粘 owner/repo,2 段)",
+			"https://github.com/Vi7QY/screenwriter-skill",
+			"Vi7QY/screenwriter-skill@screenwriter-skill",
+			false,
+		},
+		{
+			"主页 URL 末尾带斜杠",
+			"https://github.com/Vi7QY/screenwriter-skill/",
+			"Vi7QY/screenwriter-skill@screenwriter-skill",
+			false,
+		},
+		{
+			"主页 URL 带 query 和 fragment",
+			"https://github.com/owner/repo?tab=readme-ov-file#usage",
+			"owner/repo@repo",
+			false,
+		},
+		{
+			"路径过短(只有 owner)",
+			"https://github.com/owner",
 			"",
 			true,
 		},

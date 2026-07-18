@@ -194,72 +194,94 @@ func resolveSkillsSHURL(u *url.URL, raw string) (*ResolvedInput, error) {
 // resolveGitHubTreeURL 从 GitHub tree/blob URL 推断 (owner/repo, skill)(2026-07-09 增)。
 //
 // 支持:
-//   - github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md  → skill = {path 末段父目录}
-//   - github.com/{owner}/{repo}/tree/{branch}/{path}           → skill = {path 末段}
-//   - github.com/{owner}/{repo}/raw/{branch}/{path}/SKILL.md   → 同 blob
+//   - github.com/{owner}/{repo}                          → skill = repo (root,2026-07-18 增)
+//   - github.com/{owner}/{repo}/                         → skill = repo (root,同上)
+//   - github.com/{owner}/{repo}/blob/{branch}/{path}/SKILL.md → skill = {完整目录路径}
+//   - github.com/{owner}/{repo}/tree/{branch}/{path}    → skill = {完整 path}
+//   - github.com/{owner}/{repo}/raw/{branch}/{path}/SKILL.md → 同 blob
 //
 // 推断规则:
-//   - path 末段必须是 SKILL.md(skillhub 风格的单文件仓库)
-//   - skill 取 path 的父目录名(blob/{branch}/skills/foo/SKILL.md → skill=foo)
-//   - 若 path 自身就是 SKILL.md(根目录单文件仓库),skill = repo 名
+//   - 2 段形式({owner}/{repo} 或 +尾斜杠)视为仓库主页,默认派生 root 仓库路径,
+//     让 github adapter 的 isRootSkill 接管(参见 github.go 修复)
+//   - 5+ 段形式(path 末段必须是 SKILL.md):sub-skill 取 path 完整父目录
+//   - path 末段是 SKILL.md 且 len(rest) < 2 → skill = repo(root 仓库)
+//   - path 末段是 README → 报错
+//   - 其他 >3 段且 mode 不在 blob/tree/raw → 报错
 func resolveGitHubTreeURL(u *url.URL, raw string) (*ResolvedInput, error) {
 	parts := splitPathParts(u.Path)
-	// 期望:[owner, repo, mode, branch, ...path...]
-	// mode ∈ {blob, tree, raw}(GitHub 标准)
-	if len(parts) < 5 {
-		return nil, fmt.Errorf("%w: GitHub URL 路径过短,得到 %q", ErrInvalidInput, raw)
-	}
-	owner := parts[0]
-	repo := parts[1]
-	mode := parts[2]
-	_ = parts[3] // branch,保留解析但不直接使用(skillssh adapter 走笛卡尔积 main/master)
-	if mode != "blob" && mode != "tree" && mode != "raw" {
-		return nil, fmt.Errorf("%w: GitHub URL 第 3 段必须是 blob/tree/raw,得到 %q", ErrInvalidInput, mode)
-	}
-	if !validOwnerRepo(owner) || !validOwnerRepo(repo) {
-		return nil, fmt.Errorf("%w: GitHub owner/repo 非法 %q", ErrInvalidInput, raw)
-	}
-	// 剩余 path = skill 目录或 skill 文件
-	rest := parts[4:]
-	if len(rest) == 0 {
-		return nil, fmt.Errorf("%w: GitHub URL 路径缺少 SKILL.md,得到 %q", ErrInvalidInput, raw)
-	}
-	last := rest[len(rest)-1]
-	var skill string
-	switch {
-	case strings.EqualFold(last, "SKILL.md"):
-		// 文件层:取完整目录路径(github adapter 需要全路径,不止末段)
-		// 例 blob/main/skills/pdf/SKILL.md → skill = "skills/pdf"
-		if len(rest) < 2 {
-			// 根目录的 SKILL.md,skill = repo(单文件仓库)
-			skill = repo
-		} else {
-			// 拼接 rest 中除了末段 SKILL.md 之外的所有段
-			skill = strings.Join(rest[:len(rest)-1], "/")
+	owner := ""
+	repo := ""
+	switch len(parts) {
+	case 2:
+		// 2026-07-18 增:repo 主页 URL(只粘 https://github.com/{owner}/{repo})
+		// 直接派生 root 仓库形态,后续由 github adapter 的 isRootSkill 接管。
+		owner = parts[0]
+		repo = parts[1]
+		if !validOwnerRepo(owner) || !validOwnerRepo(repo) {
+			return nil, fmt.Errorf("%w: GitHub owner/repo 非法 %q", ErrInvalidInput, raw)
 		}
-	case strings.EqualFold(last, "README.md"):
-		// README 不算 skill 入口,报错
-		return nil, fmt.Errorf("%w: GitHub URL 指向 README.md,不是 SKILL.md %q", ErrInvalidInput, raw)
+		// sanity check:GitHub home 长 repo 不是真仓库(404 兜底交给 adapter),
+		// 这里只粗校验 owner / repo 字符不空。
+		return &ResolvedInput{
+			SourceType:  skillmarket.SourceGitHub,
+			SourceName:  "GitHub",
+			RemoteID:    owner + "/" + repo + "@" + repo,
+			ResolvedURL: raw,
+		}, nil
+	case 0, 1:
+		// 只有域名 / 只有一段(owner 没有 repo):无法定位仓库
+		return nil, fmt.Errorf("%w: GitHub URL 路径过短,得到 %q(预期形如 https://github.com/{{owner}}/{{repo}})", ErrInvalidInput, raw)
 	default:
-		// 末段是目录(tree URL 常见),用完整 path 作 skill(去掉末段斜杠)
-		skill = strings.Join(rest, "/")
+		// 多段:走原 blob/tree/raw 路径
+		if len(parts) < 5 {
+			return nil, fmt.Errorf("%w: GitHub URL 路径过短,得到 %q", ErrInvalidInput, raw)
+		}
+		owner = parts[0]
+		repo = parts[1]
+		mode := parts[2]
+		_ = parts[3] // branch,保留解析但不直接使用
+		if mode != "blob" && mode != "tree" && mode != "raw" {
+			return nil, fmt.Errorf("%w: GitHub URL 第 3 段必须是 blob/tree/raw,得到 %q", ErrInvalidInput, mode)
+		}
+		if !validOwnerRepo(owner) || !validOwnerRepo(repo) {
+			return nil, fmt.Errorf("%w: GitHub owner/repo 非法 %q", ErrInvalidInput, raw)
+		}
+		// 剩余 path = skill 目录或 skill 文件
+		rest := parts[4:]
+		if len(rest) == 0 {
+			return nil, fmt.Errorf("%w: GitHub URL 路径缺少 SKILL.md,得到 %q", ErrInvalidInput, raw)
+		}
+		last := rest[len(rest)-1]
+		var skill string
+		switch {
+		case strings.EqualFold(last, "SKILL.md"):
+			// 文件层:取完整目录路径(github adapter 需要全路径,不止末段)
+			// 例 blob/main/skills/pdf/SKILL.md → skill = "skills/pdf"
+			if len(rest) < 2 {
+				// 根目录的 SKILL.md,skill = repo(单文件仓库)
+				skill = repo
+			} else {
+				// 拼接 rest 中除了末段 SKILL.md 之外的所有段
+				skill = strings.Join(rest[:len(rest)-1], "/")
+			}
+		case strings.EqualFold(last, "README.md"):
+			// README 不算 skill 入口,报错
+			return nil, fmt.Errorf("%w: GitHub URL 指向 README.md,不是 SKILL.md %q", ErrInvalidInput, raw)
+		default:
+			// 末段是目录(tree URL 常见),用完整 path 作 skill(去掉末段斜杠)
+			skill = strings.Join(rest, "/")
+		}
+		if sanitizeSlug(skill) == "" {
+			return nil, fmt.Errorf("%w: GitHub skill 名称非法 %q", ErrInvalidInput, raw)
+		}
+		// 原始 URL 当 ResolvedURL,前端展示/日志用。
+		return &ResolvedInput{
+			SourceType:  skillmarket.SourceGitHub,
+			SourceName:  "GitHub",
+			RemoteID:    owner + "/" + repo + "@" + skill,
+			ResolvedURL: raw,
+		}, nil
 	}
-	if sanitizeSlug(skill) == "" {
-		return nil, fmt.Errorf("%w: GitHub skill 名称非法 %q", ErrInvalidInput, raw)
-	}
-	// 原始 URL 当 ResolvedURL,前端展示/日志用。
-	//
-	// 2026-07-09 修(关键 bug):早期 SourceType / SourceName 都写成 skillssh,
-	// 导致 controller 拿 resolved.SourceType="skillssh" 走老 adapter,新 github
-	// adapter 完全被绕过;同时 groupPath 走 "skills-sh" 而非 "anthropics"。
-	// 改成 source=github 后,findOrCreateSourceByType 会注册/用 github 源,
-	// deriveGroupPath 走按 owner 分组。
-	return &ResolvedInput{
-		SourceType:  skillmarket.SourceGitHub,
-		SourceName:  "GitHub",
-		RemoteID:    owner + "/" + repo + "@" + skill,
-		ResolvedURL: raw,
-	}, nil
 }
 
 // splitOwnerRepoAt 拆 "owner/repo@skill" → (owner/repo, skill)(2026-07-09 增)。
