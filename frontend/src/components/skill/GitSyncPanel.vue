@@ -354,7 +354,19 @@ watch(gitExpanded, (open) => {
   color: var(--text-muted, rgba(127, 127, 127, 0.7));
 }
 
-.gsp-content { display: flex; flex-direction: column; gap: 4px; }
+.gsp-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* 2026-07-18 增:Git 同步面板最大高度 + 内部滚动,跟历史面板统一做法。
+     默认 320px 跟作用域列表视觉一致 — 防止展开后 KV 行 + 配置表单 + 错误
+     提示累计高度把 .sfip-left 底部空间挤满,文件树被压扁。 */
+  max-height: var(--gsp-content-max-h, 320px);
+  overflow-y: auto;
+  /* 2026-07-18:跟全局隐藏滚动条惯例对齐 */
+  scrollbar-width: none;
+}
+.gsp-content::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .gsp-row { display: flex; align-items: baseline; gap: 6px; }
 .gsp-row-label { flex: 0 0 40px; font-size: 11px; color: var(--text-muted, rgba(127, 127, 127, 0.7)); }

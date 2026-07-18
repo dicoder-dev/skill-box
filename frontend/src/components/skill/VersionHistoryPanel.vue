@@ -423,9 +423,14 @@ function shortHash(h) {
   return (h || '').slice(0, 7)
 }
 
+// 2026-07-18 改:具体到分钟 — 后端返回的 when 形如 2026-07-18T15:42:08+08:00
+// (RFC3339),slice(0, 16) 拿到 YYYY-MM-DDTHH:MM,再用空格替换 T 让阅读更顺。
+// 用户反馈历史面板只显示日期太粗,同一天多次提交看不出顺序,改到分钟能立刻
+// 区分先后。
 function formatTime(when) {
   if (!when) return ''
-  return when.slice(0, 10)
+  const head = String(when).slice(0, 16) // YYYY-MM-DDTHH:MM
+  return head.replace('T', ' ')
 }
 </script>
 
@@ -555,7 +560,7 @@ function formatTime(when) {
               </span>
               <span v-if="modalCommit && modalCommit.when" class="vhp-modal-when">
                 <IconPark icon="Time" :size="10" />
-                {{ modalCommit.when.slice(0, 10) }}
+                {{ formatTime(modalCommit.when) }}
               </span>
             </div>
             <div class="vhp-modal-header-right">
@@ -724,8 +729,14 @@ function formatTime(when) {
 
 .vhp-list {
   overflow: auto;
-  max-height: 480px;
+  /* 2026-07-18 改:历史面板最大高度走 CSS 变量 --vhp-list-max-h,
+     让 SkillFileInlinePanel 父级能在窄窗口 / 多面板叠加时按需覆盖。
+     默认 320px,跟作用域列表视觉一致 — 撑很高会让左侧文件树被挤压缩。 */
+  max-height: var(--vhp-list-max-h, 320px);
+  /* 2026-07-18 增:同步隐藏 webkit scrollbar,跟全局惯例一致 */
+  scrollbar-width: none;
 }
+.vhp-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .vhp-commits { display: flex; flex-direction: column; }
 .vhp-commit { display: flex; flex-direction: column; }
 
