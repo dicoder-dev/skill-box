@@ -18,7 +18,7 @@
 //   await tree.deleteGroup('frontend', { cascade: true })
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   listSkills as apiListSkills,
   createGroup as apiCreateGroup,
@@ -43,6 +43,20 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   const error = ref('')
   const keyword = ref('')
   // 折叠态(用 Set 记录所有当前折叠的 path)
+  //
+  // 2026-07-18 改:首次进入默认全折叠的产品决策保留;用户手动 toggle 后
+  // 走 localStorage 持久化(F5 / 重启后还原)。关键修复:
+  // 之前非搜索态无条件 collapseAllGroups,导致用户展开「分组 1」→ 拖文件
+  // 到「分组 2」→ moveSkill → load 末尾把分组 1 也折叠了。现在加了
+  // "内存 Set 为空才走默认全折叠"的判断,后续 load 不再覆盖用户视图。
+  //
+  // 持久化由 watch 单一出口兜底(saveCollapsedPaths 写到 localStorage),
+  // 任何改 Set 的路径(set/toggle/clear/prune)都自动同步,不再需要在 5 个
+  // 改动点手工调 saveCollapsedPaths(),降低漏调风险(对齐 useMdOutlineVisible
+  // 已有的 watch 写法)。
+  //
+  // 同时 saveCollapsedPaths 顺手只写当前 tree 里仍存在的 group(过滤掉
+  // 已删除/重命名的脏 path),不需要单独的 prune 步骤。
   const collapsedPaths = ref(new Set())
   // 拖拽中:当前 drop 目标(高亮)
   const dropTargetPath = ref('')
@@ -52,6 +66,60 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   // 解决:MarketView 装好跳 skills tab 时,SkillsView 可能还没 mount,
   // 事件就丢了。这里存个"待选清单",SkillsView mount 后 + list 加载完时检查一次。
   const pendingSelectName = ref('')
+
+  // 2026-07-18 增:localStorage 持久化 collapsedPaths。
+  // 让用户主动展开/折叠过的分组在 F5 刷新、关闭浏览器重开后都保持。
+  // key 加 storeId 前缀,未来如果引入多 store 不串数据;
+  // 失败静默(无痕模式 / 存储满)不阻断 UI。
+  //
+  // 只序列化"当前 tree 里仍然存在"的 group path —— stale path 自然被
+  // 过滤掉,免去单独的 prune 步骤(2026-07-18 simplify 复审建议)。
+  const COLLAPSED_STORAGE_KEY = 'skillbox:skill-tree:collapsed-paths'
+  function collectGroupPathsInTree(predicate) {
+    const out = new Set()
+    const walk = (nodes) => {
+      for (const n of nodes || []) {
+        if (!n.is_group) continue
+        if (!predicate || predicate(n)) out.add(n.path)
+        walk(n.children)
+      }
+    }
+    walk(tree.value)
+    return out
+  }
+  function loadCollapsedPaths() {
+    try {
+      const raw = localStorage.getItem(COLLAPSED_STORAGE_KEY)
+      if (!raw) return new Set()
+      const arr = JSON.parse(raw)
+      if (!Array.isArray(arr)) return new Set()
+      // 只保留 string 元素,避免外面塞奇怪数据进来炸 Set
+      return new Set(arr.filter((x) => typeof x === 'string' && x))
+    } catch (_) {
+      return new Set()
+    }
+  }
+  function saveCollapsedPaths() {
+    try {
+      // 只写当前 tree 里仍存在的 group path,淘汰 stale 条目
+      const valid = collectGroupPathsInTree()
+      const arr = Array.from(collapsedPaths.value || []).filter((p) => valid.has(p))
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(arr))
+    } catch (_) { /* 静默失败:无痕模式 / 存储满都不阻断 UI */ }
+  }
+  // 初始化时从 localStorage 恢复一次。store 创建时(pinia 热重载 / 浏览器
+  // 刷新)collapsedPaths 立刻就有用户上次的折叠状态,而不是默认空 Set,
+  // 第一次 render 就走"用户上次的视图"。"首次默认全折叠"的判断也基于
+  // 这一步的结果 —— 如果持久化数据为空,load 末尾就走 collapseAllGroups。
+  const persisted = loadCollapsedPaths()
+  if (persisted.size) collapsedPaths.value = persisted
+  // 2026-07-18 增:deep watch 单一出口。任何地方改 collapsedPaths(用户
+  // toggle / prune / rewriteGroupPathRefs / 等)都自动同步到 localStorage,
+  // 不需要在每个改动点记得调 saveCollapsedPaths。
+  // deep: true 因为 Set 是引用类型,内部 add/delete 不会触发浅 watch;
+  // 实际我们在每个改动点都做 `collapsedPaths.value = new Set(...)` 整体
+  // 重赋值触发响应式,deep 仍是防御性双保险。
+  watch(collapsedPaths, () => saveCollapsedPaths(), { deep: true })
 
   // 2026-07-12 增:选中态跨 tab 持久化。
   // 原 selectedPath 是 pinia 的内存 ref,切 tab 时 SkillsView 整体
@@ -221,13 +289,19 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
       }
       const resp = await apiListSkills({ keyword: keyword.value || undefined, page: 1, size: 1000 })
       tree.value = resp?.tree || []
-      // 2026-07-10 改:首页分组默认折叠。
-      // 原因:用户反馈首次进入首页时所有 group 处于展开状态,树又长又乱。
-      // 这里在 load 完成且非搜索模式下,把 tree 中所有 group path 收集到 collapsedPaths,
-      // 实现"默认全折叠"。Set 的 add 是幂等的,reload/手动展开过的 group 也会被覆盖折叠,
-      // 这是用户主动选择的产品策略(刷新即重置为折叠初始态),不算 bug。
-      // 搜索时走 autoExpandMatchedPaths 自动展开匹配路径,不受本逻辑影响。
-      if (!keyword.value) {
+      // 2026-07-18 改:折叠态初始化策略。
+      // 原行为:非搜索态无条件 collapseAllGroups,导致拖拽 / CRUD 后用户
+      // 主动展开过的 group 被折叠掉,体验不好。
+      // 新行为:
+      //   - 首次进入(pinia store 新建)+ 内存里折叠态为空(无持久化数据)
+      //     → 默认全折叠(保留 2026-07-10 "首次进入观感" 的产品决策)
+      //   - 内存里有持久化数据 → 不动 collapsedPaths,保留用户视图
+      //   - 搜索时仍然走 autoExpandMatchedPaths,让搜索结果可见
+      //
+      // "内存为空才初始化"的判断绕开了原 hasInitializedCollapse 这个
+      // 派生 flag —— 折叠态为空本身就意味着"还没初始化过"(用户刚装、
+      // 或外部把 localStorage 清掉了),等价且不用再多记一个 let。
+      if (!keyword.value && collapsedPaths.value.size === 0) {
         collapseAllGroups()
       }
       // 搜索时:自动展开匹配路径(让结果可见)
@@ -245,20 +319,13 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
       // 搜索态下 selectedPath 通常已被清空(用户切了关键字),if 直接跳过。
       // expandAncestorsOfPath 内部还会校验目标在 tree 里确实是叶子 skill,
       // 找不到或路径异常时静默返回,不会乱展开。
+      //
+      // 2026-07-18 删:与"折叠态恢复可见性"的语义合并 — 如果已选中 skill
+      // 的祖先被旧逻辑折叠,这次展开也会被 watch 同步落到 localStorage,
+      // F5 后用户回到这个 skill 时祖先已展开,选中态不丢。
       if (selectedPath.value) {
         expandAncestorsOfPath(selectedPath.value)
       }
-      // 2026-07-16 增:load 后,如果之前已有选中节点,把它祖先分组展开。
-      // 场景:用户点击右侧 ScopePanel 的"全局 Agent"开关 → 派发
-      // skillbox:scope-refresh → SkillsView.onScopeChange 调 skillTree.load
-      // → 非搜索态下 collapseAllGroups 整体折叠,导致当前选中的 skill 节点
-      // 被埋进折叠组里,看起来"左侧目录被关掉了"。这里复用 expandAncestorsOfPath,
-      // 把选中节点的所有祖先 group 从 collapsedPaths 移除,保证选中节点可见。
-      // 注意:放在 collapseAllGroups / autoExpandMatchedPaths 之后,优先遵循
-      // 用户显式的"全部折叠"语义失败兜底(被展开的只是选中节点祖先,不是全部);
-      // 搜索态下 selectedPath 通常已被清空(用户切了关键字),if 直接跳过。
-      // expandAncestorsOfPath 内部还会校验目标在 tree 里确实是叶子 skill,
-      // 找不到或路径异常时静默返回,不会乱展开。
     } catch (e) {
       error.value = e?.message || String(e)
     } finally {
@@ -269,16 +336,13 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
   // 2026-07-10 增:把 tree 中所有 group path 全部加入 collapsedPaths(默认折叠)。
   // 跟 autoExpandMatchedPaths 互为反向操作 — 一个展开匹配组,一个折叠全部组。
   // 抽出独立函数,便于未来 toggle 默认行为的开关(比如加个 "默认展开" 设置项)。
+  //
+  // 2026-07-18 改:复用顶层的 collectGroupPathsInTree(消除本函数与
+  // pruneStaleCollapsedPaths / autoExpandMatchedPaths 三处重复的递归);
+  // 落盘交给 watch 自动同步,函数本身不再调 saveCollapsedPaths。
   function collapseAllGroups() {
-    const paths = new Set()
-    const collectGroupPaths = (node, out) => {
-      if (!node.is_group) return
-      out.add(node.path)
-      for (const c of node.children || []) collectGroupPaths(c, out)
-    }
-    for (const n of tree.value || []) collectGroupPaths(n, paths)
     // 整体替换(触发响应式),而不是逐个 add
-    collapsedPaths.value = new Set(paths)
+    collapsedPaths.value = collectGroupPathsInTree()
   }
 
   // 自动展开所有包含匹配 skill 的分组(搜索时用)
@@ -483,6 +547,10 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     const newCollapsed = new Set()
     for (const p of collapsedPaths.value) newCollapsed.add(replace(p))
     collapsedPaths.value = newCollapsed
+    // 2026-07-18 改:不再手工 saveCollapsedPaths() —— 改 Set 后 watch
+    // 自动同步到 localStorage。旧前缀换新的语义不变;watch 把"新 Set
+    // 整组"作为最终状态入库,F5 后从 localStorage 恢复的就是新 path,
+    // 不需要 prune 步骤。
   }
 
   function pathDirname(p) {
@@ -526,7 +594,10 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
         changed = true
       }
     }
-    if (changed) collapsedPaths.value = new Set(collapsedPaths.value)
+    if (changed) {
+      collapsedPaths.value = new Set(collapsedPaths.value)
+      // 2026-07-18 改:不再手工 saveCollapsedPaths() —— watch 自动同步。
+    }
   }
 
   function toggleCollapse(path) {
@@ -535,7 +606,7 @@ export const useSkillTreeStore = defineStore('skill-tree', () => {
     } else {
       collapsedPaths.value.add(path)
     }
-    // 触发响应式
+    // 触发响应式(watch 借此自动落盘到 localStorage)
     collapsedPaths.value = new Set(collapsedPaths.value)
   }
 
