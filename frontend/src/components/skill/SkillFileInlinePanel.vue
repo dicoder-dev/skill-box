@@ -334,9 +334,9 @@ function _syncLocalFiles() {
   localFiles.clear()
   for (const [k, v] of next) localFiles.set(k, v)
   dirtyPaths.value = new Set()
-  // 2026-07-18 增:props.files 是父级重新拉的"权威内容"(比如保存成功后
-  // 父级 emit('saved') → loadCurrent → 拉新 files),本地 localFiles 跟权威
-  // 一致了 → 清 baseline,isDirty 退回用 selectedFile.content 比对 = 也不脏。
+  // 2026-07-18 改:同步 baseline 到磁盘真值 — 跟 saveCurrent 的"对齐到 disk" 策略一致。
+  // 父级 props.files 是磁盘权威内容,editingBaseline 里的所有 path 都应该有
+  // 对应的 disk baseline,避免下次进 edit 时 baseline 是旧值导致误判 dirty。
   editingBaseline.clear()
 }
 onUpdated(() => {
@@ -964,28 +964,39 @@ async function saveCurrent() {
     // 不消失 → 用户要点第二次。resetLock 期间所有 update:content 全部丢弃,
     // 跟 resetCurrent 同款机制,只是窗口期稍长(200ms 覆盖整次 HTTP roundtrip)。
     resetLockUntil = Date.now() + 200
-    // 2026-07-18 改:不再手动写 localFiles — 之前 saveCurrent 末尾的
-    // localFiles.set(f.path, stored) + setMode('view') + emit('saved') 链路
-    // 跟父级 onUpdated 触发的 _syncLocalFiles 重复,且先后时序不确定:
-    //   - 如果 saveCurrent 先写 → _syncLocalFiles 后清空重填 → 一致
-    //   - 如果 _syncLocalFiles 先跑(父级 props.files 先到,onUpdated 先触发)
-    //     → localFiles 已经是新内容 → saveCurrent 再写一遍 → 但写入的是
-    //     localFiles.get(path) 即"旧 localFiles 中用户编辑过 + round-trip 后的版本"
-    //     这个值在 _syncLocalFiles clear() 后已丢失,localFiles.get(path) 返 undefined
-    //     → fallback 到 '' → 把空字符串写进 localFiles → displayContent 空白!
-    //     (Bug B 根因:保存后内容变成别的文档)
-    // 修法:saveCurrent 不动 localFiles,留给 _syncLocalFiles 用父级新 props.files
-    // 自然重填;清 dirtyPaths + 清 baseline + setMode('view') 后 emit('saved')。
-    const s = new Set(dirtyPaths.value)
+    // 2026-07-18 改:保存成功后立刻把 localFiles 同步到磁盘真值,editingBaseline
+    // 也对齐到磁盘真值 — 解决"保存后按钮依旧存在 + 再点无用"那个致命 bug。
+    //
+    // 旧逻辑(saveCurrent 不动 localFiles 等 _syncLocalFiles 自然重填)有两个
+    // 致命缺陷:
+    //   1. 中间帧空白:saveCurrent 末尾跑完 emit('saved') → 父级 loadCurrent
+    //      → await getSkill 之间,Vue 可能先重渲染 → isDirty 用 localFiles.get(path)
+    //      (用户改过的内容) vs selectedFile.value.content (旧 disk) → 不等 → true
+    //      → 按钮再次出现 → 用户看到"按钮还在" → 再点保存 → 走完流程 → 还是这样
+    //   2. _syncLocalFiles 触发晚:onUpdated 是 patch 后才跑,从 saveCurrent 完毕
+    //      到 patch 完成可能差几帧到几十帧,期间按钮一直可见。
+    //
+    // 根治:保存成功瞬间用本地 dirty 内容当作 disk 真值写回 localFiles,baseline
+    // 也写相同 — 等价于"基线对齐到本次保存的内容"。之后即便 props.files 没立即
+    // 更新、_syncLocalFiles 还没跑,isDirty 计算:
+    //   - baseline == localFiles (都是保存后的内容)
+    //   - 编辑模式已退出 → currentEditingPath 清空 → 后续进 edit 时 baseline
+    //     还在,可继续对比
+    //   - 不依赖 selectedFile.value.content 的时序
+    // 用 incomingFiles 的 dirty 部分内容作为 disk 真值 — 这是发出去被后端
+    // 接受的内容,跟磁盘 100% 一致(后端 store.Save 走 atomic 全量覆盖)。
     for (const f of incomingFiles) {
-      s.delete(f.path)
+      if (!f.path) continue
+      if (f.path === 'SKILL.md') {
+        localFiles.set(f.path, splitSkillMd(f.content || '').body)
+      } else {
+        localFiles.set(f.path, f.content || '')
+      }
     }
-    dirtyPaths.value = s
+    dirtyPaths.value = new Set()
     // 2026-07-18 改:统一清掉所有相关 path 的 baseline,避免下次 setMode('edit')
     // 之后第一次 emit 跟后端拉回来的内容有差异时,误判 dirty(基线对齐到磁盘真值)。
-    for (const f of incomingFiles) {
-      if (f.path) editingBaseline.delete(f.path)
-    }
+    editingBaseline.clear()
     // 2026-07-08 改:保存成功后退出编辑态,跟 resetCurrent 一致。"放弃/保存"
     // 按钮自动消失,工具栏恢复显示"编辑"铅笔图标。
     setMode(props.skill?.name, path, 'view')
