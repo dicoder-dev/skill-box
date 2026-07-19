@@ -169,8 +169,12 @@ echo "=== 5. WRITE Finder layout (osascript) ==="
 #   - close + delay 1 让 Finder 写 .DS_Store 到 dmg 根
 # 窗口 600x400,app 图标坐标 (170,190),Applications 软链坐标 (410,190)。
 #
-# 重要:不走 `tell disk "Skill Box"`(会报 -1728),改用 `POSIX file` 直接定位挂载点
-# 卷标 + Finder disk 对象在 -mountpoint /tmp/... 时未必注册,POSIX path 最稳。
+# 重要:不要只走 `tell disk "$VOLNAME"` 这条链 —— 我们 step 3 用的是
+# `-mountpoint /tmp/dmg-mount.$$`,dmg 没挂到 /Volumes/Skill-Box,Tahoe 上
+# `disk "$VOLNAME"` 经常 -1728(Finder 找不到 disk 对象)。
+# 优先走 `POSIX file "$MOUNT_POINT"`(我们显式挂的路径一定存在),失败再回退
+# `disk "$VOLNAME"`(Tahoe 有时候也会注册到 /Volumes),都不行就让 build 失败,
+# 不要静默跳过 —— 跳过会让 .DS_Store 缺失,拖到 /Applications 后布局全乱。
 MOUNT_OSA=$(echo "$MOUNT_POINT" | sed 's/ /\\ /g')
 # 关键防御点:
 #   - delay 1 给 Finder 时间挂载就绪(Apple Silicon M1/M2 挂载延迟比 Intel 高)
@@ -194,11 +198,52 @@ MOUNT_OSA=$(echo "$MOUNT_POINT" | sed 's/ /\\ /g')
 osascript <<EOF
 tell application "Finder"
   delay 1
-  set theDisk to disk "$VOLNAME"
-  open theDisk
+
+  -- 拿 dmg 根 Finder 引用。两条链都要试,因为 macOS 26 Tahoe 在 -mountpoint /tmp/...
+  -- 挂载模式下,disk "$VOLNAME" 未必注册到 LaunchServices —— 实测会 -1728。
+  --
+  -- 链 1:POSIX file 走挂载点路径(我们 step 3 显式挂到 /tmp/dmg-mount.$$,稳)
+  -- 链 2:disk "$VOLNAME"(Tahoe 有时候会注册到 /Volumes,$VOLNAME 名也能找到)
+  -- 链 3:都不行就让 build 失败,避免静默跳过布局导致 .DS_Store 缺失
+  set theFolder to missing value
+  set diskRef to missing value
+  try
+    set theFolder to (POSIX file "$MOUNT_OSA") as alias
+  on error errMsg number errNum
+    log "warn: POSIX file chain failed (" & errNum & "): " & errMsg
+  end try
+  try
+    set diskRef to disk "$VOLNAME"
+    if theFolder is missing value then
+      set theFolder to diskRef
+    end if
+  on error errMsg number errNum
+    log "warn: disk chain failed (" & errNum & "): " & errMsg
+  end try
+  if theFolder is missing value then
+    error "Finder 无法定位 dmg 根(POSIX file + disk 两条链都失败),跳过布局会让 .DS_Store 缺失"
+  end if
+
+  open theFolder
   delay 1
 
-  set winOpts to container window of theDisk
+  -- 优先拿 container window(Finder 真窗口),失败回退 disk 自带 container window
+  set winOpts to missing value
+  try
+    set winOpts to container window of theFolder
+  on error errMsg number errNum
+    log "warn: container window of folder failed (" & errNum & "): " & errMsg
+  end try
+  if winOpts is missing value and diskRef is not missing value then
+    try
+      set winOpts to container window of diskRef
+    on error errMsg number errNum
+      log "warn: container window of disk failed (" & errNum & "): " & errMsg
+    end try
+  end if
+  if winOpts is missing value then
+    error "Finder container window 拿不到(两条链都失败),跳过布局"
+  end if
 
   -- 切到 icon view 是核心,失败会让坐标全错;这条不带 try,直接挂以便发现新 Tahoe 行为变化
   set current view of winOpts to icon view
@@ -235,21 +280,33 @@ tell application "Finder"
   end try
 
   -- 两图标坐标。APP_FOLDER_NAME 跟着 .app 真实名字走
-  -- (universal 是 skill-box.app,arm64-only 是 skill-box-arm64.app)。
+  -- (universal 是 Skill-Box.app,arm64-only 是 Skill-Box-arm64.app)。
   -- 这一步是 dmg 布局核心(.DS_Store 持久化靠它),失败就让 osascript 退出非零
   -- 让 build-dmg.sh 失败 —— 重试可见。
+  set itemPosOK to false
   try
     set position of item "$APP_FOLDER_NAME" of winOpts to {170, 190}
     set position of item "Applications" of winOpts to {410, 190}
+    set itemPosOK to true
   on error errMsg number errNum
     -- Tahoe 上第二次跑时 disk object 的 container window 拿到的 items
     -- 不可写,这里用 disk 根 + POSIX path 重试。
     log "warn: item position via window failed (" & errNum & "): " & errMsg
-    try
-      set position of item "$APP_FOLDER_NAME" of theDisk to {170, 190}
-      set position of item "Applications" of theDisk to {410, 190}
-    end try
   end try
+  if not itemPosOK then
+    try
+      set position of item "$APP_FOLDER_NAME" of theFolder to {170, 190}
+      set position of item "Applications" of theFolder to {410, 190}
+      set itemPosOK to true
+    end try
+  end if
+  if not itemPosOK and diskRef is not missing value then
+    try
+      set position of item "$APP_FOLDER_NAME" of diskRef to {170, 190}
+      set position of item "Applications" of diskRef to {410, 190}
+      set itemPosOK to true
+    end try
+  end if
 
   -- 关键:close 触发 Finder flush .DS_Store 到 dmg 根
   close winOpts
