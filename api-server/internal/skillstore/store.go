@@ -34,6 +34,8 @@ import (
 	"ginp-api/internal/commitmsg"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillversion"
+	"ginp-api/pkg/logger"
+	"golang.org/x/sync/errgroup"
 	sharefunc "ginp-api/share/func"
 )
 
@@ -1175,11 +1177,27 @@ type SkillTreeMeta struct {
 	SourcePath   string   `json:"source_path,omitempty"`
 }
 
+// leafScanRef 是 ListTree 阶段 1 收集的 leaf / group 位置引用。
+// 用法上 leaf = 含 SKILL.md 的目录,group = 中间层目录;两者结构同构。
+// 提到包级供 loadLeavesConcurrently / buildSubtree 共享(避免匿名 struct 跨函数传递)。
+type leafScanRef struct {
+	absDir    string
+	name      string
+	groupPath string
+}
+
 // ListTree 列出全部 skill 的树形结构(供前端分组 UI 用)。
 //
 // 2026-06-29 增:返回嵌套 TreeNode 数组,root 节点的 IsGroup=true + Children 列出
 // 顶层项;keyword 非空时,对 skill 叶子做 name 子串匹配(分组即使不含匹配项也保留,
 // 便于前端展示"匹配项所在的分组链")。
+//
+// 2026-07-28 改:两阶段并发。阶段 1 同步 walk 整棵目录(只 ReadDir)收集所有
+// (groupPath, name, absDir) 位置;阶段 2 用 errgroup.SetLimit(32) 并发
+// loadFromDir + resolveGlobalSourcePath(单 leaf 全是纯读 IO,无共享状态,
+// 可安全并发);阶段 3 同步按 groupPath 索引构造嵌套 tree(沿用 sortTreeNodes)。
+// 前端响应 JSON 形态完全不变,controller / store / 组件 0 改动。
+// 失败 leaf 走 logger.Warn 后跳过,与原 buildTreeNode 返回 nil 等价,不阻断。
 func (s *Store) ListTree(keyword string) ([]TreeNode, error) {
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
@@ -1189,23 +1207,148 @@ func (s *Store) ListTree(keyword string) ([]TreeNode, error) {
 		return nil, err
 	}
 	kw := strings.ToLower(strings.TrimSpace(keyword))
-	var roots []TreeNode
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+
+	// 阶段 1:同步 walk 收集所有 leaf + group 位置。
+	// ReadDir 极快(SSD < 0.1ms/次),不需要并发,串行也只占 ListTree 总耗时 < 5%。
+	var leaves []leafScanRef
+	var groups []leafScanRef // group 中间层,与 leafScanRef 同构,语义区分靠用法
+	var walkDirs func(absDir, name, groupPath string, depth int)
+	walkDirs = func(absDir, name, groupPath string, depth int) {
+		if depth > maxScanDepth {
+			return
 		}
-		name := e.Name()
-		if strings.HasPrefix(name, ".") {
-			continue
+		if _, statErr := os.Stat(filepath.Join(absDir, "SKILL.md")); statErr == nil {
+			leaves = append(leaves, leafScanRef{absDir: absDir, name: name, groupPath: groupPath})
+			return
 		}
-		node := s.buildTreeNode(filepath.Join(s.root, name), name, "", kw, 0)
-		if node == nil {
-			continue
+		groups = append(groups, leafScanRef{absDir: absDir, name: name, groupPath: groupPath})
+		entries, readErr := os.ReadDir(absDir)
+		if readErr != nil {
+			return
 		}
-		roots = append(roots, *node)
+		childGroup := joinGroupPath(groupPath, name)
+		for _, e := range entries {
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			walkDirs(filepath.Join(absDir, e.Name()), e.Name(), childGroup, depth+1)
+		}
 	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		walkDirs(filepath.Join(s.root, e.Name()), e.Name(), "", 0)
+	}
+
+	// 阶段 2:并发解析所有 leaf → leafMetas[leafPath] = SkillTreeMeta
+	leafMetas := loadLeavesConcurrently(s, leaves, kw, listTreeConcurrency)
+
+	// 阶段 3:按 groupPath 反向索引 leafMetas,递归构造嵌套 tree
+	leafByGrp := make(map[string][]*SkillTreeMeta, len(leafMetas))
+	for k, m := range leafMetas {
+		i := strings.LastIndex(k, "/")
+		gp := ""
+		if i >= 0 {
+			gp = k[:i]
+		}
+		leafByGrp[gp] = append(leafByGrp[gp], m)
+	}
+	// 把 groups 按 parent groupPath 索引
+	groupsByParent := make(map[string][]leafScanRef, len(groups))
+	for _, g := range groups {
+		groupsByParent[g.groupPath] = append(groupsByParent[g.groupPath], g)
+	}
+	roots := buildSubtree("", groupsByParent, leafByGrp, 0, kw)
 	sortTreeNodes(roots)
 	return roots, nil
+}
+
+// listTreeConcurrency ListTree 并发 worker 上限。2026-07-28 设:macOS 默认
+// fd soft limit = 256,32 远低于此;SSD 顺序读 32 之后收益递减;100/1000 skill
+// 都够用。暂不引入配置(简单优先)。
+const listTreeConcurrency = 32
+
+// loadLeavesConcurrently 用 errgroup.SetLimit 并发解析所有 leaf。失败 leaf
+// 走 logger.Warn 后跳过(与原 buildTreeNode 返回 nil 等价);kw 非空时不匹配
+// 的 leaf 也跳过。返回 map[leafPath] → SkillTreeMeta。
+//
+// leafPath 形如 "<groupPath>/<name>",对应 TreeNode.Path。
+func loadLeavesConcurrently(s *Store, leaves []leafScanRef, kw string, concurrency int) map[string]*SkillTreeMeta {
+	out := make(map[string]*SkillTreeMeta, len(leaves))
+	if len(leaves) == 0 {
+		return out
+	}
+	var mu sync.Mutex
+	g, _ := errgroup.WithContext(context.Background())
+	g.SetLimit(concurrency)
+	for _, lf := range leaves {
+		lf := lf
+		g.Go(func() error {
+			c, err := s.loadFromDir(lf.absDir)
+			if err != nil {
+				logger.Warn("listtree: loadFromDir %s failed: %v", lf.absDir, err)
+				return nil // 宽容:不阻断其他 leaf
+			}
+			if kw != "" && !strings.Contains(strings.ToLower(c.Manifest.Name), kw) {
+				return nil
+			}
+			srcPath := resolveGlobalSourcePath(c.Manifest.Name)
+			meta := &SkillTreeMeta{
+				Name:        c.Manifest.Name,
+				Version:     c.Manifest.Version,
+				Description: c.Manifest.Description,
+				Triggers:    c.Manifest.Triggers,
+				UpdatedAt:   dirModTime(lf.absDir),
+				SourcePath:  srcPath,
+			}
+			key := joinGroupPath(lf.groupPath, c.Manifest.Name)
+			mu.Lock()
+			out[key] = meta
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = g.Wait() // errgroup 已宽容,这里只等全部 goroutine 退出
+	return out
+}
+
+// buildSubtree 递归构造指定 groupPath 下的 TreeNode 数组。
+// groupsByParent: parent groupPath → 该层 group 列表。
+// leafByGrp:      groupPath → 该层 leaf meta 列表(已按 kw 过滤)。
+// depth:          当前递归深度(防 maxScanDepth 越界)。
+// kw:             keyword,用于空 group 在 kw 非空时是否保留的判断。
+func buildSubtree(groupPath string, groupsByParent map[string][]leafScanRef, leafByGrp map[string][]*SkillTreeMeta, depth int, kw string) []TreeNode {
+	if depth > maxScanDepth {
+		return nil
+	}
+	var out []TreeNode
+	// 先放叶子(按原 buildTreeNode 行为,叶子在 group children 末尾 — sortTreeNodes
+	// 会重排为 (IsGroup desc, Name asc),所以放前面/后面都会被重排;放末尾更易读)
+	for _, m := range leafByGrp[groupPath] {
+		out = append(out, TreeNode{
+			Name:      m.Name,
+			Path:      joinGroupPath(groupPath, m.Name),
+			IsGroup:   false,
+			SkillMeta: m,
+		})
+	}
+	// 再放子 group
+	for _, g := range groupsByParent[groupPath] {
+		childPath := joinGroupPath(groupPath, g.name)
+		children := buildSubtree(childPath, groupsByParent, leafByGrp, depth+1, kw)
+		// 空 group:kw 非空 → 隐藏(与原 buildTreeNode 行为一致)
+		if len(children) == 0 && kw != "" {
+			continue
+		}
+		out = append(out, TreeNode{
+			Name:     g.name,
+			Path:     childPath,
+			IsGroup:  true,
+			Children: children,
+		})
+	}
+	return out
 }
 
 // buildTreeNode 递归构造 TreeNode。
