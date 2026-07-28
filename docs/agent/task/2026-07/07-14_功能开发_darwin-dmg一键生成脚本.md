@@ -143,7 +143,7 @@
 ### 留给下次的事
 - 是否要走 sign:notarize 流程(在 dmg 任务 deps 里追加 `task: sign`)
 - 是否加背景图(dmg 根 .background/ + .DS_Store 引用,目前是纯白底)
-- Info.plist 里的 CFBundleName="My Product" / CFBundleIdentifier="com.example.skillbox" 是占位符,正式发版前需要替换
+- Info.plist 里的 CFBundleName="Skill-Box" / CFBundleIdentifier="com.example.skillbox" 是占位符,正式发版前需要替换
 
 ### 复盘
 - 第一次写完脚本时 Plan agent 给的 AppleScript `delay 1` / `arrangement not arranged` 等防御点很关键

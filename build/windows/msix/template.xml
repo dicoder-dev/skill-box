@@ -10,11 +10,11 @@
     <Installer
         Path="skill-box"
         Arguments=""
-        InstallLocation="C:\Program Files\My Company\My Product">
+        InstallLocation="C:\Program Files\My Company\Skill-Box">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
+        PackageName="Skill-Box"
+        PackageDisplayName="Skill-Box"
         PublisherName="CN=My Company"
         PublisherDisplayName="My Company"
         Version="0.1.0.0"
@@ -27,7 +27,7 @@
             <Application
                 Id="com.example.skillbox"
                 Description="A skill-box application"
-                DisplayName="My Product"
+                DisplayName="Skill-Box"
                 ExecutableName="skill-box"
                 EntryPoint="Windows.FullTrustApplication">
                 
@@ -41,7 +41,7 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
+            <DisplayName>Skill-Box</DisplayName>
             <PublisherDisplayName>My Company</PublisherDisplayName>
             <Description>A skill-box application</Description>
             <Logo>Assets\AppIcon.png</Logo>

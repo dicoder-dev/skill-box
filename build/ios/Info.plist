@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.example.skillbox</string>
     <key>CFBundleName</key>
-    <string>My Product</string>
+    <string>Skill-Box</string>
     <key>CFBundleDisplayName</key>
-    <string>My Product</string>
+    <string>Skill-Box</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
