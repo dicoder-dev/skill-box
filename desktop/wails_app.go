@@ -26,6 +26,7 @@ import (
 // 主窗口自适应屏幕比例的默认值。
 // 启动后 Window.GetScreen() 返回 *Screen,里面 Size/Bounds 都是 DIP 宽度,
 // alpha.60 的 Window option.Width/Height 也是 DIP,无需再手动除 ScaleFactor。
+// (v3.0.0 起 macOS 屏幕坐标统一为逻辑点 Y-down,Size/Bounds 仍是 DIP,结论不变)
 //
 // 选 90% × 90% 的理由：用户反馈之前的 80% × 16:10 不够"大",这次宽高都按 90%。
 // 注意 100% 会把任务栏覆盖(且 SetSize 计算会偏 1px);0.9 在主流屏上视觉接近最大化
