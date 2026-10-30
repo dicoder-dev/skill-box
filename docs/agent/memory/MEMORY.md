@@ -1,3 +1,4 @@
+- [应用更新按语言分源](updater-locale-source-routing.md) — 2026-10-30;中文 Gitee / 英文 GitHub;选源逻辑在 pkg/updatersrc;两站各一份 manifest 指针;Gitee 附件 100MB 上限 + 分支名坑
 - [Wails v3 darwin OnDoubleClick 死代码](wails-v3-tray-darwin-doubleclick-deadcode.md) — 到 v3.0.0 正式版仍未修,darwin processClick 只 case left/right button,macOS 上双击永远不触发
 - [Wails v3 升级到 v3.0.0 正式版](wails-v3-upgrade-3-0-0.md) — 2026-10-30 完成;Go 1.26 要求、runtime 精确 pin、CLI 装错 GOPATH 的坑、逐条 BREAKING 核查结论(本项目零命中)
 - [Go //go:embed 不支持符号链接](go-embed-no-symlink.md) — pattern cannot embed irregular file,需要复制实体文件

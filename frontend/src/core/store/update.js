@@ -19,12 +19,22 @@ import { defineStore } from 'pinia'
 import { http } from '@/core/utils/requests'
 import { platform } from '@/platform'
 import { getRuntime } from '@/core/utils/runtime'
+import { getCurrentLocale } from '@/core/i18n'
 
 const checkUrl = '/api/desktop/update/check'
 const stateUrl = '/api/desktop/update/state'
 const downloadUrl = '/api/desktop/update/download'
 
 let _pollTimer = null
+
+// currentLocale 返回当前界面语言(zh-CN / en-US)。
+//
+// 后端按这个值选更新源:中文走 Gitee,英文走 GitHub。
+// 取值来自 vue-i18n 的全局 locale(用户在设置页切换过就跟着变),
+// 不用 __APP_RUNTIME__.lang —— 那个字段后端并没有注入,恒为 undefined。
+function currentLocale() {
+  return getCurrentLocale() || 'zh-CN'
+}
 
 function normalizeBaseState(s) {
   if (!s) return 'upToDate'
@@ -96,7 +106,8 @@ export const useUpdateStore = defineStore('update', {
       this.state = 'checking'
       this.error = ''
       try {
-        const resp = await http.get(checkUrl)
+        // 带当前语言:后端据此选更新源(中文 → Gitee,英文 → GitHub)。
+        const resp = await http.get(checkUrl, { lang: currentLocale() })
         const s = normalizeBaseState(resp?.status)
         this.localVersion = resp?.local_version || this.localVersion
         this.remoteVersion = resp?.remote_version || ''
@@ -104,7 +115,7 @@ export const useUpdateStore = defineStore('update', {
         this.mustUpdate = !!resp?.must_update
         this.hasUpdate = !!resp?.has_update
         this.manifest = resp?.assets ? resp : null
-        this.notes = pickNotes(resp?.notes, getRuntime().lang || (typeof document !== 'undefined' ? (document.documentElement.lang || '') : ''))
+        this.notes = pickNotes(resp?.notes, currentLocale())
         this.source = resp?.source || ''
         if (s === 'incomparable') {
           this.state = 'incomparable'
@@ -128,7 +139,7 @@ export const useUpdateStore = defineStore('update', {
         this.progress = 0
         this.error = ''
         try {
-          await http.post(downloadUrl, { old_version: this.localVersion })
+          await http.post(downloadUrl, { old_version: this.localVersion, lang: currentLocale() })
           // 父进程随后 Quit,这条分支通常走不到
           this.state = 'pendingRestart'
           this.startPoll()

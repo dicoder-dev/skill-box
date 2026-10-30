@@ -120,6 +120,7 @@ type BootstrapHooks struct {
 	// LocalVersion 桌面端实现:返回 ldflags 注入的 services.Version;Web 端可以不注入。
 	LocalVersion func() string
 	// UpdaterManifestURLs 桌面端实现:返回 manifest 的多源 urls(数组顺序就是降级顺序);
-	// 没注入则 cdesktop 默认走 build/updater/manifest.example.json 的 sample 模式。
-	UpdaterManifestURLs func() []string
+	// 入参 locale(zh-CN / en-US)决定源优先级 —— 中文用户优先 Gitee,英文用户优先 GitHub。
+	// 没注入则 cdesktop 默认走 updatersrc 内置源(build/updater/manifest.*.json 指针文件)。
+	UpdaterManifestURLs func(locale string) []string
 }

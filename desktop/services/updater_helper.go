@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"ginp-api/pkg/updatersrc"
 )
 
 //go:embed updater_scripts/helper_darwin.sh updater_scripts/helper_windows.ps1 updater_scripts/helper_linux.sh
@@ -173,26 +175,19 @@ var (
 	UpdaterManifestURLs  = defaultManifestURLsExport
 )
 
-// defaultManifestURLsExport 桌面端 manifest 多源 url,实际规则:
-//   1) 优先读环境变量 SKILLBOX_UPDATER_URLS(逗号分隔,release 阶段注入);
-//   2) 否则走 example.json 的 raw url(MVP 默认)。
+// defaultManifestURLsExport 桌面端 manifest 多源 url,按 locale 决定源优先级。
+//
+// 规则(全部委托给 ginp-api/pkg/updatersrc,桌面端与后端共用同一份逻辑):
+//  1) 环境变量 SKILLBOX_UPDATER_SOURCES:"<id>=<url>,<id>=<url>",可覆盖默认源;
+//  2) 环境变量 SKILLBOX_UPDATER_URLS(旧配置):逗号分隔 url,顺序即降级顺序;
+//  3) 否则用内置默认源(Gitee / GitHub)。
+//
+// locale 入参:
+//   - zh-CN → Gitee 优先,GitHub 兜底(国内用户走 Gitee 快且免翻墙);
+//   - 其他   → GitHub 优先,Gitee 兜底。
 //
 // env 注入在 release 阶段由 scripts/release.sh 的安装后置脚本完成,本期先用
-// 内存默认值(dev 模式下也能跑通)。
-func defaultManifestURLsExport() []string {
-	if raw := os.Getenv("SKILLBOX_UPDATER_URLS"); raw != "" {
-		parts := strings.Split(raw, ",")
-		out := make([]string, 0, len(parts))
-		for _, p := range parts {
-			if v := strings.TrimSpace(p); v != "" {
-				out = append(out, v)
-			}
-		}
-		if len(out) > 0 {
-			return out
-		}
-	}
-	return []string{
-		"https://raw.githubusercontent.com/dicoder/skill-box/main/build/updater/manifest.example.json",
-	}
+// 内置默认值(dev 模式下也能跑通)。
+func defaultManifestURLsExport(locale string) []string {
+	return updatersrc.ManifestURLs(updatersrc.Sources(), locale)
 }

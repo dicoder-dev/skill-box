@@ -1,0 +1,11 @@
+{
+  "channel": "stable",
+  "version": "0.0.0",
+  "released_at": "",
+  "min_supported": "1.0.0",
+  "notes": {
+    "zh-CN": "占位清单:正式发版前请运行 scripts/release.sh 生成。",
+    "en-US": "Placeholder manifest: run scripts/release.sh before the first release."
+  },
+  "assets": []
+}

@@ -14,8 +14,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +75,7 @@ type Client struct {
 
 type cacheEntry struct {
 	manifest  *Manifest
+	sourceURL string
 	expiresAt time.Time
 }
 
@@ -88,16 +91,26 @@ func NewClient() *Client {
 // FetchManifest 从多源 urls 数组里按顺序拉,**严格按顺序试**(HEAD 探测太重,
 // 直接 GET 一次 + 8s 超时,失败切下一个)。所有源都失败返 error。
 //
-// channel 参数本版本未使用,作为 cache key;MVP 阶段 manifest 不带 ?channel=。
+// channel 参数本版本未使用,作为 cache key 的一部分;MVP 阶段 manifest 不带 ?channel=。
 func (c *Client) FetchManifest(ctx context.Context, urls []string, channel string) (*Manifest, error) {
+	m, _, err := c.FetchManifestWithSource(ctx, urls, channel)
+	return m, err
+}
+
+// FetchManifestWithSource 与 FetchManifest 行为一致,额外返回**实际命中的 manifest url**。
+//
+// 用途:告诉前端"本次版本信息来自哪个源"(gitee / github 对应的实际地址),
+// 方便用户排查下载慢 / 源不可达的问题。
+func (c *Client) FetchManifestWithSource(ctx context.Context, urls []string, channel string) (*Manifest, string, error) {
+	key := cacheKey(channel, urls)
 	c.mu.Lock()
-	if e, ok := c.cache[channel]; ok && e.manifest != nil && time.Now().Before(e.expiresAt) {
+	if e, ok := c.cache[key]; ok && e.manifest != nil && time.Now().Before(e.expiresAt) {
 		c.mu.Unlock()
-		return e.manifest, nil
+		return e.manifest, e.sourceURL, nil
 	}
 	c.mu.Unlock()
 	if len(urls) == 0 {
-		return nil, fmt.Errorf("updater: empty urls")
+		return nil, "", fmt.Errorf("updater: empty urls")
 	}
 	var lastErr error
 	for _, raw := range urls {
@@ -135,12 +148,28 @@ func (c *Client) FetchManifest(ctx context.Context, urls []string, channel strin
 		}
 		// 5 分钟缓存。MVP 期间避免反复拉,生产可降级到 1 分钟。
 		c.mu.Lock()
-		c.cache[channel] = &cacheEntry{manifest: &m, expiresAt: time.Now().Add(5 * time.Minute)}
+		c.cache[key] = &cacheEntry{manifest: &m, sourceURL: url, expiresAt: time.Now().Add(5 * time.Minute)}
 		c.mu.Unlock()
-		return &m, nil
+		return &m, url, nil
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("updater: no valid url")
 	}
-	return nil, fmt.Errorf("updater: all urls failed: %w", lastErr)
+	return nil, "", fmt.Errorf("updater: all urls failed: %w", lastErr)
+}
+
+// cacheKey 按 "渠道 + 源 url 列表" 生成缓存键。
+//
+// 为什么要带 url 列表:不同语言的源顺序不同(Gitee 优先 / GitHub 优先),
+// 两个源的 manifest 内容也不一样(assets[].urls 指向各自站点)。
+// 只用 channel 做键会让"切语言后拿到上一个源的 manifest",导致中文用户
+// 拿到 GitHub 地址的安装包(或者反过来)。
+func cacheKey(channel string, urls []string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(channel))
+	for _, u := range urls {
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(u))
+	}
+	return channel + "#" + strconv.FormatUint(h.Sum64(), 16)
 }

@@ -17,6 +17,7 @@
 package cdesktop
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +25,7 @@ import (
 	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/internal/gapi/service/updater/ssupdater"
 	"ginp-api/pkg/ginp"
+	"ginp-api/pkg/updatersrc"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,27 +45,31 @@ type RespondUpdateCheck struct {
 	Source        string            `json:"source,omitempty"`
 }
 
-// RequestUpdateCheck 当前无入参,占位。
-type RequestUpdateCheck struct{}
+// RequestUpdateCheck 当前入参只有语言,决定用哪个更新源。
+type RequestUpdateCheck struct {
+	// Lang 前端当前语言(zh-CN / en-US),由前端 query 传入。
+	// zh-CN → Gitee 优先,GitHub 兜底;en-US → GitHub 优先,Gitee 兜底。
+	Lang string `json:"lang" form:"lang"`
+}
 
 // GetUpdateCheck GET /api/desktop/update/check
 //
 // 流程:
-//  1. 桌面端通过 BootstrapHooks.UpdaterDownloadPath 拿到 manifest url
-//     (manifest.example.json 见 build/updater/manifest.example.json);
-//  2. Web 端也走同一路径,前端期望值跟 desktop 一致;
+//  1. 按请求里的语言取 manifest 源列表(Gitee / GitHub,顺序即降级顺序);
+//     桌面端可通过 BootstrapHooks.UpdaterManifestURLs 定制,Web 端走 updatersrc 内置源;
+//  2. 前端期望值跟 desktop 一致(两边同一个 controller);
 //  3. 当前 OS/Arch 由 runtime.GOOS / GOARCH 取得;
 //  4. 本地版本 desktop 走 services.Version 由 ldflags 注入;Web 端
 //     兜底 "0.0.0+web-<git short sha>",后续由 A4 注入 __APP_RUNTIME__.version。
-func GetUpdateCheck(c *ginp.ContextPlus, _ *RequestUpdateCheck) {
+func GetUpdateCheck(c *ginp.ContextPlus, req *RequestUpdateCheck) {
 	h := hooks.Get()
-	urls := defaultManifestURLs(h)
+	urls := defaultManifestURLs(h, req.Lang)
 	if len(urls) == 0 {
 		c.JSON(503, gin.H{"error": "updater: no manifest urls configured"})
 		return
 	}
 	cli := ssupdater.NewClient()
-	m, err := cli.FetchManifest(c.Request.Context(), urls, "stable")
+	m, sourceURL, err := cli.FetchManifestWithSource(c.Request.Context(), urls, "stable")
 	if err != nil {
 		c.JSON(502, gin.H{"error": err.Error()})
 		return
@@ -80,6 +86,7 @@ func GetUpdateCheck(c *ginp.ContextPlus, _ *RequestUpdateCheck) {
 		MustUpdate:    status == ssupdater.StatusMustUpdate,
 		Notes:         m.Notes,
 		Assets:        m.Assets,
+		Source:        sourceIDOf(h, sourceURL),
 	}
 	c.JSON(200, resp)
 }
@@ -110,12 +117,15 @@ func GetUpdateState(c *ginp.ContextPlus, _ *RequestUpdateState) {
 
 // ===== /api/desktop/update/download =====
 
-// RequestUpdateDownload 触发下载,body 里只带 manifest 的 asset key(暂用 sha256 作 id 兜底)。
+// RequestUpdateDownload 触发下载,body 里带 manifest 的 asset key 与当前语言。
 type RequestUpdateDownload struct {
 	// AssetIndex 选 assets[AssetIndex] 的具体一条;缺省值 0(通常 OS/Arch 已唯一)。
 	AssetIndex int `json:"asset_index"`
 	// OldVersion 由前端 __APP_RUNTIME__.version 提供,用来给新进程 env SKILLBOX_UPDATER_FROM。
 	OldVersion string `json:"old_version"`
+	// Lang 前端当前语言(zh-CN / en-US),决定从哪个源下载安装包。
+	// 必须与 check 时一致,否则 manifest 与安装包可能来自不同站点。
+	Lang string `json:"lang" form:"lang"`
 }
 
 // PostUpdateDownload POST /api/desktop/update/download
@@ -134,9 +144,9 @@ func PostUpdateDownload(c *ginp.ContextPlus, req *RequestUpdateDownload) {
 		c.JSON(501, gin.H{"error": "updater: only available on desktop"})
 		return
 	}
-	urls := defaultManifestURLs(h)
+	urls := defaultManifestURLs(h, req.Lang)
 	cli := ssupdater.NewClient()
-	m, err := cli.FetchManifest(c.Request.Context(), urls, "stable")
+	m, _, err := cli.FetchManifestWithSource(c.Request.Context(), urls, "stable")
 	if err != nil {
 		c.JSON(502, gin.H{"error": err.Error()})
 		return
@@ -186,16 +196,33 @@ func PostUpdateDownload(c *ginp.ContextPlus, req *RequestUpdateDownload) {
 
 // ===== Agent 方法 =====
 
-// defaultUpdateURLs 桌面端可选注入自定义 urls;未注入走默认 GitHub + Gitea mirror 样例,
-// 真正上线后由运营在 BootstrapHooks.UpdaterManifestURLs 注入。
+// defaultUpdateURLs 桌面端可选注入自定义 urls;未注入走 updatersrc 默认源
+// (Gitee / GitHub,按 locale 排序:中文 Gitee 优先,英文 GitHub 优先)。
 //
 // 返回值不会被持久化,纯运行时拼接。
-func defaultUpdateURLs(h hooks.BootstrapHooks) []string {
-	return ssupdater.DefaultManifestURLs(h)
+func defaultUpdateURLs(h hooks.BootstrapHooks, locale string) []string {
+	return ssupdater.DefaultManifestURLs(h, locale)
 }
 
 // 保留 defaultManifestURLs 作为 alias,保证外部引用兼容。
-func defaultManifestURLs(h hooks.BootstrapHooks) []string { return defaultUpdateURLs(h) }
+func defaultManifestURLs(h hooks.BootstrapHooks, locale string) []string {
+	return defaultUpdateURLs(h, locale)
+}
+
+// sourceIDOf 把实际命中的 manifest url 解析成源 ID(gitee / github)。
+// 解析不出时退回 url 的 host,方便前端展示"这次版本信息来自哪里"。
+func sourceIDOf(_ hooks.BootstrapHooks, manifestURL string) string {
+	if manifestURL == "" {
+		return ""
+	}
+	if id := updatersrc.SourceIDOf(updatersrc.Sources(), manifestURL); id != "" {
+		return id
+	}
+	if u, err := url.Parse(manifestURL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return manifestURL
+}
 
 // pickAssetForRuntime 按 runtime.GOOS/GOARCH 选当前平台的 asset。
 func pickAssetForRuntime(m *ssupdater.Manifest) *ssupdater.Asset {

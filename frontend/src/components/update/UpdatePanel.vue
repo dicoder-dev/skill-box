@@ -19,6 +19,16 @@ const versionText = computed(() => {
 
 const channelText = computed(() => update.channel || 'stable')
 
+// 更新源展示:后端按当前语言选源(中文 Gitee / 英文 GitHub),
+// 这里把源 ID 翻译成可读名字,方便用户判断"这次更新信息从哪来的"。
+const sourceText = computed(() => {
+  const s = String(update.source || '').toLowerCase()
+  if (!s) return ''
+  if (s.includes('gitee')) return 'Gitee'
+  if (s.includes('github')) return 'GitHub'
+  return update.source
+})
+
 function onCheck() {
   update.check()
 }
@@ -43,6 +53,10 @@ function onReset() {
       <div class="update-channel">
         <span class="meta-label">渠道</span>
         <span class="meta-value">{{ channelText }}</span>
+      </div>
+      <div v-if="sourceText" class="update-source">
+        <span class="meta-label">更新源</span>
+        <span class="meta-value">{{ sourceText }}</span>
       </div>
     </div>
 

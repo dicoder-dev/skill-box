@@ -1,23 +1,23 @@
 package ssupdater
 
-import "ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
+import (
+	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
+	"ginp-api/pkg/updatersrc"
+)
 
-// DefaultManifestURLs 在 desktop / web 都没显式注入 UpdaterManifestURLs 时兜底。
+// DefaultManifestURLs 按语言返回 manifest 源 url 列表(数组顺序 = 降级顺序)。
 //
-// 这里返回 build/updater/manifest.example.json 的 sample 路径(由 release 阶段覆盖),
-// 真正生产环境会改成 GitHub release + Gitea mirror 的 raw 链接。
+// 取值优先级:
+//  1. 桌面端通过 BootstrapHooks.UpdaterManifestURLs 注入(可按 locale 定制);
+//  2. 没注入时用 updatersrc 的内置源(Gitee / GitHub),按 locale 排序:
+//     中文(zh-CN)→ Gitee 优先,英文(en-US)→ GitHub 优先。
 //
-// MVP 阶段:开发期返 example 的 file:// 路径,生产配置由 desktop 包 SetDesktopHooks 时覆盖。
 // 不返空数组,保证 controller 阶段不会 503。
-func DefaultManifestURLs(h hooks.BootstrapHooks) []string {
+func DefaultManifestURLs(h hooks.BootstrapHooks, locale string) []string {
 	if h.UpdaterManifestURLs != nil {
-		if urls := h.UpdaterManifestURLs(); len(urls) > 0 {
+		if urls := h.UpdaterManifestURLs(locale); len(urls) > 0 {
 			return urls
 		}
 	}
-	// 兜底链:GitHub raw + Gitea raw + 本地 example(只对 dev 有意义)
-	return []string{
-		"https://raw.githubusercontent.com/dicoder/skill-box/main/build/updater/manifest.example.json",
-		"https://gitea.example.com/dicoder/skill-box/raw/branch/main/build/updater/manifest.example.json",
-	}
+	return updatersrc.ManifestURLs(updatersrc.Sources(), locale)
 }
