@@ -12,6 +12,7 @@ ai:
     temperature: 0.7
     timeout_seconds: 60
     top_p: 1
+branch: main
 db:
     mysql:
         db: ""
@@ -46,6 +47,7 @@ lianghua:
     api:
         base_url: http://api.biyingapi.com
         licence: ""
+llm_enabled: "false"
 map:
     amap:
         base_url: https://restapi.amap.com
@@ -86,6 +88,7 @@ rate_limiter:
         - 127.0.0.1
         - ::1
     window_size: 60
+remote_url: ""
 server:
     port: "8082"
 shop:
@@ -127,6 +130,7 @@ system:
     usercenter:
         secret_key: "123456"
         url: http://localhost:8082
+template: filename
 tencent:
     cos:
         allow_prefix: ""
@@ -145,3 +149,6 @@ tencent:
         app_secret: ""
         encoding_aes_key: ""
         token: ""
+token_file: ""
+user_email: ""
+user_name: ""

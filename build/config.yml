@@ -75,6 +75,9 @@ dev_mode:
       type: background
     - cmd: wails3 task run
       type: primary
+      # wails3 v3.0.0 新增:主进程退出时自动关掉 background 进程(这里是 Vite dev server)。
+      # 不加的话 Ctrl-C 退出 wails3 dev 后 Vite 会残留成孤儿进程占着 9245 端口。
+      exit_policy: shutdown
 
 # 文件关联
 # 更多信息请参考：https://v3.wails.io/noit/done/yet

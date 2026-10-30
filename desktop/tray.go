@@ -61,7 +61,7 @@ type TrayCallbacks struct {
 //     Light/Dark 模式自动反色);SetLabel 留空避免图标+文字并存。
 //   - windows / linux: 左键单击 = 显示主窗口,右键 = 弹出菜单(SetIcon 彩色)。
 //
-// 为什么不绑 OnDoubleClick: Wails v3 alpha.60 的 darwin 路径 processClick
+// 为什么不绑 OnDoubleClick: Wails v3 v3.0.0 的 darwin 路径 processClick
 // 根本不 dispatch doubleClickHandler(processClick 只 case left/right
 // button),留着 OnDoubleClick = 误导性的死代码;Windows/Linux 下双击
 // 体验上与单击同义(OnShow),绑了也看不出区别。
