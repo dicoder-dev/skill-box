@@ -7,7 +7,7 @@ package bootstrap
 // 这些子包,Go 编译器会整个去掉未引用的包,导致 defaultRegistry 永远是空的,
 // skillimporter.Scan 的 adapter 列表为空 → 扫描结果 0 个 skill。
 //
-// 2026-06-30 二改:工具元数据从 yaml embed 改成 DB(由 agentseed.EnsureSeeded
+// 2026-06-30 二改:Agent元数据从 yaml embed 改成 DB(由 agentseed.EnsureSeeded
 // 在 start_db.go 启动期 seed);agentspecs 包不再 init() 自动注册,改由
 // start_db.go 显式调 agentspecs.ReloadAllFromDB(dbs.GetWriteDb())。
 // 但仍保留 blank import,确保包被链接进二进制(虽然它没副作用)。

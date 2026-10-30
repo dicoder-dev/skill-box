@@ -1,7 +1,7 @@
 // Package cagent - create_agent.a.go
 // POST /api/skillbox/agents/create
 //
-// 新建一个用户工具(is_system 强制 false)。
+// 新建一个用户Agent(is_system 强制 false)。
 package cagent
 
 import (
@@ -82,7 +82,7 @@ func init() {
 		PermissionName: "skillbox.agents.create",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.create",
-			Description:   "新建工具(用户级,is_system 强制 false);前端改完建议再调 /agents/reload 让 adapter 立刻生效",
+			Description:   "新建Agent(用户级,is_system 强制 false);前端改完建议再调 /agents/reload 让 adapter 立刻生效",
 			RequestParams: RequestCreateAgent{},
 		},
 	})

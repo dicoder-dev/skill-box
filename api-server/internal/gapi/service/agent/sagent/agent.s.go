@@ -1,14 +1,14 @@
-// Package sagent 提供工具(AI 编程工具元数据)的业务层封装。
+// Package sagent 提供Agent(AI 编程Agent元数据)的业务层封装。
 //
-// 2026-06-30 二改:替代原 agentspecs/specs/*.yaml 编译期配置,工具元数据
-// 全部走 e_tool + e_tool_path 表,本服务负责 CRUD + Reload。
+// 2026-06-30 二改:替代原 agentspecs/specs/*.yaml 编译期配置,Agent元数据
+// 全部走 tools + tool_paths 表,本服务负责 CRUD + Reload。
 //
 // 设计要点:
 //   - Create / Update / Delete 走 magent(model 层)
-//   - 系统工具(is_system=true):tool_id / is_system 不可改,行不可删;
+//   - 系统Agent(is_system=true):tool_id / is_system 不可改,行不可删;
 //     其他字段(display_name / mdi_icon / maturity / note / enabled / paths)可改
 //   - 改完业务数据后,业务层调 Reload() 一次性刷新 skilladapter.DefaultRegistry
-//   - 删 agent 时事务里级联删 e_tool_path
+//   - 删 agent 时事务里级联删 tool_paths
 package sagent
 
 import (
@@ -46,7 +46,7 @@ var (
 	ErrPathExisted = errors.New("agent: a path already exists for (scope, category)")
 )
 
-// Service 工具管理服务。
+// Service Agent管理服务。
 type Service struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
@@ -59,7 +59,7 @@ func New(dbWrite, dbRead *gorm.DB) *Service {
 func (s *Service) agentM() *magent.Model        { return magent.NewModel(s.dbWrite, s.dbRead) }
 func (s *Service) pathM() *magent.AgentPathModel { return magent.NewAgentPathModel(s.dbWrite, s.dbRead) }
 
-// CreateInput 新建工具入参。
+// CreateInput 新建Agent入参。
 type CreateInput struct {
 	AgentID      string
 	DisplayName string
@@ -80,7 +80,7 @@ type PathInput struct {
 	PathOrder int
 }
 
-// Create 新建一个用户工具(is_system 强制 false)。
+// Create 新建一个用户Agent(is_system 强制 false)。
 func (s *Service) Create(in *CreateInput) (*entity.Agent, error) {
 	if err := validateBase(in.AgentID, in.DisplayName, in.MdiIcon, in.IconFile, in.Maturity); err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func (s *Service) Create(in *CreateInput) (*entity.Agent, error) {
 		IconFile:    strings.TrimSpace(in.IconFile),
 		Maturity:    in.Maturity,
 		Note:        in.Note,
-		IsSystem:    false, // 用户新建,永远非系统工具
+		IsSystem:    false, // 用户新建,永远非系统Agent
 		Enabled:     in.Enabled,
 		SortOrder:   in.SortOrder,
 	}
@@ -131,7 +131,7 @@ type UpdateInput struct {
 	Paths       *[]PathInput // nil 表示不改 paths;非 nil 表示"用此组覆盖"
 }
 
-// Update 改一个工具的元数据。系统工具的 tool_id / is_system 不可改,
+// Update 改一个Agent的元数据。系统Agent的 tool_id / is_system 不可改,
 // 其他字段(本函数)以及 path(通过 Paths 替换)可改。
 func (s *Service) Update(in *UpdateInput) (*entity.Agent, error) {
 	cur, err := s.agentM().FindByAgentID(in.AgentID)
@@ -208,7 +208,7 @@ func (s *Service) Update(in *UpdateInput) (*entity.Agent, error) {
 	return s.agentM().FindOneByID(cur.ID)
 }
 
-// Delete 删一个工具。系统工具(is_system=true)不可删。
+// Delete 删一个Agent。系统Agent(is_system=true)不可删。
 func (s *Service) Delete(agentID string) error {
 	cur, err := s.agentM().FindByAgentID(agentID)
 	if err != nil {
@@ -239,10 +239,10 @@ func (s *Service) Delete(agentID string) error {
 	return nil
 }
 
-// List 列出所有工具(给前端用,含 path)。
+// List 列出所有Agent(给前端用,含 path)。
 //
 // 2026-07-18 改:加 ORDER BY sort_order ASC, id ASC 兜底,保证前端首页按
-// "用户最常用在前"的稳定顺序展示;此前未排序,依赖 DB 物理插入序,新工具加进来
+// "用户最常用在前"的稳定顺序展示;此前未排序,依赖 DB 物理插入序,新Agent加进来
 // 会落到表尾或随机位置,体验不一致。
 func (s *Service) List() ([]AgentView, error) {
 	agents, _, err := s.agentM().FindList(nil, &where.Extra{
@@ -283,7 +283,7 @@ func (s *Service) List() ([]AgentView, error) {
 	return out, nil
 }
 
-// Reload 业务数据改完后,重新从 DB 拉一次工具元数据,刷 skilladapter.Registry。
+// Reload 业务数据改完后,重新从 DB 拉一次Agent元数据,刷 skilladapter.Registry。
 func (s *Service) Reload() error {
 	if err := agentspecs.ReloadAllFromDB(s.dbRead); err != nil {
 		return err
@@ -371,12 +371,12 @@ func validatePathUniqueness(paths []PathInput) error {
 	return nil
 }
 
-// AddOnePath 给已存在工具追加一条 path,严格校验 (scope, category) 唯一。
+// AddOnePath 给已存在Agent追加一条 path,严格校验 (scope, category) 唯一。
 //
 // 2026-07-04 改:原 controller 直接调 model.Create,依赖 DB uniqueIndex 报错,
 // 现在 Service 层先查一次避免空跑事务,DB uniqueIndex 作为最终兜底。
 //
-// 入参 agentID 是工具的 tool_id(非 DB 主键);失败时返回 ErrNotFound /
+// 入参 agentID 是Agent的 tool_id(非 DB 主键);失败时返回 ErrNotFound /
 // ErrPathExisted / 其它基础校验错。
 func (s *Service) AddOnePath(agentID string, in PathInput) (*entity.AgentPath, error) {
 	if err := validatePath(in); err != nil {
@@ -441,7 +441,7 @@ func validMaturity(s string) bool {
 
 // ─── 视图结构 ───────────────────────────────────────────────────────
 
-// AgentView 工具视图(给前端)。
+// AgentView Agent视图(给前端)。
 type AgentView struct {
 	ID          uint       `json:"id"`
 	AgentID      string     `json:"agent_id"`

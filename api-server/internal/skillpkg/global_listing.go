@@ -5,8 +5,8 @@
 //
 // 为什么单独一个文件,不复用 skilladapter.BaseAdapter.Scan:
 //   - BaseAdapter.Scan 是"按某个 adapter 的 Agents[scope] 路径去扫",面向的是
-//     claude/codex/trae 等工具各自的语义(允许跳过 SystemPaths 之类)。
-//   - 这里的诉求是"看 ~/.agents/skills 里到底有哪些 skill",跟具体工具无关,
+//     claude/codex/trae 等Agent各自的语义(允许跳过 SystemPaths 之类)。
+//   - 这里的诉求是"看 ~/.agents/skills 里到底有哪些 skill",跟具体Agent无关,
 //     也不该被任何 SystemPaths 跳过(全局目录本身就是 user 根,不是 system)。
 //   - 复用 ImportFromFolder 已有的 collectSkillDirs 来做磁盘遍历 + skip-symlink
 //     + 深度限制,避免重写一份 walk 逻辑。

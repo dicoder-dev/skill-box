@@ -7,7 +7,7 @@
 //   - source 维度:smarket 自身只读 / 缓存元数据;源增删不在本步范围(Step 7 落 4 端点,源由
 //     seed 在 Onboarding 阶段插入)
 //
-// 2026-06-30 增:PullV2 一站式流程(写盘 + apply 到工具),与 Pull 旧路径并存;
+// 2026-06-30 增:PullV2 一站式流程(写盘 + apply 到Agent),与 Pull 旧路径并存;
 // 旧 Pull 仅写盘不 apply,保留向后兼容(标记 deprecated),新前端默认走 v2。
 //
 // 2026-07-01 改:Install/PullV2 → Pull/PullV2(pull 是新名,install 留 alias);
@@ -109,7 +109,7 @@ type ListSourcesResult struct {
 // 不该写盘。
 type SourceWithHomepage struct {
 	*entity.MarketSource
-	// 2026-07-04 增:源官方主页 URL,前端工具栏「前往官网」按钮点击后跳转此 URL。
+	// 2026-07-04 增:源官方主页 URL,前端Agent栏「前往官网」按钮点击后跳转此 URL。
 	// 空字符串表示该源没有官方主页(按钮降级隐藏)。
 	Homepage string `json:"homepage"`
 }
@@ -391,7 +391,7 @@ type PullV2Input struct {
 	RemoteID  string
 	Scope     string   // global / project,缺省 global
 	ProjectID uint     // scope=project 时必填
-	Agents     []string // 可选;空 = skilladapter.AllAgents(本机全部 5 个工具)
+	Agents     []string // 可选;空 = skilladapter.AllAgents(本机全部 5 个Agent)
 	FinalName string   // 前端确认后的最终 name(支持"另存为"重命名);空 = manifest.Name
 	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
 	// 走 NormalizeGroupName 校验(防 ../ / 绝对路径),非空时写到 Manifest.GroupPath,
@@ -420,12 +420,12 @@ type PullV2Result struct {
 // InstallV2Result 旧名 alias(2026-07-01 deprecated),新代码请用 PullV2Result。
 type InstallV2Result = PullV2Result
 
-// PullV2 一站式:写盘 + apply 到工具。
+// PullV2 一站式:写盘 + apply 到Agent。
 //
 // 关键决策(2026-06-30):
-//   - Agents 空数组(0 个) = "不 apply 任何工具,只写盘"(用户主动选择为空时尊重他的意图)
+//   - Agents 空数组(0 个) = "不 apply 任何Agent,只写盘"(用户主动选择为空时尊重他的意图)
 //     旧行为:Agents=nil 时默认填 AllAgents(5 个);2026-06-30 改为尊重空数组语义
-//   - 写盘成功 + apply 部分失败不回滚 store;SkippedAgents 列出失败的工具
+//   - 写盘成功 + apply 部分失败不回滚 store;SkippedAgents 列出失败的Agent
 //   - write 阶段就报错时仍然整体返 err(没东西可 apply)
 //   - 重名检测由前端做(传 FinalName),后端不重复检测
 //   - 分组路径(2026-06-30 增):in.GroupPath 写到 Manifest.GroupPath,store.Save 走子目录

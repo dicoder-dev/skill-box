@@ -363,7 +363,7 @@ func ReadSkillDir(dir string) (Canonical, error) {
 	if err != nil {
 		return Canonical{}, err
 	}
-	// 装齐所有文件。dir 可能是 symlink(外部工具的 skill 经常用 symlink 链到
+	// 装齐所有文件。dir 可能是 symlink(外部Agent的 skill 经常用 symlink 链到
 	// ~/.agents/skills/xxx),先用 EvalSymlinks 解析真实路径再 WalkDir,
 	// 避免 WalkDir 默认不跟随 symlink 导致附属文件被漏掉。
 	realDir := dir

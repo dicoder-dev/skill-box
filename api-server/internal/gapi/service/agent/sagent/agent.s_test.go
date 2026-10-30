@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupTestDB 起一个 sqlite 临时文件 DB,跑 e_tool + e_tool_path AutoMigrate,
-// 写一条用户工具,验证 sagent 业务规则。
+// setupTestDB 起一个 sqlite 临时文件 DB,跑 tools + tool_paths AutoMigrate,
+// 写一条用户Agent,验证 sagent 业务规则。
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dir := t.TempDir()
@@ -32,7 +32,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestCreate_AndList 新建工具后能从 List 看到。
+// TestCreate_AndList 新建Agent后能从 List 看到。
 func TestCreate_AndList(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
@@ -89,11 +89,11 @@ func TestCreate_DuplicateAgentID(t *testing.T) {
 	}
 }
 
-// TestDelete_SystemFrozen 系统工具不可删。
+// TestDelete_SystemFrozen 系统Agent不可删。
 func TestDelete_SystemFrozen(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
-	// 手工塞一条系统工具(模拟 seed 出来的)
+	// 手工塞一条系统Agent(模拟 seed 出来的)
 	if err := db.Create(&entity.Agent{
 		AgentID: "sys-agent", DisplayName: "S", MdiIcon: "mdi:s", IsSystem: true, Enabled: true,
 	}).Error; err != nil {
@@ -108,12 +108,12 @@ func TestDelete_SystemFrozen(t *testing.T) {
 // TestUpdate_AndReload 修改 display_name 后,Reload 让 Registry 反映新值。
 //
 // 这条测试是 scope-status / skillimporter 走 DB adapter 的端到端验证:
-// 改完 e_tool 行 → Reload → skilladapter.All() 返回新 name。
+// 改完 tools 行 → Reload → skilladapter.All() 返回新 name。
 func TestUpdate_AndReload(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 
-	// seed 一个工具
+	// seed 一个Agent
 	created, err := svc.Create(&sagent.CreateInput{
 		AgentID: "user-agent", DisplayName: "Old Name", MdiIcon: "mdi:agents", Maturity: "stable",
 		Enabled: true,
@@ -164,7 +164,7 @@ func TestUpdate_AndReload(t *testing.T) {
 	}
 }
 
-// TestDelete_Cascade 删 user 工具应级联删 e_tool_path。
+// TestDelete_Cascade 删 user Agent应级联删 tool_paths。
 func TestDelete_Cascade(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)

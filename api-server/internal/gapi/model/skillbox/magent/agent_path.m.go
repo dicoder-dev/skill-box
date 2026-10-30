@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// AgentPathModel 工具路径子表 model。
+// AgentPathModel Agent路径子表 model。
 type AgentPathModel struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
@@ -89,12 +89,12 @@ func (s *AgentPathModel) DeleteByID(id uint) error {
 	return s.Delete(where.New(FieldPathID, "=", id).Conditions())
 }
 
-// DeleteByAgentID 删一个工具的全部 path(级联删时使用)。
+// DeleteByAgentID 删一个Agent的全部 path(级联删时使用)。
 func (s *AgentPathModel) DeleteByAgentID(agentID uint) error {
 	return s.Delete(where.New(FieldPathAgentID, "=", agentID).Conditions())
 }
 
-// FindByAgentID 查一个工具的全部 path,按 (scope, category, path_order) 排序。
+// FindByAgentID 查一个Agent的全部 path,按 (scope, category, path_order) 排序。
 func (s *AgentPathModel) FindByAgentID(agentID uint) ([]*entity.AgentPath, error) {
 	list, _, err := s.FindList(where.New(FieldPathAgentID, "=", agentID).Conditions(), nil)
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *AgentPathModel) FindByAgentID(agentID uint) ([]*entity.AgentPath, error
 	return list, nil
 }
 
-// FindAllByAgentIDs 批量查多个工具的 path(避免 N+1),返回 map[agentID][]AgentPath。
+// FindAllByAgentIDs 批量查多个Agent的 path(避免 N+1),返回 map[agentID][]AgentPath。
 func (s *AgentPathModel) FindAllByAgentIDs(agentIDs []uint) (map[uint][]*entity.AgentPath, error) {
 	if len(agentIDs) == 0 {
 		return map[uint][]*entity.AgentPath{}, nil

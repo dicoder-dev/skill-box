@@ -12,7 +12,7 @@
 //   - Serve(b)          = 阻塞跑 gin HTTP server,适合桌面端(主循环在 Wails)
 //
 // 之所以放在 cmd/ 而不是 pkg/,是因为:
-//   - 这是业务启动编排(cfg/DB/Task/Logger/Server),不是通用工具
+//   - 这是业务启动编排(cfg/DB/Task/Logger/Server),不是通用Agent
 //   - skill-box(桌面端)是另一个 Go module,通过 go.work 跨 module import 它
 //   - 未来如果有第三方 CLI / 嵌入式场景,也需要复用这套启动流程
 package bootstrap

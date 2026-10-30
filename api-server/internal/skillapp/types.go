@@ -1,4 +1,4 @@
-// Package skillapp 提供"把 canonical skill 落到目标工具"的核心能力。
+// Package skillapp 提供"把 canonical skill 落到目标Agent"的核心能力。
 //
 // 设计要点(见 docs/project/需求规划.md 第 4.1.3 + 5.1 节):
 //   - Apply 走 adapter.Apply(c, targetDir);失败时根据 pre-snapshot 整体回滚
@@ -118,7 +118,7 @@ type ApplyInput struct {
 	Scope       string                  // global / project
 	ProjectID   uint                    // scope=project 时必填
 	ProjectRoot string                  // scope=project 时的项目 root_path(从 sproject 查)
-	Agents       []string                // 目标工具 ID 列表
+	Agents       []string                // 目标Agent ID 列表
 	Canonical   *skilladapter.Canonical // 来自 sskill.Get
 }
 

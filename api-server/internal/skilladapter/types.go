@@ -1,7 +1,7 @@
-// Package skilladapter 定义 canonical skill 表达 + 目标工具适配器抽象。
+// Package skilladapter 定义 canonical skill 表达 + 目标Agent适配器抽象。
 //
 // 内部所有模块(skillstore / skillapp / skillimporter ...)只依赖 canonical 与
-// Adapter interface;具体工具(Codex / Claude / OpenCode / Cursor / Trae)由
+// Adapter interface;具体Agent(Codex / Claude / OpenCode / Cursor / Trae)由
 // 子包 adapter 实现,运行时通过 registry 调度。
 //
 // 设计要点见 docs/project/需求规划.md 第 7.1 节。
@@ -24,7 +24,7 @@ type Manifest struct {
 	// 2026-06-29 增:GroupPath 是该 skill 在 skillbox 库内的分组相对路径
 	// (如 "frontend/react"),不含叶子 name。允许空(根下未分组)。
 	// 不参与 SKILL.md frontmatter 序列化(走 SkillboxSection 单独管理,避免污染
-	// 外部工具读取的 frontmatter)。
+	// 外部Agent读取的 frontmatter)。
 	GroupPath string `yaml:"-" json:"group_path,omitempty"`
 	// Source/SourceRef 用于标记"这条 skill 是从哪儿来的"(2026-06-24:从 mskill 行迁到 frontmatter)。
 	// 不参与 SKILL.md 文件落盘(写盘时通过 skillstore.SkillboxSection 单独处理,避免污染 frontmatter)。
@@ -40,7 +40,7 @@ type File struct {
 	Content string `yaml:"content" json:"content"`
 }
 
-// Canonical 与具体工具无关的 skill 表示。
+// Canonical 与具体Agent无关的 skill 表示。
 type Canonical struct {
 	Manifest Manifest `yaml:"manifest" json:"manifest"`
 	Files    []File   `yaml:"files" json:"files"`
@@ -59,8 +59,8 @@ const (
 // 数据脏,BaseAdapter.UserPath 在数据违反唯一约束时返回。前端 4xx 弹清晰提示。
 var ErrMultipleUserPaths = errors.New("skilladapter: agent has multiple user paths for scope (max 1)")
 
-// AgentID 已支持的目标工具 ID 集合(legacy 命名常量,新工具以 agentspecs/*.yaml
-// 为准,不要在此追加;这里只保留最初 5 个老工具的常量以兼容旧调用方)。
+// AgentID 已支持的目标Agent ID 集合(legacy 命名常量,新Agent以 agentspecs/*.yaml
+// 为准,不要在此追加;这里只保留最初 5 个老Agent的常量以兼容旧调用方)。
 const (
 	AgentCodex    = "codex"
 	AgentClaude   = "claude"
@@ -69,23 +69,23 @@ const (
 	AgentTrae     = "trae"
 )
 
-// AllAgents v1 时期硬编码的 5 个老工具 ID。
+// AllAgents v1 时期硬编码的 5 个老Agent ID。
 //
-// 2026-06-30 改造:AllAgents 仅为兼容老调用方保留的"最小工具集",
-// 实际生效的工具清单以 defaultRegistry 为准(由 agentspecs 包在 init() 时
-// 按 specs/*.yaml 注册)。新工具的 ID 不会再追加到这个 slice 里。
+// 2026-06-30 改造:AllAgents 仅为兼容老调用方保留的"最小Agent集",
+// 实际生效的Agent清单以 defaultRegistry 为准(由 agentspecs 包在 init() 时
+// 按 specs/*.yaml 注册)。新Agent的 ID 不会再追加到这个 slice 里。
 //
 // 业务侧应使用 skilladapter.All() 或 skilladapter.Get(id) 拿 adapter,
 // 而不是遍历 AllAgents 自行反查。
 var AllAgents = []string{AgentCodex, AgentClaude, AgentOpenCode, AgentCursor, AgentTrae}
 
-// Adapter canonical 与目标工具双向转换的接口。
+// Adapter canonical 与目标Agent双向转换的接口。
 //
 // 实现方约束:
 //   - Apply 必须是原子的(失败时不应留半成品);caller 负责整组事务的 rollback。
 //   - Scan 必须容错:遇到损坏文件跳过而不是整体失败,返回的 error 仅表示整体不可恢复。
 type Adapter interface {
-	// AgentID 工具唯一 ID,用于路由 / 落库。
+	// AgentID Agent唯一 ID,用于路由 / 落库。
 	AgentID() string
 
 	// DisplayName UI 显示名(中英混合,前端走 i18n 覆盖)。
@@ -94,8 +94,8 @@ type Adapter interface {
 	// Icon 前端展示用的图标(emoji / unicode 都行,前端自由映射)。
 	Icon() string
 
-	// DiscoverPaths 返回该工具在指定 scope 下的全部 skill 目录。
-	// 返回空切片表示该 scope 不支持(如某些工具没有项目级 skill 概念)。
+	// DiscoverPaths 返回该Agent在指定 scope 下的全部 skill 目录。
+	// 返回空切片表示该 scope 不支持(如某些Agent没有项目级 skill 概念)。
 	DiscoverPaths(scope string) ([]string, error)
 
 	// Scan 扫描指定目录,产出 canonical。
@@ -107,20 +107,20 @@ type Adapter interface {
 	// 实现需要处理 LocalName / 字段裁剪 / 文件名 normalize。
 	Apply(c Canonical, targetDir string) error
 
-	// LocalName canonical name 映射到目标工具的最终文件名 / 目录名。
+	// LocalName canonical name 映射到目标Agent的最终文件名 / 目录名。
 	LocalName(c Canonical) string
 
 	// Validate Apply 前的轻量校验(目录可写 / 字段合法)。
-	// 字段合规已在 skillstore.Save 阶段校验过,这里只做工具特有的检查。
+	// 字段合规已在 skillstore.Save 阶段校验过,这里只做Agent特有的检查。
 	Validate(c Canonical) error
 
 	// IsSystemPath 判断给定扫描根是否属于该 adapter 的 system 级别。
-	// system skill 是工具自带 / vendor curated / plugin 内建的那批,
+	// system skill 是Agent自带 / vendor curated / plugin 内建的那批,
 	// 前端 phase2 据此把它们列为只读参考、不可勾选。
 	// 不实现则默认全 user(BaseAdapter 已实现,空 SystemPaths 时返回 false)。
 	IsSystemPath(p string) bool
 
-	// UserPath 返回该工具在指定 scope 下"用户级"写盘路径。
+	// UserPath 返回该Agent在指定 scope 下"用户级"写盘路径。
 	// 用于 apply:applier 只关心 user 写盘目标(单值),system path 不参与。
 	// 返回 "" + nil 表示该 scope 没有用户级 path(罕见,applier 会转成 4xx)。
 	// 返回多条 user path 时返 ErrMultipleUserPaths —— DB 唯一约束

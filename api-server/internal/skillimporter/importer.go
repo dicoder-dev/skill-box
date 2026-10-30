@@ -1,10 +1,10 @@
-// Package skillimporter 把已装编程工具的 skill 导入到 Skill Box 自己的 store。
+// Package skillimporter 把已装编程Agent的 skill 导入到 Skill Box 自己的 store。
 //
 // 设计要点(见 docs/project/需求规划.md 第 5.2 节):
-//   - 只读扫描:不修改任何目标工具目录(避免破坏现有 skill)
+//   - 只读扫描:不修改任何目标Agent目录(避免破坏现有 skill)
 //   - 落地策略:复制 canonical 内容到 skillstore(全局),不动原目录
 //   - 幂等:同一 (agent, name) 二次导入会覆盖,不会留垃圾
-//   - 进度可观察:Report 暴露每工具/每路径命中数与失败原因
+//   - 进度可观察:Report 暴露每Agent/每路径命中数与失败原因
 //
 // 2026-06-24 改造:DB 弃用后 importer 只写 store,不再双写 mskill;WithDB 保留为 no-op。
 package skillimporter
@@ -23,10 +23,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// CategoryFound skill 在原工具里的归类(user = 用户自有 / system = 工具自带或 vendor)。
+// CategoryFound skill 在原Agent里的归类(user = 用户自有 / system = Agent自带或 vendor)。
 //
 // 前端 Onboarding phase2 据此决定是否可勾选 —— user 默认勾选可取消,
-// system 只读列出不可勾(避免把工具内建 skill 误导入覆盖本地 store)。
+// system 只读列出不可勾(避免把Agent内建 skill 误导入覆盖本地 store)。
 type Category string
 
 const (
@@ -38,7 +38,7 @@ const (
 type FoundSkill struct {
 	AgentID     string                 `json:"agent_id"`
 	AgentName   string                 `json:"agent_name"`
-	SourcePath string                 `json:"source_path"` // 该 skill 在原工具里的绝对路径
+	SourcePath string                 `json:"source_path"` // 该 skill 在原Agent里的绝对路径
 	Category   Category               `json:"category"`    // user | system
 	Canonical  skilladapter.Canonical `json:"canonical"`
 }
@@ -65,7 +65,7 @@ type Report struct {
 	AgentSummary map[string]int `json:"agent_summary"` // agentID -> count
 }
 
-// Importer 跨工具的导入器;scan / import 都通过它。
+// Importer 跨Agent的导入器;scan / import 都通过它。
 type Importer struct {
 	store   *skillstore.Store
 	reg     *skilladapter.Registry // nil = 用默认全局
@@ -227,7 +227,7 @@ type ImportResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// NormalizeForStore 在 Save 前修补 Manifest,适配上游工具 SKILL.md frontmatter
+// NormalizeForStore 在 Save 前修补 Manifest,适配上游Agent SKILL.md frontmatter
 // 不全的情况(典型:外部 skill 只有 name + description,没有 triggers;
 // 或某些 community skill description 偏短 < 10 字)。
 //
@@ -345,7 +345,7 @@ func ExtractTriggers(desc, name string) []string {
 	return out
 }
 
-// Import 把指定条目从目标工具目录导入到 skillbox 全局 store。
+// Import 把指定条目从目标Agent目录导入到 skillbox 全局 store。
 // 入参 items 通常来自前端在 Report 上勾选出来的子集;空 items 表示"全部导入"。
 func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, error) {
 	if im == nil || im.store == nil {
@@ -390,7 +390,7 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 		}
 		c := fs.Canonical
 		c.Manifest.Version = ver
-		// 兜底:外部工具的 SKILL.md frontmatter 可能只有 name+description
+		// 兜底:外部Agent的 SKILL.md frontmatter 可能只有 name+description
 		// 没有 triggers / description 过短。store 校验要求严格,直接 Save 会失败。
 		// normalizeForStore 自动补全,不影响已经合法的 manifest。
 		NormalizeForStore(&c)
@@ -408,7 +408,7 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 	return out, nil
 }
 
-// FilterByAgent 返回 Report 中指定 agent 的 FoundSkill 列表(常用于前端"按工具分组展示")。
+// FilterByAgent 返回 Report 中指定 agent 的 FoundSkill 列表(常用于前端"按Agent分组展示")。
 func (r *Report) FilterByAgent(agentID string) []FoundSkill {
 	var out []FoundSkill
 	for _, fs := range r.FoundSkills {

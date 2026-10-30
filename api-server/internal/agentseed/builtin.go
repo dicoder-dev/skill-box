@@ -1,11 +1,11 @@
-// Package agentseed 在程序首次启动时把内置的 9 个默认 AI 编程工具 seed 到 e_tool + e_tool_path 表。
+// Package agentseed 在程序首次启动时把内置的 9 个默认 AI 编程Agent seed 到 tools + tool_paths 表。
 //
-// 触发条件:启动期 e_tool 表 COUNT==0(全新 DB / 工具表被清空)。
+// 触发条件:启动期 tools 表 COUNT==0(全新 DB / Agent表被清空)。
 // 不触发:DB 里已有任何 agent 记录(不论系统 / 用户),认作"已初始化过"。
 //
-// 2026-06-30 二改:此包替代 agentspecs/specs/*.yaml 的"硬编码默认工具"职责,
+// 2026-06-30 二改:此包替代 agentspecs/specs/*.yaml 的"硬编码默认Agent"职责,
 // 从"编译期内嵌配置"变成"运行时一次性 seed 进 DB"。
-// 之后增删 / 改工具全部走 sagent 服务层 + e_tool / e_tool_path 表,不再改代码。
+// 之后增删 / 改Agent全部走 sagent 服务层 + tools / tool_paths 表,不再改代码。
 package agentseed
 
 import "ginp-api/internal/skilladapter"
@@ -18,7 +18,7 @@ type builtinPath struct {
 	PathOrder int
 }
 
-// builtinAgent 内置工具 seed 描述;转 entity.Agent / entity.AgentPath 后落库。
+// builtinAgent 内置Agent seed 描述;转 entity.Agent / entity.AgentPath 后落库。
 type builtinAgent struct {
 	AgentID      string
 	DisplayName string
@@ -32,12 +32,12 @@ type builtinAgent struct {
 	Paths       []builtinPath
 }
 
-// builtins 默认内置 AI 工具(2026-07-18 扩到 17 个)。
+// builtins 默认内置 AI Agent(2026-07-18 扩到 17 个)。
 //
 // 顺序约定:SortOrder 数字越小越靠前,首页按"用户最常用"排在前:
 //   - 编程 IDE / 终端 Agent(stable 主流)         10..90
 //   - 通用 Agent / 个人助理(experimental 较新)   100..190
-//   - 较新或小众实验工具                         200..290
+//   - 较新或小众实验Agent                         200..290
 //
 // 2026-07-18 大扩:
 //   - 重排已有 9 个,SortOrder 拉开间距(10/20/30/... 跳到 30 间隔)便于后续插入
@@ -202,7 +202,7 @@ var builtins = []builtinAgent{
 		},
 	},
 
-	// ── 较新或小众实验工具(experimental,2026-07-18 新增)──────────
+	// ── 较新或小众实验Agent(experimental,2026-07-18 新增)──────────
 	// Aider:终端成对的 AI 编程 pair,git-aware;走 ~/.aider/。
 	{
 		AgentID:      "aider",
@@ -211,7 +211,7 @@ var builtins = []builtinAgent{
 		IconFile:    "aider.svg",
 		Maturity:    "experimental",
 		SortOrder:   280,
-		Note:        "终端 AI pair 编程工具(aider.chat),git-aware diff;官方 SKILL.md 规范未公开,占位 ~/.aider/skills。",
+		Note:        "终端 AI pair 编程Agent(aider.chat),git-aware diff;官方 SKILL.md 规范未公开,占位 ~/.aider/skills。",
 		Paths: []builtinPath{
 			{skilladapter.ScopeGlobal, "user", "~/.aider/skills", 0},
 			{skilladapter.ScopeProject, "user", ".aider/skills", 0},

@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// AgentSpec 单个 AI 编程工具的静态元数据,从 specs/<agent>.yaml 加载。
+// AgentSpec 单个 AI 编程Agent的静态元数据,从 specs/<agent>.yaml 加载。
 //
 // 字段定义与 skilladapter.BaseAdapter 字段一一对应,加载后由
 // skilladapter.NewSpecAdapter 转成 BaseAdapter。
 type AgentSpec struct {
-	// AgentID 工具唯一 ID,用于路由、落库、前端 mdi 查找。
+	// AgentID Agent唯一 ID,用于路由、落库、前端 mdi 查找。
 	// 一旦定下不要轻易改 — DB / 前端都靠它做关联。
 	AgentID string `yaml:"tool_id" json:"agent_id"`
 
@@ -25,10 +25,10 @@ type AgentSpec struct {
 	// 找不到合适的用 mdi:puzzle-outline 占位。
 	MdiIcon string `yaml:"mdi_icon" json:"mdi_icon"`
 
-	// Maturity 工具的稳定度,可选值:stable / experimental / deprecated。
+	// Maturity Agent的稳定度,可选值:stable / experimental / deprecated。
 	// stable:已实测可正常工作(读、写、扫都能找到 SKILL.md);
 	// experimental:路径是社区约定/官方未明确,可能在用户机器上找不到;
-	// deprecated:工具已停维,保留只是不破坏旧数据。
+	// deprecated:Agent已停维,保留只是不破坏旧数据。
 	Maturity string `yaml:"maturity,omitempty" json:"maturity,omitempty"`
 
 	// Note 自由文本,用于在 YAML 注释之外补充一些"为什么这样配"的说明。
@@ -37,7 +37,7 @@ type AgentSpec struct {
 
 	// Paths 路径配置,scope × category 笛卡尔积。
 	//   - Scope: global(用户级,挂在 $HOME 下) / project(项目级,挂在 <project>/.xxx/skills)
-	//   - Category: user(用户自己装,可读可写) / system(工具自带 / vendor,只读)
+	//   - Category: user(用户自己装,可读可写) / system(Agent自带 / vendor,只读)
 	//
 	// 任一 scope × category 都可省略,意味该档位没有扫描根(仍允许 scope 的其它档位工作)。
 	Paths AgentPaths `yaml:"paths" json:"paths"`

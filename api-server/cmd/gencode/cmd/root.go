@@ -12,8 +12,8 @@ var version = "0.2.0"
 // rootCmd 表示在不调用任何子命令时的基本命令
 var rootCmd = &cobra.Command{
 	Use:   "gencode",
-	Short: "GINP 代码生成工具",
-	Long: `GINP 代码生成工具 - 基于 service 层的命令行工具
+	Short: "GINP 代码生成Agent",
+	Long: `GINP 代码生成Agent - 基于 service 层的命令行Agent
 
 支持的功能：
   - entity: 实体管理（列表、生成、删除）

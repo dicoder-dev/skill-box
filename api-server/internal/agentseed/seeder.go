@@ -14,23 +14,23 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrAlreadySeeded DB 里已有工具,跳过 seed(非错误;只是"无需再 seed")。
+// ErrAlreadySeeded DB 里已有Agent,跳过 seed(非错误;只是"无需再 seed")。
 var ErrAlreadySeeded = errors.New("agentseed: already initialized, skip seed")
 
-// EnsureSeeded 启动期调用:e_tool 表非空时,upsert 所有内置工具行;
-// e_tool 表为空时,第一次 seed 全部内置工具。
+// EnsureSeeded 启动期调用:tools 表非空时,upsert 所有内置Agent行;
+// tools 表为空时,第一次 seed 全部内置Agent。
 //
-// 2026-07-18 升级:从"只刷已有系统工具的软字段"升级为"增量 upsert"。
+// 2026-07-18 升级:从"只刷已有系统Agent的软字段"升级为"增量 upsert"。
 // 判定逻辑:
 //   - DB 空 → runSeedInTx,事务内批量 insert 全量 builtins
 //   - DB 非空 → upsertBuiltinAgents,事务内每条 builtin:
 //       *  DB 已存在(按 tool_id 查) → 更新软字段(sort_order / display_name /
 //          mdi_icon / icon_file / maturity / note),保留用户改过的 is_system /
 //          enabled / 独立字段
-//       *  DB 不存在 → insert 新工具行(is_system=true,enabled=true,sort_order
+//       *  DB 不存在 → insert 新Agent行(is_system=true,enabled=true,sort_order
 //          来自 builtins)+ 写 paths
 // 这样 builtin.go 新增条目后,老用户重启一次就自动补上新增内置。
-// 用户自定义工具(is_system=false)不受影响。
+// 用户自定义Agent(is_system=false)不受影响。
 //
 // 图标写盘独立于 DB(失败仅 log),refresh 软字段 / 新增条目都共用。
 func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
@@ -60,11 +60,11 @@ func EnsureSeeded(dbWrite, dbRead *gorm.DB) error {
 // upsertBuiltinAgents 单事务内对每条 builtin 做"在 → 刷软字段 / 不在 → insert"两路处理。
 //
 // 保留不动:
-//   - 用户对系统工具改过的 is_system / enabled(后者是用户开关语义)
-//   - 用户对系统工具改过的图标(icon_file 字段值不为空 + 与 builtins 不同时不刷;
+//   - 用户对系统Agent改过的 is_system / enabled(后者是用户开关语义)
+//   - 用户对系统Agent改过的图标(icon_file 字段值不为空 + 与 builtins 不同时不刷;
 //      但 builtins 从空改为非空时刷,因为 builtin 优先;用户上传图片的兜底路径仍由
 //      cagent upload 覆盖,这里只是把"系统内置默认 icon"刷成内置图标名)
-//   - 用户对系统工具改过的 tool_id(unique 不可变,也不刷)
+//   - 用户对系统Agent改过的 tool_id(unique 不可变,也不刷)
 //
 // 刷(差异才刷):
 //   - sort_order / display_name / mdi_icon / maturity / note
@@ -79,7 +79,7 @@ func upsertBuiltinAgents(db *gorm.DB) error {
 		for _, bt := range builtins {
 			cur, err := agentM.FindByAgentID(bt.AgentID)
 			if err != nil {
-				// 找不到 = 内置工具 DB 缺失 → 新增
+				// 找不到 = 内置Agent DB 缺失 → 新增
 				agent := &entity.Agent{
 					AgentID:      bt.AgentID,
 					DisplayName: bt.DisplayName,
@@ -163,8 +163,8 @@ func upsertBuiltinAgents(db *gorm.DB) error {
 	})
 }
 
-// runSeedInTx 把 9 个默认工具 + paths 写进 DB,事务内。
-// 系统工具 IsSystem=true;Maturity 原样落库;Path 保留 ~/ 形式不展开。
+// runSeedInTx 把 9 个默认Agent + paths 写进 DB,事务内。
+// 系统Agent IsSystem=true;Maturity 原样落库;Path 保留 ~/ 形式不展开。
 func runSeedInTx(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		agentM := magent.NewModel(tx, tx)
@@ -177,7 +177,7 @@ func runSeedInTx(db *gorm.DB) error {
 				IconFile:    bt.IconFile,
 				Maturity:    bt.Maturity,
 				Note:        bt.Note,
-				IsSystem:    true, // seed 出的全是系统工具
+				IsSystem:    true, // seed 出的全是系统Agent
 				Enabled:     true,
 				SortOrder:   bt.SortOrder,
 			}

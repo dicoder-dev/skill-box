@@ -197,7 +197,7 @@ func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string 
 //   - scope=project 时,优先用 ProjectRoot(由 caller 从 sproject.Service 查
 //     entity.Project.RootPath 得到)— 这是 Codex / Claude / Cursor 实际读的项目根
 //     (ai-image 这种项目的 root_path 是 /Volumes/MyDrive/.../ai-image,apply
-//     会写到 /Volumes/.../ai-image/.agents/skills/<name>,工具才能读到)。
+//     会写到 /Volumes/.../ai-image/.agents/skills/<name>,Agent才能读到)。
 //   - ProjectRoot 为空时,fallback 到旧的占位实现 home/.skillbox/projects/<id>/
 //     (用于测试或 caller 暂时拿不到 root_path 的场景,但 production 必须传)。
 func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope string, projectID uint, projectRoot string) (string, error) {

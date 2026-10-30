@@ -9,7 +9,7 @@
 //   - 一个 skill 一个目录,无 version 层(版本写在 SKILL.md frontmatter)
 //   - 元数据唯一来源是 SKILL.md 的 YAML frontmatter,不再额外落 skill.yaml
 //   - 写入走 per-skill 文件锁(flock),保证多进程并发安全
-//   - 跨工具兼容:任何按 "<name>/SKILL.md" 布局的外部工具(Claude Code / Codex / ...)
+//   - 跨Agent兼容:任何按 "<name>/SKILL.md" 布局的外部Agent(Claude Code / Codex / ...)
 //     都可以直接读本目录;我们要写回时也只动 SKILL.md,不会引入额外元数据文件
 //
 // 设计上下文见 docs/project/需求规划.md 第 5.1 + 8.2 节。
@@ -900,7 +900,7 @@ func (s *Store) CreateGroupDir(groupPath string) error {
 //
 // 2026-06-29 增:供 cskill.delete_group 用。
 // deleted 数组是"该分组下所有 skill 叶子的相对路径"(供前端在 cascade=true 时
-// 同步工具目录),即使删除失败也尽量填好让 caller 做部分回滚。
+// 同步Agent目录),即使删除失败也尽量填好让 caller 做部分回滚。
 func (s *Store) DeleteGroupDir(groupPath string, recursive bool) ([]string, error) {
 	if groupPath == "" {
 		return nil, nil
@@ -1157,8 +1157,8 @@ type TreeNode struct {
 
 // SkillTreeMeta 树节点中携带的 skill 轻量元数据。
 //
-// 2026-06-29 增:AppliedAgents 是该 skill 被全局启用的工具 ID 列表(从
-// cskillapply 的 scope-status 反推),供前端卡片"被这些工具全局调用了"显示。
+// 2026-06-29 增:AppliedAgents 是该 skill 被全局启用的Agent ID 列表(从
+// cskillapply 的 scope-status 反推),供前端卡片"被这些Agent全局调用了"显示。
 // 复用了 cskill 包里的 GlobalAppliedAgents helper(同进程),避免在 store 层
 // 重复实现 scope-status 扫描逻辑。
 // 2026-07-12 增:SourcePath 是该 skill 的"导入来源磁盘绝对路径"(EvalSymlinks

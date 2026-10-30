@@ -12,7 +12,7 @@ import (
 // RequestDeleteGroup 删分组入参。
 //
 // 2026-06-29 增:为支持"右键删除分组"。返回 deleted_skill_paths — 在 cascade=true
-// 时填该分组下所有 skill 叶子的相对路径,供前端二次确认"是否同步清理工具目录";
+// 时填该分组下所有 skill 叶子的相对路径,供前端二次确认"是否同步清理Agent目录";
 // cascade=false 时若分组非空,该字段也填,作为 4xx 响应的附带信息。
 type RequestDeleteGroup struct {
 	GroupPath string `json:"group_path" form:"group_path"`

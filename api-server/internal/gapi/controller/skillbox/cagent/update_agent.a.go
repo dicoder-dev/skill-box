@@ -1,7 +1,7 @@
 // Package cagent - update_agent.a.go
 // POST /api/skillbox/agents/update
 //
-// 改一个工具的元数据;系统工具的 tool_id / is_system 不可改(本接口忽略这两个字段)。
+// 改一个Agent的元数据;系统Agent的 tool_id / is_system 不可改(本接口忽略这两个字段)。
 package cagent
 
 import (
@@ -14,7 +14,7 @@ import (
 	"ginp-api/pkg/logger"
 )
 
-// RequestUpdateAgent 改工具入参。
+// RequestUpdateAgent 改Agent入参。
 type RequestUpdateAgent struct {
 	AgentID      string              `json:"agent_id"` // locator,不可改
 	DisplayName *string             `json:"display_name,omitempty"`
@@ -76,7 +76,7 @@ func init() {
 		PermissionName: "skillbox.agents.update",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.update",
-			Description:   "改工具元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /agents/reload",
+			Description:   "改Agent元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /agents/reload",
 			RequestParams: RequestUpdateAgent{},
 		},
 	})

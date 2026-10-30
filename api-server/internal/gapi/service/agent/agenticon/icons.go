@@ -1,4 +1,4 @@
-// Package agenticon 提供工具自定义图标文件的物理存储管理。
+// Package agenticon 提供Agent自定义图标文件的物理存储管理。
 //
 // 设计:
 //   - 图标文件存到 ~/.<AppName>/agent-icons/<name>.<ext>
@@ -49,7 +49,7 @@ func ValidIconFileName(name string) bool {
 	return false
 }
 
-// Dir 返回工具图标目录的绝对路径(末尾无分隔符),目录若不存在则 MkdirAll。
+// Dir 返回Agent图标目录的绝对路径(末尾无分隔符),目录若不存在则 MkdirAll。
 func Dir() (string, error) {
 	base := sharefunc.DataDir()
 	if base == "" {

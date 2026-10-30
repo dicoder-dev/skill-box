@@ -78,9 +78,9 @@ func (r *Registry) All() []Adapter {
 
 // Reload 用给定的 adapter 列表整体替换 registry 的内容。
 //
-// 2026-06-30 二改:工具元数据从 yaml 改 DB 后,业务层(sagent Service)改完
-// 工具需要重新加载 — 用 Reload(adapters) 整体替换一次,包括删除用户
-// 在 UI 删掉的工具。比逐个 Add/Remove 简单,且保证"最终状态就是给定列表"。
+// 2026-06-30 二改:Agent元数据从 yaml 改 DB 后,业务层(sagent Service)改完
+// Agent需要重新加载 — 用 Reload(adapters) 整体替换一次,包括删除用户
+// 在 UI 删掉的Agent。比逐个 Add/Remove 简单,且保证"最终状态就是给定列表"。
 //
 // 失败语义:无错误(纯内存替换);tool_id 重复由调用方在 spec 加载阶段
 // (LoadAllFromDB) 兜底,这里不去重。

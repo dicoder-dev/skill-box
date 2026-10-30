@@ -16,7 +16,7 @@ type RequestOnboardingScan struct{}
 // RespondOnboardingScan scan 后的精简 Report。
 type RespondOnboardingScan = skillimporterReportEnvelope
 
-// PostOnboardingScan 跑一次跨工具扫描,把结果缓存到包级变量供后续 import 用。
+// PostOnboardingScan 跑一次跨Agent扫描,把结果缓存到包级变量供后续 import 用。
 func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 	store, err := skillstore.New()
 	if err != nil {
@@ -82,7 +82,7 @@ func init() {
 		PermissionName: "skillbox.onboarding.scan",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "onboarding.scan",
-			Description:   "跑一次跨工具扫描并把 Report 缓存到进程,供 import 接口消费",
+			Description:   "跑一次跨Agent扫描并把 Report 缓存到进程,供 import 接口消费",
 			RequestParams: RequestOnboardingScan{},
 		},
 	})

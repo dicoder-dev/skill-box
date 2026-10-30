@@ -274,7 +274,7 @@ func TestScan_NilStoreErrors(t *testing.T) {
 //   - normalizeForStore 必须从 description 抽 trigger,保证 store.Save 不拒收
 func TestImport_NormalizeFixesTriggers(t *testing.T) {
 	_, _, tmp := setupReg(t)
-	// setupReg 的 fakeAdapter 用工具 A / B 写死的内容;直接复用,挑一个缺 trigger 的 skill。
+	// setupReg 的 fakeAdapter 用Agent A / B 写死的内容;直接复用,挑一个缺 trigger 的 skill。
 	// 这里再额外写一个带缺字段 frontmatter 的 skill,验证 normalize。
 	extraDir := t.TempDir()
 	writeSkillWithFM(t, extraDir, "no-triggers",

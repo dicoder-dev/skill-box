@@ -295,7 +295,7 @@ func (s *Service) CreateGroup(groupPath string) error {
 // cascade=false 时,若分组非空,返回 (deleted_skill_paths, error) — 让 caller
 // 决定是否强删。cascade=true 时直接递归删,返回 (deleted_skill_paths, nil)。
 // 返回的 deleted_skill_paths 是该分组下所有 skill 叶子的相对路径(用 '/' 分隔),
-// 供前端在 cascade_agents=true 时同步清理各工具目录。
+// 供前端在 cascade_agents=true 时同步清理各Agent目录。
 //
 // 2026-06-29 增:为支持多级分组。
 func (s *Service) DeleteGroup(groupPath string, cascade bool) ([]string, error) {
@@ -445,7 +445,7 @@ func (s *Service) GetByPath(groupPath string, name string) (*skilladapter.Canoni
 
 // DeleteByPath 按分组路径删 skill(供 cskill.delete_skill 用)。
 // 返回 (deleted_skill_path, error) — deleted_skill_path 用于前端在
-// cascade_agents=true 时同步清理工具目录。
+// cascade_agents=true 时同步清理Agent目录。
 //
 // 2026-06-29 增:为支持多级分组的删除。
 func (s *Service) DeleteByPath(groupPath string, name string) (string, error) {

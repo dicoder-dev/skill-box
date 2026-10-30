@@ -15,9 +15,9 @@ import (
 // 否则 GetWriteDb 内部 switch 会拿到错误的 DB 实现。
 //
 // 2026-06-30 二改:启动流程 = AutoMigrate → EnsureSeeded → ReloadAllFromDB。
-// - AutoMigrate 创建/更新 e_tool + e_tool_path 表
-// - EnsureSeeded 把 9 个默认工具 seed 进 DB(全新 DB 才 seed)
-// - ReloadAllFromDB 从 DB 拉一次 enabled 工具,注册到 skilladapter.Registry
+// - AutoMigrate 创建/更新 tools + tool_paths 表
+// - EnsureSeeded 把 9 个默认Agent seed 进 DB(全新 DB 才 seed)
+// - ReloadAllFromDB 从 DB 拉一次 enabled Agent,注册到 skilladapter.Registry
 //
 // 顺序关键:先 seed 完再 reload,reload 时才有数据可拉。
 func StartDB() {
@@ -45,15 +45,15 @@ func StartDB() {
 		panic(err)
 	}
 
-	// 2) Seed 9 个默认工具(全新 DB 才会真 seed)
+	// 2) Seed 9 个默认Agent(全新 DB 才会真 seed)
 	if err := agentseed.EnsureSeeded(dbs.GetWriteDb(), dbs.GetReadDb()); err != nil {
-		fmt.Println("seed 工具元数据失败:" + err.Error())
+		fmt.Println("seed Agent元数据失败:" + err.Error())
 		panic(err)
 	}
 
-	// 3) 从 DB 加载工具到 skilladapter.Registry
+	// 3) 从 DB 加载Agent到 skilladapter.Registry
 	if err := agentspecs.ReloadAllFromDB(dbs.GetWriteDb()); err != nil {
-		fmt.Println("加载工具元数据到 registry 失败:" + err.Error())
+		fmt.Println("加载Agent元数据到 registry 失败:" + err.Error())
 		panic(err)
 	}
 }

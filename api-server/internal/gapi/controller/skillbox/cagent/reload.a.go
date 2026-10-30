@@ -1,8 +1,8 @@
 // Package cagent - reload.a.go
 // POST /api/skillbox/agents/reload
 //
-// 重新从 DB 拉一次工具元数据,刷 skilladapter.DefaultRegistry。
-// 前端改完工具后调一次,让 adapter 立刻反映新数据。
+// 重新从 DB 拉一次Agent元数据,刷 skilladapter.DefaultRegistry。
+// 前端改完Agent后调一次,让 adapter 立刻反映新数据。
 package cagent
 
 import (
@@ -37,7 +37,7 @@ func init() {
 		PermissionName: "skillbox.agents.reload",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.reload",
-			Description:   "重新从 DB 加载工具到 skilladapter.Registry;前端改完工具后调一次,立刻生效",
+			Description:   "重新从 DB 加载Agent到 skilladapter.Registry;前端改完Agent后调一次,立刻生效",
 			RequestParams: RequestReload{},
 		},
 	})

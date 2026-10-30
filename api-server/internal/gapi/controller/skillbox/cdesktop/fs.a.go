@@ -150,7 +150,7 @@ func PostFsInspectProject(c *ginp.ContextPlus, req *RequestFsInspectProject) {
 
 // RequestFsRemovePath { path } 删除给定磁盘路径(文件或目录树)。
 //
-// 2026-07-04 增:供 ProjectsView 工具 skill 弹窗的"删除 skill"按钮使用,
+// 2026-07-04 增:供 ProjectsView Agent skill 弹窗的"删除 skill"按钮使用,
 // 物理删 source_path 对应的目录。不写 DB,不联动其它状态(纯本地文件操作)。
 //
 // 注意:这是**破坏性**操作,前端必须二次确认;后端不做语义层校验,

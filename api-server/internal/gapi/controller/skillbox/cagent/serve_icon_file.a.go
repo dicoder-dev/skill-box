@@ -102,7 +102,7 @@ func init() {
 		PermissionName: "skillbox.files.tool_icons",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "files.tool_icons",
-			Description:   "静态服务用户上传/seed 的工具图标;文件名必须是合法 basename",
+			Description:   "静态服务用户上传/seed 的Agent图标;文件名必须是合法 basename",
 			RequestParams: struct{}{},
 		},
 	})

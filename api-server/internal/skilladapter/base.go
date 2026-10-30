@@ -8,22 +8,22 @@ import (
 	"strings"
 )
 
-// BaseAdapter 提供 Adapter 的通用实现,具体工具只需填充 DiscoverPaths + LocalName。
+// BaseAdapter 提供 Adapter 的通用实现,具体Agent只需填充 DiscoverPaths + LocalName。
 //
-// 假设:目标工具的 skill 布局是 "<skills_dir>/<name>/SKILL.md" 单文件目录结构
+// 假设:目标Agent的 skill 布局是 "<skills_dir>/<name>/SKILL.md" 单文件目录结构
 // (Trae / Codex / OpenCode / Claude 都是这样,只有 frontmatter 字段裁剪不同)。
 type BaseAdapter struct {
 	ID      string
 	Display string
 	// IconEmoji 用于前端展示;不需要图标可留空。
 	IconEmoji string
-	// LocalNameFn canonical name → 目标工具的最终目录名。nil 时用 manifest.Name。
+	// LocalNameFn canonical name → 目标Agent的最终目录名。nil 时用 manifest.Name。
 	LocalNameFn func(c Canonical) string
 	// Agents 提供每个 scope 下的候选 skills 根目录;DiscoverPaths 直接返回。
 	Agents map[string][]string
 	// SystemPaths 标记哪些扫描根属于"系统级"(plugin 自带 / vendor curated 等),
-	// 前端 phase2 会把扫出来的 skill 列为不可勾选的"只读参考",避免把工具自带
-	// 的 skill 当作 user skill 误导入覆盖。空 map 表示该工具没有 system 路径。
+	// 前端 phase2 会把扫出来的 skill 列为不可勾选的"只读参考",避免把Agent自带
+	// 的 skill 当作 user skill 误导入覆盖。空 map 表示该Agent没有 system 路径。
 	SystemPaths map[string][]string
 }
 
@@ -303,7 +303,7 @@ func (b *BaseAdapter) Apply(c Canonical, targetDir string) error {
 		return fmt.Errorf("%s: mkdir %s: %w", b.ID, targetDir, err)
 	}
 	// 写盘过滤(2026-07-14 增):
-	//   .skill-box/、.git/ 等隐藏路径不应写进目标工具目录。两条额外防线的兜底:
+	//   .skill-box/、.git/ 等隐藏路径不应写进目标Agent目录。两条额外防线的兜底:
 	//     1) skillstore.walkFiles 加载 ~/.skill-box/skills/<name>/ 时已过滤;
 	//     2) readDirFiles 加载外部 skill 时也已过滤(见下面 readDirFiles);
 	//   这里再叠一层是为了兼容从其它路径直接构造 Canonical 的代码(importer 旧版本、
@@ -332,7 +332,7 @@ func (b *BaseAdapter) Apply(c Canonical, targetDir string) error {
 // 创建一个 symlink,指向 skillstore 里的源 skill 根(canonical.SourceDir,
 // 已 EvalSymlinks 规范化,见 readSkillDir)。这样:
 //   - 零磁盘占用(目标端就是源端的一个引用,文件物理只存一份);
-//   - 用户编辑源文件后,目标工具立刻读到最新内容,无需重新 apply;
+//   - 用户编辑源文件后,目标Agent立刻读到最新内容,无需重新 apply;
 //   - 撤销只需 os.Remove(targetDir),比 restoreFromSnapshot 简单且无副作用。
 //
 // 实现要点:
@@ -345,7 +345,7 @@ func (b *BaseAdapter) ApplyLink(c Canonical, targetDir string) error {
 	if c.SourceDir == "" {
 		return fmt.Errorf("%s: symlink apply: empty source_dir for skill %q", b.ID, c.Manifest.Name)
 	}
-	// 拿真实路径,避免链式 symlink 在某些工具下被读两次。
+	// 拿真实路径,避免链式 symlink 在某些Agent下被读两次。
 	src, err := filepath.EvalSymlinks(c.SourceDir)
 	if err != nil {
 		// 源端 symlink 损坏,仍可按原路径链(让用户看到问题,而不是静默回退)
@@ -377,7 +377,7 @@ func (b *BaseAdapter) ApplyLink(c Canonical, targetDir string) error {
 }
 
 // readDirFiles 递归扫 dir 下所有文件,产出 File 列表(Path 用正斜杠,已排序)。
-// dir 可能是 symlink(外部工具的 skill 经常用 symlink 链到 ~/.agents/skills/xxx),
+// dir 可能是 symlink(外部Agent的 skill 经常用 symlink 链到 ~/.agents/skills/xxx),
 // 内部用 EvalSymlinks 解析真实路径后再 WalkDir,避免 WalkDir 默认不跟随 symlink
 // 导致附属文件被漏掉。
 func readDirFiles(dir string) ([]File, error) {

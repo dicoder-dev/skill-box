@@ -22,7 +22,7 @@ import (
 //     ~/.codex/skills/xxx"也能立即看到,不需要 import 流程。
 //   - 入参只接受 name(必填)+ version(可选,只用于日志/未来扩展;目录名只
 //     取决于 name,不影响判断)。
-//   - 返回结构: agents 数组列出所有已知工具(供前端渲染第一行),hits 数组
+//   - 返回结构: agents 数组列出所有已知Agent(供前端渲染第一行),hits 数组
 //     给出 (agent, scope, project_id) 组合 + exists + 绝对路径,前端用 exists
 //     字段决定 chip 高亮。
 type RequestSkillScopeStatus struct {
@@ -169,7 +169,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 // skillDirExists 检查 <resolved> 是否是存在的 skill 目录(自身含 SKILL.md 或含子目录里有 SKILL.md)。
 //
 // 实现:必须 <resolved>/SKILL.md 存在(对齐 BaseAdapter.readSkillDir 入口);
-// 不做深度递归 — scope-status 关心"我有没有放在工具期望的位置",不是
+// 不做深度递归 — scope-status 关心"我有没有放在Agent期望的位置",不是
 // "我有没有放在任意子目录里"。后者是 Scan 的活,scope-status 故意不做,
 // 避免误报(用户随手建的子目录不应该算"已应用")。
 func skillDirExists(resolved string) bool {
@@ -224,7 +224,7 @@ func ResolveHit(name, scope string, projectID uint, agent string) (string, error
 	}
 	a, ok := skilladapter.DefaultRegistry().Get(agent)
 	if !ok {
-		return "", nil // 工具不存在 → 视作未命中
+		return "", nil // Agent不存在 → 视作未命中
 	}
 	paths, err := a.DiscoverPaths(scope)
 	if err != nil {

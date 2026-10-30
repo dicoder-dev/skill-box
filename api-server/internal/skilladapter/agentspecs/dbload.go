@@ -11,14 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// LoadAllFromDB 从 e_tool + e_tool_path 表加载全部 enabled=true 的工具,
+// LoadAllFromDB 从 tools + tool_paths 表加载全部 enabled=true 的Agent,
 // 转成 []*AgentSpec。
 //
-// 2026-06-30 二改:替代原 LoadAll() 的"读 yaml"实现,工具元数据从编译期
+// 2026-06-30 二改:替代原 LoadAll() 的"读 yaml"实现,Agent元数据从编译期
 // 内嵌变成运行时 DB 拉。每次启动 / 每次 reload 都会调一次。
 //
 // 关键约束:
-//   - 排除 enabled=false 的工具(用户禁用,不注册 adapter)
+//   - 排除 enabled=false 的Agent(用户禁用,不注册 adapter)
 //   - 同一 tool_id 在 DB 层面靠 uniqueIndex 兜底;这里再校验一次(防御
 //     race condition / DB 异常)
 //   - 每个 agent 的 path 按 (scope, category, path_order) 排序后填入 AgentSpec.Paths

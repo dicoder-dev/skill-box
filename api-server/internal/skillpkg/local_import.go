@@ -3,10 +3,10 @@
 // 从本地文件夹 / 压缩包导入 skill 到 skillstore。
 //
 // 跟现有 Importer.Import 的区别:
-//   - Importer.Import 是"扫描已装编程工具的目录 → 选中条目 → store.Save",
+//   - Importer.Import 是"扫描已装编程Agent的目录 → 选中条目 → store.Save",
 //     走的是 skillimporter.Report 流。
 //   - 这里用户主动选一个本地文件夹 / 压缩包,直接解析 SKILL.md → Canonical
-//     → store.Save,不动其它工具。
+//     → store.Save,不动其它Agent。
 //
 // 校验:目录或压缩包内必须存在 SKILL.md(用户原话要求)。命中数为 0 时返
 // ErrNoSkillMD,caller 转 HTTP 400,前端 toast 提示。

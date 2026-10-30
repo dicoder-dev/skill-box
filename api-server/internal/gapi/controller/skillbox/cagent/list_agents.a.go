@@ -1,7 +1,7 @@
 // Package cagent - list_agents.a.go
 // GET /api/skillbox/agents
 //
-// 列出所有 AI 编程工具(系统 + 用户),含每条 path。
+// 列出所有 AI 编程Agent(系统 + 用户),含每条 path。
 // 供前端 Settings / SkillsView 用。
 package cagent
 
@@ -16,7 +16,7 @@ import (
 // RequestListAgents 列表请求(无参)。
 type RequestListAgents struct{}
 
-// RespondListAgents 响应 = 工具视图列表。
+// RespondListAgents 响应 = Agent视图列表。
 type RespondListAgents = []sagent.AgentView
 
 // ListAgents GET /api/skillbox/agents
@@ -41,7 +41,7 @@ func init() {
 		PermissionName: "skillbox.agents.list",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.list",
-			Description:   "列出全部 AI 编程工具元数据(含 path),系统工具 is_system=true",
+			Description:   "列出全部 AI 编程Agent元数据(含 path),系统Agent is_system=true",
 			RequestParams: RequestListAgents{},
 		},
 	})

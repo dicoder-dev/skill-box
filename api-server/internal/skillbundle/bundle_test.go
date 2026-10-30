@@ -61,12 +61,12 @@ func TestLoadAll_ManifestValid(t *testing.T) {
 		}
 		// target_tools 必须是 AllTools 的子集
 		allowed := map[string]bool{}
-		for _, id := range skilladapter.AllTools {
+		for _, id := range skilladapter.AllAgents {
 			allowed[id] = true
 		}
-		for _, tool := range m.TargetTools {
-			if !allowed[tool] {
-				t.Errorf("%s: target_tools 含未知工具 %q", m.Name, tool)
+		for _, agent := range m.TargetTools {
+			if !allowed[agent] {
+				t.Errorf("%s: target_tools 含未知Agent %q", m.Name, agent)
 			}
 		}
 	}

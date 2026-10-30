@@ -31,7 +31,7 @@ type RequestInstallMarketSkillV2 = RequestPullMarketSkillV2
 
 // RespondPullMarketSkillV2 响应(2026-07-01 改名:RespondInstallMarketSkillV2 → RespondPullMarketSkillV2)。
 //
-// 含 apply 摘要、canonical、跳过的工具列表;前端用来判断装到几个工具、哪些失败。
+// 含 apply 摘要、canonical、跳过的Agent列表;前端用来判断装到几个Agent、哪些失败。
 type RespondPullMarketSkillV2 = smarket.PullV2Result
 
 // RespondInstallMarketSkillV2 旧名 alias(2026-07-01 deprecated),新代码请用 RespondPullMarketSkillV2。
@@ -40,8 +40,8 @@ type RespondInstallMarketSkillV2 = RespondPullMarketSkillV2
 // PullMarketSkillV2 POST /api/skillbox/market/install-v2
 //
 // 一站式:三方 → 写盘 → apply 到 agents(scope 默认 global)。
-// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedAgents 列出失败工具,
-// 整体仍返 200(已装到本地,只是部分工具未启用)。
+// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedAgents 列出失败Agent,
+// 整体仍返 200(已装到本地,只是部分Agent未启用)。
 //
 // 2026-07-01 改名:InstallMarketSkillV2 → PullMarketSkillV2。HTTP 路径 /install-v2
 // 保留不变(向后兼容);PermissionName 改 pull.v2,install.v2 同步留 alias。
@@ -92,7 +92,7 @@ func init() {
 		PermissionName: "skillbox.market.pull.v2",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "market.pull.v2",
-			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到工具(scope 默认 global,agents 默认本机全部 5 个工具)",
+			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到Agent(scope 默认 global,agents 默认本机全部 5 个Agent)",
 			RequestParams: RequestPullMarketSkillV2{},
 		},
 	})

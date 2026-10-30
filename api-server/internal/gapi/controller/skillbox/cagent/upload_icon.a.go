@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	// maxIconSize 256 KB 上限(够 1024x1024 png,常规工具 logo 远小于此)
+	// maxIconSize 256 KB 上限(够 1024x1024 png,常规Agent logo 远小于此)
 	maxIconSize = 256 * 1024
 )
 
@@ -225,7 +225,7 @@ func init() {
 		PermissionName: "skillbox.agents.upload_icon",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.upload_icon",
-			Description:   "上传工具自定义图标到 ~/.skill-box/agent-icons/,返回 basename;前端再把 name 写到 agent.icon_file",
+			Description:   "上传Agent自定义图标到 ~/.skill-box/agent-icons/,返回 basename;前端再把 name 写到 agent.icon_file",
 			RequestParams: struct{}{},
 		},
 	})

@@ -58,7 +58,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply",
-			Description:   "把一个 skill 落到一个或多个目标工具;用 scope+name 定位",
+			Description:   "把一个 skill 落到一个或多个目标Agent;用 scope+name 定位",
 			RequestParams: RequestApplySkill{},
 		},
 	})

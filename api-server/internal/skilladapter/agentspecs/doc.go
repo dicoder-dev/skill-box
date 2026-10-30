@@ -1,19 +1,19 @@
-// Package agentspecs 提供"工具元数据"的数据驱动加载层。
+// Package agentspecs 提供"Agent元数据"的数据驱动加载层。
 //
 // 设计动机:
 //
-//	改造前(2026-06 之前):每个工具(Codex / Claude / OpenCode / Cursor / Trae)
+//	改造前(2026-06 之前):每个Agent(Codex / Claude / OpenCode / Cursor / Trae)
 //	各占一个 Go 子包,内部 80 行 boilerplate(Agents map / SystemPaths /
-//	DisplayName / IconEmoji),只差 path 跟 display_name。新加一个工具要:
+//	DisplayName / IconEmoji),只差 path 跟 display_name。新加一个Agent要:
 //	  1. 新建子包 + 写 adapter.go
 //	  2. 在 init() 注册到默认 registry
 //	  3. 重新 go build
 //	  4. 写完发现路径错了,改 yaml 后又要再 build
-//	→ 迭代极慢,工具元数据藏在 Go 代码里,运维/产品改不动。
+//	→ 迭代极慢,Agent元数据藏在 Go 代码里,运维/产品改不动。
 //
-//	改造后(2026-06-30 起):本包把"工具是什么"从代码中分离出来,以 YAML 数据文件
+//	改造后(2026-06-30 起):本包把"Agent是什么"从代码中分离出来,以 YAML 数据文件
 //	存到 specs/<agent>.yaml,Go 端只负责按 AgentSpec 喂给 BaseAdapter。
-//	新增一个工具 = 在 specs/ 里加一个 yaml,不需要 Go 代码变动、不需要 build。
+//	新增一个Agent = 在 specs/ 里加一个 yaml,不需要 Go 代码变动、不需要 build。
 //
 // 关键边界:
 //

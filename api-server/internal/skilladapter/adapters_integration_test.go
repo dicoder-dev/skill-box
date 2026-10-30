@@ -27,7 +27,7 @@ func setupRegistryFromSQLite(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// AutoMigrate e_tool + e_tool_path(测试用最小集)
+	// AutoMigrate tools + tool_paths(测试用最小集)
 	if err := db.AutoMigrate(&entity.Agent{}, &entity.AgentPath{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -40,11 +40,11 @@ func setupRegistryFromSQLite(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestAllAdaptersRegistered 验证默认 Registry 在 DB 加载后包含全部默认工具。
+// TestAllAdaptersRegistered 验证默认 Registry 在 DB 加载后包含全部默认Agent。
 //
 // 2026-06-30 二改:adapter 不再 init() 自动注册,而是依赖启动期
 // agentspecs.ReloadAllFromDB(db);本测试用 sqlite 内存 DB 模拟"seed + reload"
-// 全流程,验证 9 个默认工具 + Icon() 字段透传。
+// 全流程,验证 9 个默认Agent + Icon() 字段透传。
 func TestAllAdaptersRegistered(t *testing.T) {
 	_ = setupRegistryFromSQLite(t)
 
@@ -66,14 +66,14 @@ func TestAllAdaptersRegistered(t *testing.T) {
 			t.Errorf("adapter %s icon %q must start with mdi:", a.AgentID(), icon)
 		}
 	}
-	// 5 个老工具必须存在(向后兼容);新工具(antigravity/cline/codebuddy/jetbrains)
+	// 5 个老Agent必须存在(向后兼容);新Agent(antigravity/cline/codebuddy/jetbrains)
 	// 不在此断言,数量由 seed 9 个默认决定。
 	for _, want := range skilladapter.AllAgents {
 		if !ids[want] {
 			t.Errorf("missing legacy adapter for %q", want)
 		}
 	}
-	// 至少得有 9 个(5 老 + 4 新),避免 seed 漏工具
+	// 至少得有 9 个(5 老 + 4 新),避免 seed 漏Agent
 	if got := len(all); got < 9 {
 		t.Errorf("expected at least 9 adapters (5 legacy + 4 new), got %d", got)
 	}

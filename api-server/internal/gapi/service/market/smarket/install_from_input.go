@@ -75,7 +75,7 @@ type InstallFromInputResult struct {
 //   - ErrSourceNotFound 源未注册(404)
 //   - ErrPullFailed 下载 / 写盘失败(500)
 //
-// 不做 apply:本接口只负责把 skill 装到本地 store,apply 到具体工具(scope)
+// 不做 apply:本接口只负责把 skill 装到本地 store,apply 到具体Agent(scope)
 // 由用户在首页 Onboarding / Skill detail 触发,跟现有 Pull / PullV2 行为一致。
 func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInput) (*InstallFromInputResult, error) {
 	if in == nil {

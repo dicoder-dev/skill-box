@@ -182,7 +182,7 @@ func PostUpdateDownload(c *ginp.ContextPlus, req *RequestUpdateDownload) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// ===== 工具方法 =====
+// ===== Agent方法 =====
 
 // defaultUpdateURLs 桌面端可选注入自定义 urls;未注入走默认 GitHub + Gitea mirror 样例,
 // 真正上线后由运营在 BootstrapHooks.UpdaterManifestURLs 注入。
