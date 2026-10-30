@@ -1,6 +1,6 @@
 // core/composables/useRightPanelMode.js
 //
-// 文件工具栏右侧面板的三态全局显示状态:
+// 文件Agent栏右侧面板的三态全局显示状态:
 //   'outline' → 显示 md 大纲(原 useMdOutlineVisible 的等价行为)
 //   'ai'      → 显示 AI 对话面板(新)
 //   'none'    → 两边都不显示(用户主动隐藏)

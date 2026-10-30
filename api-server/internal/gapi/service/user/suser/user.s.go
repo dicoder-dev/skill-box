@@ -3,10 +3,10 @@ package suser
 import (
 	"fmt"
 
+	"ginp-api/internal/db/mysql"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/model/user/muser"
 	scommon "ginp-api/internal/gapi/service/system/common"
-	"ginp-api/internal/db/mysql"
 	"ginp-api/pkg/where"
 )
 

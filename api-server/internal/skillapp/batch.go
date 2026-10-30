@@ -30,7 +30,7 @@ type BatchItem struct {
 	Scope        string
 	ProjectID    uint
 	ProjectRoot  string // scope=project 时的项目 root_path
-	Agent         string
+	Agent        string
 	Canonical    *skilladapter.Canonical
 }
 
@@ -64,7 +64,7 @@ func (b *BatchApplier) Apply(items []BatchItem, atomic bool) *BatchOutput {
 			Scope:       it.Scope,
 			ProjectID:   it.ProjectID,
 			ProjectRoot: it.ProjectRoot,
-			Agents:       []string{it.Agent},
+			Agents:      []string{it.Agent},
 			Canonical:   it.Canonical,
 		})
 		bir := BatchItemResult{BatchItem: it, Result: res}

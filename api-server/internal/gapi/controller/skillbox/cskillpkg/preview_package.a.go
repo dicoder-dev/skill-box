@@ -8,11 +8,11 @@ package cskillpkg
 import (
 	"io"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillpkg/sskillpkg"
 	"ginp-api/pkg/ginp"
+	"github.com/gin-gonic/gin"
 )
 
 // PreviewPackage POST /api/skillbox/pkg/preview
@@ -53,8 +53,8 @@ func init() {
 		NeedPermission: false,
 		PermissionName: "skillbox.pkg.preview",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "pkg.preview",
-			Description:   "接收 .skillbox zip,只解析 manifest 返回 skill 索引",
+			Title:       "pkg.preview",
+			Description: "接收 .skillbox zip,只解析 manifest 返回 skill 索引",
 		},
 	})
 }

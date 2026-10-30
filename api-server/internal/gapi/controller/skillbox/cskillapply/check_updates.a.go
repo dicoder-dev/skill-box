@@ -3,12 +3,12 @@ package cskillapply
 import (
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
-)// RequestCheckUpdates 更新检测请求。query + body 兼容。
+	"github.com/gin-gonic/gin"
+) // RequestCheckUpdates 更新检测请求。query + body 兼容。
 type RequestCheckUpdates struct {
 	Scope     string `json:"scope" form:"scope"`
 	ProjectID uint   `json:"project_id" form:"project_id"`

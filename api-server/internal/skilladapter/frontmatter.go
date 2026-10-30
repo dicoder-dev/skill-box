@@ -50,13 +50,13 @@ func splitFrontmatter(content string) (fm string, body string, err error) {
 // "missing frontmatter" 误导用户 "文件坏了"。
 //
 // 现在策略:
-// - SKILL.md 存在 + 有可读内容 → 接受
-// - 有 --- frontmatter → 走 YAML 解析出 Manifest(优先)
-// - 没 frontmatter → 从 H1 (# xxx) 提取 name,body 当 description
-//   (匹配很多社区 skill 的实际写法)
-// - 还没拿到 name → 从文件名 (路径末段去后缀) 兜底
-// - 全部失败 → 才返错 (仍然不可能装,但错误文案清晰:
-//   "no name derivable from frontmatter / H1 / filename")
+//   - SKILL.md 存在 + 有可读内容 → 接受
+//   - 有 --- frontmatter → 走 YAML 解析出 Manifest(优先)
+//   - 没 frontmatter → 从 H1 (# xxx) 提取 name,body 当 description
+//     (匹配很多社区 skill 的实际写法)
+//   - 还没拿到 name → 从文件名 (路径末段去后缀) 兜底
+//   - 全部失败 → 才返错 (仍然不可能装,但错误文案清晰:
+//     "no name derivable from frontmatter / H1 / filename")
 //
 // name 兜底:优先级 frontmatter > H1 > filename
 // version 兜底:frontmatter > 0.1.0
@@ -363,7 +363,7 @@ func ReadSkillDir(dir string) (Canonical, error) {
 	if err != nil {
 		return Canonical{}, err
 	}
-	// 装齐所有文件。dir 可能是 symlink(外部Agent的 skill 经常用 symlink 链到
+	// 装齐所有文件。dir 可能是 symlink(外部 Agent 的 skill 经常用 symlink 链到
 	// ~/.agents/skills/xxx),先用 EvalSymlinks 解析真实路径再 WalkDir,
 	// 避免 WalkDir 默认不跟随 symlink 导致附属文件被漏掉。
 	realDir := dir

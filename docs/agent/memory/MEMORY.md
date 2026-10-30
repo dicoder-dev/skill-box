@@ -3,7 +3,8 @@
 - [Go //go:embed 不支持符号链接](go-embed-no-symlink.md) — pattern cannot embed irregular file,需要复制实体文件
 - [wails3 webview iconify 离线](wails3-webview-iconify-network.md) — webview 拉不到 iconify API,业务关键图标必须离线打包
 - [禁止紫色作为项目主配色](avoid-violet-as-primary-color.md) — 紫色 AI 感强,主色禁用,只能辅助;主色候选:蓝/绿/橙/红/灰
-- [工具自定义图标 + 内置图标两段式](tool-custom-icon-upload.md) — entity.Tool.icon_file / toolicon 包 / ctool 上传 + 静态服务 / seed embed builtin 图标 / ToolIcon 组件
+- [「工具」概念统一改名为「Agent」](tool-to-agent-rename.md) — 2026-10-30;DB 表名/列名/frontmatter target_tools/图标目录名等外部契约必须保持不变;批量改名脚本的翻车教训
+- [工具自定义图标 + 内置图标两段式](tool-custom-icon-upload.md) — entity.Agent.icon_file / agenticon 包 / cagent 上传 + 静态服务 / seed embed builtin 图标 / AgentIcon 组件
 - [市场 skillhub 超时根因](market-skillhub-timeout.md) — 浏览器 Failed to fetch + 后端 Discover 全量分支不降级,90s 拖死
 - [三方源超时兜底策略](market-fallback-strategy.md) — UI 永远不能空,fallback 优先 + 常驻重试按钮
 - [前端 GET 请求禁带 Content-Type](frontend-get-no-content-type.md) — baseHeaders 只在 POST/PUT/PATCH 设 application/json,GET 不设(否则 BindParamsHandler EOF)

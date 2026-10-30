@@ -1,15 +1,17 @@
 // Package cdesktop 的 update.a.go 提供"检测升级 / 下载 / 替身脚本"端点。
 //
 // 设计动机:
-//   Wails v3 alpha.60 没有官方自升级 API,因此本端点对外暴露简单的"check +
-//   state + download"三件套,真正的"Quit → 替身脚本接管二进制替换"由桌面端
-//   desktop/wails_app.go 通过 BootstrapHooks.UpdaterSpawnHelper / UpdaterDownloadPath 注入。
-//   本 controller 不直接 import desktop 包,只通过 hooks.Get() 调用,避免 import cycle。
+//
+//	Wails v3 alpha.60 没有官方自升级 API,因此本端点对外暴露简单的"check +
+//	state + download"三件套,真正的"Quit → 替身脚本接管二进制替换"由桌面端
+//	desktop/wails_app.go 通过 BootstrapHooks.UpdaterSpawnHelper / UpdaterDownloadPath 注入。
+//	本 controller 不直接 import desktop 包,只通过 hooks.Get() 调用,避免 import cycle。
 //
 // 路由:
-//   GET  /api/desktop/update/check    全形态接;Web 端亦不需 501,行为一致。
-//   GET  /api/desktop/update/state    全形态接;进度查询。
-//   POST /api/desktop/update/download 桌面端专属;Web 端返 501。
+//
+//	GET  /api/desktop/update/check    全形态接;Web 端亦不需 501,行为一致。
+//	GET  /api/desktop/update/state    全形态接;进度查询。
+//	POST /api/desktop/update/download 桌面端专属;Web 端返 501。
 //
 // 不变量(I-1):所有路由通过 ginp.RouterAppend 注册,严格遵守 cdesktop 其他端点风格。
 package cdesktop
@@ -19,8 +21,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"ginp-api/internal/gapi/service/updater/ssupdater"
 	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
+	"ginp-api/internal/gapi/service/updater/ssupdater"
 	"ginp-api/pkg/ginp"
 
 	"github.com/gin-gonic/gin"
@@ -30,15 +32,15 @@ import (
 
 // RespondUpdateCheck 是 check 的统一响应(桌面 + Web 共用)。
 type RespondUpdateCheck struct {
-	LocalVersion string                  `json:"local_version"`
-	RemoteVersion string                `json:"remote_version"`
-	Channel      string                  `json:"channel"`
-	Status       string                  `json:"status"` // upToDate / available / mustUpdate / incomparable
-	HasUpdate    bool                    `json:"has_update"`
-	MustUpdate   bool                    `json:"must_update"`
-	Notes        map[string]string       `json:"notes,omitempty"`
-	Assets       []ssupdater.Asset       `json:"assets,omitempty"`
-	Source       string                  `json:"source,omitempty"`
+	LocalVersion  string            `json:"local_version"`
+	RemoteVersion string            `json:"remote_version"`
+	Channel       string            `json:"channel"`
+	Status        string            `json:"status"` // upToDate / available / mustUpdate / incomparable
+	HasUpdate     bool              `json:"has_update"`
+	MustUpdate    bool              `json:"must_update"`
+	Notes         map[string]string `json:"notes,omitempty"`
+	Assets        []ssupdater.Asset `json:"assets,omitempty"`
+	Source        string            `json:"source,omitempty"`
 }
 
 // RequestUpdateCheck 当前无入参,占位。
@@ -47,12 +49,12 @@ type RequestUpdateCheck struct{}
 // GetUpdateCheck GET /api/desktop/update/check
 //
 // 流程:
-//   1) 桌面端通过 BootstrapHooks.UpdaterDownloadPath 拿到 manifest url
-//      (manifest.example.json 见 build/updater/manifest.example.json);
-//   2) Web 端也走同一路径,前端期望值跟 desktop 一致;
-//   3) 当前 OS/Arch 由 runtime.GOOS / GOARCH 取得;
-//   4) 本地版本 desktop 走 services.Version 由 ldflags 注入;Web 端
-//      兜底 "0.0.0+web-<git short sha>",后续由 A4 注入 __APP_RUNTIME__.version。
+//  1. 桌面端通过 BootstrapHooks.UpdaterDownloadPath 拿到 manifest url
+//     (manifest.example.json 见 build/updater/manifest.example.json);
+//  2. Web 端也走同一路径,前端期望值跟 desktop 一致;
+//  3. 当前 OS/Arch 由 runtime.GOOS / GOARCH 取得;
+//  4. 本地版本 desktop 走 services.Version 由 ldflags 注入;Web 端
+//     兜底 "0.0.0+web-<git short sha>",后续由 A4 注入 __APP_RUNTIME__.version。
 func GetUpdateCheck(c *ginp.ContextPlus, _ *RequestUpdateCheck) {
 	h := hooks.Get()
 	urls := defaultManifestURLs(h)
@@ -86,8 +88,8 @@ func GetUpdateCheck(c *ginp.ContextPlus, _ *RequestUpdateCheck) {
 
 // RespondUpdateState 是 state 的统一响应。
 type RespondUpdateState struct {
-	Phase          string `json:"phase"`           // idle / checking / downloading / verifying / pendingRestart / failed
-	Progress       int    `json:"progress"`        // 0~100
+	Phase          string `json:"phase"`    // idle / checking / downloading / verifying / pendingRestart / failed
+	Progress       int    `json:"progress"` // 0~100
 	Error          string `json:"error,omitempty"`
 	DownloadedPath string `json:"downloaded_path,omitempty"`
 }
@@ -119,10 +121,10 @@ type RequestUpdateDownload struct {
 // PostUpdateDownload POST /api/desktop/update/download
 //
 // 硬规则(参考 ssupdater.SpawnOrder):
-//   1) dbs.IsDesktop() == false(Web) → 501
-//   2) 调 hooks.Get().UpdaterSpawnHelper,desktop 实现里 exec.Cmd.Start() **不 Wait**
-//   3) helper Start() 失败 → 500,**不调 AppQuit**
-//   4) helper Start() 成功 → 调 hooks.Get().AppQuit() 退出 wails 主循环
+//  1. dbs.IsDesktop() == false(Web) → 501
+//  2. 调 hooks.Get().UpdaterSpawnHelper,desktop 实现里 exec.Cmd.Start() **不 Wait**
+//  3. helper Start() 失败 → 500,**不调 AppQuit**
+//  4. helper Start() 成功 → 调 hooks.Get().AppQuit() 退出 wails 主循环
 //
 // **Web 端完全不走这条**,因为替身脚本只能 fork 同主机进程,而 web 单进程
 // 是 server-less 性质的,不在用户本机。
@@ -182,7 +184,7 @@ func PostUpdateDownload(c *ginp.ContextPlus, req *RequestUpdateDownload) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// ===== Agent方法 =====
+// ===== Agent 方法 =====
 
 // defaultUpdateURLs 桌面端可选注入自定义 urls;未注入走默认 GitHub + Gitea mirror 样例,
 // 真正上线后由运营在 BootstrapHooks.UpdaterManifestURLs 注入。

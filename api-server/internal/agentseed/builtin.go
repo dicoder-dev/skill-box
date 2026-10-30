@@ -1,11 +1,11 @@
-// Package agentseed 在程序首次启动时把内置的 9 个默认 AI 编程Agent seed 到 tools + tool_paths 表。
+// Package agentseed 在程序首次启动时把内置的 9 个默认 AI 编程 Agent seed 到 tools + tool_paths 表。
 //
-// 触发条件:启动期 tools 表 COUNT==0(全新 DB / Agent表被清空)。
+// 触发条件:启动期 tools 表 COUNT==0(全新 DB / Agent 表被清空)。
 // 不触发:DB 里已有任何 agent 记录(不论系统 / 用户),认作"已初始化过"。
 //
-// 2026-06-30 二改:此包替代 agentspecs/specs/*.yaml 的"硬编码默认Agent"职责,
+// 2026-06-30 二改:此包替代 agentspecs/specs/*.yaml 的"硬编码默认 Agent"职责,
 // 从"编译期内嵌配置"变成"运行时一次性 seed 进 DB"。
-// 之后增删 / 改Agent全部走 sagent 服务层 + tools / tool_paths 表,不再改代码。
+// 之后增删 / 改 Agent 全部走 sagent 服务层 + tools / tool_paths 表,不再改代码。
 package agentseed
 
 import "ginp-api/internal/skilladapter"
@@ -18,18 +18,18 @@ type builtinPath struct {
 	PathOrder int
 }
 
-// builtinAgent 内置Agent seed 描述;转 entity.Agent / entity.AgentPath 后落库。
+// builtinAgent 内置 Agent seed 描述;转 entity.Agent / entity.AgentPath 后落库。
 type builtinAgent struct {
-	AgentID      string
+	AgentID     string
 	DisplayName string
 	MdiIcon     string
-	// IconFile seed 阶段同时写到 ~/.skill-box/agent-icons/<IconFile>,让前端能立即拿到。
+	// IconFile seed 阶段同时写到 ~/.skill-box/tool-icons/<IconFile>,让前端能立即拿到。
 	// 留空 = 仅 mdi_icon。
-	IconFile    string
-	Maturity    string
-	Note        string
-	SortOrder   int
-	Paths       []builtinPath
+	IconFile  string
+	Maturity  string
+	Note      string
+	SortOrder int
+	Paths     []builtinPath
 }
 
 // builtins 默认内置 AI Agent(2026-07-18 扩到 17 个)。
@@ -37,7 +37,7 @@ type builtinAgent struct {
 // 顺序约定:SortOrder 数字越小越靠前,首页按"用户最常用"排在前:
 //   - 编程 IDE / 终端 Agent(stable 主流)         10..90
 //   - 通用 Agent / 个人助理(experimental 较新)   100..190
-//   - 较新或小众实验Agent                         200..290
+//   - 较新或小众实验 Agent                         200..290
 //
 // 2026-07-18 大扩:
 //   - 重排已有 9 个,SortOrder 拉开间距(10/20/30/... 跳到 30 间隔)便于后续插入
@@ -46,7 +46,7 @@ type builtinAgent struct {
 var builtins = []builtinAgent{
 	// ── 编程 IDE / 终端 Agent(stable)────────────────────────
 	{
-		AgentID:      "claude",
+		AgentID:     "claude",
 		DisplayName: "Claude Code",
 		MdiIcon:     "mdi:robot-outline",
 		IconFile:    "claude.ico",
@@ -60,7 +60,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "codex",
+		AgentID:     "codex",
 		DisplayName: "Codex",
 		MdiIcon:     "mdi:console",
 		IconFile:    "codex.png",
@@ -74,7 +74,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "cursor",
+		AgentID:     "cursor",
 		DisplayName: "Cursor",
 		MdiIcon:     "mdi:cursor-default-click-outline",
 		IconFile:    "cursor.ico",
@@ -87,7 +87,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "opencode",
+		AgentID:     "opencode",
 		DisplayName: "OpenCode",
 		MdiIcon:     "mdi:code-tags",
 		IconFile:    "opencode.svg",
@@ -100,7 +100,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "trae",
+		AgentID:     "trae",
 		DisplayName: "Trae",
 		MdiIcon:     "mdi:leaf",
 		IconFile:    "trae.ico",
@@ -113,7 +113,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "antigravity",
+		AgentID:     "antigravity",
 		DisplayName: "Antigravity",
 		MdiIcon:     "mdi:rocket-launch-outline",
 		IconFile:    "antigravity.ico",
@@ -126,7 +126,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "cline",
+		AgentID:     "cline",
 		DisplayName: "Cline",
 		MdiIcon:     "mdi:file-document-outline",
 		IconFile:    "cline.png",
@@ -144,7 +144,7 @@ var builtins = []builtinAgent{
 	// GitHub 24.8 万 star,登顶星标榜首;支持多通道接入(WhatsApp/Telegram/飞书/钉钉),
 	// 通过 ~/.openclaw/skills 持久化记忆与技能。
 	{
-		AgentID:      "openclaw",
+		AgentID:     "openclaw",
 		DisplayName: "OpenClaw",
 		MdiIcon:     "mdi:rabbit-variant",
 		IconFile:    "openclaw.svg",
@@ -159,7 +159,7 @@ var builtins = []builtinAgent{
 	// Hermes Agent:Nous Research 出品的自进化 AI Agent,
 	// 核心特性"学习闭环 + 持久记忆",配置目录 ~/.hermes/。
 	{
-		AgentID:      "hermes",
+		AgentID:     "hermes",
 		DisplayName: "Hermes Agent",
 		MdiIcon:     "mdi:brain",
 		IconFile:    "hermes.png",
@@ -174,7 +174,7 @@ var builtins = []builtinAgent{
 	// GitHub Copilot:VSCode 老牌 AI 补全 + Chat;Agent Skills 路径暂未官方公开,
 	// 推测走 ~/.copilot/skills(参考 VSCode 其他 Copilot 扩展)。
 	{
-		AgentID:      "copilot",
+		AgentID:     "copilot",
 		DisplayName: "GitHub Copilot",
 		MdiIcon:     "mdi:github",
 		IconFile:    "copilot.ico",
@@ -189,7 +189,7 @@ var builtins = []builtinAgent{
 	// Windsurf:Codeium 推出的 AI IDE,原 Cascade 引擎;社区讨论支持 Agent Skills 后,
 	// 推测走 ~/.codeium/skills(Windsurf 改名前的 codeium 配置根)。
 	{
-		AgentID:      "windsurf",
+		AgentID:     "windsurf",
 		DisplayName: "Windsurf",
 		MdiIcon:     "mdi:waves-arrow-up",
 		IconFile:    "windsurf.svg",
@@ -202,16 +202,16 @@ var builtins = []builtinAgent{
 		},
 	},
 
-	// ── 较新或小众实验Agent(experimental,2026-07-18 新增)──────────
+	// ── 较新或小众实验 Agent(experimental,2026-07-18 新增)──────────
 	// Aider:终端成对的 AI 编程 pair,git-aware;走 ~/.aider/。
 	{
-		AgentID:      "aider",
+		AgentID:     "aider",
 		DisplayName: "Aider",
 		MdiIcon:     "mdi:account-multiple-plus-outline",
 		IconFile:    "aider.svg",
 		Maturity:    "experimental",
 		SortOrder:   280,
-		Note:        "终端 AI pair 编程Agent(aider.chat),git-aware diff;官方 SKILL.md 规范未公开,占位 ~/.aider/skills。",
+		Note:        "终端 AI pair 编程 Agent(aider.chat),git-aware diff;官方 SKILL.md 规范未公开,占位 ~/.aider/skills。",
 		Paths: []builtinPath{
 			{skilladapter.ScopeGlobal, "user", "~/.aider/skills", 0},
 			{skilladapter.ScopeProject, "user", ".aider/skills", 0},
@@ -219,7 +219,7 @@ var builtins = []builtinAgent{
 	},
 	// Roo Code:Cline fork,VSCode 插件;多模式 + 自定义角色,~/.roo/skills。
 	{
-		AgentID:      "roo",
+		AgentID:     "roo",
 		DisplayName: "Roo Code",
 		MdiIcon:     "mdi:rocket",
 		IconFile:    "roo.ico",
@@ -233,7 +233,7 @@ var builtins = []builtinAgent{
 	},
 	// Continue:开源 AI 编程助手,VSCode + JetBrains 插件;配置 ~/.continue/config.yaml。
 	{
-		AgentID:      "continue",
+		AgentID:     "continue",
 		DisplayName: "Continue",
 		MdiIcon:     "mdi:play-box-outline",
 		IconFile:    "continue.png",
@@ -248,7 +248,7 @@ var builtins = []builtinAgent{
 	// Goose:Block 公司开源的 AI Agent(2026 已迁到 Linux Foundation AAIF),
 	// Rust 写的桌面 + CLI + API;配置 ~/.config/goose/。
 	{
-		AgentID:      "goose",
+		AgentID:     "goose",
 		DisplayName: "Goose",
 		MdiIcon:     "mdi:duck",
 		IconFile:    "goose.png",
@@ -263,7 +263,7 @@ var builtins = []builtinAgent{
 
 	// ── 早期内置但目前 SKILL.md 规范未公开的两个,继续保留 experimental ──
 	{
-		AgentID:      "codebuddy",
+		AgentID:     "codebuddy",
 		DisplayName: "CodeBuddy",
 		MdiIcon:     "mdi:buddy",
 		IconFile:    "codebuddy.svg",
@@ -276,7 +276,7 @@ var builtins = []builtinAgent{
 		},
 	},
 	{
-		AgentID:      "jetbrains",
+		AgentID:     "jetbrains",
 		DisplayName: "JetBrains AI",
 		MdiIcon:     "mdi:language-java",
 		IconFile:    "jetbrains.ico",

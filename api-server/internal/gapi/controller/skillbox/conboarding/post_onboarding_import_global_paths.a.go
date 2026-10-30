@@ -17,11 +17,11 @@
 package conboarding
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillpkg"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestOnboardingImportGlobalPaths 全局目录批量导入入参。

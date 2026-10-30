@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
@@ -26,6 +25,7 @@ import (
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/logger"
 	"ginp-api/pkg/where"
+	"github.com/go-kratos/blades"
 
 	"gorm.io/gorm"
 )
@@ -268,6 +268,7 @@ func validKind(k string) bool {
 // 设计原因:
 //   - 设置界面:用户在表单里改完想"先试一下能不能通"再保存 —— api key 此时还没落盘
 //   - 列表页:用户想验证已存 provider 的 key 没失效
+//
 // 两类用法合并为一个 controller,避免 controller 数量膨胀。
 type TestParams struct {
 	// ProviderID 非空 = 用 ai_providers 表里的元数据(name/kind/base_url/model)+ settings 里的 api_key

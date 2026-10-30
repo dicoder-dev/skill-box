@@ -22,8 +22,8 @@ const messages = {
     nav: {
       skills: { label: '技能' },
       projects: { label: '项目' },
-      // 2026-07-01 增:工具元数据管理
-      tools: { label: '工具' },
+      // 2026-07-01 增:Agent 元数据管理
+      agents: { label: 'Agent' },
       market: { label: '市场' },
       onboarding: { label: '导入技能' },
       settings: { label: '设置' },
@@ -31,7 +31,7 @@ const messages = {
     backendOk: '后端已连接',
     backendDown: '后端断开',
     refreshStats: '刷新统计',
-    toolsLabel: '工具',
+    agentsLabel: 'Agent',
     // 2026-07-11 增:顶栏 tooltip 用
     themeToggle: {
       toDark: '切换到暗黑模式',
@@ -69,14 +69,14 @@ const messages = {
     pageOfNoCount: '第 {page} / {total} 页',
     totalCount: '共 {count} 条',
     noData: '该作用域下还没有技能',
-    noDataHint: '点右上角"新建"开始,或去首次配置从已装工具导入',
+    noDataHint: '点右上角"新建"开始,或去首次配置从已装 Agent 导入',
     deleted: '已删除 {name}',
     openFailed: '打开失败:{msg}',
   },
 
   skills: {
     title: '技能',
-    subtitle: '浏览 / 编辑 / 测试 / 落工具 / 打 tag / 回滚。AI 侧栏一键改写 frontmatter 与 body。',
+    subtitle: '浏览 / 编辑 / 测试 / 落 Agent / 打 tag / 回滚。AI 侧栏一键改写 frontmatter 与 body。',
     scopeGlobal: '全局',
     scopeProject: '项目',
     searchPlaceholder: '按名称过滤',
@@ -85,12 +85,12 @@ const messages = {
     btnAiClose: '关闭 AI',
 
     applyBar: {
-      target: '应用目标工具:',
+      target: '应用目标 Agent:',
       checkUpdates: '检测更新',
       checking: '检测中…',
       updatesAvailable: '{updates} / {total} 可更新',
       allUpToDate: '{total} 个技能已是最新',
-      appliedOk: '已把 {name}@{version} 落到 {tool}',
+      appliedOk: '已把 {name}@{version} 落到 {agent}',
       appliedPartial: '部分失败: {detail}',
       errDefault: '应用失败',
     },
@@ -115,22 +115,22 @@ const messages = {
       triggersOptional: '可选',
       triggersEmptyHint: '未填写触发词,skill 不会按关键词自动触发',
       body: '正文 (Markdown,frontmatter 会自动拼)',
-      // 2026-06-26 新增:作用域区改造 + 适用工具
+      // 2026-06-26 新增:作用域区改造 + 适用 Agent
       scopeGlobal: '全局',
       scopeProject: '项目',
       scopeGlobalHint: '对所有项目可见',
       projectPick: '请选择项目',
-      applyTools: '适用工具',
-      applyToolsHint: '勾选后会自动启用',
-      applyToolsNone: '暂未勾选,创建后只在 skillbox 库中',
-      applyToolsSelected: '已选 {n} 个',
+      applyAgents: '适用 Agent',
+      applyAgentsHint: '勾选后会自动启用',
+      applyAgentsNone: '暂未勾选,创建后只在 skillbox 库中',
+      applyAgentsSelected: '已选 {n} 个',
       errProjectRequired: '请先选择项目',
-      applyAllSuccess: '已在 {n} 个工具上自动启用',
-      applyPartialFailed: '{ok}/{total} 个工具启用成功,失败: {fails}',
+      applyAllSuccess: '已在 {n} 个 Agent 上自动启用',
+      applyPartialFailed: '{ok}/{total} 个 Agent 启用成功,失败: {fails}',
       // 2026-06-26 新增:编辑保存后同步拷贝到已启用命中的提示
       syncAllSuccess: '已同步到 {n} 个生效位置',
       syncPartialFailed: '{ok}/{total} 个生效位置同步成功',
-      syncNone: '「{name}」已保存,但还没在任何工具/项目上启用,需要时去作用域区启用',
+      syncNone: '「{name}」已保存,但还没在任何 Agent/项目上启用,需要时去作用域区启用',
       errNameEmpty: '名称不能为空',
       errVersionEmpty: '版本不能为空',
       errDescriptionEmpty: '描述不能为空',
@@ -153,11 +153,11 @@ const messages = {
 
     // 2026-07-03 增:apply / batch 响应的统一判定 toast 文案(全文件复用)。
     // 之前 skills.editor.applyPartialFailed 是 editor 内的兜底,新的 skills.apply
-    // 命名空间用于跨页面(首页 doApplyOne、编辑保存同步、创建时勾选工具)的
+    // 命名空间用于跨页面(首页 doApplyOne、编辑保存同步、创建时勾选 Agent)的
     // 统一"部分失败"展示,带 {detail} 多行失败明细。
     apply: {
-      allOk: '已成功应用到 {n} 个工具',
-      partialFailed: '{ok}/{total} 个工具启用成功,失败明细:\n{detail}',
+      allOk: '已成功应用到 {n} 个 Agent',
+      partialFailed: '{ok}/{total} 个 Agent 启用成功,失败明细:\n{detail}',
     },
 
     applyHistory: {
@@ -199,40 +199,40 @@ const messages = {
       btnDelete: '删除',
       confirmDelete: '确定删除技能 "{name}@{version}" ?',
       emptyTitle: '该作用域下还没有技能',
-      emptyHint: '点右上角"+ 新建技能"开始,或去首次配置从已装工具导入',
+      emptyHint: '点右上角"+ 新建技能"开始,或去首次配置从已装 Agent 导入',
 
       // 左右布局新增
       btnNewSkill: '新建',
       btnNewSkillTitle: '新建技能',
       btnImportSkill: '导入',
-      btnImportSkillTitle: '从已装工具导入',
+      btnImportSkillTitle: '从已装 Agent 导入',
       searchTitle: '按名称过滤',
       selectToView: '从左侧选一个技能查看详情',
       // 2026-07-08 增:空状态引导用户新建第一个技能
       noSkillTitle: '还没有任何技能',
-      noSkillHint: '点上方"新建"创建第一个技能,或"导入"从已装工具拉取',
+      noSkillHint: '点上方"新建"创建第一个技能,或"导入"从已装 Agent 拉取',
       noSkillBtnCreate: '新建技能',
-      noSkillBtnImport: '从已装工具导入',
+      noSkillBtnImport: '从已装 Agent 导入',
       noFilesHint: '该技能没有可渲染的正文',
       scopeLabel: '作用域',
       scopeGlobalChip: '全局',
       scopeProjectChip: '项目',
-      scopeToolsRow: '工具',
+      scopeAgentsRow: 'Agent',
       scopeTargetsRow: '生效位置',
-      scopeEmpty: '该技能尚未写入任何工具/位置',
+      scopeEmpty: '该技能尚未写入任何 Agent/位置',
       scopeHitCount: '{n} 处生效',
-      scopeSelectToolFirst: '先在「工具」行点选一个工具,再操作生效位置',
-      scopeForTool: '对 {tool} 生效',
-      scopeToolSelected: '已选 {tool}',
+      scopeSelectAgentFirst: '先在「Agent」行点选一个 Agent,再操作生效位置',
+      scopeForAgent: '对 {agent} 生效',
+      scopeAgentSelected: '已选 {agent}',
       applyConfirmTitle: '启用作用域',
-      applyConfirmMessage: '将 skill "{name}" 复制到 {tool} · {scope}?',
+      applyConfirmMessage: '将 skill "{name}" 复制到 {agent} · {scope}?',
       applySuccess: '已启用:{path}',
       applyFailed: '启用失败:{msg}',
       unapplyConfirmTitle: '停用作用域',
-      unapplyConfirmMessage: '将从 {tool} · {scope} 删除 skill "{name}"(走 apply/undo 还原 PreSnapshot),继续?',
+      unapplyConfirmMessage: '将从 {agent} · {scope} 删除 skill "{name}"(走 apply/undo 还原 PreSnapshot),继续?',
       unapplySuccess: '已停用:{path}',
       unapplyFailed: '停用失败:{msg}',
-      appliedGlobal: '{tool} 已全局应用',
+      appliedGlobal: '{agent} 已全局应用',
       applying: '启用中…',
       unapplying: '停用中…',
       tagsEmpty: '还没有标签,点右上角打一个',
@@ -267,8 +267,8 @@ const messages = {
       groupInvalid: '分组名非法(不能含 .. 或 / 开头/结尾)',
       groupCreateFailed: '新建分组失败: {msg}',
       groupDeleteConfirm: '确定删除分组「{name}」吗?',
-      groupDeleteConfirmCascade: '该分组下还有 {n} 个 skill,会一并删除。是否同步清理这些 skill 在 5 个工具目录中的副本?',
-      groupDeleteCascadeHint: '同步删除这些 skill 在工具目录(5 个工具 × 全局 / 各项目)中的副本',
+      groupDeleteConfirmCascade: '该分组下还有 {n} 个 skill,会一并删除。是否同步清理这些 skill 在 5 个 Agent 目录中的副本?',
+      groupDeleteCascadeHint: '同步删除这些 skill 在 Agent 目录(5 个 Agent × 全局 / 各项目)中的副本',
       groupDeleteFailed: '删除分组失败: {msg}',
       // 2026-06-29 增:重命名分组
       groupRenamePrompt: '重命名分组「{name}」',
@@ -278,11 +278,11 @@ const messages = {
       groupRenameConflict: '同层已存在同名分组',
       groupRenameNotFound: '原分组不存在',
       skillDeleteConfirm: '确定删除技能「{name}」吗?',
-      skillDeleteCascadeHint: '同步删除该 skill 在工具目录(5 个工具 × 全局 / 各项目)中的副本',
+      skillDeleteCascadeHint: '同步删除该 skill 在 Agent 目录(5 个 Agent × 全局 / 各项目)中的副本',
       skillDeleteFailed: '删除失败: {msg}',
-      skillCascadeOk: '已删除「{name}」及 {n} 处工具目录副本',
-      skillCascadePartial: '已删除「{name}」,{n} 处工具目录清理失败:{detail}',
-      skillCascadeSkipped: '已删除「{name}」(工具目录副本未清理)',
+      skillCascadeOk: '已删除「{name}」及 {n} 处 Agent 目录副本',
+      skillCascadePartial: '已删除「{name}」,{n} 处 Agent 目录清理失败:{detail}',
+      skillCascadeSkipped: '已删除「{name}」(Agent 目录副本未清理)',
       // 2026-07-18 增:重命名 skill(全局唯一性)
       skillRenameTitle: '重命名技能',
       skillRenamePrompt: '技能「{name}」将被重命名为',
@@ -420,7 +420,7 @@ const messages = {
     },
 
     // 2026-07-13 增:AI 右侧对话面板(替换原大纲区域,接替旧 AIDialog 弹窗入口)。
-    // 文件工具栏点 AI 图标 → 右侧面板从大纲切换为聊天面板;标签栏提供翻译/检测快捷入口。
+    // 文件 Agent 栏点 AI 图标 → 右侧面板从大纲切换为聊天面板;标签栏提供翻译/检测快捷入口。
     aiPanel: {
       open: '打开 Agent Dog',
       close: '关闭 Agent Dog',
@@ -484,7 +484,7 @@ const messages = {
       // 2026-07-16 删:projectPrefix(原来用于拼接"项目 #N")。
       // SkillScopePanel 现在直接从 projects 数据表读取用户在项目页配置的 name,
       // 不再硬拼 i18n 文案,避免显示成语言标识。保留空行注释避免结构变动。
-      empty: '该技能尚未写入任何工具/位置',
+      empty: '该技能尚未写入任何 Agent/位置',
       loading: '加载中...',
       enable: '启用作用域',
       disable: '停用作用域',
@@ -495,31 +495,31 @@ const messages = {
       partialFailed: '部分失败',
       enableFailed: '启用失败',
       disableFailed: '停用失败',
-      enableSuccess: '已启用 {tool} · {scope}',
-      disableSuccess: '已停用 {tool} · {scope}',
-      disableConfirm: '确定要从 {tool} · {scope} 删除 skill「{name}」?',
-      enableConfirm: '确定要把 skill「{name}」复制到 {tool} · {scope}?',
-      toolCount: '{n} 个工具',
-      toolCountShort: '{n} 个工具',
+      enableSuccess: '已启用 {agent} · {scope}',
+      disableSuccess: '已停用 {agent} · {scope}',
+      disableConfirm: '确定要从 {agent} · {scope} 删除 skill「{name}」?',
+      enableConfirm: '确定要把 skill「{name}」复制到 {agent} · {scope}?',
+      agentCount: '{n} 个 Agent',
+      agentCountShort: '{n} 个 Agent',
       globalEnabledTip: '已启用全局作用域',
       globalAgent: '全局 Agent Skill',
-      globalAgentTip: '同步到 ~/.agents/skills/ 共享池(所有工具均可读取)',
+      globalAgentTip: '同步到 ~/.agents/skills/ 共享池(所有 Agent 均可读取)',
       globalAgentInfoTip: '查看全局 Agent 说明',
       globalAgentFolderTip: '在文件浏览器中打开 ~/.agents/skills/',
       globalAgentInfoTitle: '全局 Agent Skill',
-      globalAgentInfoDesc: '把 skill 写入 ~/.agents/skills/ 后,所有声明该目录作为个人级 skills 池的 AI 工具都能自动读取(无需复制到每个工具的目录)。',
-      globalAgentCompatibleToolsTitle: '适配 ~/.agents/skills/ 的工具(2026-07-12)',
+      globalAgentInfoDesc: '把 skill 写入 ~/.agents/skills/ 后,所有声明该目录作为个人级 skills 池的 AI Agent 都能自动读取(无需复制到每个 Agent 的目录)。',
+      globalAgentCompatibleAgentsTitle: '适配 ~/.agents/skills/ 的 Agent(2026-07-12)',
       globalAgentSupported: '已支持',
       globalAgentPartial: '部分支持',
-      globalAgentEmpty: '暂未发现适配工具。',
+      globalAgentEmpty: '暂未发现适配 Agent。',
       globalAgentEnabled: '已同步到 ~/.agents/skills/{name}/',
       globalAgentDisabled: '已从 ~/.agents/skills/{name}/ 移除',
       globalAgentToggleFailed: '切换全局 Agent 失败:{msg}',
       globalAgentPathFailed: '无法获取 ~/.agents/skills/ 路径',
       openFolderFailed: '打开文件夹失败:{msg}',
       globalAgentDirToast: '全局 Agent 目录: {url}',
-      // 各工具支持备注(给 info 弹窗用)
-      toolNotes: {
+      // 各 Agent 支持备注(给 info 弹窗用)
+      agentNotes: {
         vscode: '文档明确支持个人级',
         antigravity: '官方支持',
         claude: '项目级支持,个人级实际走其他目录',
@@ -667,7 +667,7 @@ const messages = {
     // skill name 横向空间)。globalAgentTip 保留 — 用作 TreeNode 图标的 hover
     // title 提示。
     treeNode: {
-      globalAgentTip: '该技能位于全局 agents 目录,所有工具可自动读取',
+      globalAgentTip: '该技能位于全局 agents 目录,所有 Agent 可自动读取',
       dropHere: '放到此处',
     },
   },
@@ -705,14 +705,14 @@ const messages = {
     confirmDelete: '确定删除项目 #{id} ?',
     empty: '还没有登记项目。',
     emptyHint: '点右上角"导入项目",从本地选一个目录开始',
-    noTools: '该项目尚未应用任何工具',
+    noAgents: '该项目尚未应用任何 Agent',
     openInFinder: '在 Finder 中打开',
     openFailed: '打开文件夹失败:{msg}',
     scannedAt: '扫描于 {time}',
     scanFailed: '扫描失败',
-    toolSkillsTitle: '{project} · {tool} 的 skills ({count})',
+    agentSkillsTitle: '{project} · {agent} 的 skills ({count})',
     skillPath: '路径',
-    // 工具 skill 弹窗里的"跳转"和"删除"两个操作图标
+    // Agent skill 弹窗里的"跳转"和"删除"两个操作图标
     skillActionReveal: '在文件管理器中打开该 skill 目录',
     skillActionDelete: '删除该 skill 目录(物理删除)',
     skillDeleteConfirm: '确定删除 skill "{name}"?此操作会永久删除磁盘目录:\n{path}',
@@ -846,15 +846,15 @@ const messages = {
 
   onboarding: {
     title: '导入技能',
-    subtitle: '扫描本机 5 个 AI 编程工具的技能目录,把发现的技能勾选导入到 Skill Box 自己的 store(全局作用域)。',
+    subtitle: '扫描本机 5 个 AI 编程 Agent 的技能目录,把发现的技能勾选导入到 Skill Box 自己的 store(全局作用域)。',
     btnRescan: '重新扫描',
     btnRescanning: '扫描中…',
     btnRescanTitle: '重新扫描 5 个 adapter',
-    // 2026-07-01 增:弹窗顶部 tab 切换(扫工具 vs 从本地导入)
-    // 2026-07-18 改:tab 顺序调整 + 「扫描工具」改名「工具」+ 新增「从三方导入」首位
+    // 2026-07-01 增:弹窗顶部 tab 切换(扫 Agent vs 从本地导入)
+    // 2026-07-18 改:tab 顺序调整 + 「扫描 Agent」改名「Agent」+ 新增「从三方导入」首位
     tabs: {
       market: '从三方导入',
-      scan: 'Agent 工具',
+      scan: 'Agent',
       global: 'Agent 目录',
       local: '从本地导入',
     },
@@ -939,9 +939,9 @@ const messages = {
       desc: '扫描 ~/.agents/skills 下所有 SKILL.md(Claude / Codex / Trae 等共享根),勾选要导入到 Skill Box 库的项目。',
       rootLabel: '扫描根',
       rootMissing: '目录不存在',
-      rootMissingHint: '当前机器上没有 ~/.agents/skills,可先去任意支持 Agent Skills 标准的工具装几个 skill,再回来这里检索。',
+      rootMissingHint: '当前机器上没有 ~/.agents/skills,可先去任意支持 Agent Skills 标准的 Agent 装几个 skill,再回来这里检索。',
       empty: '这个目录里还没有任何 skill',
-      emptyHint: '可以先去 Claude / Codex / Trae 等工具里装一些 skill,然后再点"重新扫描"',
+      emptyHint: '可以先去 Claude / Codex / Trae 等 Agent 里装一些 skill,然后再点"重新扫描"',
       loading: '扫描中…',
       loadFailed: '加载失败:{msg}',
       importOk: '导入完成:成功 {ok} 个,失败 {failed} 个',
@@ -965,10 +965,10 @@ const messages = {
       done: '完成',
     },
     phase1: {
-      title: '工具 adapter 状态',
+      title: 'Agent adapter 状态',
       total: '共 {n} 个',
       empty: '还没注册 adapter',
-      colTool: '工具',
+      colAgent: 'Agent',
       colId: 'ID',
       colGlobalPath: '全局路径',
       colStatus: '状态',
@@ -984,7 +984,7 @@ const messages = {
       title: '扫描结果',
       foundSuffix: '发现 {n} 个技能',
       empty: '这次扫描没找到任何技能',
-      emptyHint: '可以点右上角"重新扫描",或先去工具里装一些 skill',
+      emptyHint: '可以点右上角"重新扫描",或先去 Agent 里装一些 skill',
       selectAll: '全选当前',
       selectNone: '清空当前',
       selected: '已选 {sel} / {total}',
@@ -993,12 +993,12 @@ const messages = {
       importing: '导入中…',
       catUser: '用户技能',
       catSystem: '系统技能',
-      catSystemHint: '系统级 skill(工具自带 / vendor curated / plugin 内建)只读展示,不能导入',
+      catSystemHint: '系统级 skill(Agent 自带 / vendor curated / plugin 内建)只读展示,不能导入',
       catSectionDivider: '以下系统级 skill 不可勾选',
       tagExists: '已存在',
       disabledSystem: '系统级 skill 不能导入',
       disabledExists: '客户端 store 中已存在同名 skill,无法重复导入',
-      disabledExclusive: '同名 skill 已被另一个工具勾选,请先取消',
+      disabledExclusive: '同名 skill 已被另一个 Agent 勾选,请先取消',
     },
     phase3: {
       title: '导入完成',
@@ -1080,7 +1080,7 @@ const messages = {
     // 2026-07-02 增:apply 模式(通用偏好,Web / 桌面端均可见)。
     applyMode: {
       title: '应用方式',
-      subtitle: '技能应用到目标工具时的存在形式',
+      subtitle: '技能应用到目标 Agent 时的存在形式',
       copy: '复制',
       copyHint: '把 skill 源文件逐个拷贝到目标目录(占磁盘空间,源文件修改后需重新应用)',
       symlink: '软链接',
@@ -1114,10 +1114,10 @@ const messages = {
     prefsUnavailable: '偏好服务不可用(可能后端未启动或 prefs 存储未就绪)',
   },
 
-  // 2026-07-01 增:工具元数据管理(对应 /api/skillbox/tools)
-  tools: {
-    title: '工具',
-    subtitle: '共 {total} 个工具(系统 {system} + 用户 {user})。可启停 / 改字段 / 增删;改完点「重新加载」让 adapter 立刻生效。',
+  // 2026-07-01 增:Agent 元数据管理(对应 /api/skillbox/agents)
+  agents: {
+    title: 'Agent',
+    subtitle: '共 {total} 个 Agent(系统 {system} + 用户 {user})。可启停 / 改字段 / 增删;改完点「重新加载」让 adapter 立刻生效。',
     searchPlaceholder: '按名称或 ID 过滤',
     filterAll: '全部',
     filterSystem: '系统',
@@ -1126,19 +1126,19 @@ const messages = {
     btnEdit: '编辑',
     btnReload: '重新加载',
     systemBadge: '系统',
-    systemLocked: '系统工具不可删',
+    systemLocked: '系统 Agent 不可删',
     pathCount: '{n} 个路径',
-    // 2026-07-06 增:打开工具对应的 skills 目录按钮
+    // 2026-07-06 增:打开 Agent 对应的 skills 目录按钮
     btnOpenSkillsDir: '打开技能目录',
-    openNoPath: '该工具尚未配置 skills 目录',
+    openNoPath: '该 Agent 尚未配置 skills 目录',
     openFailed: '打开目录失败:{msg}',
     // 2026-07-07 增:reveal 失败时弹确认,允许用户自动创建并打开
     openCreateConfirm: '目录不存在,是否创建并打开?\n{path}',
     openCreateOk: '已创建并打开',
     openExistedOpen: '目录已存在,正在打开',
     openCreateFailed: '创建失败:{msg}',
-    empty: '当前作用域下还没有工具',
-    emptyHint: '点右上角「新建」开始;系统工具(9 个)由 seed 自动注入',
+    empty: '当前作用域下还没有 Agent',
+    emptyHint: '点右上角「新建」开始;系统 Agent(17 个)由 seed 自动注入',
     loading: '加载中…',
 
     // maturity 三选一
@@ -1150,7 +1150,7 @@ const messages = {
 
     // 字段 / 提示
     field: {
-      toolId: '工具 ID',
+      agentId: 'Agent ID',
       displayName: '展示名',
       mdiIcon: '图标 (mdi)',
       customIcon: '自定义图标',
@@ -1160,16 +1160,16 @@ const messages = {
       note: '备注',
     },
     hint: {
-      toolId: 'canonical 短 ID,如 claude',
-      toolIdLocked: 'tool_id 在创建后不可修改',
+      agentId: 'canonical 短 ID,如 claude',
+      agentIdLocked: 'agent_id 在创建后不可修改',
       displayName: 'UI 显示名',
       mdiIcon: '走 Iconify 在线解析,形如 mdi:robot-outline;清空时由「自定义图标」补位',
       customIcon: '上传本地 png/svg/ico 等(≤ 256KB)。优先级高于 mdi 图标。',
       note: '可选,内部备注',
     },
-    formNewTitle: '新建工具',
+    formNewTitle: '新建 Agent',
     formEditTitle: '编辑「{name}」',
-    formHint: '新建工具 is_system 强制为 false;Paths 用「覆盖式」语义,保存后整组替换。',
+    formHint: '新建 Agent is_system 强制为 false;Paths 用「覆盖式」语义,保存后整组替换。',
     btnUploadIcon: '上传自定义',
     btnClearIcon: '清除',
     uploadIconOk: '图标已上传',
@@ -1207,8 +1207,8 @@ const messages = {
     pickFolderFailed: '选择目录失败:{msg}',
 
     // 删除确认
-    confirmDeleteTitle: '删除工具',
-    confirmDeleteMsg: '确定删除「{name}」吗?该操作不可恢复,工具表行 + 全部 path 都会一并删除。',
+    confirmDeleteTitle: '删除 Agent',
+    confirmDeleteMsg: '确定删除「{name}」吗?该操作不可恢复,Agent 表行 + 全部 path 都会一并删除。',
   },
 
   // 2026-07-17 增:Git 同步面板(go-git 版本管理)文案。

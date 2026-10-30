@@ -4,10 +4,10 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestUpdateMarketSource 局部更新入参(2026-06-30 增)。

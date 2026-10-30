@@ -1,17 +1,18 @@
 // Package cskillversion 提供技能仓库版本管理的 HTTP API(2026-07-17 增)。
 //
 // 11 个端点:
-//   GET  /api/skillbox/git/config       读远端配置(URL/branch/token 存在标志)
-//   POST /api/skillbox/git/config       写远端配置 + 写 token 文件
-//   GET  /api/skillbox/git/status       当前 Repo 状态 + push 队列长度
-//   POST /api/skillbox/git/init         初始化仓库(给未启用场景)
-//   GET  /api/skillbox/git/log          commit 历史(?limit=50)
-//   GET  /api/skillbox/git/log/:hash    单 commit 详情
-//   GET  /api/skillbox/git/diff         diff (?from=A&to=B 或 from=hash&to=HEAD)
-//   POST /api/skillbox/git/checkout     reset 工作区到某 commit(hard)
-//   POST /api/skillbox/git/push         手动 push
-//   POST /api/skillbox/git/pull         手动 pull
-//   POST /api/skillbox/git/discard      丢弃工作区未提交改动
+//
+//	GET  /api/skillbox/git/config       读远端配置(URL/branch/token 存在标志)
+//	POST /api/skillbox/git/config       写远端配置 + 写 token 文件
+//	GET  /api/skillbox/git/status       当前 Repo 状态 + push 队列长度
+//	POST /api/skillbox/git/init         初始化仓库(给未启用场景)
+//	GET  /api/skillbox/git/log          commit 历史(?limit=50)
+//	GET  /api/skillbox/git/log/:hash    单 commit 详情
+//	GET  /api/skillbox/git/diff         diff (?from=A&to=B 或 from=hash&to=HEAD)
+//	POST /api/skillbox/git/checkout     reset 工作区到某 commit(hard)
+//	POST /api/skillbox/git/push         手动 push
+//	POST /api/skillbox/git/pull         手动 pull
+//	POST /api/skillbox/git/discard      丢弃工作区未提交改动
 //
 // 本期不做:ssh/lfs/submodule/三方合并。
 package cskillversion
@@ -22,11 +23,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillversion"
 	"ginp-api/internal/skillversion/gitconfig"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // ===========================================================================
@@ -192,6 +193,7 @@ func GitInit(c *ginp.ContextPlus) {
 // 这里在 handler 层兜底:
 //   - 仓库未 init → 返空数组(等 bootstrap / 用户主动 init 后再拉)
 //   - head 不存在(空仓库但已 init)→ 返空数组
+//
 // 返 200 而不是 500,前端 VersionHistoryPanel 就只是"还没提交过 commit"
 // 的空态,符合用户预期。
 func GitLog(c *ginp.ContextPlus, req *struct {
@@ -422,12 +424,12 @@ func init() {
 		},
 	})
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/git/log",
+		Path: "/api/skillbox/git/log",
 		// 2026-07-17 改:BindParamsHandler 的占位 struct 必须跟 handler
 		// 签名完全一致(字段名/类型/数量)— reflect 用它生成 reflect.Value,
 		// 字段不对会 panic "Call using *struct{...} as type *struct{...}"。
 		// GitLog 签名加了 Path,所以这里也要带。
-		Handler:        ginp.BindParamsHandler(GitLog, &struct {
+		Handler: ginp.BindParamsHandler(GitLog, &struct {
 			Limit int    `json:"limit" form:"limit"`
 			Path  string `json:"path" form:"path"`
 		}{}),

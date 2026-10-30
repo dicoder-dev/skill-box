@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skilltester/sskilltest"
@@ -12,6 +11,7 @@ import (
 	"ginp-api/internal/skilltester"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestRunSkillTest 测试入参。2026-06-24 改造:用 (scope, name) 定位。

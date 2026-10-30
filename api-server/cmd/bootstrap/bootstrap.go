@@ -12,7 +12,7 @@
 //   - Serve(b)          = 阻塞跑 gin HTTP server,适合桌面端(主循环在 Wails)
 //
 // 之所以放在 cmd/ 而不是 pkg/,是因为:
-//   - 这是业务启动编排(cfg/DB/Task/Logger/Server),不是通用Agent
+//   - 这是业务启动编排(cfg/DB/Task/Logger/Server),不是通用 Agent
 //   - skill-box(桌面端)是另一个 Go module,通过 go.work 跨 module import 它
 //   - 未来如果有第三方 CLI / 嵌入式场景,也需要复用这套启动流程
 package bootstrap
@@ -319,28 +319,28 @@ func (b *Backend) Shutdown() {
 //
 // 设计逻辑(2026-07-15 第三版,实测通过):
 //
-//   首次启动(无 plist):
-//     1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
-//     2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
-//        第二次双击或等 kickstart
-//     3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
+//	首次启动(无 plist):
+//	  1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
+//	  2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
+//	     第二次双击或等 kickstart
+//	  3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
 //
-//   首次启动(无 plist):
-//     1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
-//     2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
-//        第二次双击或等 kickstart
-//     3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
+//	首次启动(无 plist):
+//	  1. 写 plist + launchctl bootstrap(注册到 launchd 域,不立刻跑)
+//	  2. 本进程继续跑 Serve,不退出 —— 这样用户双击后立刻能用,不用
+//	     第二次双击或等 kickstart
+//	  3. 用户退出程序后,launchctl list 里有记录,下次启动走 launchd 派发
 //
-//   后续启动(plist 已装 + plist program 路径 != 当前 binary 路径,典型场景
-//   是 dmg 装的 .app 首次双击,plist 还是 dev 期 build 留下的路径):
-//     1. Install 重写 plist 指向当前 binary 路径(Install 内部 bootout + 写 + bootstrap)
-//     2. 本进程继续 Serve,plist 已重写,下次启动路径一致
+//	后续启动(plist 已装 + plist program 路径 != 当前 binary 路径,典型场景
+//	是 dmg 装的 .app 首次双击,plist 还是 dev 期 build 留下的路径):
+//	  1. Install 重写 plist 指向当前 binary 路径(Install 内部 bootout + 写 + bootstrap)
+//	  2. 本进程继续 Serve,plist 已重写,下次启动路径一致
 //
-//   后续启动(plist 已装 + plist program 路径 == 当前 binary 路径):
-//     1. 如果 8082 已被 Skill-Box 占用 → launchd 那份在跑,本进程退出避免撞端口
-//     2. 如果 8082 没占用 → 本进程直接 Serve(不 kickstart,kickstart -k 5s 超时
-//        在 macOS 26 Tahoe 下不稳定,launchd child 启动 + 跑 Serve 通常 > 5s,
-//        5s 超时会让本进程退出后 launchd 那份还没起来 → 用户看到二次启动)
+//	后续启动(plist 已装 + plist program 路径 == 当前 binary 路径):
+//	  1. 如果 8082 已被 Skill-Box 占用 → launchd 那份在跑,本进程退出避免撞端口
+//	  2. 如果 8082 没占用 → 本进程直接 Serve(不 kickstart,kickstart -k 5s 超时
+//	     在 macOS 26 Tahoe 下不稳定,launchd child 启动 + 跑 Serve 通常 > 5s,
+//	     5s 超时会让本进程退出后 launchd 那份还没起来 → 用户看到二次启动)
 //
 // 为什么首次启动和后续启动都不 kickstart:实测 2026-07-16,kickstart -k 后
 // launchd child 启动到 8082 LISTEN 通常需要 8-12s(Go runtime + sqlite migrate
@@ -452,6 +452,7 @@ func parsePortFromAddr(addr string) int {
 //	或 -config 显式传入)。applyDataDir 用它做"首次种子"。
 //
 // overrideRunMode  :调用方显式声明的运行形态("desktop"),完全由启动命令
+//
 //	传入,不再回写到配置文件(避免双源歧义)。
 func applyDataDir(originalConfigPath, overrideRunMode string) {
 	runMode := overrideRunMode

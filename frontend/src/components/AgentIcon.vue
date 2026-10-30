@@ -1,9 +1,9 @@
 <script setup>
-// ToolIcon - 工具图标统一渲染组件。
+// AgentIcon - Agent图标统一渲染组件。
 //
 // 优先级:
-//   1) icon_file 非空 → 用 <img src="/api/files/tool-icons/<name>" alt />
-//      (前端 vite dev 时直接给绝对 URL,后端 /api/files/tool-icons/ 提供二进制)
+//   1) icon_file 非空 → 用 <img src="/api/files/agent-icons/<name>" alt />
+//      (前端 vite dev 时直接给绝对 URL,后端 /api/files/agent-icons/ 提供二进制)
 //   2) icon_file 为空 → 用 <IconPark icon="mdi:..." /> (Iconify 离线优先)
 //
 // 设计原因:
@@ -13,7 +13,7 @@
 //     前端 mdi 解析即可。
 //
 // Props:
-//   - tool: ToolView(view 字段集)
+//   - agent: AgentView(view 字段集)
 //     必须字段:{mdi_icon, icon_file}
 //   - size:  渲染尺寸(像素),默认 22 与原 <IconPark :icon=:width="22"/> 一致
 //
@@ -24,7 +24,7 @@ import { computed } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 
 const props = defineProps({
-  tool: { type: Object, required: true },
+  agent: { type: Object, required: true },
   size: { type: Number, default: 22 },
 })
 
@@ -42,14 +42,14 @@ function resolveBaseURL() {
 }
 
 const iconSrc = computed(() => {
-  if (!props.tool || !props.tool.icon_file) return ''
+  if (!props.agent || !props.agent.icon_file) return ''
   const base = resolveBaseURL()
-  return `${base}/api/files/tool-icons/${props.tool.icon_file}`
+  return `${base}/api/files/agent-icons/${props.agent.icon_file}`
 })
 
 const mdiIcon = computed(() => {
-  if (!props.tool) return 'mdi:cog-outline'
-  return props.tool.mdi_icon || 'mdi:cog-outline'
+  if (!props.agent) return 'mdi:cog-outline'
+  return props.agent.mdi_icon || 'mdi:cog-outline'
 })
 </script>
 
@@ -59,8 +59,8 @@ const mdiIcon = computed(() => {
     :src="iconSrc"
     :width="size"
     :height="size"
-    :alt="tool?.display_name || tool?.tool_id || 'tool icon'"
-    class="tool-icon-img"
+    :alt="agent?.display_name || agent?.agent_id || 'agent icon'"
+    class="agent-icon-img"
   />
   <IconPark
     v-else
@@ -71,7 +71,7 @@ const mdiIcon = computed(() => {
 </template>
 
 <style scoped>
-.tool-icon-img {
+.agent-icon-img {
   display: inline-block;
   /* SVG / PNG 在小尺寸下默认插值模糊,object-fit 强制 fit */
   object-fit: contain;

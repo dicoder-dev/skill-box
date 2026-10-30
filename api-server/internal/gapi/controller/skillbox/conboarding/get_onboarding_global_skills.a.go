@@ -24,11 +24,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillpkg"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestOnboardingGlobalSkills 无入参,GET 请求。
@@ -36,8 +36,8 @@ type RequestOnboardingGlobalSkills struct{}
 
 // RespondOnboardingGlobalSkills 响应体。
 type RespondOnboardingGlobalSkills struct {
-	Root   string                       `json:"root"`   // 实际扫描的磁盘绝对路径
-	Exists bool                         `json:"exists"` // root 是否存在
+	Root   string                          `json:"root"`   // 实际扫描的磁盘绝对路径
+	Exists bool                            `json:"exists"` // root 是否存在
 	Items  []skillpkg.GlobalSkillCandidate `json:"items"`  // 候选列表
 }
 

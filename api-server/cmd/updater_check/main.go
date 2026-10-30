@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"ginp-api/pkg/ginp"
 	_ "ginp-api/internal/gapi/controller/skillbox/cdesktop"
+	"ginp-api/pkg/ginp"
 )
 
 func main() {

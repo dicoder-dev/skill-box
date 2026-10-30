@@ -389,7 +389,7 @@ onMounted(() => {
   fetchStoreRoot()
   // 2026-07-13 增:注册全局 Ctrl+S / Cmd+S 快捷键保存。
   // 挂 window 而非组件根 div,这样焦点在 Monaco/Tiptap 编辑器内部时也能捕获。
-  // 仅在编辑模式或当前文件 dirty 时触发,避免空保存(同工具栏"保存"按钮的可见条件)。
+  // 仅在编辑模式或当前文件 dirty 时触发,避免空保存(同Agent栏"保存"按钮的可见条件)。
   // macOS 上 metaKey(Cmd)等价 ctrlKey;其它平台 ctrlKey。输入法组合中不抢键。
   window.addEventListener('keydown', onKeyDown)
   // 目录树宽度拖拽初始化(setup 时 sfipLeftEl 未挂载,这里再写一次)
@@ -927,7 +927,7 @@ const skillRelPath = computed(() => {
 const saving = ref(false)
 const saveError = ref('')
 // 2026-07-13 增:全局 Ctrl+S / Cmd+S 触发保存。
-// 触发条件:编辑模式或当前文件 dirty(与工具栏"保存"按钮 v-if 一致)。
+// 触发条件:编辑模式或当前文件 dirty(与Agent栏"保存"按钮 v-if 一致)。
 // macOS Cmd+S(metaKey),其它平台 Ctrl+S(ctrlKey)。输入法组合中不抢。
 function onKeyDown(e) {
   if (e?.isComposing) return
@@ -1024,7 +1024,7 @@ async function saveCurrent() {
     // 之后第一次 emit 跟后端拉回来的内容有差异时,误判 dirty(基线对齐到磁盘真值)。
     editingBaseline.clear()
     // 2026-07-08 改:保存成功后退出编辑态,跟 resetCurrent 一致。"放弃/保存"
-    // 按钮自动消失,工具栏恢复显示"编辑"铅笔图标。
+    // 按钮自动消失,Agent栏恢复显示"编辑"铅笔图标。
     setMode(props.skill?.name, path, 'view')
     const savedContent = path === 'SKILL.md' ? rebuildSkillMd() : (localFiles.get(path) || '')
     emit('saved', { path, content: savedContent })
@@ -1036,7 +1036,7 @@ async function saveCurrent() {
   }
 }
 
-// 2026-07-10 改:跟 rebuildSkillMd 配套的"从 body 反推完整 SKILL.md"的工具。
+// 2026-07-10 改:跟 rebuildSkillMd 配套的"从 body 反推完整 SKILL.md"的Agent。
 // 原本职责:复用已有 frontmatter + 拼 body 得完整字符串。
 // 现状:SKILL.md 不再携带 frontmatter 围栏(完全交给 manifest 字段 + 后端
 // RenderSkillMD 重渲),这里只返回 body,frontmatter 透传给调用方走 manifest。
@@ -1072,7 +1072,7 @@ function resetCurrent() {
   s.delete(path)
   dirtyPaths.value = s
   // 2026-07-08 改:放弃成功后退出编辑态,回到 view 模式。这样"放弃/保存"按钮
-  // 自动消失(由 v-if="currentMode === 'edit' || isDirty" 控制),工具栏恢复
+  // 自动消失(由 v-if="currentMode === 'edit' || isDirty" 控制),Agent栏恢复
   // 显示"编辑"铅笔图标;CodeViewer 内部从 Monaco/Tiptap 切回 hljs 只读渲染。
   setMode(props.skill?.name, path, 'view')
 }
@@ -2542,7 +2542,7 @@ defineExpose({
   font-size: 12px;
   color: var(--text-dim);
   flex-shrink: 0;
-  /* 兜底:工具栏按钮较多时不撑破容器,避免详情底部出现横向滚动条 */
+  /* 兜底:Agent栏按钮较多时不撑破容器,避免详情底部出现横向滚动条 */
   min-width: 0;
   overflow: hidden;
 }

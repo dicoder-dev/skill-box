@@ -15,8 +15,8 @@ import (
 // 拿完整 Canonical(含 SKILL.md + 全部附属文件),而不是只塞 Name/Version。
 //
 // 用 trae 的真实 find-skills 做 fixture(已确认大小 ≈ 4635 字节),验证:
-//   1. import 后 store 里的 SKILL.md 字节数 ≈ 源字节数
-//   2. 不退化成 ~126 字节的占位货
+//  1. import 后 store 里的 SKILL.md 字节数 ≈ 源字节数
+//  2. 不退化成 ~126 字节的占位货
 func TestImportFlow_PreservesSkillContent(t *testing.T) {
 	srcPath := "/Users/brody/.trae/skills/find-skills"
 	if _, err := os.Stat(srcPath); err != nil {
@@ -47,15 +47,15 @@ func TestImportFlow_PreservesSkillContent(t *testing.T) {
 
 	// 模拟 scan 缓存只留轻量字段
 	cached := struct {
-		AgentID     string
-		AgentName   string
+		AgentID    string
+		AgentName  string
 		Name       string
 		Version    string
 		SourcePath string
 		Category   string
 	}{
-		AgentID:     "trae",
-		AgentName:   "Trae",
+		AgentID:    "trae",
+		AgentName:  "Trae",
 		Name:       scannedCanonical.Manifest.Name,
 		Version:    scannedCanonical.Manifest.Version,
 		SourcePath: realPath,
@@ -77,8 +77,8 @@ func TestImportFlow_PreservesSkillContent(t *testing.T) {
 	// 走 importer.Import
 	report := &skillimporter.Report{
 		FoundSkills: []skillimporter.FoundSkill{{
-			AgentID:     cached.AgentID,
-			AgentName:   cached.AgentName,
+			AgentID:    cached.AgentID,
+			AgentName:  cached.AgentName,
 			SourcePath: cached.SourcePath,
 			Canonical:  full,
 		}},

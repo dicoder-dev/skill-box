@@ -249,7 +249,7 @@ func TestUpdate_PartialFilesPreservesOthers(t *testing.T) {
 	// 显式删 b.md 时(契约:前端 files 里剔除 b.md + DeletedPaths=["b.md"]),
 	// 必须真正物理删除。
 	if _, err := svc.Update("partial", &sskill.WriteInput{
-		Scope: "global",
+		Scope:    "global",
 		Manifest: mk,
 		Files: []skilladapter.File{
 			{Path: "a.md", Content: "AAA-modified"},

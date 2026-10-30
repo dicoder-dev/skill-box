@@ -24,8 +24,8 @@ const messages = {
     nav: {
       skills: { label: 'Skills' },
       projects: { label: 'Projects' },
-      // 2026-07-01 new: tool metadata management
-      tools: { label: 'Tools' },
+      // 2026-07-01 new: agent metadata management
+      agents: { label: 'Agents' },
       market: { label: 'Market' },
       onboarding: { label: 'Import skills' },
       settings: { label: 'Settings' },
@@ -33,7 +33,7 @@ const messages = {
     backendOk: 'Backend connected',
     backendDown: 'Backend down',
     refreshStats: 'Refresh stats',
-    toolsLabel: 'Tools',
+    agentsLabel: 'Agents',
     // 2026-07-11 new: topbar tooltip copy
     themeToggle: {
       toDark: 'Switch to dark mode',
@@ -71,7 +71,7 @@ const messages = {
     pageOfNoCount: 'Page {page} / {total}',
     totalCount: '{count} total',
     noData: 'No skills in this scope yet',
-    noDataHint: 'Click "+ New" to start, or import from installed tools via Onboarding',
+    noDataHint: 'Click "+ New" to start, or import from installed agents via Onboarding',
     deleted: 'Deleted {name}',
     openFailed: 'Open failed: {msg}',
   },
@@ -87,12 +87,12 @@ const messages = {
     btnAiClose: 'Close AI',
 
     applyBar: {
-      target: 'Apply target tool:',
+      target: 'Apply target agent:',
       checkUpdates: 'Check updates',
       checking: 'Checking…',
       updatesAvailable: '{updates} / {total} updates available',
       allUpToDate: '{total} skills up to date',
-      appliedOk: 'Applied {name}@{version} to {tool}',
+      appliedOk: 'Applied {name}@{version} to {agent}',
       appliedPartial: 'Partial failure: {detail}',
       errDefault: 'Apply failed',
     },
@@ -117,18 +117,18 @@ const messages = {
       triggersOptional: 'optional',
       triggersEmptyHint: 'no triggers set — skill will not auto-fire on keywords',
       body: 'Body (Markdown, frontmatter auto-merged)',
-      // 2026-06-26 new: scope refactor + apply tools
+      // 2026-06-26 new: scope refactor + apply agents
       scopeGlobal: 'Global',
       scopeProject: 'Project',
       scopeGlobalHint: 'visible to all projects',
       projectPick: 'select a project',
-      applyTools: 'Apply to tools',
-      applyToolsHint: 'auto-enable on selected tools',
-      applyToolsNone: 'none selected, only stored in skillbox',
-      applyToolsSelected: '{n} selected',
+      applyAgents: 'Apply to agents',
+      applyAgentsHint: 'auto-enable on selected agents',
+      applyAgentsNone: 'none selected, only stored in skillbox',
+      applyAgentsSelected: '{n} selected',
       errProjectRequired: 'please select a project first',
-      applyAllSuccess: 'auto-enabled on {n} tools',
-      applyPartialFailed: '{ok}/{total} tools enabled, failed: {fails}',
+      applyAllSuccess: 'auto-enabled on {n} agents',
+      applyPartialFailed: '{ok}/{total} agents enabled, failed: {fails}',
       // 2026-06-26 new: edit save sync to enabled locations
       syncAllSuccess: 'synced to {n} active locations',
       syncPartialFailed: '{ok}/{total} active locations synced',
@@ -155,8 +155,8 @@ const messages = {
 
     // 2026-07-03 增:unified toast text for apply / batch partial-failure handling.
     apply: {
-      allOk: 'Successfully applied to {n} tools',
-      partialFailed: '{ok}/{total} tools applied successfully. Failures:\n{detail}',
+      allOk: 'Successfully applied to {n} agents',
+      partialFailed: '{ok}/{total} agents applied successfully. Failures:\n{detail}',
     },
 
     applyHistory: {
@@ -198,40 +198,40 @@ const messages = {
       btnDelete: 'Delete',
       confirmDelete: 'Delete skill "{name}@{version}" ?',
       emptyTitle: 'No skills in this scope yet',
-      emptyHint: 'Click "+ New Skill" to start, or import from installed tools via Onboarding',
+      emptyHint: 'Click "+ New Skill" to start, or import from installed agents via Onboarding',
 
       // left/right layout
       btnNewSkill: 'New',
       btnNewSkillTitle: 'New skill',
       btnImportSkill: 'Import',
-      btnImportSkillTitle: 'Import from installed tools',
+      btnImportSkillTitle: 'Import from installed agents',
       searchTitle: 'Filter by name',
       selectToView: 'Pick a skill on the left to see details',
       // 2026-07-08: empty state — no skills yet, prompt user to create or import
       noSkillTitle: 'No skills yet',
-      noSkillHint: 'Click "New" above to create your first skill, or "Import" to pull from installed tools',
+      noSkillHint: 'Click "New" above to create your first skill, or "Import" to pull from installed agents',
       noSkillBtnCreate: 'New skill',
-      noSkillBtnImport: 'Import from installed tools',
+      noSkillBtnImport: 'Import from installed agents',
       noFilesHint: 'This skill has no renderable body',
       scopeLabel: 'Scope',
       scopeGlobalChip: 'Global',
       scopeProjectChip: 'Project',
-      scopeToolsRow: 'Tools',
+      scopeAgentsRow: 'Agents',
       scopeTargetsRow: 'Locations',
-      scopeEmpty: 'This skill is not installed in any tool yet',
+      scopeEmpty: 'This skill is not installed in any agent yet',
       scopeHitCount: '{n} locations',
-      scopeSelectToolFirst: 'Pick a tool in the "Tools" row first, then choose a location',
-      scopeForTool: 'Applies to {tool}',
-      scopeToolSelected: 'Selected: {tool}',
+      scopeSelectAgentFirst: 'Pick an agent in the "Agents" row first, then choose a location',
+      scopeForAgent: 'Applies to {agent}',
+      scopeAgentSelected: 'Selected: {agent}',
       applyConfirmTitle: 'Enable location',
-      applyConfirmMessage: 'Copy skill "{name}" to {tool} · {scope}?',
+      applyConfirmMessage: 'Copy skill "{name}" to {agent} · {scope}?',
       applySuccess: 'Enabled: {path}',
       applyFailed: 'Failed to enable: {msg}',
       unapplyConfirmTitle: 'Disable location',
-      unapplyConfirmMessage: 'Delete skill "{name}" from {tool} · {scope} (via apply/undo + PreSnapshot restore). Continue?',
+      unapplyConfirmMessage: 'Delete skill "{name}" from {agent} · {scope} (via apply/undo + PreSnapshot restore). Continue?',
       unapplySuccess: 'Disabled: {path}',
       unapplyFailed: 'Failed to disable: {msg}',
-      appliedGlobal: '{tool} applied globally',
+      appliedGlobal: '{agent} applied globally',
       applying: 'Enabling…',
       unapplying: 'Disabling…',
       tagsEmpty: 'No tags yet, click the icon above to create one',
@@ -264,8 +264,8 @@ const messages = {
       groupInvalid: 'Invalid group name (no .., no leading/trailing /)',
       groupCreateFailed: 'Create group failed: {msg}',
       groupDeleteConfirm: 'Delete group "{name}"?',
-      groupDeleteConfirmCascade: 'This group contains {n} skill(s); they will be deleted too. Also remove their copies from the 5 tool directories?',
-      groupDeleteCascadeHint: 'Also remove copies from tool directories (5 tools × global / per-project)',
+      groupDeleteConfirmCascade: 'This group contains {n} skill(s); they will be deleted too. Also remove their copies from the 5 agent directories?',
+      groupDeleteCascadeHint: 'Also remove copies from agent directories (5 agents × global / per-project)',
       groupDeleteFailed: 'Delete group failed: {msg}',
       // 2026-06-29 new: rename group
       groupRenamePrompt: 'Rename group "{name}"',
@@ -275,11 +275,11 @@ const messages = {
       groupRenameConflict: 'A group with the same name already exists at the same level',
       groupRenameNotFound: 'Source group no longer exists',
       skillDeleteConfirm: 'Delete skill "{name}"?',
-      skillDeleteCascadeHint: 'Also remove copies from tool directories (5 tools × global / per-project)',
+      skillDeleteCascadeHint: 'Also remove copies from agent directories (5 agents × global / per-project)',
       skillDeleteFailed: 'Delete failed: {msg}',
-      skillCascadeOk: 'Deleted "{name}" and {n} tool-dir copies',
-      skillCascadePartial: 'Deleted "{name}"; {n} tool-dir cleanups failed: {detail}',
-      skillCascadeSkipped: 'Deleted "{name}" (tool-dir copies left intact)',
+      skillCascadeOk: 'Deleted "{name}" and {n} agent-dir copies',
+      skillCascadePartial: 'Deleted "{name}"; {n} agent-dir cleanups failed: {detail}',
+      skillCascadeSkipped: 'Deleted "{name}" (agent-dir copies left intact)',
       // 2026-07-18 new: rename skill (globally unique)
       skillRenameTitle: 'Rename Skill',
       skillRenamePrompt: 'Skill "{name}" will be renamed to',
@@ -415,7 +415,7 @@ const messages = {
       // 2026-07-16 removed: projectPrefix (was used to compose "Project #N").
       // SkillScopePanel now reads project names directly from the projects data
       // table (configured on the Projects page) instead of stitching i18n text.
-      empty: 'This skill has not been written to any tool/location yet',
+      empty: 'This skill has not been written to any agent/location yet',
       loading: 'Loading...',
       enable: 'Enable scope',
       disable: 'Disable scope',
@@ -426,30 +426,30 @@ const messages = {
       partialFailed: 'Partial failure',
       enableFailed: 'Enable failed',
       disableFailed: 'Disable failed',
-      enableSuccess: 'Enabled {tool} · {scope}',
-      disableSuccess: 'Disabled {tool} · {scope}',
-      disableConfirm: 'Remove skill "{name}" from {tool} · {scope}?',
-      enableConfirm: 'Copy skill "{name}" to {tool} · {scope}?',
-      toolCount: '{n} tools',
-      toolCountShort: '{n} tools',
+      enableSuccess: 'Enabled {agent} · {scope}',
+      disableSuccess: 'Disabled {agent} · {scope}',
+      disableConfirm: 'Remove skill "{name}" from {agent} · {scope}?',
+      enableConfirm: 'Copy skill "{name}" to {agent} · {scope}?',
+      agentCount: '{n} agents',
+      agentCountShort: '{n} agents',
       globalEnabledTip: 'Global scope enabled',
       globalAgent: 'Global Agent Skill',
-      globalAgentTip: 'Sync to ~/.agents/skills/ shared pool (readable by all tools)',
+      globalAgentTip: 'Sync to ~/.agents/skills/ shared pool (readable by all agents)',
       globalAgentInfoTip: 'View global agent info',
       globalAgentFolderTip: 'Open ~/.agents/skills/ in file explorer',
       globalAgentInfoTitle: 'Global Agent Skill',
-      globalAgentInfoDesc: 'After writing a skill to ~/.agents/skills/, any AI tool that declares this directory as its personal skills pool can read it automatically — no need to copy into each tool\'s directory.',
-      globalAgentCompatibleToolsTitle: 'Tools that work with ~/.agents/skills/ (2026-07-12)',
+      globalAgentInfoDesc: 'After writing a skill to ~/.agents/skills/, any AI agent that declares this directory as its personal skills pool can read it automatically — no need to copy into each agent\'s directory.',
+      globalAgentCompatibleAgentsTitle: 'Agents that work with ~/.agents/skills/ (2026-07-12)',
       globalAgentSupported: 'Supported',
       globalAgentPartial: 'Partial',
-      globalAgentEmpty: 'No compatible tools found.',
+      globalAgentEmpty: 'No compatible agents found.',
       globalAgentEnabled: 'Synced to ~/.agents/skills/{name}/',
       globalAgentDisabled: 'Removed from ~/.agents/skills/{name}/',
       globalAgentToggleFailed: 'Failed to toggle global agent: {msg}',
       globalAgentPathFailed: 'Cannot resolve ~/.agents/skills/ path',
       openFolderFailed: 'Failed to open folder: {msg}',
       globalAgentDirToast: 'Global Agent directory: {url}',
-      toolNotes: {
+      agentNotes: {
         vscode: 'Documentation explicitly supports personal-level path',
         antigravity: 'Officially supported',
         claude: 'Project-level supported; personal level uses a different directory',
@@ -493,7 +493,7 @@ const messages = {
         // The "original prompt" template is kept in Chinese in both locales on purpose:
         // The user's target text is the translated skill body (which can be any language),
         // but the prompt itself stays consistent across locales to make round-trip
-        // debugging and copying the prompt to other tools easier. The actual system
+        // debugging and copying the prompt to other agents easier. The actual system
         // prompt sent to the LLM is injected by the backend preset, this is just a preview.
         promptTemplate:
 `Translate the following Claude / Codex Skill "SKILL.md" into the target language:{target_lang}.
@@ -655,7 +655,7 @@ const messages = {
     // the "global Agent" semantic; an extra badge crowds the skill name.
     // globalAgentTip stays — used as the icon's hover title.
     treeNode: {
-      globalAgentTip: 'This skill lives in the global agents directory and is read by all tools automatically',
+      globalAgentTip: 'This skill lives in the global agents directory and is read by all agents automatically',
       dropHere: 'Drop here',
     },
   },
@@ -693,14 +693,14 @@ const messages = {
     confirmDelete: 'Delete project #{id} ?',
     empty: 'No projects registered yet.',
     emptyHint: 'Click "Import Project" at the top right to start from a local folder',
-    noTools: 'No tools applied to this project',
+    noAgents: 'No agents applied to this project',
     openInFinder: 'Open in Finder',
     openFailed: 'Failed to open folder: {msg}',
     scannedAt: 'Scanned {time}',
     scanFailed: 'Scan failed',
-    toolSkillsTitle: '{project} · {tool} skills ({count})',
+    agentSkillsTitle: '{project} · {agent} skills ({count})',
     skillPath: 'Path',
-    // Actions on each skill row inside the tool-skills modal
+    // Actions on each skill row inside the agent-skills modal
     skillActionReveal: 'Reveal this skill folder in file manager',
     skillActionDelete: 'Delete this skill folder (irreversible)',
     skillDeleteConfirm: 'Delete skill "{name}"? This will permanently remove the folder:\n{path}',
@@ -828,17 +828,17 @@ const messages = {
 
   onboarding: {
     title: 'Import skills',
-    subtitle: 'Scan skill directories of the 5 AI coding tools on this machine, pick which ones to import into the Skill Box store (global scope).',
+    subtitle: 'Scan skill directories of the 5 AI coding agents on this machine, pick which ones to import into the Skill Box store (global scope).',
     btnRescan: 'Rescan',
     btnRescanning: 'Scanning…',
     btnRescanTitle: 'Rescan all 5 adapters',
     // 2026-07-01: dialog top tab switcher
-    // 2026-07-18: tab order changed + "Scan tools" renamed to "Tools" + new "From marketplace" tab first
+    // 2026-07-18: tab order changed + "Scan agents" renamed to "Agents" + new "From marketplace" tab first
     tabs: {
       market: 'From marketplace',
-      scan: 'Agent tools',
+      scan: 'Agents',
       local: 'From local',
-      // 2026-07-18 改:Agent dir(跟 Agent tools 配套的全局目录)
+      // 2026-07-18 改:Agent dir(跟 Agents 配套的全局目录)
       global: 'Agent dir',
     },
     // 2026-07-18: marketplace import panel (3rd-party source list + URL input)
@@ -921,7 +921,7 @@ const messages = {
       desc: 'Scan ~/.agents/skills for SKILL.md files (shared root used by Claude / Codex / Trae). Tick the ones to import into the Skill Box store.',
       rootLabel: 'Scan root',
       rootMissing: 'Directory does not exist',
-      rootMissingHint: 'No ~/.agents/skills on this machine yet. Install some skills via a tool that supports the Agent Skills standard, then come back and rescan.',
+      rootMissingHint: 'No ~/.agents/skills on this machine yet. Install some skills via an agent that supports the Agent Skills standard, then come back and rescan.',
       empty: 'No skills found in this directory',
       emptyHint: 'Install some skills via Claude / Codex / Trae, then click "Rescan"',
       loading: 'Scanning…',
@@ -947,10 +947,10 @@ const messages = {
       done: 'Done',
     },
     phase1: {
-      title: 'Tool adapter status',
+      title: 'Agent adapter status',
       total: '{n} total',
       empty: 'No adapters registered yet',
-      colTool: 'Tool',
+      colAgent: 'Agent',
       colId: 'ID',
       colGlobalPath: 'Global Path',
       colStatus: 'Status',
@@ -975,12 +975,12 @@ const messages = {
       importing: 'Importing…',
       catUser: 'User skills',
       catSystem: 'System skills',
-      catSystemHint: 'System-level skills (tool-built-in / vendor curated / plugin bundled) are read-only and cannot be imported',
+      catSystemHint: 'System-level skills (agent-built-in / vendor curated / plugin bundled) are read-only and cannot be imported',
       catSectionDivider: 'The following system-level skills cannot be selected',
       tagExists: 'Exists',
       disabledSystem: 'System-level skills cannot be imported',
       disabledExists: 'A skill with the same name already exists in the client store',
-      disabledExclusive: 'The same skill is already selected from another tool — deselect first',
+      disabledExclusive: 'The same skill is already selected from another agent — deselect first',
     },
     phase3: {
       title: 'Import complete',
@@ -1062,7 +1062,7 @@ const messages = {
     // 2026-07-02 add: apply mode (common preference, visible on both Web and Desktop).
     applyMode: {
       title: 'Apply mode',
-      subtitle: 'How skills are placed on the target tool',
+      subtitle: 'How skills are placed on the target agent',
       copy: 'Copy',
       copyHint: 'Copy every source file to the target directory (uses disk space, requires re-apply after source changes)',
       symlink: 'Symlink',
@@ -1095,10 +1095,10 @@ const messages = {
     prefsUnavailable: 'Preferences service unavailable (backend may not be running or prefs store not initialized)',
   },
 
-  // 2026-07-01 new: tool metadata management (talks to /api/skillbox/tools)
-  tools: {
-    title: 'Tools',
-    subtitle: '{total} tools total ({system} system + {user} user). Toggle / edit / add / delete; click "Reload" to make changes effective for adapters immediately.',
+  // 2026-07-01 new: agent metadata management (talks to /api/skillbox/agents)
+  agents: {
+    title: 'Agents',
+    subtitle: '{total} agents total ({system} system + {user} user). Toggle / edit / add / delete; click "Reload" to make changes effective for adapters immediately.',
     searchPlaceholder: 'Filter by name or id',
     filterAll: 'All',
     filterSystem: 'System',
@@ -1107,19 +1107,19 @@ const messages = {
     btnEdit: 'Edit',
     btnReload: 'Reload',
     systemBadge: 'System',
-    systemLocked: 'System tools cannot be deleted',
+    systemLocked: 'System agents cannot be deleted',
     pathCount: '{n} paths',
-    // 2026-07-06: open the tool's skills directory in the system file manager
+    // 2026-07-06: open the agent's skills directory in the system file manager
     btnOpenSkillsDir: 'Open skills directory',
-    openNoPath: 'No skills directory configured for this tool',
+    openNoPath: 'No skills directory configured for this agent',
     openFailed: 'Failed to open directory: {msg}',
     // 2026-07-07: confirm-create-and-open when reveal fails (directory missing)
     openCreateConfirm: 'Directory does not exist. Create it and open?\n{path}',
     openCreateOk: 'Created and opened',
     openExistedOpen: 'Directory already exists, opening',
     openCreateFailed: 'Failed to create: {msg}',
-    empty: 'No tools in the current scope',
-    emptyHint: 'Click "+ New" at the top right to start; the 9 system tools are auto-seeded',
+    empty: 'No agents in the current scope',
+    emptyHint: 'Click "+ New" at the top right to start; the 9 system agents are auto-seeded',
     loading: 'Loading…',
 
     // maturity options
@@ -1131,7 +1131,7 @@ const messages = {
 
     // fields / hints
     field: {
-      toolId: 'Tool ID',
+      agentId: 'Agent ID',
       displayName: 'Display name',
       mdiIcon: 'Icon (mdi)',
       customIcon: 'Custom icon',
@@ -1141,16 +1141,16 @@ const messages = {
       note: 'Note',
     },
     hint: {
-      toolId: 'canonical short id, e.g. claude',
-      toolIdLocked: 'tool_id is immutable after creation',
+      agentId: 'canonical short id, e.g. claude',
+      agentIdLocked: 'agent_id is immutable after creation',
       displayName: 'UI display name',
       mdiIcon: 'Resolved by Iconify at runtime, e.g. mdi:robot-outline. Cleared when "Custom icon" takes precedence.',
       customIcon: 'Upload a local png/svg/ico (≤ 256KB). Takes precedence over the mdi icon above.',
       note: 'optional, internal note',
     },
-    formNewTitle: 'New tool',
+    formNewTitle: 'New agent',
     formEditTitle: 'Edit "{name}"',
-    formHint: 'New tools are forced to is_system=false; Paths use overwrite semantics (saving replaces the whole group).',
+    formHint: 'New agents are forced to is_system=false; Paths use overwrite semantics (saving replaces the whole group).',
     btnUploadIcon: 'Upload custom',
     btnClearIcon: 'Clear',
     uploadIconOk: 'Icon uploaded',
@@ -1188,8 +1188,8 @@ const messages = {
     pickFolderFailed: 'Pick folder failed: {msg}',
 
     // delete confirm
-    confirmDeleteTitle: 'Delete tool',
-    confirmDeleteMsg: 'Delete "{name}"? This cannot be undone; the tool row and all its paths will be removed.',
+    confirmDeleteTitle: 'Delete agent',
+    confirmDeleteMsg: 'Delete "{name}"? This cannot be undone; the agent row and all its paths will be removed.',
   },
 
   // 2026-07-17 add: Git sync panel (go-git version management) strings.

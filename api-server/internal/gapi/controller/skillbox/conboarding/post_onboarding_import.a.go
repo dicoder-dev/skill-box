@@ -3,13 +3,13 @@ package conboarding
 import (
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestOnboardingImport 入参。
@@ -52,8 +52,8 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 
 	// 还原 report(只填 importer.Import 实际用到的字段)
 	report := &skillimporter.Report{
-		StartedAt:   cached.ScannedAt,
-		FinishedAt:  cached.ScannedAt,
+		StartedAt:    cached.ScannedAt,
+		FinishedAt:   cached.ScannedAt,
 		Agents:       cached.Agents,
 		AgentSummary: cached.Summary,
 	}
@@ -90,8 +90,8 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 			}
 		}
 		report.FoundSkills = append(report.FoundSkills, skillimporter.FoundSkill{
-			AgentID:     f.AgentID,
-			AgentName:   f.AgentName,
+			AgentID:    f.AgentID,
+			AgentName:  f.AgentName,
 			SourcePath: f.SourcePath,
 			Canonical:  c,
 		})

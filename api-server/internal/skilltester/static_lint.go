@@ -11,15 +11,15 @@ import (
 
 // 静态 lint 规则常量(命名 / 版本 / 长度等)。
 const (
-	minNameLen     = 2
-	maxNameLen     = 64
-	minDescLen     = 10
-	maxDescLen     = 500
-	minTriggers    = 1
-	maxTriggers    = 10
-	maxBodyChars   = 50000 // body 上限,防止误粘贴巨型内容
-	maxFileCount   = 50
-	maxFileBytes   = 1 * 1024 * 1024
+	minNameLen   = 2
+	maxNameLen   = 64
+	minDescLen   = 10
+	maxDescLen   = 500
+	minTriggers  = 1
+	maxTriggers  = 10
+	maxBodyChars = 50000 // body 上限,防止误粘贴巨型内容
+	maxFileCount = 50
+	maxFileBytes = 1 * 1024 * 1024
 )
 
 var (

@@ -1,8 +1,8 @@
 // skillbox/skill_apply.js - Skill 应用 / 撤销 / 更新检测 HTTP 客户端。
 //
 // 后端路径:
-//   POST /api/skillbox/skills/apply                  - 单 skill 落 1~N 工具
-//   POST /api/skillbox/skills/apply/batch            - 批量 (skill × tool 笛卡尔积)
+//   POST /api/skillbox/skills/apply                  - 单 skill 落 1~N Agent
+//   POST /api/skillbox/skills/apply/batch            - 批量 (skill × agent 笛卡尔积)
 //   POST /api/skillbox/skills/apply/undo             - 撤销一条 apply
 //   POST /api/skillbox/skills/apply/force-undo       - 强制撤销(DB 无记录走 scope-status 删)
 //   POST /api/skillbox/skills/apply/migrate-mode     - 批量切 copy↔symlink(2026-07-02 增)

@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Model Agent主表 model,带 FindByAgentID / ListWithPaths 等业务方法。
+// Model Agent 主表 model,带 FindByAgentID / ListWithPaths 等业务方法。
 type Model struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
@@ -104,7 +104,7 @@ func (s *Model) Count() (int64, error) {
 	return dbops.GetTotal(nil, new(entity.Agent), s.dbRead)
 }
 
-// ListAllEnabled 列出所有 enabled=true 的Agent(给 Registry Reload 用)。
+// ListAllEnabled 列出所有 enabled=true 的 Agent(给 Registry Reload 用)。
 // 排除系统关闭(enabled=false)行,但保留 is_system=true 的也走 enabled 开关。
 func (s *Model) ListAllEnabled() ([]*entity.Agent, error) {
 	list, _, err := s.FindList(where.New(FieldEnabled, "=", true).Conditions(), nil)

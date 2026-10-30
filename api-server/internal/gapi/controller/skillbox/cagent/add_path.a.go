@@ -1,7 +1,7 @@
 // Package cagent - add_path.a.go
 // POST /api/skillbox/agents/paths/add
 //
-// 给一个Agent追加一条 path(不覆盖现有)。改完调 /agents/reload 生效。
+// 给一个 Agent 追加一条 path(不覆盖现有)。改完调 /agents/reload 生效。
 //
 // 2026-07-04 改:走 sagent.Service.AddOnePath,统一在 Service 层做 (scope, category)
 // 唯一性校验(单 path 模型),DB uniqueIndex 作为兜底。
@@ -10,15 +10,15 @@ package cagent
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestAddPath 加一条 path 入参。
 type RequestAddPath struct {
-	AgentID    string `json:"agent_id"`
+	AgentID   string `json:"agent_id"`
 	Scope     string `json:"scope"`
 	Category  string `json:"category"`
 	Path      string `json:"path"`
@@ -65,7 +65,7 @@ func init() {
 		PermissionName: "skillbox.agents.paths.add",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.paths.add",
-			Description:   "给Agent追加一条 path(不覆盖现有);同 (scope, category) 仅允许 1 条,冲突返 409。改完建议再调 /agents/reload",
+			Description:   "给 Agent 追加一条 path(不覆盖现有);同 (scope, category) 仅允许 1 条,冲突返 409。改完建议再调 /agents/reload",
 			RequestParams: RequestAddPath{},
 		},
 	})

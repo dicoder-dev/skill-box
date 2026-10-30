@@ -10,9 +10,9 @@
 package cdesktop
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/controller/skillbox/cdesktop/hooks"
 	"ginp-api/pkg/ginp"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestFsPickFile 弹文件选择对话框入参。

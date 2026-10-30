@@ -4,11 +4,11 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestUndoSkill 撤销请求。

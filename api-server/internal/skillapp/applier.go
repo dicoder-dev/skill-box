@@ -69,11 +69,11 @@ func (a *Applier) resolveMode() string {
 // 这里用 PartialFailure 给前端一个明确信号,前端读 res.partial_failure 弹
 // partial_failed toast,而不是只看 res.all_ok 推断)。
 type ApplyResult struct {
-	Agent           string       `json:"agent"`
+	Agent          string       `json:"agent"`
 	TargetPath     string       `json:"target_path"`
-	Status         string       `json:"status"` // applied / failed
+	Status         string       `json:"status"`             // applied / failed
 	ApplyID        uint         `json:"apply_id,omitempty"` // service 写完 DB 后回填
-	PreSnapshot    *PreSnapshot `json:"-"`      // 不进 JSON,只走 service 内部
+	PreSnapshot    *PreSnapshot `json:"-"`                  // 不进 JSON,只走 service 内部
 	Error          string       `json:"error,omitempty"`
 	PartialFailure bool         `json:"partial_failure,omitempty"` // 与 Status=failed 同步设 true,Service.Apply 宽容路径用
 	StartedAt      time.Time    `json:"started_at"`
@@ -125,7 +125,7 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 		_ = restoreFromSnapshot(targetDir, pre)
 		finished := a.now()
 		return &ApplyResult{
-			Agent:           agentID,
+			Agent:          agentID,
 			TargetPath:     targetDir,
 			Status:         StatusFailed,
 			PreSnapshot:    pre,
@@ -139,12 +139,12 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	pre.PostFiles = post
 	finished := a.now()
 	return &ApplyResult{
-		Agent:           agentID,
-		TargetPath:     targetDir,
-		Status:         StatusApplied,
-		PreSnapshot:    pre,
-		StartedAt:      started,
-		FinishedAt:     finished,
+		Agent:       agentID,
+		TargetPath:  targetDir,
+		Status:      StatusApplied,
+		PreSnapshot: pre,
+		StartedAt:   started,
+		FinishedAt:  finished,
 	}, nil
 }
 
@@ -197,7 +197,7 @@ func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string 
 //   - scope=project 时,优先用 ProjectRoot(由 caller 从 sproject.Service 查
 //     entity.Project.RootPath 得到)— 这是 Codex / Claude / Cursor 实际读的项目根
 //     (ai-image 这种项目的 root_path 是 /Volumes/MyDrive/.../ai-image,apply
-//     会写到 /Volumes/.../ai-image/.agents/skills/<name>,Agent才能读到)。
+//     会写到 /Volumes/.../ai-image/.agents/skills/<name>,Agent 才能读到)。
 //   - ProjectRoot 为空时,fallback 到旧的占位实现 home/.skillbox/projects/<id>/
 //     (用于测试或 caller 暂时拿不到 root_path 的场景,但 production 必须传)。
 func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope string, projectID uint, projectRoot string) (string, error) {

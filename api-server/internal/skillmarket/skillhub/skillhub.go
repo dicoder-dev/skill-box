@@ -179,14 +179,14 @@ type apiListResp struct {
 
 // apiSkill 列表 / 详情里的 skill 元素(子集,详情接口还有 owner/latestVersion 等外层)。
 type apiSkill struct {
-	Slug               string   `json:"slug"`
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	DescriptionZh      string   `json:"description_zh"`
-	Version            string   `json:"version"`
-	OwnerName          string   `json:"ownerName"`
-	Tags               []string `json:"tags"`
-	SubCategories      []struct {
+	Slug          string   `json:"slug"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	DescriptionZh string   `json:"description_zh"`
+	Version       string   `json:"version"`
+	OwnerName     string   `json:"ownerName"`
+	Tags          []string `json:"tags"`
+	SubCategories []struct {
 		Key  string `json:"key"`
 		Name string `json:"name"`
 	} `json:"subCategories"`
@@ -515,9 +515,9 @@ type apiDetailResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    struct {
-		Skill         apiSkill          `json:"skill"`
-		Owner         apiOwner          `json:"owner"`
-		LatestVersion apiLatestVersion  `json:"latestVersion"`
+		Skill         apiSkill         `json:"skill"`
+		Owner         apiOwner         `json:"owner"`
+		LatestVersion apiLatestVersion `json:"latestVersion"`
 	} `json:"data"`
 }
 
@@ -626,10 +626,10 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 // Download 拉 skill 落到本地 canonical(走 302 → COS zip → 解压 → SKILL.md)。
 //
 // 2026-07-01 改:对接 skillhub zip 流程:
-//   1. GET {baseURL}/api/v1/download?slug={slug} 不 follow redirect,拿 Location(COS URL)
-//   2. follow Location 拉 zip 字节流(50MB cap,防恶意包)
-//   3. archive/zip 解压找 SKILL.md → skilladapter.ParseSkillMD
-//   4. 任何环节失败 → knownFallback[remoteID] 命中 → buildFallbackCanonical,否则 ErrRemoteFetchFail
+//  1. GET {baseURL}/api/v1/download?slug={slug} 不 follow redirect,拿 Location(COS URL)
+//  2. follow Location 拉 zip 字节流(50MB cap,防恶意包)
+//  3. archive/zip 解压找 SKILL.md → skilladapter.ParseSkillMD
+//  4. 任何环节失败 → knownFallback[remoteID] 命中 → buildFallbackCanonical,否则 ErrRemoteFetchFail
 //
 // 同时也尝试备用单文件路径 {baseURL}/api/v1/skills/{slug}/skill.md(应对 zip 接口变更)。
 //

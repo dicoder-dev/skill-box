@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/skilladapter"
 	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
+	"ginp-api/internal/skilladapter"
 	"ginp-api/pkg/where"
 )
 
@@ -168,9 +168,9 @@ func (o *Orchestrator) DiscoverFromSource(ctx context.Context, sourceID uint, ke
 //
 // 推断方式:看 ctx 是否被 deadline 触发 / 看 adapter 内是否触发 fallback 路径。
 // 这里用 err 信息 + items 内容结合判断:
-//   1. err 是 context.DeadlineExceeded / context.Canceled / 网络层错误 → fallback
-//   2. items 与 adapter 的 knownFallback 完全重合 → fallback(强信号)
-//   3. 否则 → remote
+//  1. err 是 context.DeadlineExceeded / context.Canceled / 网络层错误 → fallback
+//  2. items 与 adapter 的 knownFallback 完全重合 → fallback(强信号)
+//  3. 否则 → remote
 //
 // 注意:adapter 内部超时通常在 setStop + out=0 时主动 fallback,err 为 nil;
 // 此时用 (2) 的"与 knownFallback 重合"判断。
@@ -289,18 +289,18 @@ func itemToRow(src *entity.MarketSource, ad MarketAdapter, baseURL string, it Ma
 		"source_type":    ad.SourceID(),
 	})
 	return &entity.MarketSkill{
-		SourceID:   src.ID,
-		SourceName: src.Name,
-		RemoteID:   it.RemoteID,
-		Name:       it.Name,
-		Version:    it.Version,
+		SourceID:    src.ID,
+		SourceName:  src.Name,
+		RemoteID:    it.RemoteID,
+		Name:        it.Name,
+		Version:     it.Version,
 		Description: it.Description,
-		Author:     it.Author,
-		Tags:       tags,
-		InstallRef: install,
-		DetailURL:  detail,
-		ExtraJSON:  string(extra),
-		FetchedAt:  time.Now(),
+		Author:      it.Author,
+		Tags:        tags,
+		InstallRef:  install,
+		DetailURL:   detail,
+		ExtraJSON:   string(extra),
+		FetchedAt:   time.Now(),
 	}
 }
 

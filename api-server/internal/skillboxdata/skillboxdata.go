@@ -122,7 +122,7 @@ type HistoryItem struct {
 
 // History history.json 顶层结构。
 type History struct {
-	Version int          `json:"version"`
+	Version int           `json:"version"`
 	Items   []HistoryItem `json:"items"`
 }
 

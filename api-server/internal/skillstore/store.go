@@ -9,7 +9,7 @@
 //   - 一个 skill 一个目录,无 version 层(版本写在 SKILL.md frontmatter)
 //   - 元数据唯一来源是 SKILL.md 的 YAML frontmatter,不再额外落 skill.yaml
 //   - 写入走 per-skill 文件锁(flock),保证多进程并发安全
-//   - 跨Agent兼容:任何按 "<name>/SKILL.md" 布局的外部Agent(Claude Code / Codex / ...)
+//   - 跨 Agent 兼容:任何按 "<name>/SKILL.md" 布局的外部 Agent(Claude Code / Codex / ...)
 //     都可以直接读本目录;我们要写回时也只动 SKILL.md,不会引入额外元数据文件
 //
 // 设计上下文见 docs/project/需求规划.md 第 5.1 + 8.2 节。
@@ -35,8 +35,8 @@ import (
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillversion"
 	"ginp-api/pkg/logger"
-	"golang.org/x/sync/errgroup"
 	sharefunc "ginp-api/share/func"
+	"golang.org/x/sync/errgroup"
 )
 
 // ErrNotFound skill 不存在。
@@ -664,6 +664,7 @@ func (s *Store) DeleteByName(name string) error {
 //   - 若 source 不存在,返回 ErrNotFound
 //   - 若 dstGroupPath 已存在同名 skill,返回 error(避免覆盖)
 //   - 内部走 os.Rename(同设备下原子),跨设备降级为 copy+delete
+//
 // 2026-06-29 改:加 ancestor check — 若 dstDir 在 srcDir 内部,直接 400 拒掉
 // (防死循环,见 MoveGroupDir 同名注释)。
 //
@@ -900,7 +901,7 @@ func (s *Store) CreateGroupDir(groupPath string) error {
 //
 // 2026-06-29 增:供 cskill.delete_group 用。
 // deleted 数组是"该分组下所有 skill 叶子的相对路径"(供前端在 cascade=true 时
-// 同步Agent目录),即使删除失败也尽量填好让 caller 做部分回滚。
+// 同步 Agent 目录),即使删除失败也尽量填好让 caller 做部分回滚。
 func (s *Store) DeleteGroupDir(groupPath string, recursive bool) ([]string, error) {
 	if groupPath == "" {
 		return nil, nil
@@ -1157,8 +1158,8 @@ type TreeNode struct {
 
 // SkillTreeMeta 树节点中携带的 skill 轻量元数据。
 //
-// 2026-06-29 增:AppliedAgents 是该 skill 被全局启用的Agent ID 列表(从
-// cskillapply 的 scope-status 反推),供前端卡片"被这些Agent全局调用了"显示。
+// 2026-06-29 增:AppliedAgents 是该 skill 被全局启用的 Agent ID 列表(从
+// cskillapply 的 scope-status 反推),供前端卡片"被这些 Agent 全局调用了"显示。
 // 复用了 cskill 包里的 GlobalAppliedAgents helper(同进程),避免在 store 层
 // 重复实现 scope-status 扫描逻辑。
 // 2026-07-12 增:SourcePath 是该 skill 的"导入来源磁盘绝对路径"(EvalSymlinks
@@ -1166,15 +1167,15 @@ type TreeNode struct {
 // 时才会有值;前端据此判断"全局 Agent"标签。落盘位置:skill 目录下的
 // .skillbox-source.json sidecar 文件(避免污染 SKILL.md frontmatter)。
 type SkillTreeMeta struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	Description  string   `json:"description"`
-	Triggers     []string `json:"triggers"`
-	UpdatedAt    string   `json:"updated_at,omitempty"`
+	Name          string   `json:"name"`
+	Version       string   `json:"version"`
+	Description   string   `json:"description"`
+	Triggers      []string `json:"triggers"`
+	UpdatedAt     string   `json:"updated_at,omitempty"`
 	AppliedAgents []string `json:"applied_agents,omitempty"`
 	// 2026-07-12 增:导入来源磁盘绝对路径(可选)。前端用 [\\/]\.agents[\\/]skills[\\/]
 	// 正则判断是否来自 ~/.agents/skills/ 全局 Agent 目录,贴"全局 Agent"标签。
-	SourcePath   string   `json:"source_path,omitempty"`
+	SourcePath string `json:"source_path,omitempty"`
 }
 
 // leafScanRef 是 ListTree 阶段 1 收集的 leaf / group 位置引用。

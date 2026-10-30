@@ -1,11 +1,11 @@
 package cskillapply
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestApplyBatch 多 skill 批量 apply。

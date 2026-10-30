@@ -1,15 +1,15 @@
-// core/store/tools.js - 工具元数据域 Pinia store。
+// core/store/agents.js - Agent元数据域 Pinia store。
 //
-// 2026-07-01 新建。对应后端 7 个 ctool 接口(2026-06-30 上线)。
+// 2026-07-01 新建。对应后端 7 个 cagent 接口(2026-06-30 上线)。
 // 集中管理:
-//   - items                工具列表(原始后端数据)
+//   - items                Agent列表(原始后端数据)
 //   - filter               客户端过滤态(keyword + source: all|system|user)
 //   - loading / reloading / saving / removing  独立 loading
 //   - form                 新建 / 编辑 弹窗的临时表单态(reactive,直接 v-model)
 //   - confirmOpen / confirmTarget 单一确认弹窗
 //
-// 业务规则(后端 stool 服务兜底,前端只做"友好提示"避免误用):
-//   - is_system=true:tool_id 不可改 + 行不可删;其他字段(display_name / mdi_icon /
+// 业务规则(后端 sagent 服务兜底,前端只做"友好提示"避免误用):
+//   - is_system=true:agent_id 不可改 + 行不可删;其他字段(display_name / mdi_icon /
 //     maturity / note / enabled / sort_order / paths)可改
 //   - is_system=false:全部可改 + 可删
 //   - paths 非 null = 整组覆盖(update 语义)
@@ -19,20 +19,20 @@
 // 提交时由 buildPayload 把 4 格拍平为 paths 数组,空 path 自动剔除。
 //
 // 用法:
-//   import { useToolsStore } from '@/core/store/tools'
-//   const tools = useToolsStore()
-//   await tools.load()
-//   tools.setKeyword('claude')
-//   tools.openCreate()
+//   import { useAgentsStore } from '@/core/store/agents'
+//   const agents = useAgentsStore()
+//   await agents.load()
+//   agents.setKeyword('claude')
+//   agents.openCreate()
 
 import { defineStore } from 'pinia'
 import {
-  listTools,
-  createTool,
-  updateTool,
-  deleteTool,
-  reloadTools,
-} from '@/api/skillbox/tools'
+  listAgents,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  reloadAgents,
+} from '@/api/skillbox/agents'
 
 // 业务常量:maturity 可选值
 const ALLOWED_MATURITY = ['stable', 'experimental', 'deprecated']
@@ -40,15 +40,15 @@ const ALLOWED_SCOPE = ['global', 'project']
 const ALLOWED_CATEGORY = ['user', 'system']
 
 // 2026-07-04 改:固定 4 个 (scope, category) 格子,顺序与 UI 行顺序一致。
-// 每个工具的每个格子 0 或 1 条 path(单 path 模型)。
+// 每个Agent的每个格子 0 或 1 条 path(单 path 模型)。
 //
 // 排序约定:user 在前、system 在后(用户实际写盘的目录更常用,优先展示);
 // 同 category 内 global → project(全局优先,因为日常使用的入口)。
 export const PATH_SLOTS = [
-  { scope: 'global', category: 'user', label: 'tools.paths.slotGlobalUser' },
-  { scope: 'project', category: 'user', label: 'tools.paths.slotProjectUser' },
-  { scope: 'global', category: 'system', label: 'tools.paths.slotGlobalSystem' },
-  { scope: 'project', category: 'system', label: 'tools.paths.slotProjectSystem' },
+  { scope: 'global', category: 'user', label: 'agents.paths.slotGlobalUser' },
+  { scope: 'project', category: 'user', label: 'agents.paths.slotProjectUser' },
+  { scope: 'global', category: 'system', label: 'agents.paths.slotGlobalSystem' },
+  { scope: 'project', category: 'system', label: 'agents.paths.slotProjectSystem' },
 ]
 
 // 单格 path 模板(空字符串 = 这一格未配置)
@@ -64,7 +64,7 @@ function emptySlots() {
 // 空表单模板(避免多处重复 + 保证 reset 时字段不会跨弹窗泄漏)
 function emptyForm() {
   return {
-    tool_id: '',
+    agent_id: '',
     display_name: '',
     mdi_icon: 'mdi:',
     icon_file: '', // 新增:自定义图标文件名(basename);非空时优先于 mdi_icon
@@ -90,10 +90,10 @@ function pathsToSlots(paths) {
   return slots
 }
 
-export const useToolsStore = defineStore('tools', {
+export const useAgentsStore = defineStore('agents', {
   state: () => ({
     // --- 列表 ---
-    items: [], // 原始 ToolView[]
+    items: [], // 原始 AgentView[]
 
     // --- 过滤(客户端,纯前端) ---
     filter: {
@@ -103,7 +103,7 @@ export const useToolsStore = defineStore('tools', {
 
     // --- loading 各自分开(避免一个 spinner 压所有操作) ---
     loading: false, // list 加载中
-    reloading: false, // /tools/reload 加载中
+    reloading: false, // /agents/reload 加载中
     saving: false, // create / update 中
     removing: false, // delete 中
 
@@ -114,28 +114,28 @@ export const useToolsStore = defineStore('tools', {
     formOpen: false,
     formMode: 'create', // 'create' | 'edit'
     form: emptyForm(),
-    editingToolId: '', // 编辑时记录原 tool_id(locator,只读)
-    editingIsSystem: false, // 编辑时记录原始 is_system(决定 tool_id 是否禁用)
+    editingAgentId: '', // 编辑时记录原 agent_id(locator,只读)
+    editingIsSystem: false, // 编辑时记录原始 is_system(决定 agent_id 是否禁用)
 
     // --- 删除确认(单一确认弹窗) ---
     confirmOpen: false,
-    confirmTarget: null, // ToolView | null
+    confirmTarget: null, // AgentView | null
   }),
 
   getters: {
-    /** 全量工具数(原始列表,不过滤)。 */
+    /** 全量Agent数(原始列表,不过滤)。 */
     totalCount: (s) => s.items.length,
 
-    /** 系统工具数量。 */
+    /** 系统Agent数量。 */
     systemCount: (s) => s.items.filter((x) => x.is_system).length,
 
-    /** 用户工具数量(is_system = false)。 */
+    /** 用户Agent数量(is_system = false)。 */
     userCount: (s) => s.items.filter((x) => !x.is_system).length,
 
     /**
      * 客户端过滤后的列表(view 直接 v-for 这个,view 不再二次过滤)。
      * 匹配规则:
-     *   - keyword(忽略大小写)在 display_name 或 tool_id 中任一包含
+     *   - keyword(忽略大小写)在 display_name 或 agent_id 中任一包含
      *   - source:
      *       'all'    → 不过滤
      *       'system' → 仅 is_system=true
@@ -144,16 +144,16 @@ export const useToolsStore = defineStore('tools', {
     /**
      * 客户端过滤 + 排序后的列表(view 直接 v-for 这个,view 不再二次过滤/排序)。
      * 过滤规则:
-     *   - keyword(忽略大小写)在 display_name 或 tool_id 中任一包含
+     *   - keyword(忽略大小写)在 display_name 或 agent_id 中任一包含
      *   - source:
      *       'all'    → 不过滤
      *       'system' → 仅 is_system=true
      *       'user'   → 仅 is_system=false
-     * 排序规则(2026-07-18 加):启用的工具优先展示在前面,禁用沉底,组内按 sort_order
-     *   升序,sort_order 相等时按 tool_id 字母序稳定排序(避免视觉抖动):
+     * 排序规则(2026-07-18 加):启用的Agent优先展示在前面,禁用沉底,组内按 sort_order
+     *   升序,sort_order 相等时按 agent_id 字母序稳定排序(避免视觉抖动):
      *     1) enabled desc(启用在前)
      *     2) sort_order asc(数字小的在前)
-     *     3) tool_id asc(打破平局,稳定排序)
+     *     3) agent_id asc(打破平局,稳定排序)
      */
     filteredItems: (s) => {
       const kw = (s.filter.keyword || '').trim().toLowerCase()
@@ -163,7 +163,7 @@ export const useToolsStore = defineStore('tools', {
         if (!kw) return true
         return (
           (x.display_name || '').toLowerCase().includes(kw) ||
-          (x.tool_id || '').toLowerCase().includes(kw)
+          (x.agent_id || '').toLowerCase().includes(kw)
         )
       })
       // 拷贝再排:不污染 s.items(避免无意中影响其他读取者)
@@ -178,8 +178,8 @@ export const useToolsStore = defineStore('tools', {
           const sa = typeof a.sort_order === 'number' ? a.sort_order : 0
           const sb = typeof b.sort_order === 'number' ? b.sort_order : 0
           if (sa !== sb) return sa - sb
-          // 3) tool_id 字母序,稳定 tie-breaker
-          return String(a.tool_id || '').localeCompare(String(b.tool_id || ''))
+          // 3) agent_id 字母序,稳定 tie-breaker
+          return String(a.agent_id || '').localeCompare(String(b.agent_id || ''))
         })
     },
   },
@@ -187,12 +187,12 @@ export const useToolsStore = defineStore('tools', {
   actions: {
     // ─── 列表 ──────────────────────────────────────────────────────
 
-    /** 拉取工具列表,失败写 error。 */
+    /** 拉取Agent列表,失败写 error。 */
     async load() {
       this.loading = true
       this.error = ''
       try {
-        const res = await listTools()
+        const res = await listAgents()
         this.items = res?.items || []
       } catch (e) {
         this.error = e?.message || String(e)
@@ -206,7 +206,7 @@ export const useToolsStore = defineStore('tools', {
     async reloadRegistry() {
       this.reloading = true
       try {
-        await reloadTools()
+        await reloadAgents()
       } catch (e) {
         this.error = e?.message || String(e)
         throw e
@@ -234,19 +234,19 @@ export const useToolsStore = defineStore('tools', {
     openCreate() {
       this.formMode = 'create'
       this.form = emptyForm()
-      this.editingToolId = ''
+      this.editingAgentId = ''
       this.editingIsSystem = false
       this.formOpen = true
     },
 
     /**
-     * 打开编辑弹窗。tool 表单数据 prefill;记录 editingToolId 用作 update locator。
-     * @param {ToolView} t
+     * 打开编辑弹窗。agent 表单数据 prefill;记录 editingAgentId 用作 update locator。
+     * @param {AgentView} t
      */
     openEdit(t) {
       this.formMode = 'edit'
       this.form = {
-        tool_id: t.tool_id || '',
+        agent_id: t.agent_id || '',
         display_name: t.display_name || '',
         mdi_icon: t.mdi_icon || 'mdi:',
         icon_file: t.icon_file || '',
@@ -258,7 +258,7 @@ export const useToolsStore = defineStore('tools', {
         // 2026-07-04 改:4 格单 path 模型,从 t.paths 拍平到 slots
         slots: pathsToSlots(t.paths),
       }
-      this.editingToolId = t.tool_id
+      this.editingAgentId = t.agent_id
       this.editingIsSystem = !!t.is_system
       this.formOpen = true
     },
@@ -306,10 +306,10 @@ export const useToolsStore = defineStore('tools', {
       try {
         const payload = this.buildPayload()
         if (this.formMode === 'create') {
-          await createTool(payload)
+          await createAgent(payload)
         } else {
           // update 语义:只把"变化字段"带过去;paths 也总带,后端非 null = 整组覆盖
-          await updateTool({ tool_id: this.editingToolId, ...payload })
+          await updateAgent({ agent_id: this.editingAgentId, ...payload })
         }
         this.formOpen = false
         await this.load()
@@ -329,14 +329,14 @@ export const useToolsStore = defineStore('tools', {
 
     /**
      * 切换 enabled。立刻调 update + reload,UI 同步通过 await load 刷新卡片。
-     * @param {ToolView} t
+     * @param {AgentView} t
      */
     async toggleEnabled(t) {
-      if (!t || !t.tool_id) return
+      if (!t || !t.agent_id) return
       this.saving = true
       this.error = ''
       try {
-        await updateTool({ tool_id: t.tool_id, enabled: !t.enabled })
+        await updateAgent({ agent_id: t.agent_id, enabled: !t.enabled })
         await this.load()
         try {
           await this.reloadRegistry()
@@ -366,16 +366,16 @@ export const useToolsStore = defineStore('tools', {
     async confirmDelete() {
       const t = this.confirmTarget
       if (!t) return
-      // 双保险:即便 UI 漏了 v-if,系统工具也走不到这一步
+      // 双保险:即便 UI 漏了 v-if,系统Agent也走不到这一步
       if (t.is_system) {
-        this.error = '系统工具不可删'
+        this.error = '系统Agent不可删'
         this.cancelDelete()
         return
       }
       this.removing = true
       this.error = ''
       try {
-        await deleteTool(t.tool_id)
+        await deleteAgent(t.agent_id)
         this.confirmOpen = false
         this.confirmTarget = null
         await this.load()
@@ -396,12 +396,12 @@ export const useToolsStore = defineStore('tools', {
 
     /**
      * 校验表单,返 null 表示 OK,否则返第一条错误信息。
-     * 注意:系统工具的 tool_id 在 view 层 :disabled,这里不强校验。
+     * 注意:系统Agent的 agent_id 在 view 层 :disabled,这里不强校验。
      */
     validateForm() {
       const f = this.form
-      if (this.formMode === 'create' && !String(f.tool_id || '').trim()) {
-        return 'tool_id 不能为空'
+      if (this.formMode === 'create' && !String(f.agent_id || '').trim()) {
+        return 'agent_id 不能为空'
       }
       if (!String(f.display_name || '').trim()) {
         return 'display_name 不能为空'
@@ -458,8 +458,8 @@ export const useToolsStore = defineStore('tools', {
         enabled: !!f.enabled,
         sort_order: Number(f.sort_order) || 0,
         paths,
-        // create 模式才带 tool_id(edit 模式从 editingToolId 取)
-        ...(this.formMode === 'create' ? { tool_id: f.tool_id.trim() } : {}),
+        // create 模式才带 agent_id(edit 模式从 editingAgentId 取)
+        ...(this.formMode === 'create' ? { agent_id: f.agent_id.trim() } : {}),
       }
     },
   },

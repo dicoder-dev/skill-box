@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
+	"github.com/gin-gonic/gin"
 )
 
 // RespondStoreInfo 返 store 物理根目录的绝对路径。

@@ -3,18 +3,18 @@ package cskill
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestDeleteSkill 删除入参。
 //
 // 2026-06-29 改:支持多级分组 — 用 path(完整相对路径,如 "frontend/react")
 // 替代旧版只用 name。name 字段仍兼容旧调用(空时由 path 推导);cascade_agents
-// 是前端在确认弹窗里勾选"同步清理Agent目录"后传 true,后端只删 skillbox 库内
-// 的副本(走 DeleteByPath),Agent目录的清理由前端循环调 forceUndoApply 实现
+// 是前端在确认弹窗里勾选"同步清理 Agent 目录"后传 true,后端只删 skillbox 库内
+// 的副本(走 DeleteByPath),Agent 目录的清理由前端循环调 forceUndoApply 实现
 // (后端保持单一职责)。
 type RequestDeleteSkill struct {
 	Name string `json:"name" form:"name"`

@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"ginp-api/internal/gapi/entity"
+	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillmarket"
-	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	"ginp-api/internal/skillstore"
 
 	"gorm.io/driver/sqlite"
@@ -234,8 +234,8 @@ func TestPull_GlobalOk_UsingFallback(t *testing.T) {
 }
 
 // TestPullV2_GlobalOk_UsingFallback 验证 v2 写盘 + apply 链路。
-// 注入一个空 registry 的 sskillapp,避免真去操作各Agent目录;写盘 + 走 apply
-// 路径(marketskill 的 status 会是 failed 因为没装Agent,但 store 写盘已成功)。
+// 注入一个空 registry 的 sskillapp,避免真去操作各 Agent 目录;写盘 + 走 apply
+// 路径(marketskill 的 status 会是 failed 因为没装 Agent,但 store 写盘已成功)。
 func TestPullV2_GlobalOk_UsingFallback(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
@@ -455,9 +455,9 @@ func TestPullV2_BadGroupPath(t *testing.T) {
 	v2 := smarket.NewWithApply(env.db, env.db, factory, nil)
 	// "脏"输入 — normalize 后变成安全名,不应该报错
 	cases := []string{
-		"../escape",    // → "-escape" (TrimRight 把首字符 - 去掉,实际变 "escape")
-		"foo/../bar",   // → "foo-bar"
-		"/abs/path",    // → "abs-path"
+		"../escape",       // → "-escape" (TrimRight 把首字符 - 去掉,实际变 "escape")
+		"foo/../bar",      // → "foo-bar"
+		"/abs/path",       // → "abs-path"
 		"FRONT END/React", // → "front-end-react"
 	}
 	for _, gp := range cases {

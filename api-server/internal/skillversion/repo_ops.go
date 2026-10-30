@@ -259,11 +259,11 @@ func gitconfigGet() gitconfigSkillConfig {
 func (r *Repo) Status() (Status, error) {
 	cfg := getGitConfig()
 	s := Status{
-		Initialized: r.IsInitialized(),
-		RemoteURL:   cfg.RemoteURL,
+		Initialized:  r.IsInitialized(),
+		RemoteURL:    cfg.RemoteURL,
 		RemoteBranch: cfg.Branch,
-		HasToken:    hasTokenFile(),
-		PendingPush: pushQueue.Len(),
+		HasToken:     hasTokenFile(),
+		PendingPush:  pushQueue.Len(),
 	}
 	if last := LastPushError(); last != "" {
 		s.LastPushError = last

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"ginp-api/internal/agentseed"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skilladapter/agentspecs"
-	"ginp-api/internal/agentseed"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -40,11 +40,11 @@ func setupRegistryFromSQLite(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestAllAdaptersRegistered 验证默认 Registry 在 DB 加载后包含全部默认Agent。
+// TestAllAdaptersRegistered 验证默认 Registry 在 DB 加载后包含全部默认 Agent。
 //
 // 2026-06-30 二改:adapter 不再 init() 自动注册,而是依赖启动期
 // agentspecs.ReloadAllFromDB(db);本测试用 sqlite 内存 DB 模拟"seed + reload"
-// 全流程,验证 9 个默认Agent + Icon() 字段透传。
+// 全流程,验证 9 个默认 Agent + Icon() 字段透传。
 func TestAllAdaptersRegistered(t *testing.T) {
 	_ = setupRegistryFromSQLite(t)
 
@@ -66,14 +66,14 @@ func TestAllAdaptersRegistered(t *testing.T) {
 			t.Errorf("adapter %s icon %q must start with mdi:", a.AgentID(), icon)
 		}
 	}
-	// 5 个老Agent必须存在(向后兼容);新Agent(antigravity/cline/codebuddy/jetbrains)
+	// 5 个老 Agent 必须存在(向后兼容);新 Agent(antigravity/cline/codebuddy/jetbrains)
 	// 不在此断言,数量由 seed 9 个默认决定。
 	for _, want := range skilladapter.AllAgents {
 		if !ids[want] {
 			t.Errorf("missing legacy adapter for %q", want)
 		}
 	}
-	// 至少得有 9 个(5 老 + 4 新),避免 seed 漏Agent
+	// 至少得有 9 个(5 老 + 4 新),避免 seed 漏 Agent
 	if got := len(all); got < 9 {
 		t.Errorf("expected at least 9 adapters (5 legacy + 4 new), got %d", got)
 	}
@@ -162,14 +162,14 @@ func TestParseSkillMD_NoFrontmatter_NoH1(t *testing.T) {
 
 func TestNormalizeName(t *testing.T) {
 	cases := map[string]string{
-		"Code Review":       "code-review",
-		"foo_bar":           "foo-bar",
-		"Already-Snake":     "already-snake",
-		"中文名 abc":         "abc",
-		"1abc":              "s-1abc",
-		"   trim me  ":      "trim-me",
-		"a":                 "a",
-		"":                  "",
+		"Code Review":   "code-review",
+		"foo_bar":       "foo-bar",
+		"Already-Snake": "already-snake",
+		"中文名 abc":       "abc",
+		"1abc":          "s-1abc",
+		"   trim me  ":  "trim-me",
+		"a":             "a",
+		"":              "",
 	}
 	for in, want := range cases {
 		if got := skilladapter.NormalizeName(in); got != want {

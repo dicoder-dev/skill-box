@@ -1,9 +1,10 @@
 // 自动 commit message 设置 + LLM 测试 HTTP 端点(2026-07-18 增)。
 //
 // 三个端点:
-//   GET  /api/skillbox/git/auto-commit      读 LLMEnabled + Template + LLM 可用性
-//   POST /api/skillbox/git/auto-commit      写 LLMEnabled / Template
-//   POST /api/skillbox/git/llm-test         现场跑一次最小 prompt 测 LLM(用于"测试"按钮)
+//
+//	GET  /api/skillbox/git/auto-commit      读 LLMEnabled + Template + LLM 可用性
+//	POST /api/skillbox/git/auto-commit      写 LLMEnabled / Template
+//	POST /api/skillbox/git/llm-test         现场跑一次最小 prompt 测 LLM(用于"测试"按钮)
 package cskillversion
 
 import (
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/configs"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/commitmsg"
@@ -22,6 +22,7 @@ import (
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // ===========================================================================
@@ -30,12 +31,12 @@ import (
 
 // RespondAutoCommit GET 响应。
 type RespondAutoCommit struct {
-	LLMEnabled bool                 `json:"llm_enabled"`
-	Template   string               `json:"template"`
+	LLMEnabled bool   `json:"llm_enabled"`
+	Template   string `json:"template"`
 	// Available=true 当至少一个 enabled provider 配了 api key。
 	// 当 false 时,前端 UI 把 LLMEnabled checkbox 禁用 + 展示 Reason。
-	Available bool                 `json:"llm_available"`
-	Reason    string               `json:"reason,omitempty"`
+	Available bool   `json:"llm_available"`
+	Reason    string `json:"reason,omitempty"`
 	// ProviderName 给前端展示"已用 X (model Y)" 信息(不强制)。
 	ProviderName string `json:"provider_name,omitempty"`
 }
@@ -174,8 +175,8 @@ func SaveAutoCommit(c *ginp.ContextPlus, req *RequestAutoCommit) {
 			ctx, _ := newAutoCommitContext()
 			if ctx == nil || ctx.picked == nil {
 				c.JSON(400, gin.H{
-					"error":   "LLM 暂不可用,请先在 AI 设置里配置可用 provider + API key,并通过测试",
-					"reason":  "unavailable",
+					"error":  "LLM 暂不可用,请先在 AI 设置里配置可用 provider + API key,并通过测试",
+					"reason": "unavailable",
 				})
 				return
 			}

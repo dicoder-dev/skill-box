@@ -7,7 +7,7 @@
 //   - source 维度:smarket 自身只读 / 缓存元数据;源增删不在本步范围(Step 7 落 4 端点,源由
 //     seed 在 Onboarding 阶段插入)
 //
-// 2026-06-30 增:PullV2 一站式流程(写盘 + apply 到Agent),与 Pull 旧路径并存;
+// 2026-06-30 增:PullV2 一站式流程(写盘 + apply 到 Agent),与 Pull 旧路径并存;
 // 旧 Pull 仅写盘不 apply,保留向后兼容(标记 deprecated),新前端默认走 v2。
 //
 // 2026-07-01 改:Install/PullV2 → Pull/PullV2(pull 是新名,install 留 alias);
@@ -33,9 +33,9 @@ import (
 	// 2026-07-09 增:github 独立 source(从 skillssh 拆出来);
 	// 匿名 import 触发 init() 执行 skillmarket.Register(New()),
 	// 把 github adapter 注册到 defaultRegistry,不然 orchestrator 找不到。
-	_ "ginp-api/internal/skillmarket/github"
 	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
 	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
+	_ "ginp-api/internal/skillmarket/github"
 	"ginp-api/pkg/where"
 
 	"gorm.io/gorm"
@@ -109,7 +109,7 @@ type ListSourcesResult struct {
 // 不该写盘。
 type SourceWithHomepage struct {
 	*entity.MarketSource
-	// 2026-07-04 增:源官方主页 URL,前端Agent栏「前往官网」按钮点击后跳转此 URL。
+	// 2026-07-04 增:源官方主页 URL,前端 Agent 栏「前往官网」按钮点击后跳转此 URL。
 	// 空字符串表示该源没有官方主页(按钮降级隐藏)。
 	Homepage string `json:"homepage"`
 }
@@ -209,7 +209,7 @@ func (s *Service) RefreshSource(ctx context.Context, sourceID uint, keyword stri
 type PullInput struct {
 	SourceID  uint   `json:"source_id"`
 	RemoteID  string `json:"remote_id"`
-	Scope     string `json:"scope"`     // global / project
+	Scope     string `json:"scope"`      // global / project
 	ProjectID uint   `json:"project_id"` // scope=project 时必填
 }
 
@@ -391,7 +391,7 @@ type PullV2Input struct {
 	RemoteID  string
 	Scope     string   // global / project,缺省 global
 	ProjectID uint     // scope=project 时必填
-	Agents     []string // 可选;空 = skilladapter.AllAgents(本机全部 5 个Agent)
+	Agents    []string // 可选;空 = skilladapter.AllAgents(本机全部 5 个 Agent)
 	FinalName string   // 前端确认后的最终 name(支持"另存为"重命名);空 = manifest.Name
 	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
 	// 走 NormalizeGroupName 校验(防 ../ / 绝对路径),非空时写到 Manifest.GroupPath,
@@ -405,14 +405,14 @@ type InstallV2Input = PullV2Input
 
 // PullV2Result 一站式拉取响应(2026-07-01 改名:InstallV2Result → PullV2Result)。
 type PullV2Result struct {
-	Name         string                     `json:"name"`
-	Version      string                     `json:"version"`
-	Scope        string                     `json:"scope"`
-	ProjectID    uint                       `json:"project_id"`
-	Agents        []string                   `json:"agents"`
-	ApplyResult  *sskillapp.ApplyResult     `json:"apply_result,omitempty"`
-	Canonical    *skilladapter.Canonical    `json:"canonical,omitempty"`
-	SkippedAgents []string                   `json:"skipped_agents,omitempty"`
+	Name          string                  `json:"name"`
+	Version       string                  `json:"version"`
+	Scope         string                  `json:"scope"`
+	ProjectID     uint                    `json:"project_id"`
+	Agents        []string                `json:"agents"`
+	ApplyResult   *sskillapp.ApplyResult  `json:"apply_result,omitempty"`
+	Canonical     *skilladapter.Canonical `json:"canonical,omitempty"`
+	SkippedAgents []string                `json:"skipped_agents,omitempty"`
 	// 2026-06-30 增:实际写入的分组路径(空 = 根);前端用来刷新 tree 时定位
 	GroupPath string `json:"group_path,omitempty"`
 }
@@ -420,12 +420,12 @@ type PullV2Result struct {
 // InstallV2Result 旧名 alias(2026-07-01 deprecated),新代码请用 PullV2Result。
 type InstallV2Result = PullV2Result
 
-// PullV2 一站式:写盘 + apply 到Agent。
+// PullV2 一站式:写盘 + apply 到 Agent。
 //
 // 关键决策(2026-06-30):
-//   - Agents 空数组(0 个) = "不 apply 任何Agent,只写盘"(用户主动选择为空时尊重他的意图)
+//   - Agents 空数组(0 个) = "不 apply 任何 Agent,只写盘"(用户主动选择为空时尊重他的意图)
 //     旧行为:Agents=nil 时默认填 AllAgents(5 个);2026-06-30 改为尊重空数组语义
-//   - 写盘成功 + apply 部分失败不回滚 store;SkippedAgents 列出失败的Agent
+//   - 写盘成功 + apply 部分失败不回滚 store;SkippedAgents 列出失败的 Agent
 //   - write 阶段就报错时仍然整体返 err(没东西可 apply)
 //   - 重名检测由前端做(传 FinalName),后端不重复检测
 //   - 分组路径(2026-06-30 增):in.GroupPath 写到 Manifest.GroupPath,store.Save 走子目录
@@ -527,13 +527,13 @@ func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, e
 	// 8) Agents:空数组 = 不 apply,只写盘(2026-06-30 改:不再默认填 AllAgents)
 	agents := in.Agents
 	result := &PullV2Result{
-		Name:         finalName,
-		Version:      version,
-		Scope:        scope,
-		ProjectID:    in.ProjectID,
+		Name:          finalName,
+		Version:       version,
+		Scope:         scope,
+		ProjectID:     in.ProjectID,
 		Agents:        agents,
-		Canonical:    created,
-		GroupPath:    groupPath,
+		Canonical:     created,
+		GroupPath:     groupPath,
 		SkippedAgents: nil,
 	}
 	// 9) Apply — Agents 为空时跳过 apply,只返回写盘结果
@@ -547,7 +547,7 @@ func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, e
 		Scope:     scope,
 		ProjectID: in.ProjectID,
 		Name:      finalName,
-		Agents:     agents,
+		Agents:    agents,
 	})
 	result.ApplyResult = ar
 	// 整体 err 不回滚 store,只记 skipped
@@ -634,11 +634,11 @@ func (s *Service) ListSkillsWithInstalled(q ListSkillsQuery) (*ListSkillsWithIns
 // ListSkillsRemote 走 adapter.Discover,纯远端不读本地缓存(2026-07-01 增)。
 //
 // 数据流:
-//   1) orchestrator.DiscoverFromSource(sourceID, keyword) → []MarketItem(走三方源)
-//   2) 在内存里按 page/size 切片(in-memory 分页)
-//   3) 调 orchestrator.ItemToRow 把 MarketItem 映射成 entity.MarketSkill
-//      (让前端继续用统一 schema,无需改前端类型)
-//   4) installed map 像 ListSkillsWithInstalled 一样扫本地 store
+//  1. orchestrator.DiscoverFromSource(sourceID, keyword) → []MarketItem(走三方源)
+//  2. 在内存里按 page/size 切片(in-memory 分页)
+//  3. 调 orchestrator.ItemToRow 把 MarketItem 映射成 entity.MarketSkill
+//     (让前端继续用统一 schema,无需改前端类型)
+//  4. installed map 像 ListSkillsWithInstalled 一样扫本地 store
 //
 // skills.sh 因 audits API 单页固定 50 条且不支持 keyword,会拉 50 页 + substring;
 // skillhub 走 /api/skills?keyword= 直接拿搜索结果。

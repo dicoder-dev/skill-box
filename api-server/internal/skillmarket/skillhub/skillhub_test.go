@@ -208,7 +208,7 @@ func TestDiscover_Keyword_SpecialChar(t *testing.T) {
 	rt := newFakeClient(map[string]fakeResp{
 		"/api/skills?keyword=react+native&pageSize=100": {
 			status: 200,
-			body: `{"code":0,"data":{"skills":[],"total":0}}`,
+			body:   `{"code":0,"data":{"skills":[],"total":0}}`,
 		},
 	})
 	a := NewWithClient(rt)
@@ -482,11 +482,11 @@ func TestDetail_NotFound_FallbackHit(t *testing.T) {
 // 2026-07-04 增:detail_url 必须无条件走站点 host(skillhub.cn)。
 //
 // 历史两轮 bug 都跟上游 apiSkill.Homepage 字段不可信有关:
-//   1) homepage 为空时,fallback 误用 baseURL(API host api.skillhub.cn)
-//      拼成 https://api.skillhub.cn/skills/{slug} → 404。
-//   2) homepage 非空但内容脏(典型如
-//      https://api.skillhub.cn/pskoett/self-improving-agent 或
-//      https://skillhub.cn/pskoett/<slug> 带命名空间前缀),仍会跳错。
+//  1. homepage 为空时,fallback 误用 baseURL(API host api.skillhub.cn)
+//     拼成 https://api.skillhub.cn/skills/{slug} → 404。
+//  2. homepage 非空但内容脏(典型如
+//     https://api.skillhub.cn/pskoett/self-improving-agent 或
+//     https://skillhub.cn/pskoett/<slug> 带命名空间前缀),仍会跳错。
 //
 // 因此不论上游 Homepage 字段是什么,统一覆盖为站点详情页。
 // 覆盖三个 case:
@@ -694,7 +694,7 @@ description: review
 func TestDownload_SingleFileFallback(t *testing.T) {
 	// zip 路径 404 → 走 single-file 路径
 	rt := newFakeClient(map[string]fakeResp{
-		"/api/v1/download":               {status: 404, body: "no zip"},
+		"/api/v1/download": {status: 404, body: "no zip"},
 		"/api/v1/skills/remote-1234/skill.md": {
 			status: 200,
 			body: `---
@@ -720,8 +720,8 @@ version: 1.0.0
 func TestDownload_KnownFallback_LastResort(t *testing.T) {
 	// zip + single-file 都失败 → 走 knownFallback(命中 id 的话)
 	rt := newFakeClient(map[string]fakeResp{
-		"/api/v1/download":                     {status: 404, body: "no"},
-		"/api/v1/skills/code-review/skill.md":  {status: 404, body: "no"},
+		"/api/v1/download":                    {status: 404, body: "no"},
+		"/api/v1/skills/code-review/skill.md": {status: 404, body: "no"},
 	})
 	a := NewWithClient(rt)
 	can, err := a.Download(context.Background(), "https://api.skillhub.cn", "code-review")
@@ -759,9 +759,9 @@ func TestDownload_NoFallback_UnknownID(t *testing.T) {
 func TestDownload_COSNotFound(t *testing.T) {
 	rt := newFakeClient(map[string]fakeResp{
 		"/api/v1/download": {
-			status:      302,
-			redirectTo:  "/cos-bucket/skills/ghost-skill.zip",
-			ct:          "application/json",
+			status:     302,
+			redirectTo: "/cos-bucket/skills/ghost-skill.zip",
+			ct:         "application/json",
 		},
 		"/cos-bucket/skills/ghost-skill.zip": {
 			status: 404,
@@ -924,14 +924,13 @@ func TestDownload_SingleFileNotFound(t *testing.T) {
 	}
 }
 
-
 // 2026-07-09 增:多文件 zip 回归测试 — 验证 SKILL.md 之外的附属文件
 // (scripts/、templates/、references/、assets/ 等)不会被旧代码的
 // `if base != "SKILL.md" { continue }` 跳掉,canonical.Files 应收齐。
 func TestDownload_ZipFlow_IncludesAllFiles(t *testing.T) {
 	zipServer := newZipMockServerFiles(t, map[string]string{
-		"skills/pdf-helper/1.2.0/SKILL.md":             "---\nname: pdf-helper\ndescription: PDF helper\n---\n# PDF Helper\n",
-		"skills/pdf-helper/1.2.0/scripts/extract.py":   "#!/usr/bin/env python3\nprint('extract')\n",
+		"skills/pdf-helper/1.2.0/SKILL.md":              "---\nname: pdf-helper\ndescription: PDF helper\n---\n# PDF Helper\n",
+		"skills/pdf-helper/1.2.0/scripts/extract.py":    "#!/usr/bin/env python3\nprint('extract')\n",
 		"skills/pdf-helper/1.2.0/references/schemas.md": "# Schemas\n",
 		"skills/pdf-helper/1.2.0/assets/template.html":  "<html>template</html>\n",
 	})
@@ -965,10 +964,10 @@ func TestDownload_ZipFlow_IncludesAllFiles(t *testing.T) {
 	// 验证相对路径(锚点 = SKILL.md 所在目录 = skills/pdf-helper/1.2.0)
 	// 期望的相对路径应该是 scripts/extract.py 等,不包含 skillhub 私有前缀
 	wantRelPaths := map[string]bool{
-		"SKILL.md":                  true,
-		"scripts/extract.py":        true,
-		"references/schemas.md":     true,
-		"assets/template.html":      true,
+		"SKILL.md":              true,
+		"scripts/extract.py":    true,
+		"references/schemas.md": true,
+		"assets/template.html":  true,
 	}
 	gotPaths := map[string]bool{}
 	for _, f := range can.Files {

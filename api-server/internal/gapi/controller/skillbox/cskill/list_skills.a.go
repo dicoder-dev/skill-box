@@ -3,11 +3,11 @@ package cskill
 import (
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestListSkills 列表请求。keyword + 分页。
@@ -76,9 +76,9 @@ func ListSkills(c *ginp.ContextPlus, req *RequestListSkills) {
 		end = total
 	}
 	// 2026-06-29 改:tree 节点也注入 applied_tools(global 命中的 tool_id 列表),
-	// 让前端 TreeNode 卡片直接展示"被这些Agent全局调用了" — 之前 tree 节点的
+	// 让前端 TreeNode 卡片直接展示"被这些 Agent 全局调用了" — 之前 tree 节点的
 	// SkillTreeMeta 没有 applied_tools 字段(只在扁平的 enriched 数组里),
-	// 导致树形 UI 的卡片永远显示 0 个Agent。本层递归补齐。
+	// 导致树形 UI 的卡片永远显示 0 个 Agent。本层递归补齐。
 	enrichTreeAppliedAgents(tree)
 	c.JSON(200, gin.H{
 		"items": enriched[start:end],

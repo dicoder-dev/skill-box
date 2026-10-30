@@ -145,7 +145,7 @@ func TestBuildBytes_PartialFailure(t *testing.T) {
 
 func TestBuildBytes_AllFail(t *testing.T) {
 	p := &fakeProvider{
-		store: map[string]skilladapter.Canonical{},
+		store:  map[string]skilladapter.Canonical{},
 		errors: map[string]error{"x@1": errors.New("nope")},
 	}
 	_, fails, err := BuildBytes(ExportRequest{

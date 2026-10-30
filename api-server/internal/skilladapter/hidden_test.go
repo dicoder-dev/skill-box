@@ -20,14 +20,14 @@ func TestHasHiddenSegment(t *testing.T) {
 		{".skill-box/history.json", true},
 		{".git/config", true},
 		{".DS_Store", true},
-		{"examples/.cache/x", true},  // 嵌套的隐藏段
+		{"examples/.cache/x", true}, // 嵌套的隐藏段
 		{"a/.b", true},
-		{"./foo", true},             // 前导 ./
-		{"a/./b", true},             // 中间 . 段
+		{"./foo", true}, // 前导 ./
+		{"a/./b", true}, // 中间 . 段
 
 		// 边界
-		{"", false},                 // 空字符串不视为隐藏
-		{".", true},                 // 当前目录段
+		{"", false}, // 空字符串不视为隐藏
+		{".", true}, // 当前目录段
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

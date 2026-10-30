@@ -1,7 +1,7 @@
 // Package cagent - upload_icon.a.go
 // POST /api/skillbox/agents/upload-icon
 //
-// multipart/form-data 接收单个图标文件,保存到 ~/.skill-box/agent-icons/<basename>,
+// multipart/form-data 接收单个图标文件,保存到 ~/.skill-box/tool-icons/<basename>,
 // 自动用 源文件 basename + 后缀 作为目标文件名(防冲突加时间戳前缀)。
 //
 // 返回:{name:"claude_1719300123.png"} — 前端拿到 name 后写 agent.icon_file。
@@ -27,14 +27,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/agent/agenticon"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 const (
-	// maxIconSize 256 KB 上限(够 1024x1024 png,常规Agent logo 远小于此)
+	// maxIconSize 256 KB 上限(够 1024x1024 png,常规 Agent logo 远小于此)
 	maxIconSize = 256 * 1024
 )
 
@@ -65,7 +65,7 @@ func UploadIcon(c *ginp.ContextPlus) {
 	// 后缀白名单
 	origName := filepath.Base(fileHeader.Filename)
 	ext := strings.ToLower(filepath.Ext(origName))
-	if !agenticon.ValidIconFileName("dummy"+ext) {
+	if !agenticon.ValidIconFileName("dummy" + ext) {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
 			"error": "unsupported extension: " + ext + " (allowed: .png/.svg/.jpg/.jpeg/.webp/.ico/.gif)",
 		})
@@ -143,7 +143,7 @@ func UploadIconByPath(c *ginp.ContextPlus, req *RequestUploadIconByPath) {
 	// 后缀白名单
 	origName := filepath.Base(abs)
 	ext := strings.ToLower(filepath.Ext(origName))
-	if !agenticon.ValidIconFileName("dummy"+ext) {
+	if !agenticon.ValidIconFileName("dummy" + ext) {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
 			"error": "unsupported extension: " + ext + " (allowed: .png/.svg/.jpg/.jpeg/.webp/.ico/.gif)",
 		})
@@ -225,7 +225,7 @@ func init() {
 		PermissionName: "skillbox.agents.upload_icon",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.upload_icon",
-			Description:   "上传Agent自定义图标到 ~/.skill-box/agent-icons/,返回 basename;前端再把 name 写到 agent.icon_file",
+			Description:   "上传 Agent 自定义图标到 ~/.skill-box/tool-icons/,返回 basename;前端再把 name 写到 agent.icon_file",
 			RequestParams: struct{}{},
 		},
 	})

@@ -66,7 +66,7 @@ func TestLoadAll_ManifestValid(t *testing.T) {
 		}
 		for _, agent := range m.TargetTools {
 			if !allowed[agent] {
-				t.Errorf("%s: target_tools 含未知Agent %q", m.Name, agent)
+				t.Errorf("%s: target_tools 含未知 Agent %q", m.Name, agent)
 			}
 		}
 	}

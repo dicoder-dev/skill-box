@@ -1,4 +1,4 @@
-// Package skillapp 提供"把 canonical skill 落到目标Agent"的核心能力。
+// Package skillapp 提供"把 canonical skill 落到目标 Agent"的核心能力。
 //
 // 设计要点(见 docs/project/需求规划.md 第 4.1.3 + 5.1 节):
 //   - Apply 走 adapter.Apply(c, targetDir);失败时根据 pre-snapshot 整体回滚
@@ -22,8 +22,8 @@ import (
 // 业务错误。
 var (
 	ErrEmptySkill      = errors.New("skillapp: skill is empty")
-	ErrEmptyAgents      = errors.New("skillapp: no agents specified")
-	ErrAgentNotFound    = errors.New("skillapp: agent adapter not found")
+	ErrEmptyAgents     = errors.New("skillapp: no agents specified")
+	ErrAgentNotFound   = errors.New("skillapp: agent adapter not found")
 	ErrEmptyFiles      = errors.New("skillapp: skill has no files")
 	ErrAlreadyRolled   = errors.New("skillapp: already rolled back")
 	ErrApplyNotFound   = errors.New("skillapp: apply record not found")
@@ -41,7 +41,7 @@ const (
 //
 //   - ModeCopy:    把 canonical 逐文件拷贝到目标目录(原行为,占磁盘空间)。
 //   - ModeSymlink: 目标目录整体做成软链接,指向 skillstore 源 skill 根(零占用,
-//                  改源即生效)。具体落盘由 adapter 的 ApplyLink 实现。
+//     改源即生效)。具体落盘由 adapter 的 ApplyLink 实现。
 //
 // 与 settings.ApplyMode 常量值一致(都是 "copy"/"symlink"),便于跨包统一判断。
 const (
@@ -118,7 +118,7 @@ type ApplyInput struct {
 	Scope       string                  // global / project
 	ProjectID   uint                    // scope=project 时必填
 	ProjectRoot string                  // scope=project 时的项目 root_path(从 sproject 查)
-	Agents       []string                // 目标Agent ID 列表
+	Agents      []string                // 目标 Agent ID 列表
 	Canonical   *skilladapter.Canonical // 来自 sskill.Get
 }
 
@@ -129,9 +129,9 @@ type ApplyOutput struct {
 
 // AppliedItem 单个 agent 的 apply 结果。
 type AppliedItem struct {
-	Agent       string    `json:"agent"`
+	Agent      string    `json:"agent"`
 	TargetPath string    `json:"target_path"`
-	Status     string    `json:"status"`          // applied / failed
+	Status     string    `json:"status"` // applied / failed
 	ApplyID    uint      `json:"apply_id,omitempty"`
 	Error      string    `json:"error,omitempty"`
 	StartedAt  time.Time `json:"started_at"`
@@ -140,7 +140,7 @@ type AppliedItem struct {
 
 // BatchApplyInput 批量 apply(多 skill × 多 agent 笛卡尔积)。
 type BatchApplyInput struct {
-	Items     []ApplyInput
+	Items []ApplyInput
 	// Atomic 任一失败时是否回滚已成功的;v1 强制 true(批量本意就是原子)
 	Atomic bool
 }

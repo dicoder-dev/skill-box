@@ -3,16 +3,16 @@ package cskill
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestDeleteGroup 删分组入参。
 //
 // 2026-06-29 增:为支持"右键删除分组"。返回 deleted_skill_paths — 在 cascade=true
-// 时填该分组下所有 skill 叶子的相对路径,供前端二次确认"是否同步清理Agent目录";
+// 时填该分组下所有 skill 叶子的相对路径,供前端二次确认"是否同步清理 Agent 目录";
 // cascade=false 时若分组非空,该字段也填,作为 4xx 响应的附带信息。
 type RequestDeleteGroup struct {
 	GroupPath string `json:"group_path" form:"group_path"`
@@ -38,9 +38,9 @@ func DeleteGroup(c *ginp.ContextPlus, req *RequestDeleteGroup) {
 		// 简化:一并返 409 + 附带 deleted 列表,前端据此弹"包含 N 个 skill,确认级联删除吗"
 		if !req.Cascade && len(deleted) > 0 {
 			c.JSON(409, gin.H{
-				"error":              derr.Error(),
+				"error":               derr.Error(),
 				"deleted_skill_paths": deleted,
-				"need_cascade":       true,
+				"need_cascade":        true,
 			})
 			return
 		}
@@ -49,7 +49,7 @@ func DeleteGroup(c *ginp.ContextPlus, req *RequestDeleteGroup) {
 		return
 	}
 	c.JSON(200, gin.H{
-		"ok":                 true,
+		"ok":                  true,
 		"deleted_skill_paths": deleted,
 	})
 }

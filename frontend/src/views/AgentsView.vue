@@ -1,83 +1,83 @@
 <script setup>
-// ToolsView - 工具元数据管理视图。
+// AgentsView - Agent元数据管理视图。
 //
-// 2026-07-01 新建。对应后端 7 个 ctool 接口(2026-06-30 上线)——
-// 用户可在此浏览 / 启停 / 编辑 / 增删 / 调 reload 的工具表。
+// 2026-07-01 新建。对应后端 7 个 cagent 接口(2026-06-30 上线)——
+// 用户可在此浏览 / 启停 / 编辑 / 增删 / 调 reload 的Agent表。
 //
 // 布局结构(从上到下):
 //   1. 页面头:标题 + 副标题(展示总数 / 系统 / 用户)
 //   2. toolbar:搜索 + 三选一过滤 + 新建 + Reload
 //   3. 错误提示条(只在 store.error 非空时)
-//   4. 卡片网格:每张卡 1 个工具
-//      - 顶部:icon + display_name + tool_id + 系统/用户徽章
+//   4. 卡片网格:每张卡 1 个Agent
+//      - 顶部:icon + display_name + agent_id + 系统/用户徽章
 //      - 中部:maturity chip + path 数 + note
 //      - 底部:enabled switch(主交互) + 编辑 / 删除操作图标(hover 显)
 //   5. 新建 / 编辑 Modal(size="lg",含 paths 子表) — 由 store.formOpen 控
 //   6. 删除确认 Modal(size="sm")          — 由 store.confirmOpen 控
 //
 // 复用模式:
-//   - HTTP:    @/api/skillbox/tools.js
-//   - store:   @/core/store/tools.js
+//   - HTTP:    @/api/skillbox/agents.js
+//   - store:   @/core/store/agents.js
 //   - 弹窗:    @/components/Modal.vue(已封 size / 标题图标 / 滚动锁定)
 //   - 时间:    @/core/utils/time.js#formatRelative
 //   - 文件夹:  platform.fs.pickFolder()
-//   - i18n:    useI18n() -> t('tools.*'),共命名空间
+//   - i18n:    useI18n() -> t('agents.*'),共命名空间
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconPark from '@/components/IconPark.vue'
-import { useToolsStore, PATH_SLOTS } from '@/core/store/tools'
+import { useAgentsStore, PATH_SLOTS } from '@/core/store/agents'
 import { useToastStore } from '@/core/store/toast'
 import Modal from '@/components/Modal.vue'
-import ToolIcon from '@/components/ToolIcon.vue'
-import { uploadToolIcon, uploadToolIconByPath } from '@/api/skillbox/tools'
+import AgentIcon from '@/components/AgentIcon.vue'
+import { uploadAgentIcon, uploadAgentIconByPath } from '@/api/skillbox/agents'
 import { formatRelative } from '@/core/utils/time.js'
 import { platform } from '@/platform'
 
 const { t } = useI18n()
-const tools = useToolsStore()
+const agents = useAgentsStore()
 const toast = useToastStore()
 
 // 搜索框 draft:输入实时回显,Enter / @input 触发写入 store.setKeyword
 const keywordDraft = ref('')
-watch(() => tools.filter.keyword, (v) => {
+watch(() => agents.filter.keyword, (v) => {
   if (v !== keywordDraft.value) keywordDraft.value = v
 })
 function applyKeyword() {
-  tools.setKeyword(keywordDraft.value)
+  agents.setKeyword(keywordDraft.value)
 }
 
 // 过滤按钮互斥
 function selectSource(src) {
-  tools.setSource(src)
+  agents.setSource(src)
 }
 
 // reload:成功后弹 toast(toast 单独抽出来,失败也提示)
 async function onReload() {
   try {
-    await tools.reloadRegistry()
-    toast.success(t('tools.reloadedOk'))
+    await agents.reloadRegistry()
+    toast.success(t('agents.reloadedOk'))
   } catch (e) {
-    toast.error(t('tools.reloadFailed', { msg: e?.message || e }))
+    toast.error(t('agents.reloadFailed', { msg: e?.message || e }))
   }
 }
 
 // 新建 / 编辑 / 删除 / 启停 由 store 内部集中处理;view 只负责 toast 反馈
 async function onSubmitForm() {
   try {
-    await tools.submitForm()
-    toast.success(t('tools.savedOk'))
+    await agents.submitForm()
+    toast.success(t('agents.savedOk'))
   } catch (e) {
-    toast.error(t('tools.saveFailed', { msg: e?.message || e }))
+    toast.error(t('agents.saveFailed', { msg: e?.message || e }))
   }
 }
 
 async function onConfirmDelete() {
   try {
-    await tools.confirmDelete()
-    toast.success(t('tools.deletedOk'))
+    await agents.confirmDelete()
+    toast.success(t('agents.deletedOk'))
   } catch (e) {
-    toast.error(t('tools.deleteFailed', { msg: e?.message || e }))
+    toast.error(t('agents.deleteFailed', { msg: e?.message || e }))
   }
 }
 
@@ -86,21 +86,21 @@ async function onToggleEnabled(t_item) {
     // store.toggleEnabled 内部顺序:update -> load -> reloadRegistry
     // load 后列表中 t_item 引用会被替换,这里按"调用前的状态"取反提示
     const willEnable = !t_item.enabled
-    await tools.toggleEnabled(t_item)
-    toast.success(willEnable ? t('tools.enabledOk') : t('tools.disabledOk'))
+    await agents.toggleEnabled(t_item)
+    toast.success(willEnable ? t('agents.enabledOk') : t('agents.disabledOk'))
   } catch (err) {
-    toast.error(t('tools.toggleFailed', { msg: err?.message || err }))
+    toast.error(t('agents.toggleFailed', { msg: err?.message || err }))
   }
 }
 
-// 2026-07-06/07 改:打开工具对应的 skills 目录按钮。
+// 2026-07-06/07 改:打开Agent对应的 skills 目录按钮。
 //
 // 2026-07-07 修语义:之前"取第一个非空 path",实际上拿到的是 global|system
-// (即 ~/.claude/plugins/marketplaces/claude-plugins-official 之类工具
+// (即 ~/.claude/plugins/marketplaces/claude-plugins-official 之类Agent
 // 自带的目录),用户期望打开的是"用户配置的全局 skills 目录",即
 // (scope=global, category=user) 那条。所以这里**只取 global|user**。
 // 2026-07-07 行为:目录不存在时按钮仍可用(走 mkdir 兜底流程),只有当该
-// tool 完全没有 (global,user) 这条 path 时才置灰。
+// agent 完全没有 (global,user) 这条 path 时才置灰。
 function firstSkillsPath(t_item) {
   const list = t_item?.paths || []
   const slot = list.find((p) => p && p.scope === 'global' && p.category === 'user')
@@ -111,7 +111,7 @@ function firstSkillsPath(t_item) {
 async function openSkillsDir(t_item) {
   const p = firstSkillsPath(t_item)
   if (!p) {
-    toast.info(t('tools.openNoPath'))
+    toast.info(t('agents.openNoPath'))
     return
   }
   try {
@@ -123,18 +123,18 @@ async function openSkillsDir(t_item) {
     const msg = String(e?.message || e)
     const notExist = /does not exist|ENOENT|no such file/i.test(msg)
     if (!notExist) {
-      toast.error(t('tools.openFailed', { msg }))
+      toast.error(t('agents.openFailed', { msg }))
       return
     }
-    const ok = window.confirm(t('tools.openCreateConfirm', { path: p }))
+    const ok = window.confirm(t('agents.openCreateConfirm', { path: p }))
     if (!ok) return
     try {
       const r = await platform.fs.mkdir(p)
-      toast.success(r.created ? t('tools.openCreateOk') : t('tools.openExistedOpen'))
+      toast.success(r.created ? t('agents.openCreateOk') : t('agents.openExistedOpen'))
       // 创建后再 reveal 一次
       await platform.fs.reveal(p)
     } catch (mkErr) {
-      toast.error(t('tools.openCreateFailed', { msg: mkErr?.message || mkErr }))
+      toast.error(t('agents.openCreateFailed', { msg: mkErr?.message || mkErr }))
     }
   }
 }
@@ -146,7 +146,7 @@ async function pickPath(slot) {
     const v = await platform.fs.pickFolder()
     if (v) slot.path = v
   } catch (e) {
-    toast.error(t('tools.pickFolderFailed', { msg: e?.message || e }))
+    toast.error(t('agents.pickFolderFailed', { msg: e?.message || e }))
   }
 }
 
@@ -165,7 +165,7 @@ function maturityIcon(m) {
 // 改用 onMounted 里给 document 装一个捕获式 change 监听 + class 匹配,保证 input
 // 即便被 Vue patch 漏掉 change handler 也能正常处理。
 const iconUploadInputClass = 'icon-upload-input'
-const uploadingToolFlag = ref(false)
+const uploadingAgentFlag = ref(false)
 
 // 2026-07-03 v4 修复:桌面端走 wails3 原生 OpenFileDialog,web 端走 <input type=file>。
 // 桌面 WKWebView 下 <label> 包裹 <input> 触发文件选择器会被静默吞(根因:webview
@@ -176,19 +176,19 @@ const isDesktopRun = typeof window !== 'undefined' && window.__APP_RUNTIME__?.ru
 // 桌面端:点按钮 → 调 wails3 OpenFileDialog → 拿到 path → 调新接口 upload-by-path。
 // 完全不依赖 <input type="file">,跟 ProjectsView 的"导入项目"(pickFolder)走同套机制。
 async function pickIconFileByDesktop() {
-  uploadingToolFlag.value = true
+  uploadingAgentFlag.value = true
   try {
     const path = await platform.fs.pickFile()
     if (!path) return // 用户取消
-    const res = await uploadToolIconByPath(path)
+    const res = await uploadAgentIconByPath(path)
     if (res && res.name) {
-      tools.form.icon_file = res.name
-      toast.success(t('tools.uploadIconOk'))
+      agents.form.icon_file = res.name
+      toast.success(t('agents.uploadIconOk'))
     }
   } catch (err) {
-    toast.error(t('tools.uploadIconFailed', { msg: err?.message || err }))
+    toast.error(t('agents.uploadIconFailed', { msg: err?.message || err }))
   } finally {
-    uploadingToolFlag.value = false
+    uploadingAgentFlag.value = false
   }
 }
 
@@ -206,17 +206,17 @@ async function onIconFileChosen(input) {
   const file = input.files && input.files[0]
   // 允许清空(重新选) — 只看是否拿到 file
   if (file) {
-    uploadingToolFlag.value = true
+    uploadingAgentFlag.value = true
     try {
-      const res = await uploadToolIcon(file)
+      const res = await uploadAgentIcon(file)
       if (res && res.name) {
-        tools.form.icon_file = res.name
-        toast.success(t('tools.uploadIconOk'))
+        agents.form.icon_file = res.name
+        toast.success(t('agents.uploadIconOk'))
       }
     } catch (err) {
-      toast.error(t('tools.uploadIconFailed', { msg: err?.message || err }))
+      toast.error(t('agents.uploadIconFailed', { msg: err?.message || err }))
     } finally {
-      uploadingToolFlag.value = false
+      uploadingAgentFlag.value = false
       // 重置 input,允许选同一文件(浏览器同一 file 不会触发 change 事件)
       input.value = ''
     }
@@ -226,7 +226,7 @@ async function onIconFileChosen(input) {
 }
 
 function clearIconFile() {
-  tools.form.icon_file = ''
+  agents.form.icon_file = ''
 }
 
 // 兜底:onMounted 里给 document 装 capture-phase change 监听,匹配 .icon-upload-input
@@ -258,22 +258,22 @@ function resolveBaseURL() {
 }
 function iconPreviewURL(name) {
   if (!name) return ''
-  return `${resolveBaseURL()}/api/files/tool-icons/${name}`
+  return `${resolveBaseURL()}/api/files/agent-icons/${name}`
 }
 
 // 取 store 计算结果(用 computed 是为了响应式跟随 state 变化)
-const items = computed(() => tools.filteredItems)
-const total = computed(() => tools.totalCount)
-const systemCount = computed(() => tools.systemCount)
-const userCount = computed(() => tools.userCount)
-const loading = computed(() => tools.loading)
-const error = computed(() => tools.error)
+const items = computed(() => agents.filteredItems)
+const total = computed(() => agents.totalCount)
+const systemCount = computed(() => agents.systemCount)
+const userCount = computed(() => agents.userCount)
+const loading = computed(() => agents.loading)
+const error = computed(() => agents.error)
 
 const ALLOWED_MATURITY = ['stable', 'experimental', 'deprecated']
 
 // 2026-07-18 改:弹窗表格只展示 category=user 的格子。
 // system 格子在 PATH_SLOTS 里依然存在(对应 store.form.slots 中固定位置),
-// 后续编辑带 system 路径的工具时,后端真实数据会被原封不动保留,不会丢路径。
+// 后续编辑带 system 路径的Agent时,后端真实数据会被原封不动保留,不会丢路径。
 // 我们只是不在 UI 上让用户配/看/改 system 路径(用户的诉求:"重点是用户路径")。
 const visiblePathSlots = computed(() =>
   PATH_SLOTS.map((slot, idx) => ({ slot, idx })).filter((x) => x.slot.category === 'user'),
@@ -282,7 +282,7 @@ const visiblePathSlots = computed(() =>
 onMounted(async () => {
   bindIconUploadDocListener()
   try {
-    await tools.load()
+    await agents.load()
   } catch (e) {
     // 错误已经在 store.error 里;view 只显示
   }
@@ -290,28 +290,28 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="tools-view">
+  <div class="agents-view">
     <!-- 1. 页面头 -->
     <header class="view-header">
       <div class="view-title">
         <div class="view-icon view-icon-emerald">
-          <IconPark icon="mdi:tools" width="24" height="24" />
+          <IconPark icon="mdi:agents" width="24" height="24" />
         </div>
         <div>
-          <h1>{{ t('tools.title') }}</h1>
-          <p>{{ t('tools.subtitle', { total, system: systemCount, user: userCount }) }}</p>
+          <h1>{{ t('agents.title') }}</h1>
+          <p>{{ t('agents.subtitle', { total, system: systemCount, user: userCount }) }}</p>
         </div>
       </div>
     </header>
 
-    <!-- 2. 工具栏 -->
+    <!-- 2. Agent栏 -->
     <div class="toolbar">
       <div class="search-box">
         <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
         <input
           v-model="keywordDraft"
           type="text"
-          :placeholder="t('tools.searchPlaceholder')"
+          :placeholder="t('agents.searchPlaceholder')"
           class="search-input"
           @keyup.enter="applyKeyword"
         />
@@ -320,39 +320,39 @@ onMounted(async () => {
       <!-- 三选一过滤 -->
       <div class="filter-group">
         <button
-          :class="['filter-btn', { active: tools.filter.source === 'all' }]"
+          :class="['filter-btn', { active: agents.filter.source === 'all' }]"
           @click="selectSource('all')"
         >
           <IconPark icon="mdi:view-list" width="13" height="13" />
-          {{ t('tools.filterAll') }}
+          {{ t('agents.filterAll') }}
           <span class="filter-count">{{ total }}</span>
         </button>
         <button
-          :class="['filter-btn', { active: tools.filter.source === 'system' }]"
+          :class="['filter-btn', { active: agents.filter.source === 'system' }]"
           @click="selectSource('system')"
         >
           <IconPark icon="mdi:shield-check-outline" width="13" height="13" />
-          {{ t('tools.filterSystem') }}
+          {{ t('agents.filterSystem') }}
           <span class="filter-count">{{ systemCount }}</span>
         </button>
         <button
-          :class="['filter-btn', { active: tools.filter.source === 'user' }]"
+          :class="['filter-btn', { active: agents.filter.source === 'user' }]"
           @click="selectSource('user')"
         >
           <IconPark icon="mdi:account-outline" width="13" height="13" />
-          {{ t('tools.filterUser') }}
+          {{ t('agents.filterUser') }}
           <span class="filter-count">{{ userCount }}</span>
         </button>
       </div>
 
       <div class="toolbar-right">
-        <button class="ghost with-icon" :disabled="tools.reloading" @click="onReload">
+        <button class="ghost with-icon" :disabled="agents.reloading" @click="onReload">
           <IconPark icon="mdi:refresh" width="14" height="14" />
-          {{ t('tools.btnReload') }}
+          {{ t('agents.btnReload') }}
         </button>
-        <button class="primary with-icon" @click="tools.openCreate()">
+        <button class="primary with-icon" @click="agents.openCreate()">
           <IconPark icon="mdi:plus" width="14" height="14" />
-          {{ t('tools.btnNew') }}
+          {{ t('agents.btnNew') }}
         </button>
       </div>
     </div>
@@ -366,78 +366,78 @@ onMounted(async () => {
     <!-- 4. 卡片网格 -->
     <div v-if="loading && !items.length" class="loading-state">
       <span class="spinner"></span>
-      <p>{{ t('tools.loading') }}</p>
+      <p>{{ t('agents.loading') }}</p>
     </div>
 
-    <div v-else-if="items.length" class="tools-grid">
+    <div v-else-if="items.length" class="agents-grid">
       <article
         v-for="t_item in items"
-        :key="t_item.tool_id"
-        :class="['tool-card', {
+        :key="t_item.agent_id"
+        :class="['agent-card', {
           'is-system': t_item.is_system,
           'is-disabled': !t_item.enabled,
         }]"
       >
         <!-- 顶部 -->
-        <header class="tool-card-top">
-          <div class="tool-card-icon">
-            <ToolIcon :tool="t_item" :size="22" />
+        <header class="agent-card-top">
+          <div class="agent-card-icon">
+            <AgentIcon :agent="t_item" :size="22" />
           </div>
-          <div class="tool-card-titles">
-            <h3 class="tool-card-name" :title="t_item.display_name">
+          <div class="agent-card-titles">
+            <h3 class="agent-card-name" :title="t_item.display_name">
               {{ t_item.display_name }}
             </h3>
-            <code class="tool-card-id">{{ t_item.tool_id }}</code>
+            <code class="agent-card-id">{{ t_item.agent_id }}</code>
           </div>
           <span v-if="t_item.is_system" class="badge badge-system">
             <IconPark icon="mdi:shield-check-outline" width="10" height="10" />
-            {{ t('tools.systemBadge') }}
+            {{ t('agents.systemBadge') }}
           </span>
         </header>
 
         <!-- 中部 -->
-        <div class="tool-card-meta">
+        <div class="agent-card-meta">
           <span :class="['maturity-chip', `maturity-${t_item.maturity || 'stable'}`]">
             <IconPark :icon="maturityIcon(t_item.maturity)" width="10" height="10" />
-            {{ t(`tools.maturity.${t_item.maturity || 'stable'}`) }}
+            {{ t(`agents.maturity.${t_item.maturity || 'stable'}`) }}
           </span>
           <span class="meta-item">
             <IconPark icon="mdi:folder-multiple-outline" width="11" height="11" />
-            {{ t('tools.pathCount', { n: (t_item.paths || []).length }) }}
+            {{ t('agents.pathCount', { n: (t_item.paths || []).length }) }}
           </span>
         </div>
 
         <p
           v-if="t_item.note"
-          class="tool-card-note"
+          class="agent-card-note"
           :title="t_item.note"
         >
           {{ t_item.note }}
         </p>
 
         <!-- 底部 -->
-        <footer class="tool-card-bottom">
+        <footer class="agent-card-bottom">
           <label class="switch" @click.stop>
             <input
               type="checkbox"
               :checked="t_item.enabled"
-              :disabled="tools.saving"
+              :disabled="agents.saving"
               @change="onToggleEnabled(t_item)"
             />
             <span class="switch-slider"></span>
           </label>
-          <span class="tool-card-time">
+          <span class="agent-card-time">
             {{ formatRelative(t_item.updated_at) }}
           </span>
-          <div class="tool-card-actions" @click.stop>
-            <!-- 2026-07-06 增:打开工具对应的 skills 目录(无任何 path 时置灰) -->
+          <div class="agent-card-actions" @click.stop>
+            <!-- 2026-07-06 增:打开Agent对应的 skills 目录(无任何 path 时置灰) -->
             <IconPark
               icon="mdi:folder-open-outline"
               class="action-icon action-icon-folder"
               :class="{ 'action-icon-disabled': !firstSkillsPath(t_item) }"
               :title="firstSkillsPath(t_item)
-                ? t('tools.btnOpenSkillsDir')
-                : t('tools.openNoPath')"
+                ? t('agents.btnOpenSkillsDir')
+                : t('agents.openNoPath')"
               width="14"
               height="14"
               @click="openSkillsDir(t_item)"
@@ -445,10 +445,10 @@ onMounted(async () => {
             <IconPark
               icon="mdi:square-edit-outline"
               class="action-icon action-icon-edit"
-              :title="t('tools.btnEdit')"
+              :title="t('agents.btnEdit')"
               width="14"
               height="14"
-              @click="tools.openEdit(t_item)"
+              @click="agents.openEdit(t_item)"
             />
             <IconPark
               v-if="!t_item.is_system"
@@ -457,13 +457,13 @@ onMounted(async () => {
               :title="t('common.delete')"
               width="14"
               height="14"
-              @click="tools.askDelete(t_item)"
+              @click="agents.askDelete(t_item)"
             />
             <IconPark
               v-else
               icon="mdi:lock-outline"
               class="action-icon action-icon-locked"
-              :title="t('tools.systemLocked')"
+              :title="t('agents.systemLocked')"
               width="14"
               height="14"
             />
@@ -473,23 +473,23 @@ onMounted(async () => {
     </div>
 
     <div v-else class="empty-state">
-      <IconPark icon="mdi:tools" width="48" height="48" />
-      <p class="empty-title">{{ t('tools.empty') }}</p>
-      <p class="empty-hint">{{ t('tools.emptyHint') }}</p>
+      <IconPark icon="mdi:agents" width="48" height="48" />
+      <p class="empty-title">{{ t('agents.empty') }}</p>
+      <p class="empty-hint">{{ t('agents.emptyHint') }}</p>
     </div>
 
     <!-- 5. 新建 / 编辑 Modal -->
     <Modal
-      v-model="tools.formOpen"
+      v-model="agents.formOpen"
       size="lg"
-      :title="tools.formMode === 'create'
-        ? t('tools.formNewTitle')
-        : t('tools.formEditTitle', { name: tools.form.display_name || tools.editingToolId })"
-      :close-on-mask="!tools.saving"
+      :title="agents.formMode === 'create'
+        ? t('agents.formNewTitle')
+        : t('agents.formEditTitle', { name: agents.form.display_name || agents.editingAgentId })"
+      :close-on-mask="!agents.saving"
     >
       <template #title-icon>
         <IconPark
-          :icon="tools.formMode === 'create' ? 'mdi:plus-box' : 'mdi:square-edit-outline'"
+          :icon="agents.formMode === 'create' ? 'mdi:plus-box' : 'mdi:square-edit-outline'"
           width="18"
           height="18"
         />
@@ -497,59 +497,59 @@ onMounted(async () => {
       <form class="form" @submit.prevent="onSubmitForm">
         <p class="form-hint">
           <IconPark icon="mdi:information-outline" width="14" height="14" />
-          {{ t('tools.formHint') }}
+          {{ t('agents.formHint') }}
         </p>
 
         <div class="form-grid">
-          <!-- tool_id:新建可填,编辑锁死 -->
+          <!-- agent_id:新建可填,编辑锁死 -->
           <div class="form-field">
             <label>
-              {{ t('tools.field.toolId') }}
-              <span v-if="tools.formMode === 'create'" class="required">*</span>
+              {{ t('agents.field.agentId') }}
+              <span v-if="agents.formMode === 'create'" class="required">*</span>
             </label>
             <input
-              v-model="tools.form.tool_id"
-              :disabled="tools.formMode === 'edit'"
-              :placeholder="t('tools.hint.toolId')"
-              :readonly="tools.formMode === 'edit'"
+              v-model="agents.form.agent_id"
+              :disabled="agents.formMode === 'edit'"
+              :placeholder="t('agents.hint.agentId')"
+              :readonly="agents.formMode === 'edit'"
             />
-            <p v-if="tools.formMode === 'edit'" class="field-hint">
-              {{ t('tools.hint.toolIdLocked') }}
+            <p v-if="agents.formMode === 'edit'" class="field-hint">
+              {{ t('agents.hint.agentIdLocked') }}
             </p>
           </div>
 
           <div class="form-field">
             <label>
-              {{ t('tools.field.displayName') }}
+              {{ t('agents.field.displayName') }}
               <span class="required">*</span>
             </label>
             <input
-              v-model="tools.form.display_name"
-              :placeholder="t('tools.hint.displayName')"
-              :disabled="tools.saving"
+              v-model="agents.form.display_name"
+              :placeholder="t('agents.hint.displayName')"
+              :disabled="agents.saving"
             />
           </div>
 
           <div class="form-field">
             <label>
-              {{ t('tools.field.mdiIcon') }}
+              {{ t('agents.field.mdiIcon') }}
             </label>
             <input
-              v-model="tools.form.mdi_icon"
-              :placeholder="t('tools.hint.mdiIcon')"
-              :disabled="tools.saving"
+              v-model="agents.form.mdi_icon"
+              :placeholder="t('agents.hint.mdiIcon')"
+              :disabled="agents.saving"
             />
-            <p class="field-hint">{{ t('tools.hint.mdiIcon') }}</p>
+            <p class="field-hint">{{ t('agents.hint.mdiIcon') }}</p>
           </div>
 
           <!-- 自定义图标上传区块 -->
           <div class="form-field form-field-full">
-            <label>{{ t('tools.field.customIcon') }}</label>
+            <label>{{ t('agents.field.customIcon') }}</label>
             <div class="icon-upload-row">
               <div class="icon-preview">
                 <img
-                  v-if="tools.form.icon_file"
-                  :src="iconPreviewURL(tools.form.icon_file)"
+                  v-if="agents.form.icon_file"
+                  :src="iconPreviewURL(agents.form.icon_file)"
                   alt="icon"
                   class="icon-preview-img"
                 />
@@ -574,85 +574,85 @@ onMounted(async () => {
                   v-if="isDesktopRun"
                   type="button"
                   class="ghost with-icon upload-label"
-                  :class="{ disabled: tools.saving || uploadingToolFlag }"
-                  :disabled="tools.saving || uploadingToolFlag"
+                  :class="{ disabled: agents.saving || uploadingAgentFlag }"
+                  :disabled="agents.saving || uploadingAgentFlag"
                   @click="pickIconFileByDesktop"
                 >
-                  <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
+                  <span v-if="uploadingAgentFlag" class="spinner spinner-sm"></span>
                   <IconPark v-else icon="mdi:upload" width="14" height="14" />
-                  {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
+                  {{ uploadingAgentFlag ? t('common.processing') : t('agents.btnUploadIcon') }}
                 </button>
                 <label
                   v-else
                   class="ghost with-icon upload-label"
-                  :class="{ disabled: tools.saving || uploadingToolFlag }"
+                  :class="{ disabled: agents.saving || uploadingAgentFlag }"
                   @click.prevent="pickIconFileByWeb"
                 >
                   <input
                     type="file"
                     accept="image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon,image/gif"
                     class="hidden-input icon-upload-input"
-                    :disabled="tools.saving || uploadingToolFlag"
+                    :disabled="agents.saving || uploadingAgentFlag"
                     @change="onIconFileChosen"
                   />
-                  <span v-if="uploadingToolFlag" class="spinner spinner-sm"></span>
+                  <span v-if="uploadingAgentFlag" class="spinner spinner-sm"></span>
                   <IconPark v-else icon="mdi:upload" width="14" height="14" />
-                  {{ uploadingToolFlag ? t('common.processing') : t('tools.btnUploadIcon') }}
+                  {{ uploadingAgentFlag ? t('common.processing') : t('agents.btnUploadIcon') }}
                 </label>
                 <button
-                  v-if="tools.form.icon_file"
+                  v-if="agents.form.icon_file"
                   type="button"
                   class="ghost icon-only-btn"
-                  :disabled="tools.saving"
-                  :title="t('tools.btnClearIcon')"
+                  :disabled="agents.saving"
+                  :title="t('agents.btnClearIcon')"
                   @click="clearIconFile"
                 >
                   <IconPark icon="mdi:close" width="14" height="14" />
                 </button>
-                <code v-if="tools.form.icon_file" class="icon-file-name">
-                  {{ tools.form.icon_file }}
+                <code v-if="agents.form.icon_file" class="icon-file-name">
+                  {{ agents.form.icon_file }}
                 </code>
               </div>
             </div>
-            <p class="field-hint">{{ t('tools.hint.customIcon') }}</p>
+            <p class="field-hint">{{ t('agents.hint.customIcon') }}</p>
           </div>
 
           <div class="form-field">
-            <label>{{ t('tools.field.maturity') }}</label>
-            <select v-model="tools.form.maturity" :disabled="tools.saving">
+            <label>{{ t('agents.field.maturity') }}</label>
+            <select v-model="agents.form.maturity" :disabled="agents.saving">
               <option v-for="m in ALLOWED_MATURITY" :key="m" :value="m">
-                {{ t(`tools.maturity.${m}`) }}
+                {{ t(`agents.maturity.${m}`) }}
               </option>
             </select>
           </div>
 
           <div class="form-field">
-            <label>{{ t('tools.field.sortOrder') }}</label>
+            <label>{{ t('agents.field.sortOrder') }}</label>
             <input
-              v-model.number="tools.form.sort_order"
+              v-model.number="agents.form.sort_order"
               type="number"
-              :disabled="tools.saving"
+              :disabled="agents.saving"
             />
           </div>
 
           <div class="form-field form-field-switch">
-            <label>{{ t('tools.field.enabled') }}</label>
+            <label>{{ t('agents.field.enabled') }}</label>
             <label class="switch">
               <input
                 type="checkbox"
-                v-model="tools.form.enabled"
-                :disabled="tools.saving"
+                v-model="agents.form.enabled"
+                :disabled="agents.saving"
               />
               <span class="switch-slider"></span>
             </label>
           </div>
 
           <div class="form-field form-field-full">
-            <label>{{ t('tools.field.note') }}</label>
+            <label>{{ t('agents.field.note') }}</label>
             <input
-              v-model="tools.form.note"
-              :placeholder="t('tools.hint.note')"
-              :disabled="tools.saving"
+              v-model="agents.form.note"
+              :placeholder="t('agents.hint.note')"
+              :disabled="agents.saving"
             />
           </div>
         </div>
@@ -661,15 +661,15 @@ onMounted(async () => {
          每个格子 0 或 1 条 path。删了"添加路径"按钮 + 删除行图标。 -->
         <div class="paths-section">
           <div class="paths-section-header">
-            <h4>{{ t('tools.paths.title') }}</h4>
+            <h4>{{ t('agents.paths.title') }}</h4>
           </div>
 
           <table class="paths-table">
             <thead>
               <tr>
-                <th style="width: 90px">{{ t('tools.paths.scope') }}</th>
-                <th style="width: 90px">{{ t('tools.paths.category') }}</th>
-                <th>{{ t('tools.paths.path') }}</th>
+                <th style="width: 90px">{{ t('agents.paths.scope') }}</th>
+                <th style="width: 90px">{{ t('agents.paths.category') }}</th>
+                <th>{{ t('agents.paths.path') }}</th>
                 <th style="width: 40px"></th>
               </tr>
             </thead>
@@ -677,38 +677,38 @@ onMounted(async () => {
               <!--
                 2026-07-18 改:UI 上只展示 category=user 的格子(category=system 的格子
                 仍然在 store.form.slots 里保留,只是不渲染)。这样:
-                  - 用户编辑带 system 路径的工具时,后端真实数据不丢
+                  - 用户编辑带 system 路径的Agent时,后端真实数据不丢
                   - 不影响 buildPayload 拍平和 clearSlotPath 逻辑(走原 store 索引)
-                  - 用户新建工具时,只能配置 user 路径,与"重点是用户路径"诉求一致
+                  - 用户新建Agent时,只能配置 user 路径,与"重点是用户路径"诉求一致
               -->
               <tr
                 v-for="item in visiblePathSlots"
                 :key="`${item.slot.scope}-${item.slot.category}-ui`"
-                :class="{ 'paths-slot-empty': !tools.form.slots[item.idx].path }"
+                :class="{ 'paths-slot-empty': !agents.form.slots[item.idx].path }"
               >
                 <td>
                   <span class="paths-slot-readonly">
-                    {{ item.slot.scope === 'global' ? t('tools.paths.scopeGlobal') : t('tools.paths.scopeProject') }}
+                    {{ item.slot.scope === 'global' ? t('agents.paths.scopeGlobal') : t('agents.paths.scopeProject') }}
                   </span>
                 </td>
                 <td>
                   <span class="paths-slot-readonly">
-                    {{ item.slot.category === 'user' ? t('tools.paths.categoryUser') : t('tools.paths.categorySystem') }}
+                    {{ item.slot.category === 'user' ? t('agents.paths.categoryUser') : t('agents.paths.categorySystem') }}
                   </span>
                 </td>
                 <td>
                   <div class="input-with-action">
                     <input
-                      v-model="tools.form.slots[item.idx].path"
-                      :placeholder="item.slot.scope === 'global' ? t('tools.paths.pathHintGlobal') : t('tools.paths.pathHintProject')"
-                      :disabled="tools.saving"
+                      v-model="agents.form.slots[item.idx].path"
+                      :placeholder="item.slot.scope === 'global' ? t('agents.paths.pathHintGlobal') : t('agents.paths.pathHintProject')"
+                      :disabled="agents.saving"
                     />
                     <button
                       type="button"
                       class="ghost icon-btn"
-                      :disabled="tools.saving"
-                      :title="t('tools.paths.pickFolder')"
-                      @click="pickPath(tools.form.slots[item.idx])"
+                      :disabled="agents.saving"
+                      :title="t('agents.paths.pickFolder')"
+                      @click="pickPath(agents.form.slots[item.idx])"
                     >
                       <IconPark icon="mdi:folder-open" width="14" height="14" />
                     </button>
@@ -716,20 +716,20 @@ onMounted(async () => {
                 </td>
                 <td class="paths-action-cell">
                   <IconPark
-                    v-if="tools.form.slots[item.idx].path"
+                    v-if="agents.form.slots[item.idx].path"
                     icon="mdi:close-circle-outline"
                     class="action-icon action-icon-danger"
                     :title="t('common.delete')"
                     width="14"
                     height="14"
-                    @click="tools.clearSlotPath(item.idx)"
+                    @click="agents.clearSlotPath(item.idx)"
                   />
                 </td>
               </tr>
             </tbody>
           </table>
 
-          <p class="field-hint">{{ t('tools.paths.hint') }}</p>
+          <p class="field-hint">{{ t('agents.paths.hint') }}</p>
         </div>
       </form>
 
@@ -737,8 +737,8 @@ onMounted(async () => {
         <button
           type="button"
           class="ghost with-icon"
-          :disabled="tools.saving"
-          @click="tools.closeForm()"
+          :disabled="agents.saving"
+          @click="agents.closeForm()"
         >
           <IconPark icon="mdi:close" width="14" height="14" />
           {{ t('common.cancel') }}
@@ -746,51 +746,51 @@ onMounted(async () => {
         <button
           type="button"
           class="primary with-icon"
-          :disabled="tools.saving"
+          :disabled="agents.saving"
           @click="onSubmitForm"
         >
-          <span v-if="tools.saving" class="spinner spinner-sm"></span>
+          <span v-if="agents.saving" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:check" width="14" height="14" />
-          {{ tools.saving ? t('common.processing') : t('common.save') }}
+          {{ agents.saving ? t('common.processing') : t('common.save') }}
         </button>
       </template>
     </Modal>
 
     <!-- 6. 删除确认 Modal -->
     <Modal
-      v-model="tools.confirmOpen"
+      v-model="agents.confirmOpen"
       size="sm"
-      :title="t('tools.confirmDeleteTitle')"
-      :close-on-mask="!tools.removing"
+      :title="t('agents.confirmDeleteTitle')"
+      :close-on-mask="!agents.removing"
     >
       <p class="confirm-message">
         {{
-          t('tools.confirmDeleteMsg', {
-            name: tools.confirmTarget?.display_name || tools.confirmTarget?.tool_id,
+          t('agents.confirmDeleteMsg', {
+            name: agents.confirmTarget?.display_name || agents.confirmTarget?.agent_id,
           })
         }}
-        <span v-if="tools.confirmTarget?.note" class="confirm-hint">
-          {{ tools.confirmTarget.note }}
+        <span v-if="agents.confirmTarget?.note" class="confirm-hint">
+          {{ agents.confirmTarget.note }}
         </span>
       </p>
       <template #footer>
         <button
           type="button"
           class="ghost"
-          :disabled="tools.removing"
-          @click="tools.cancelDelete()"
+          :disabled="agents.removing"
+          @click="agents.cancelDelete()"
         >
           {{ t('common.cancel') }}
         </button>
         <button
           type="button"
           class="danger"
-          :disabled="tools.removing"
+          :disabled="agents.removing"
           @click="onConfirmDelete"
         >
-          <span v-if="tools.removing" class="spinner spinner-sm"></span>
+          <span v-if="agents.removing" class="spinner spinner-sm"></span>
           <IconPark v-else icon="mdi:trash-can" width="14" height="14" />
-          {{ tools.removing ? t('common.processing') : t('common.delete') }}
+          {{ agents.removing ? t('common.processing') : t('common.delete') }}
         </button>
       </template>
     </Modal>
@@ -798,34 +798,34 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.tools-view {
+.agents-view {
   /* 占满内容区宽度(与 MarketView 一致) */
   width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
 }
 
-/* ===== 工具主题:Emerald Workshop(独立作用域变量) ===== */
-.tools-view {
+/* ===== Agent主题:Emerald Workshop(独立作用域变量) ===== */
+.agents-view {
   /* 主色:teal-500(冷一点的青色,和翠绿 emerald 拉开层次) */
-  --tool-primary: #14b8a6;
-  --tool-primary-hover: #0d9488;
-  /* 强调:emerald-500(绿,代表"工具可用/成功") */
-  --tool-accent: #10b981;
+  --agent-primary: #14b8a6;
+  --agent-primary-hover: #0d9488;
+  /* 强调:emerald-500(绿,代表"Agent可用/成功") */
+  --agent-accent: #10b981;
   /* 派生浅底/边/字 */
-  --tool-bg: #f0fdfa;          /* teal-50 */
-  --tool-bg-strong: #ccfbf1;   /* teal-100 */
-  --tool-border: #99f6e4;      /* teal-200 */
-  --tool-text: #0f766e;        /* teal-700 */
+  --agent-bg: #f0fdfa;          /* teal-50 */
+  --agent-bg-strong: #ccfbf1;   /* teal-100 */
+  --agent-border: #99f6e4;      /* teal-200 */
+  --agent-text: #0f766e;        /* teal-700 */
 }
-:global(html.dark) .tools-view {
-  --tool-primary: #2dd4bf;     /* teal-400 提亮 */
-  --tool-primary-hover: #5eead4; /* teal-300 */
-  --tool-accent: #34d399;      /* emerald-400 */
-  --tool-bg: #042f2e;          /* teal-950 */
-  --tool-bg-strong: #134e4a;  /* teal-900 */
-  --tool-border: #115e59;      /* teal-800 */
-  --tool-text: #99f6e4;        /* teal-200 */
+:global(html.dark) .agents-view {
+  --agent-primary: #2dd4bf;     /* teal-400 提亮 */
+  --agent-primary-hover: #5eead4; /* teal-300 */
+  --agent-accent: #34d399;      /* emerald-400 */
+  --agent-bg: #042f2e;          /* teal-950 */
+  --agent-bg-strong: #134e4a;  /* teal-900 */
+  --agent-border: #115e59;      /* teal-800 */
+  --agent-text: #99f6e4;        /* teal-200 */
 }
 
 /* ===== 页面头 ===== */
@@ -853,9 +853,9 @@ onMounted(async () => {
 
 .view-icon-emerald {
   /* 主题色块:teal→emerald 渐变 + 发光阴影 */
-  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  background: linear-gradient(135deg, var(--agent-primary) 0%, var(--agent-accent) 100%);
   color: #ffffff;
-  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--tool-primary) 40%, transparent);
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--agent-primary) 40%, transparent);
 }
 
 .view-title h1 {
@@ -871,7 +871,7 @@ onMounted(async () => {
   margin: 0;
 }
 
-/* ===== 工具栏 ===== */
+/* ===== Agent栏 ===== */
 .toolbar {
   display: flex;
   align-items: center;
@@ -907,8 +907,8 @@ onMounted(async () => {
   gap: 4px;
   padding: 4px;
   /* 主题浅底 + 主题淡边(柔和不刺眼) */
-  background: var(--tool-bg);
-  border: 1px solid var(--tool-border);
+  background: var(--agent-bg);
+  border: 1px solid var(--agent-border);
   border-radius: var(--radius-sm);
 }
 
@@ -929,15 +929,15 @@ onMounted(async () => {
 
 .filter-btn:hover:not(.active) {
   /* hover 时上主题色,文字也跟随 */
-  color: var(--tool-text);
-  background: var(--tool-bg-strong);
+  color: var(--agent-text);
+  background: var(--agent-bg-strong);
 }
 
 .filter-btn.active {
   /* 激活态:teal→emerald 渐变(类似 Market 的 source-tab) */
-  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  background: linear-gradient(135deg, var(--agent-primary) 0%, var(--agent-accent) 100%);
   color: #ffffff;
-  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--tool-primary) 50%, transparent);
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--agent-primary) 50%, transparent);
 }
 
 .filter-count {
@@ -968,16 +968,16 @@ onMounted(async () => {
 
 /* 新建按钮(CTA):主题 teal→emerald 渐变 + hover 上浮(视觉关键转化点) */
 .toolbar-right button.primary {
-  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  background: linear-gradient(135deg, var(--agent-primary) 0%, var(--agent-accent) 100%);
   color: #ffffff;
   border-color: transparent;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--tool-primary) 30%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--agent-primary) 30%, transparent);
 }
 .toolbar-right button.primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--tool-primary-hover) 0%, var(--tool-accent) 100%);
+  background: linear-gradient(135deg, var(--agent-primary-hover) 0%, var(--agent-accent) 100%);
   border-color: transparent;
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--tool-primary) 45%, transparent);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--agent-primary) 45%, transparent);
 }
 
 /* ===== 错误提示 ===== */
@@ -1013,13 +1013,13 @@ onMounted(async () => {
 }
 
 /* ===== 卡片网格 ===== */
-.tools-grid {
+.agents-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 14px;
 }
 
-.tool-card {
+.agent-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1032,34 +1032,34 @@ onMounted(async () => {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.tool-card:hover {
+.agent-card:hover {
   /* hover 时显示主题色淡边 + 轻微抬起 */
-  border-color: color-mix(in srgb, var(--tool-primary) 35%, var(--border));
+  border-color: color-mix(in srgb, var(--agent-primary) 35%, var(--border));
   box-shadow: var(--shadow-card);
 }
 
-/* 系统工具:左侧 emerald 渐变条 */
-.tool-card.is-system {
+/* 系统Agent:左侧 emerald 渐变条 */
+.agent-card.is-system {
   border-left: 4px solid;
-  border-image: linear-gradient(180deg, var(--tool-primary) 0%, var(--tool-accent) 100%) 1;
+  border-image: linear-gradient(180deg, var(--agent-primary) 0%, var(--agent-accent) 100%) 1;
 }
 
-/* 用户工具:左侧浅主题色条(轻提示,与系统工具区分但不刺眼) */
-.tool-card:not(.is-system) {
-  border-left-color: color-mix(in srgb, var(--tool-primary) 25%, transparent);
+/* 用户Agent:左侧浅主题色条(轻提示,与系统Agent区分但不刺眼) */
+.agent-card:not(.is-system) {
+  border-left-color: color-mix(in srgb, var(--agent-primary) 25%, transparent);
 }
 
-.tool-card.is-disabled {
+.agent-card.is-disabled {
   opacity: 0.55;
 }
 
-.tool-card-top {
+.agent-card-top {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.tool-card-icon {
+.agent-card-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1067,13 +1067,13 @@ onMounted(async () => {
   height: 36px;
   border-radius: 8px;
   /* 主题浅底 + 主题主色图标 */
-  background: var(--tool-bg);
-  color: var(--tool-primary);
+  background: var(--agent-bg);
+  color: var(--agent-primary);
   flex-shrink: 0;
-  border: 1px solid var(--tool-border);
+  border: 1px solid var(--agent-border);
 }
 
-.tool-card-titles {
+.agent-card-titles {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1081,7 +1081,7 @@ onMounted(async () => {
   gap: 2px;
 }
 
-.tool-card-name {
+.agent-card-name {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
@@ -1091,17 +1091,17 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.tool-card-id {
+.agent-card-id {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
   /* 主题色 chip */
-  background: var(--tool-bg);
-  color: var(--tool-text);
+  background: var(--agent-bg);
+  color: var(--agent-text);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   align-self: flex-start;
   max-width: fit-content;
-  border: 1px solid var(--tool-border);
+  border: 1px solid var(--agent-border);
 }
 
 .badge {
@@ -1117,12 +1117,12 @@ onMounted(async () => {
 
 .badge-system {
   /* 系统徽章:teal→emerald 渐变,和卡片左侧条带呼应 */
-  background: linear-gradient(135deg, var(--tool-bg) 0%, var(--tool-bg-strong) 100%);
-  color: var(--tool-text);
-  border: 1px solid var(--tool-border);
+  background: linear-gradient(135deg, var(--agent-bg) 0%, var(--agent-bg-strong) 100%);
+  color: var(--agent-text);
+  border: 1px solid var(--agent-border);
 }
 
-.tool-card-meta {
+.agent-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1162,7 +1162,7 @@ onMounted(async () => {
   color: var(--text-faint);
 }
 
-.tool-card-note {
+.agent-card-note {
   margin: 0;
   font-size: 12px;
   color: var(--text-dim);
@@ -1173,7 +1173,7 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.tool-card-bottom {
+.agent-card-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1182,14 +1182,14 @@ onMounted(async () => {
   border-top: 1px solid var(--border);
 }
 
-.tool-card-time {
+.agent-card-time {
   font-size: 10px;
   color: var(--text-faint);
   flex: 1;
   text-align: left;
 }
 
-.tool-card-actions {
+.agent-card-actions {
   display: flex;
   gap: 2px;
   /* 2026-07-06 改:编辑 / 锁定 图标常显,不再依赖 hover */
@@ -1198,7 +1198,7 @@ onMounted(async () => {
 }
 
 /* hover 不再控制 actions 显隐(常显后保留 hover 过渡,避免视觉突变) */
-.tool-card:hover .tool-card-actions {
+.agent-card:hover .agent-card-actions {
   opacity: 1;
 }
 
@@ -1221,14 +1221,14 @@ onMounted(async () => {
 
 .action-icon-edit:hover {
   /* 编辑:hover 时用主题色(区别于危险) */
-  background: var(--tool-bg);
-  color: var(--tool-primary);
+  background: var(--agent-bg);
+  color: var(--agent-primary);
 }
 
 /* 2026-07-06 增:打开 skills 目录按钮:hover 走主题色,和编辑按钮一致 */
 .action-icon-folder:hover {
-  background: var(--tool-bg);
-  color: var(--tool-primary);
+  background: var(--agent-bg);
+  color: var(--agent-primary);
 }
 
 /* 无任何 path 时禁用文件夹按钮 */
@@ -1300,9 +1300,9 @@ onMounted(async () => {
 
 .switch input:checked + .switch-slider {
   /* 开启:teal→emerald 渐变 + 外发光,与卡片左侧条带呼应 */
-  background: linear-gradient(135deg, var(--tool-primary) 0%, var(--tool-accent) 100%);
+  background: linear-gradient(135deg, var(--agent-primary) 0%, var(--agent-accent) 100%);
   border-color: transparent;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-primary) 25%, transparent),
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent-primary) 25%, transparent),
               inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
@@ -1463,22 +1463,22 @@ button.with-icon :deep(svg) {
    会盖过这里,按钮看起来白底+深色文字。 */
 button.add-path-btn {
   /* 浅主题色底 + 主题色文字:亮环境清晰,深色主题下也保留对比 */
-  background: var(--tool-bg);
-  border: 1px solid var(--tool-primary);
-  color: var(--tool-text);
+  background: var(--agent-bg);
+  border: 1px solid var(--agent-primary);
+  color: var(--agent-text);
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--tool-primary) 20%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--agent-primary) 20%, transparent);
 }
 button.add-path-btn:hover:not(:disabled) {
   /* hover:底色加深一档,文字颜色再深一档,border 不变 */
-  background: var(--tool-bg-strong);
-  border-color: var(--tool-primary-hover);
-  color: var(--tool-primary-hover);
+  background: var(--agent-bg-strong);
+  border-color: var(--agent-primary-hover);
+  color: var(--agent-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--tool-primary) 35%, transparent);
+  box-shadow: 0 3px 8px -2px color-mix(in srgb, var(--agent-primary) 35%, transparent);
 }
 
 .paths-table {
@@ -1596,7 +1596,7 @@ button.add-path-btn:hover:not(:disabled) {
 
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
-  .tools-grid {
+  .agents-grid {
     grid-template-columns: 1fr;
   }
 

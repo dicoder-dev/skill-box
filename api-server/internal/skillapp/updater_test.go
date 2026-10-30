@@ -17,7 +17,7 @@ func TestSemverCmp_Basic(t *testing.T) {
 		{"1.0.1", "1.0.0", 1},
 		{"0.1.0", "0.10.0", -1},
 		{"2.0.0", "1.99.99", 1},
-		{"1.0.0-beta", "1.0.0", 0}, // pre-release 简化掉 → 主版本相等
+		{"1.0.0-beta", "1.0.0", 0},  // pre-release 简化掉 → 主版本相等
 		{"1.0.0+build", "1.0.0", 0}, // build 简化掉
 	}
 	for _, c := range cases {

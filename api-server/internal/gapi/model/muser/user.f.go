@@ -1,4 +1,4 @@
-package muser 
+package muser
 
 const FieldID = "id"
 
@@ -31,4 +31,3 @@ const FieldIsCancel = "is_cancel"
 const FieldCreatedAt = "created_at"
 
 const FieldUpdatedAt = "updated_at"
-

@@ -144,11 +144,11 @@ func (s *Service) Import(zipBytes []byte, req skillpkg.ImportRequest) (*skillpkg
 		return out, err
 	}
 	logger.Event("import", "package", "", map[string]any{
-		"target_scope":  req.TargetScope,
-		"project_id":    req.ProjectID,
-		"skills":        req.Skills,
-		"ok":            out.OK,
-		"failed":        out.Failed,
+		"target_scope": req.TargetScope,
+		"project_id":   req.ProjectID,
+		"skills":       req.Skills,
+		"ok":           out.OK,
+		"failed":       out.Failed,
 	})
 	return out, nil
 }

@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
   editor.value?.destroy()
 })
 
-// ====== 工具栏操作 ======
+// ====== Agent栏操作 ======
 const showLinkInput = ref(false)
 const linkUrl = ref('')
 const linkInputRef = ref(null)
@@ -153,7 +153,7 @@ function isBtn(name, attrs = undefined) {
 
 <template>
   <div class="rte" :style="{ '--rte-min-h': minHeight }">
-    <!-- 工具栏 -->
+    <!-- Agent栏 -->
     <div v-if="editor" class="rte-toolbar">
       <div class="rte-group">
         <button type="button" :class="isBtn('heading', { level: 1 })" :data-tip="t('skills.richText.heading1') + ' 1'" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()">
@@ -447,7 +447,7 @@ function isBtn(name, attrs = undefined) {
 
 .rte-content {
   /* 保留 max-height 让长文档在编辑器内独立滚(opcbase / 一般 markdown 编辑器都这么做),
-     而不是把页面拉爆;max-height 给一个合理的上限,留出工具栏 + 底栏的视口空间 */
+     而不是把页面拉爆;max-height 给一个合理的上限,留出Agent栏 + 底栏的视口空间 */
   min-height: var(--rte-min-h, 320px);
   max-height: 60vh;
   overflow-y: auto;

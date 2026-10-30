@@ -25,7 +25,7 @@ type fakeAdapter struct {
 	root string
 }
 
-func (f *fakeAdapter) AgentID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string     { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
 func (f *fakeAdapter) Icon() string        { return "?" }
 func (f *fakeAdapter) DiscoverPaths(scope string) ([]string, error) {
@@ -37,13 +37,15 @@ func (f *fakeAdapter) Scan(dir string) ([]skilladapter.Canonical, error) {
 func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 	return nil // 不必真正写,Service 层只验证链路
 }
+
 // 2026-07-02 增:为 MigrateMode 测试支持 symlink 落盘。
 func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) error {
 	return nil
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
-func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
-func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+func (f *fakeAdapter) Validate(c skilladapter.Canonical) error   { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                { return false }
+
 // 2026-07-08 增:Adapter 接口加 UserPath,stub 默认返 f.root(与 DiscoverPaths 同值;
 // sskillapp 测试不关心写盘落点)。
 func (f *fakeAdapter) UserPath(string) (string, error) { return f.root, nil }
@@ -94,7 +96,7 @@ func TestApply_NoAgents_ErrEmptyAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = svc.Apply(&sskillapp.ApplyInput{
-		Name:  "alpha",
+		Name:   "alpha",
 		Agents: nil,
 	})
 	if !errors.Is(err, sskillapp.ErrEmptyAgents) {
@@ -105,7 +107,7 @@ func TestApply_NoAgents_ErrEmptyAgents(t *testing.T) {
 func TestApply_SkillNotFound(t *testing.T) {
 	svc, _, _, _ := newTestSvc(t)
 	_, err := svc.Apply(&sskillapp.ApplyInput{
-		Name:  "no-such-skill",
+		Name:   "no-such-skill",
 		Agents: []string{"fake"},
 	})
 	if !errors.Is(err, sskillapp.ErrSkillNotFound) {
@@ -129,7 +131,7 @@ func TestApply_OneSkill_OneAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := svc.Apply(&sskillapp.ApplyInput{
-		Name:  "alpha",
+		Name:   "alpha",
 		Agents: []string{"fake"},
 	})
 	if err != nil {
@@ -317,8 +319,8 @@ func TestMigrateMode_SwitchCopyToSymlink(t *testing.T) {
 	}
 	// 2) apply 一次(默认 copy 模式)
 	_, err = svc.Apply(&sskillapp.ApplyInput{
-		Scope: skilladapter.ScopeGlobal,
-		Name:  "mig-skill",
+		Scope:  skilladapter.ScopeGlobal,
+		Name:   "mig-skill",
 		Agents: []string{"fake"},
 	})
 	if err != nil {

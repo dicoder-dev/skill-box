@@ -1,10 +1,10 @@
 package cskillapply
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestMigrateMode 切换 apply 模式时由前端调用。

@@ -8,13 +8,13 @@ package caisession
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/internal/skillboxdata"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestGetHistory 单条取请求。
@@ -73,7 +73,7 @@ func init() {
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "ai.history.get",
 			Description:   "按 conv_id 拉单条完整(含 messages);不存在 404",
-			RequestParams:  RequestGetHistory{},
+			RequestParams: RequestGetHistory{},
 		},
 	})
 }

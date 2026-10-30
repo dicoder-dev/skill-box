@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/skilladapter"
+	"github.com/go-kratos/blades"
 )
 
 // AI 走查:走 aiengine + 内置 preset。Provider 注入由 caller 负责。

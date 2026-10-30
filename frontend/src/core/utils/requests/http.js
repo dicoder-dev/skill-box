@@ -67,7 +67,7 @@ async function doRequest(method, path, bodyOrParams, options = {}) {
   //   - POST / PUT / PATCH 有 body → 设 Content-Type: application/json 走 JSON 解析
   //   - body 是 FormData / Blob / URLSearchParams 时不要手动覆盖 Content-Type,
   //     让浏览器 fetch 自动带上 boundary / charset;手动覆盖反而会让后端 multipart
-  //     解析失败(参见 2026-07-03 修复:ToolsView 上传自定义图标失败就是这个原因)
+  //     解析失败(参见 2026-07-03 修复:AgentsView 上传自定义图标失败就是这个原因)
   //   - 业务方如果传了 Content-Type(比如 application/json)就走业务方的,本兜底不冲突
   const baseHeaders = { ...(headers || {}) }
   if (method === 'POST' || method === 'PUT' || method === 'PATCH') {

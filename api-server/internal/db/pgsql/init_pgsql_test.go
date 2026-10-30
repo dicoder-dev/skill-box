@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-//测试连接
+// 测试连接
 func TestConnect(t *testing.T) {
 	InitDb("127.0.0.1", "5432", "root", "db_pg", "123456")
 }
@@ -43,14 +43,14 @@ func TestDSNGeneration(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// 模拟DSN生成逻辑
-				dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable TimeZone=Asia/Shanghai", 
+				dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable TimeZone=Asia/Shanghai",
 					tc.ip, tc.user, tc.password, tc.dbName, tc.port)
 
 				// 验证DSN格式
-				if strings.Contains(dsn, "host="+tc.ip) && 
-				   strings.Contains(dsn, "user="+tc.user) && 
-				   strings.Contains(dsn, "dbname="+tc.dbName) &&
-				   strings.Contains(dsn, "port="+tc.port) {
+				if strings.Contains(dsn, "host="+tc.ip) &&
+					strings.Contains(dsn, "user="+tc.user) &&
+					strings.Contains(dsn, "dbname="+tc.dbName) &&
+					strings.Contains(dsn, "port="+tc.port) {
 					t.Logf("✅ %s: DSN生成正确", tc.name)
 					t.Logf("   生成的DSN: %s", dsn)
 				} else {
@@ -90,4 +90,4 @@ func TestParameterValidation(t *testing.T) {
 // isEmpty 辅助函数，用于测试参数验证
 func isEmpty(s string) bool {
 	return s == ""
-} 
+}

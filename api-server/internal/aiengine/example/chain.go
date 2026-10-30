@@ -16,9 +16,9 @@ import (
 	"context"
 	"fmt"
 
+	"ginp-api/internal/aiengine"
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
-	"ginp-api/internal/aiengine"
 )
 
 // SafetyThenTranslate 演示"先用 safety_check preset 跑一次,再调 translate_skill"。

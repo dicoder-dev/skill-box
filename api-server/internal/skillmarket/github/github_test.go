@@ -49,7 +49,7 @@ func setupSkillRepoDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"skills/pdf/SKILL.md": "---\nname: pdf\ndescription: PDF test\n---\n# PDF\n",
+		"skills/pdf/SKILL.md":                         "---\nname: pdf\ndescription: PDF test\n---\n# PDF\n",
 		"skills/pdf/scripts/check_bounding_boxes.py":  "# bb\n",
 		"skills/pdf/scripts/check_fillable_fields.py": "# cf\n",
 		"skills/pdf/scripts/convert_pdf_to_images.py": "# ci\n",
@@ -198,10 +198,10 @@ func TestBuildRepoURL(t *testing.T) {
 // 2026-07-09 增:splitRemoteID 回归。
 func TestSplitRemoteID(t *testing.T) {
 	cases := []struct {
-		in         string
-		wantRepo   string
-		wantSkill  string
-		wantOK     bool
+		in        string
+		wantRepo  string
+		wantSkill string
+		wantOK    bool
 	}{
 		{"anthropics/skills@skills/pdf", "anthropics/skills", "skills/pdf", true},
 		{"anthropics/skills@pdf", "anthropics/skills", "pdf", true},
@@ -321,13 +321,13 @@ func setupRootSkillRepoDir(t *testing.T) string {
 	run("config", "user.name", "Test")
 
 	files := map[string]string{
-		"SKILL.md":                            "---\nname: screenwriter-skill\ndescription: Screenwriter root skill\n---\n# Screenwriter\n",
-		"README.md":                           "# Top\n",
-		"LICENSE":                             "MIT\n",
-		"references/iron_rules.md":            "# iron rules\n",
-		"templates/review_template.md":        "# review tpl\n",
-		"templates/checklist.md":              "# checklist\n",
-		"examples/sample_review.md":           "# example\n",
+		"SKILL.md":                     "---\nname: screenwriter-skill\ndescription: Screenwriter root skill\n---\n# Screenwriter\n",
+		"README.md":                    "# Top\n",
+		"LICENSE":                      "MIT\n",
+		"references/iron_rules.md":     "# iron rules\n",
+		"templates/review_template.md": "# review tpl\n",
+		"templates/checklist.md":       "# checklist\n",
+		"examples/sample_review.md":    "# example\n",
 	}
 	for rel, content := range files {
 		full := filepath.Join(dir, rel)
@@ -349,12 +349,12 @@ func TestIsRootSkill(t *testing.T) {
 		skillPath, repoName string
 		want                bool
 	}{
-		{"screenwriter-skill", "screenwriter-skill", true}, // ROOT 仓库
-		{"pdf", "skills", false},                           // 子目录 skill
-		{"skills/pdf", "skills", false},                    // 嵌套子目录
+		{"screenwriter-skill", "screenwriter-skill", true},     // ROOT 仓库
+		{"pdf", "skills", false},                               // 子目录 skill
+		{"skills/pdf", "skills", false},                        // 嵌套子目录
 		{"  screenwriter-skill  ", "screenwriter-skill", true}, // TrimSpace 兜底
-		{"", "screenwriter-skill", false},                  // 空 skillPath 不是 ROOT
-		{"screenwriter-skill", "", false},                  // 空 repoName 也不是
+		{"", "screenwriter-skill", false},                      // 空 skillPath 不是 ROOT
+		{"screenwriter-skill", "", false},                      // 空 repoName 也不是
 	}
 	for _, c := range cases {
 		t.Run(c.skillPath+"|"+c.repoName, func(t *testing.T) {

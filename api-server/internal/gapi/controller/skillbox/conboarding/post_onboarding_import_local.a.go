@@ -21,11 +21,11 @@ package conboarding
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillpkg"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestOnboardingImportLocal 本地导入的 JSON 入参。

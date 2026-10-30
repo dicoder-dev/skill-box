@@ -25,7 +25,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestEnsureSeeded_Empty seed 17 个默认Agent到空 DB(2026-07-18:从 9 个扩到 17 个)。
+// TestEnsureSeeded_Empty seed 17 个默认 Agent 到空 DB(2026-07-18:从 9 个扩到 17 个)。
 func TestEnsureSeeded_Empty(t *testing.T) {
 	db := setupTestDB(t)
 	if err := EnsureSeeded(db, db); err != nil {
@@ -39,7 +39,7 @@ func TestEnsureSeeded_Empty(t *testing.T) {
 	var paths int64
 	db.Model(&entity.AgentPath{}).Count(&paths)
 	if paths < 30 {
-		// 17 个Agent每个至少 2 条 path,合计 ≥ 30
+		// 17 个 Agent 每个至少 2 条 path,合计 ≥ 30
 		t.Errorf("expected at least 30 paths, got %d", paths)
 	}
 }
@@ -62,7 +62,7 @@ func TestEnsureSeeded_AlreadySeeded(t *testing.T) {
 	}
 }
 
-// TestEnsureSeeded_IncrementalUpsert 2026-07-18 新增:模拟"老 DB 已有部分内置Agent,
+// TestEnsureSeeded_IncrementalUpsert 2026-07-18 新增:模拟"老 DB 已有部分内置 Agent,
 // 程序升级后再启动应自动补全缺失的 builtin"。
 //
 // 步骤:
@@ -71,7 +71,7 @@ func TestEnsureSeeded_AlreadySeeded(t *testing.T) {
 //  3. 验证 DB 最终是 17 个 builtin(头 10 upsert + 后 7 insert)+ 1 个用户自定义 = 18 行
 //  4. 验证新增的 builtin(openclaw / hermes / goose 等)都在 DB 里
 //  5. 验证老 builtin 的"用户改过的 enabled 字段"不被覆盖
-//  6. 验证用户自定义Agent保持原样
+//  6. 验证用户自定义 Agent 保持原样
 func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 	db := setupTestDB(t)
 	// 1) 模拟"老 DB 已有前 10 个 builtin"
@@ -93,7 +93,7 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 				return err
 			}
 		}
-		// 再加 1 个用户自定义Agent(应该不会被 upsert 影响)
+		// 再加 1 个用户自定义 Agent(应该不会被 upsert 影响)
 		if err := tx.Create(&entity.Agent{
 			AgentID: "my-custom-agent", DisplayName: "MyCustom", MdiIcon: "mdi:c",
 			IsSystem: false, Enabled: true, SortOrder: 999,
@@ -141,7 +141,7 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 		t.Errorf("upsert should NOT touch user-modified enabled; claude enabled=%v, want false", claude.Enabled)
 	}
 
-	// 6) 验证用户自定义Agent保持原样
+	// 6) 验证用户自定义 Agent 保持原样
 	var custom entity.Agent
 	if err := db.Where("tool_id = ?", "my-custom-agent").First(&custom).Error; err != nil {
 		t.Fatalf("user agent not found: %v", err)

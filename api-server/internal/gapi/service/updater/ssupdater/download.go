@@ -28,12 +28,12 @@ type State struct {
 
 // 各 phase 常量,前端字符串匹配。
 const (
-	PhaseIdle          = "idle"
-	PhaseChecking      = "checking"
-	PhaseDownloading   = "downloading"
-	PhaseVerifying     = "verifying"
+	PhaseIdle           = "idle"
+	PhaseChecking       = "checking"
+	PhaseDownloading    = "downloading"
+	PhaseVerifying      = "verifying"
 	PhasePendingRestart = "pendingRestart"
-	PhaseFailed        = "failed"
+	PhaseFailed         = "failed"
 )
 
 func newState() *State { return &State{Phase: PhaseIdle} }
@@ -136,7 +136,7 @@ func (d *Downloader) Download(ctx context.Context, asset *Asset) (string, error)
 		url := strings.TrimSpace(raw)
 		err := d.singleDownload(ctx, url, dest, asset.Size)
 		if err != nil {
-		logger.Warn("updater: download failed url=%s err=%v", url, err)
+			logger.Warn("updater: download failed url=%s err=%v", url, err)
 			lastErr = err
 			continue
 		}

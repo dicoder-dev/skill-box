@@ -194,7 +194,7 @@ export const MDI_TO_ICONPARK = {
   'archive-arrow-down-outline':   'Inbox',            // 归档 → 收件
 
   // 工具 / 视图入口
-  'tools':                        'Tool',
+  'agents':                        'Agent',
   'puzzle-outline':               'Puzzle',
   'shield-outline':               'Shield',
   'shield-check-outline':         'Shield',
@@ -221,7 +221,7 @@ export const MDI_TO_ICONPARK = {
   'cursor-default-click-outline': 'Cursor',
   'script-text-outline':          'FileCode',
   'radio-tower':                  'Tower',
-  'construction':                 'Tool',
+  'construction':                 'Agent',
 
   // 流程 / 状态
   'send':                         'Send',

@@ -19,9 +19,10 @@ type fakeAdapter struct {
 	touched  *[]string
 }
 
-func (f *fakeAdapter) AgentID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string     { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
-func (f *fakeAdapter) Icon() string        { return "?"
+func (f *fakeAdapter) Icon() string {
+	return "?"
 }
 func (f *fakeAdapter) DiscoverPaths(scope string) ([]string, error) {
 	return []string{f.root}, nil
@@ -74,8 +75,9 @@ func (f *fakeAdapter) ApplyLink(c skilladapter.Canonical, targetDir string) erro
 	return os.Symlink(c.SourceDir, targetDir)
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
-func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
-func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+func (f *fakeAdapter) Validate(c skilladapter.Canonical) error   { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                { return false }
+
 // 2026-07-08 增:Adapter 接口加 UserPath,fixdefault 走 f.root(同 DiscoverPaths 单值模型)。
 // 真正"DiscoverPaths 返多 path,UserPath 返单 path"的差异在 TestApplyOne_UsesUserPath_NotDiscoverPaths 验证。
 func (f *fakeAdapter) UserPath(scope string) (string, error) {
@@ -108,7 +110,7 @@ func TestApplyOne_Success_PreSnapshot(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err != nil {
@@ -145,7 +147,7 @@ func TestApplyOne_RollsBack_OnApplyError(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err == nil {
@@ -174,7 +176,7 @@ func TestApplyOne_RejectsBadScope(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     "moon",
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err == nil || !strings.Contains(err.Error(), "invalid scope") {
@@ -189,7 +191,7 @@ func TestApplyOne_RejectsUnknownAgent(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"ghost"},
+		Agents:    []string{"ghost"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if !errors.Is(err, skillapp.ErrAgentNotFound) {
@@ -222,7 +224,7 @@ func TestApplyOne_NilRegistry_FallsBackToDefault(t *testing.T) {
 	ap := skillapp.NewApplier(nil)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{agentID},
+		Agents:    []string{agentID},
 		Canonical: ptrCanon(sampleCanon("fallback-skill")),
 	})
 	if err != nil {
@@ -240,7 +242,7 @@ func TestApplyOne_RejectsEmptyFiles(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: &skilladapter.Canonical{Manifest: skilladapter.Manifest{Name: "x"}},
 	})
 	if !errors.Is(err, skillapp.ErrEmptyFiles) {
@@ -255,7 +257,7 @@ func TestApplyOne_RejectsEmptyAgents(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     nil,
+		Agents:    nil,
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if !errors.Is(err, skillapp.ErrEmptyAgents) {
@@ -271,7 +273,7 @@ func TestSnapshotDir_NonExistent(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("beta")),
 	})
 	if err != nil {
@@ -296,7 +298,7 @@ func TestApplyOne_SymlinkMode_CreatesSymlink(t *testing.T) {
 	canon.SourceDir = t.TempDir() // 模拟 skillstore 源端
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -346,7 +348,7 @@ func TestApplyOne_SymlinkMode_UndoRemovesLink(t *testing.T) {
 
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -377,7 +379,7 @@ func TestApplyOne_CopyMode_Default(t *testing.T) {
 	canon := sampleCanon("zeta")
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -394,11 +396,13 @@ func TestApplyOne_CopyMode_Default(t *testing.T) {
 }
 
 func ptrCanon(c skilladapter.Canonical) *skilladapter.Canonical { return &c }
+
 // TestApplyOne_PartialFailure_OnApplyError(2026-07-03):
 // Service.Apply 走宽容语义,即便 ApplyOne 出错仍返 200 给 controller。
 // 这里验证 ApplyResult.PartialFailure 字段在失败/成功路径下被正确赋值:
 //   - 失败时 res.PartialFailure=true + Status=StatusFailed + Error 非空
 //   - 成功时 res.PartialFailure=false + Status=StatusApplied + Error 空
+//
 // 前端 readApplyResult 依赖这两个字段判定是否弹 partial_failed toast。
 func TestApplyOne_PartialFailure_OnApplyError(t *testing.T) {
 	root := t.TempDir()
@@ -407,7 +411,7 @@ func TestApplyOne_PartialFailure_OnApplyError(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("theta")),
 	})
 	if err == nil {
@@ -434,7 +438,7 @@ func TestApplyOne_PartialFailure_OnSuccess(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"fake"},
+		Agents:    []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("iota")),
 	})
 	if err != nil {
@@ -548,7 +552,7 @@ func TestApplyOne_UsesUserPath_NotDiscoverPaths(t *testing.T) {
 
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Agents:     []string{"claude-ish"},
+		Agents:    []string{"claude-ish"},
 		Canonical: ptrCanon(sampleCanon("code-review")),
 	})
 	if err != nil {

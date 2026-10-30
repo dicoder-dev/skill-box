@@ -211,7 +211,7 @@ async function onApplyModeChange(newMode) {
     if (res && res.failed > 0) {
       const failedEntries = (res.entries || []).filter((e) => !e.ok && !e.skipped)
       const detail = failedEntries
-        .map((e) => `  • ${e.name} (${e.tool}): ${e.error}`)
+        .map((e) => `  • ${e.name} (${e.agent}): ${e.error}`)
         .join('\n')
       if (detail) {
         applyModeHint.value += '\n' + t('settings.applyMode.switchFailedDetail', { detail })

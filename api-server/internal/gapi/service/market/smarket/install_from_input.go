@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"ginp-api/internal/gapi/entity"
+	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
+	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillmarket"
-	mmarketskill "ginp-api/internal/gapi/model/skillbox/mmarketskill"
-	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
 	"ginp-api/pkg/where"
 )
 
@@ -59,23 +59,23 @@ type InstallFromInputResult struct {
 	GroupPath string `json:"group_path,omitempty"`
 	// 2026-07-09 增:同名已存在时返 409,前端弹「覆盖/另存为/取消」对话框
 	ConflictExistingVersion string `json:"conflict_existing_version,omitempty"`
-	ConflictExistingPath   string `json:"conflict_existing_path,omitempty"`
+	ConflictExistingPath    string `json:"conflict_existing_path,omitempty"`
 }
 
 // InstallFromInput 用户输入框 → 解析 → 下载 → 落 store(2026-07-09 增)。
 //
 // 流程:
-//   1) ResolveInstallInput 解析 input → (source_type, remote_id)
-//   2) 找 source / 或注册一个新 source(skillhub / skillssh 默认已 seed)
-//   3) Orchestrator.DownloadFromSource 拿 canonical
-//   4) sskill.Service.Create 落 store(skillstore DB)
+//  1. ResolveInstallInput 解析 input → (source_type, remote_id)
+//  2. 找 source / 或注册一个新 source(skillhub / skillssh 默认已 seed)
+//  3. Orchestrator.DownloadFromSource 拿 canonical
+//  4. sskill.Service.Create 落 store(skillstore DB)
 //
 // 错误:
 //   - ErrInvalidInput 解析失败(400)
 //   - ErrSourceNotFound 源未注册(404)
 //   - ErrPullFailed 下载 / 写盘失败(500)
 //
-// 不做 apply:本接口只负责把 skill 装到本地 store,apply 到具体Agent(scope)
+// 不做 apply:本接口只负责把 skill 装到本地 store,apply 到具体 Agent(scope)
 // 由用户在首页 Onboarding / Skill detail 触发,跟现有 Pull / PullV2 行为一致。
 func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInput) (*InstallFromInputResult, error) {
 	if in == nil {
@@ -164,7 +164,7 @@ func (s *Service) InstallFromInput(ctx context.Context, in *InstallFromInputInpu
 					SkillVersion:            can.Manifest.Version,
 					Scope:                   scope,
 					ConflictExistingVersion: existing.Manifest.Version,
-					ConflictExistingPath:   existingPath,
+					ConflictExistingPath:    existingPath,
 				}, fmt.Errorf("%w: %s", ErrSkillAlreadyExists, can.Manifest.Name)
 			}
 		}

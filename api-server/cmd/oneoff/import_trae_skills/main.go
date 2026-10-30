@@ -1,7 +1,8 @@
 // 一次性脚本: 走 importer 真导入 trae 5 个 skill 到 ~/.skill-box/skills/
 //
 // 用法:
-//   go run ./cmd/oneoff/import_trae_skills/
+//
+//	go run ./cmd/oneoff/import_trae_skills/
 //
 // 不依赖 HTTP / 桌面端 / DB,直接调 skillimporter 包做 scan + import。
 // 幂等: 二次跑同名 skill 会覆盖。
@@ -39,7 +40,7 @@ func main() {
 	for _, fs := range report.FoundSkills {
 		if fs.AgentID == "trae" {
 			traeItems = append(traeItems, skillimporter.ImportItem{
-				AgentID:  fs.AgentID,
+				AgentID: fs.AgentID,
 				Name:    fs.Canonical.Manifest.Name,
 				Version: fs.Canonical.Manifest.Version,
 			})

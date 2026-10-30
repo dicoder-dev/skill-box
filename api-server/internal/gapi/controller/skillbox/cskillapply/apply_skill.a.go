@@ -3,7 +3,6 @@ package cskillapply
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
@@ -11,6 +10,7 @@ import (
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestApplySkill 单 skill apply 请求。2026-06-24 改造:用 (scope, name) 定位 skill。
@@ -18,7 +18,7 @@ type RequestApplySkill struct {
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
 	Name      string   `json:"name"`
-	Agents     []string `json:"agents"`
+	Agents    []string `json:"agents"`
 }
 
 // RespondApplySkill 响应。
@@ -31,7 +31,7 @@ func ApplySkill(c *ginp.ContextPlus, req *RequestApplySkill) {
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
 		Name:      req.Name,
-		Agents:     req.Agents,
+		Agents:    req.Agents,
 	})
 	if err != nil {
 		switch {
@@ -58,7 +58,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply",
-			Description:   "把一个 skill 落到一个或多个目标Agent;用 scope+name 定位",
+			Description:   "把一个 skill 落到一个或多个目标 Agent;用 scope+name 定位",
 			RequestParams: RequestApplySkill{},
 		},
 	})

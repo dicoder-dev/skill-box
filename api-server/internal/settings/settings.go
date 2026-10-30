@@ -123,7 +123,7 @@ func (s *Service) GetAll() (*Snapshot, error) {
 //
 //   - copy:    沿用旧行为,把 canonical 文件逐个拷贝到目标目录(占空间,文件副本独立)。
 //   - symlink: 把目标目录做成一个软链接指向 skillstore 里的真实 skill 根(零占用,
-//              改源文件后目标端即时生效)。
+//     改源文件后目标端即时生效)。
 //
 // 默认 copy —— 不破坏任何已 apply 的记录,迁移是显式由用户发起。
 const (

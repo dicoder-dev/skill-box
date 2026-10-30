@@ -3,11 +3,11 @@ package cskillapply
 import (
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skillapp/sskillapp"
 	"ginp-api/internal/skillapp"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestForceUndoSkill 强制撤销请求(不依赖 apply_id)。
@@ -19,7 +19,7 @@ type RequestForceUndoSkill struct {
 	Scope     string `json:"scope" form:"scope"`
 	ProjectID uint   `json:"project_id" form:"project_id"`
 	Name      string `json:"name" form:"name"`
-	Agent      string `json:"agent" form:"agent"`
+	Agent     string `json:"agent" form:"agent"`
 }
 
 // ForceUndoSkill POST /api/skillbox/skills/apply/force-undo
@@ -37,7 +37,7 @@ func ForceUndoSkill(c *ginp.ContextPlus, req *RequestForceUndoSkill) {
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
 		Name:      req.Name,
-		Agent:      req.Agent,
+		Agent:     req.Agent,
 	})
 	if err != nil {
 		switch err {

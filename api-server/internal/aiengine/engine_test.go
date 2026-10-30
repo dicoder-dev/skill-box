@@ -5,16 +5,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
+	"github.com/go-kratos/blades"
 )
 
 // --- presets ---
 
 func TestRenderPreset_TemplateSubst(t *testing.T) {
 	p := aiengine.Preset{
-		System:      "You are X.",
+		System:       "You are X.",
 		UserTemplate: "Hello {name}, your skill is {skill_md}",
 	}
 	msgs := aiengine.RenderPreset(p, map[string]string{"name": "brody", "skill_md": "review-pr"})

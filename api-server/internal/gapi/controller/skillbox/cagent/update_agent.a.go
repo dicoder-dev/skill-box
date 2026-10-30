@@ -1,22 +1,22 @@
 // Package cagent - update_agent.a.go
 // POST /api/skillbox/agents/update
 //
-// 改一个Agent的元数据;系统Agent的 tool_id / is_system 不可改(本接口忽略这两个字段)。
+// 改一个 Agent 的元数据;系统 Agent 的 tool_id / is_system 不可改(本接口忽略这两个字段)。
 package cagent
 
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
-// RequestUpdateAgent 改Agent入参。
+// RequestUpdateAgent 改 Agent 入参。
 type RequestUpdateAgent struct {
-	AgentID      string              `json:"agent_id"` // locator,不可改
+	AgentID     string              `json:"agent_id"` // locator,不可改
 	DisplayName *string             `json:"display_name,omitempty"`
 	MdiIcon     *string             `json:"mdi_icon,omitempty"`
 	IconFile    *string             `json:"icon_file,omitempty"`
@@ -31,7 +31,7 @@ type RequestUpdateAgent struct {
 func UpdateAgent(c *ginp.ContextPlus, req *RequestUpdateAgent) {
 	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	in := &sagent.UpdateInput{
-		AgentID:      req.AgentID,
+		AgentID:     req.AgentID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
 		IconFile:    req.IconFile,
@@ -76,7 +76,7 @@ func init() {
 		PermissionName: "skillbox.agents.update",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.update",
-			Description:   "改Agent元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /agents/reload",
+			Description:   "改 Agent 元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /agents/reload",
 			RequestParams: RequestUpdateAgent{},
 		},
 	})

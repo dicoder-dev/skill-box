@@ -1,15 +1,16 @@
 // Package cdesktop 暴露桌面端独有的 HTTP 端点,供 webview 中的前端调用。
 //
 // 设计动机:
-//   Wails v3 alpha.60 不再像 v2 那样把 Go service 注入到 window.go.*;
-//   自动生成的 bindings 用 $Call.ByID(methodID, ...) 走 fetch /wails/runtime,
-//   而本项目的 webview 由后端 Gin server 提供,/wails/runtime 路由不存在。
 //
-//   因此桌面端能力(偏好、窗口、通知、剪贴板等)统一走 Gin HTTP 端点,
-//   既复用已有的 HTTP 抽象(http.js),也免去在 webview 里塞入 runtime.js 的复杂度。
+//	Wails v3 alpha.60 不再像 v2 那样把 Go service 注入到 window.go.*;
+//	自动生成的 bindings 用 $Call.ByID(methodID, ...) 走 fetch /wails/runtime,
+//	而本项目的 webview 由后端 Gin server 提供,/wails/runtime 路由不存在。
 //
-//   所有端点约定 NeedLogin=false / NeedPermission=false:这些是桌面本机能力,
-//   不需要走用户鉴权(本机进程内调用);若以后需要区分用户,再补 auth。
+//	因此桌面端能力(偏好、窗口、通知、剪贴板等)统一走 Gin HTTP 端点,
+//	既复用已有的 HTTP 抽象(http.js),也免去在 webview 里塞入 runtime.js 的复杂度。
+//
+//	所有端点约定 NeedLogin=false / NeedPermission=false:这些是桌面本机能力,
+//	不需要走用户鉴权(本机进程内调用);若以后需要区分用户,再补 auth。
 package cdesktop
 
 import (

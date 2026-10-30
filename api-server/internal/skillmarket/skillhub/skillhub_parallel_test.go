@@ -70,7 +70,7 @@ func TestDiscover_FallbackOnSlow(t *testing.T) {
 	// (跟 adapter 内 New 的 8s 一致);但 mock RoundTrip 直接转发到 stub server,
 	// 让 ctx 在 8s 时取消,触发 Discover fallback。
 	a := NewWithClient(&http.Client{
-		Timeout: 8 * time.Second,
+		Timeout:   8 * time.Second,
 		Transport: &mockRT{base: srv.URL},
 	})
 	start := time.Now()

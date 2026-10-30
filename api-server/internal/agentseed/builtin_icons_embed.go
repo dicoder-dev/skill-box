@@ -1,7 +1,7 @@
 // Package agentseed - builtin_icons_embed.go
 //
-// 把 9 个内置Agent的真实图标(从官方源下载)用 //go:embed 嵌到 Go 二进制,
-// seed 阶段写到 ~/.skill-box/agent-icons/ 让前端自托管接口能立即服务出来。
+// 把 9 个内置 Agent 的真实图标(从官方源下载)用 //go:embed 嵌到 Go 二进制,
+// seed 阶段写到 ~/.skill-box/tool-icons/ 让前端自托管接口能立即服务出来。
 //
 // 为什么不直接用前端 assets?
 //   - Go //go:embed 只能 embed 本包同 module 内的实体文件;
@@ -19,7 +19,7 @@ import "embed"
 //go:embed builtin-icons/*
 var builtinIconsFS embed.FS
 
-// builtinIconNames 内置图标的文件名 — 与 builtin.go 中内置Agent的 IconFile 字段对应。
+// builtinIconNames 内置图标的文件名 — 与 builtin.go 中内置 Agent 的 IconFile 字段对应。
 // 任何修改这里都要同步改 builtin.go 中 bt.IconFile 字段。
 //
 // 2026-07-03 更新:从临时占位图标换成联网搜集到的官方源:
@@ -33,7 +33,7 @@ var builtinIconsFS embed.FS
 //   - codebuddy.png + .svg  codebuddy.tencent.com 真 favicon
 //   - jetbrains.ico jetbrains.com 官方 favicon
 //
-// 2026-07-18 大扩:内置Agent从 9 增到 17,新增图标(已联网抓到):
+// 2026-07-18 大扩:内置 Agent 从 9 增到 17,新增图标(已联网抓到):
 //   - copilot.ico   github.com 站点 favicon
 //   - windsurf.ico  windsurf.com 官方 favicon(原 codeium.com)
 //   - goose.ico     block.github.io/goose 官方 icon(对应 block/goose)

@@ -876,7 +876,7 @@ const lineNumbers = computed(() => {
   align-items: center;
   padding: 4px 12px;
   font-size: 11px;
-  /* 2026-07-07 改 v2:工具栏背景深灰,跟代码区黑底过渡自然 */
+  /* 2026-07-07 改 v2:Agent栏背景深灰,跟代码区黑底过渡自然 */
   background: #171717;
   color: #94a3b8;
   border-bottom: 1px solid #262626;

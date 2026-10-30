@@ -36,10 +36,10 @@ import (
 )
 
 const (
-	defaultBaseURL    = "https://skills.sh"
+	defaultBaseURL        = "https://skills.sh"
 	defaultSourceHomepage = "https://skills.sh" // 2026-07-04 增:站点首页(skills.sh 本身就是浏览页,API 也在这个 host)
-	defaultGHRawBase  = "https://raw.githubusercontent.com"
-	defaultGHBlobBase = "https://github.com"
+	defaultGHRawBase      = "https://raw.githubusercontent.com"
+	defaultGHBlobBase     = "https://github.com"
 	// 2026-07-01 改:用 /api/audits/{page} 公开 JSON API(无需鉴权)做主数据源。
 	// 50 页 = 2500 条,覆盖 skills.sh Top 实用区。audits API 单页固定 50 条,
 	// 全站 851,604 是 GitHub 仓库抓取总维度,网站全榜只展示 Top N,
@@ -178,9 +178,9 @@ func (a *Adapter) KnownFallbackIDs() []string {
 // Discover 解析 catalog 页,提取 (owner/repo, skill) 列表。
 //
 // 2026-07-01 改:三段式 —
-//   1) 优先走 /api/audits/{page} 公开 JSON API(无需鉴权,含 author/description/tags)
-//   2) JSON 解析失败时回退 HTML 解析(老版 @ 文本 + 新版 href 链接),合并去重
-//   3) HTML 也为空时走 knownCatalogFallback
+//  1. 优先走 /api/audits/{page} 公开 JSON API(无需鉴权,含 author/description/tags)
+//  2. JSON 解析失败时回退 HTML 解析(老版 @ 文本 + 新版 href 链接),合并去重
+//  3. HTML 也为空时走 knownCatalogFallback
 //
 // 2026-07-01 增:keyword 参数处理。
 //   - 空 keyword:走 /api/audits/{0..N-1} 全量目录
@@ -299,19 +299,19 @@ func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pag
 	}
 
 	type pageResult struct {
-		page  int
+		page   int
 		skills []struct {
-			Rank     int    `json:"rank"`
-			Source   string `json:"source"`
-			SkillID  string `json:"skillId"`
-			Name     string `json:"name"`
+			Rank          int    `json:"rank"`
+			Source        string `json:"source"`
+			SkillID       string `json:"skillId"`
+			Name          string `json:"name"`
 			AgentTrustHub *struct {
 				Source string `json:"source"`
 				Slug   string `json:"slug"`
 				Result struct {
 					GeminiAnalysis struct {
-						Verdict  string   `json:"verdict"`
-						Summary  string   `json:"summary"`
+						Verdict    string   `json:"verdict"`
+						Summary    string   `json:"summary"`
 						Categories []string `json:"categories"`
 					} `json:"gemini_analysis"`
 					OverallRiskLevel string `json:"overall_risk_level"`
@@ -445,17 +445,17 @@ func (a *Adapter) discoverFromAuditsAPI(ctx context.Context, baseURL string, pag
 // auditsAPIResponse 对应 /api/audits/{page} 的响应(只取需要的字段)。
 type auditsAPIResponse struct {
 	Skills []struct {
-		Rank     int    `json:"rank"`
-		Source   string `json:"source"`
-		SkillID  string `json:"skillId"`
-		Name     string `json:"name"`
+		Rank          int    `json:"rank"`
+		Source        string `json:"source"`
+		SkillID       string `json:"skillId"`
+		Name          string `json:"name"`
 		AgentTrustHub *struct {
 			Source string `json:"source"`
 			Slug   string `json:"slug"`
 			Result struct {
 				GeminiAnalysis struct {
-					Verdict  string `json:"verdict"`
-					Summary  string `json:"summary"`
+					Verdict    string   `json:"verdict"`
+					Summary    string   `json:"summary"`
 					Categories []string `json:"categories"`
 				} `json:"gemini_analysis"`
 				OverallRiskLevel string `json:"overall_risk_level"`
@@ -528,14 +528,14 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 // 6 候选全失败 → 兜底骨架 → 用户根本装不上。
 //
 // 新方案(镜像 github adapter):
-//   1) GET /api/github/repos/{owner}/{repo}/git/trees/{branch}?recursive=1
-//      → 扫整个仓库的 blob 路径元数据(~1.2s)
-//   2) 在 tree 里找**以 "<name>/SKILL.md" 结尾**的 blob(允许任意深度前缀)
-//      → 例: <name>=ai-video-generation 命中 `tools/video/SKILL.md` 也行
-//   3) 找到 → anchor prefix = 命中路径去掉 "/SKILL.md" 前缀,然后并发 raw 拉所有
-//      blob(类似 github adapter.downloadFromTree)。
-//   4) 找不到 / tree 拉不到 → 退回老 6 候选 URL,只为兜底拿 SKILL.md。
-//   5) 都失败 → knownCatalogFallback 命中 → 内存骨架。
+//  1. GET /api/github/repos/{owner}/{repo}/git/trees/{branch}?recursive=1
+//     → 扫整个仓库的 blob 路径元数据(~1.2s)
+//  2. 在 tree 里找**以 "<name>/SKILL.md" 结尾**的 blob(允许任意深度前缀)
+//     → 例: <name>=ai-video-generation 命中 `tools/video/SKILL.md` 也行
+//  3. 找到 → anchor prefix = 命中路径去掉 "/SKILL.md" 前缀,然后并发 raw 拉所有
+//     blob(类似 github adapter.downloadFromTree)。
+//  4. 找不到 / tree 拉不到 → 退回老 6 候选 URL,只为兜底拿 SKILL.md。
+//  5. 都失败 → knownCatalogFallback 命中 → 内存骨架。
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	if remoteID == "" {
 		return nil, skillmarket.ErrEmptyRemoteID
@@ -572,12 +572,12 @@ func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skil
 // downloadFromTree 走 GitHub Trees API + raw 并发下载,完整流程。
 //
 // 两阶段 locate(2026-07-10 增):
-//   1) 路径匹配:树里找以 "<name>/SKILL.md" 结尾的 blob
-//      → 命中走 anchor-files 并发拉(代价小,典型 5-10 个文件)
-//   2) frontmatter 匹配(回退):扫描树里所有 SKILL.md,并发 GET 内容,parse frontmatter
-//      找 `name: <name>` 精确匹配
-//      → 解决 skills.sh detail 页 name ≠ GitHub 目录名的问题(如
-//         "ai-video-generation" 在 `inference-sh/skills` 是 `tools/video/SKILL.md`)
+//  1. 路径匹配:树里找以 "<name>/SKILL.md" 结尾的 blob
+//     → 命中走 anchor-files 并发拉(代价小,典型 5-10 个文件)
+//  2. frontmatter 匹配(回退):扫描树里所有 SKILL.md,并发 GET 内容,parse frontmatter
+//     找 `name: <name>` 精确匹配
+//     → 解决 skills.sh detail 页 name ≠ GitHub 目录名的问题(如
+//     "ai-video-generation" 在 `inference-sh/skills` 是 `tools/video/SKILL.md`)
 //
 // 返回 (canonical, true) 命中;(nil, false) 表示树抓不到 / 两阶段都没找到,
 // 由调用方继续走老 6 候选 URL 兜底。

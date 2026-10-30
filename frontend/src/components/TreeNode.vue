@@ -10,7 +10,7 @@
  *
  * 节点数据:
  *   - { is_group: true,  name, path, children: [...] }
- *   - { is_group: false, name, path, skill_meta: { name, version, description, applied_tools, ... } }
+ *   - { is_group: false, name, path, skill_meta: { name, version, description, applied_agents, ... } }
  *
  * 行为:
  *   - 分组:可展开/折叠(箭头 + 点击行)
@@ -25,7 +25,7 @@
  * 让父组件能跨节点共享展开状态(搜索时自动展开匹配路径用)。
  *
  * 2026-06-29 改:skill 叶子改"卡片"样式 — 明显的圆角边框、内边距、阴影,
- *   卡片内部分两行:头(name + @version + description)、尾(工具调用小标题 + 工具 chip 列表);
+ *   卡片内部分两行:头(name + @version + description)、尾(Agent调用小标题 + Agent chip 列表);
  *   折叠时缩进(分组)不影响 skill 卡片视觉。
  */
 import { computed } from 'vue'
@@ -51,11 +51,11 @@ const props = defineProps({
   depth: { type: Number, default: 0 },
   // 父路径(根为空)— 用于构建完整 path
   parentPath: { type: String, default: '' },
-  // 2026-07-03 增:工具元数据映射 { [tool_id]: { mdi_icon, icon_file, display_name, ... } }
+  // 2026-07-03 增:Agent元数据映射 { [agent_id]: { mdi_icon, icon_file, display_name, ... } }
   // 用于把首页 skill 树 chip 前的图标从硬编码 mdi 改成"icon_file 优先 + mdi 兜底",
-  // 跟 ToolsView 的 ToolIcon 组件保持一致的视觉。
-  // 父组件(SkillsView)传整个 useToolsStore.items,TreeNode 内部按 tool_id 查。
-  toolsById: { type: Object, default: () => ({}) },
+  // 跟 AgentsView 的 AgentIcon 组件保持一致的视觉。
+  // 父组件(SkillsView)传整个 useAgentsStore.items,TreeNode 内部按 agent_id 查。
+  agentsById: { type: Object, default: () => ({}) },
 })
 
 // 2026-07-03 改:首页分组只支持单级,走单级拍平函数,把后端可能仍返回的
@@ -145,12 +145,12 @@ function onDragStart(node, e) {
   setTimeout(() => ghost.remove(), 0)
 }
 
-// 2026-07-17 增:图标栈的悬浮提示 — 显示完整的可读名(优先 display_name,否则 tool_id),
-// 避免用户看到重叠图标想确认"这是哪个工具"时无处可查。
-function toolFullTitle(toolID) {
-  const meta = props.toolsById?.[toolID]
+// 2026-07-17 增:图标栈的悬浮提示 — 显示完整的可读名(优先 display_name,否则 agent_id),
+// 避免用户看到重叠图标想确认"这是哪个Agent"时无处可查。
+function agentFullTitle(agentID) {
+  const meta = props.agentsById?.[agentID]
   if (meta?.display_name) return meta.display_name
-  return toolID
+  return agentID
 }
 const TOOL_ICON_MAP = {
   codex: 'mdi:console',
@@ -159,9 +159,9 @@ const TOOL_ICON_MAP = {
   cursor: 'mdi:cursor-default-click-outline',
   trae: 'mdi:leaf',
 }
-function toolIcon(tid) { return TOOL_ICON_MAP[tid] || 'mdi:puzzle-outline' }
+function agentIcon(tid) { return TOOL_ICON_MAP[tid] || 'mdi:puzzle-outline' }
 
-// 2026-07-11 增:chip 按工具分色 — key 与 TOOL_ICON_MAP 同步,
+// 2026-07-11 增:chip 按Agent分色 — key 与 TOOL_ICON_MAP 同步,
 // value 是 style.css 已有的 accent 名(浅色 / 暗黑模式自动切换)。
 // opencode=紫仅作用于 chip 强调色,不会蔓延到卡片主体,符合
 // memory:avoid-violet-as-primary-color.md "紫色 AI 感强,主色禁用"。
@@ -173,15 +173,15 @@ const TOOL_ACCENT = {
   trae: 'accent-rose',       // 玫 — 字节 IDE
 }
 
-// 2026-07-03 增:tool 的 icon_file 优先级 > mdi。
-// chip 上有 icon_file 就走 <img :src="/api/files/tool-icons/<basename>">,
-// 否则走原来 toolIcon(tid) 拿 mdi 字符串。
-function toolIconFile(tid) {
-  const t = props.toolsById && props.toolsById[tid]
+// 2026-07-03 增:agent 的 icon_file 优先级 > mdi。
+// chip 上有 icon_file 就走 <img :src="/api/files/agent-icons/<basename>">,
+// 否则走原来 agentIcon(tid) 拿 mdi 字符串。
+function agentIconFile(tid) {
+  const t = props.agentsById && props.agentsById[tid]
   return t && t.icon_file ? t.icon_file : ''
 }
 
-// 给 chip 的 <img> 拼绝对 URL(同 ToolIcon 组件的逻辑,baseURL 由 main.js 注入)
+// 给 chip 的 <img> 拼绝对 URL(同 AgentIcon 组件的逻辑,baseURL 由 main.js 注入)
 function resolveBaseURL() {
   if (typeof window === 'undefined') return ''
   const cfg = window.__APP_CONFIG__
@@ -189,9 +189,9 @@ function resolveBaseURL() {
   if (window.location) return `${window.location.protocol}//${window.location.host}`
   return ''
 }
-function toolIconURL(name) {
+function agentIconURL(name) {
   if (!name) return ''
-  return `${resolveBaseURL()}/api/files/tool-icons/${name}`
+  return `${resolveBaseURL()}/api/files/agent-icons/${name}`
 }
 
 // 是否 drop 目标 = 当前节点
@@ -200,7 +200,7 @@ function isDropTarget(node) {
 }
 
 // 2026-07-12 改:全局 Agent 判定 — 看 skill 的 source_path 磁盘绝对路径是否
-// 命中 ~/.agents/skills/ 段(用户家目录下的全局 skills 池,所有工具可自动读取)。
+// 命中 ~/.agents/skills/ 段(用户家目录下的全局 skills 池,所有Agent可自动读取)。
 // source_path 是后端 ListTree 在 SkillTreeMeta.source_path 字段注入的:
 // skill 从 ~/.agents/skills/<name>/ 导入到 ~/.skill-box/skills/ 时,后端
 // importOneFromDir 会把原始目录 EvalSymlinks 后的真实路径写到
@@ -218,18 +218,18 @@ function isGlobalAgent(node) {
   return /[\\/]\.agents[\\/]skills[\\/]/.test(src)
 }
 
-// 2026-07-17 增:卡片前的「图标栈」— 把原来底部完整工具名 chip 列表收敛成
-// head 最左侧的重叠工具图标,节省卡片纵向空间,让列表更简洁。
+// 2026-07-17 增:卡片前的「图标栈」— 把原来底部完整Agent名 chip 列表收敛成
+// head 最左侧的重叠Agent图标,节省卡片纵向空间,让列表更简洁。
 // 规则(用户需求):
-//   - 全局 Agent:只显示当前默认图标(mdi:earth,emerald),不叠工具图标;
-//   - 没有任何工具启用:显示默认图标(mdi:puzzle-outline);
-//   - 有工具启用:用各工具自己的图标横向重叠排列,最多显示 3 个;
-//   - 启用工具 > 3 个:前 2 个显示工具图标,第 3 个位置显示「+N」表示还有更多。
+//   - 全局 Agent:只显示当前默认图标(mdi:earth,emerald),不叠Agent图标;
+//   - 没有任何Agent启用:显示默认图标(mdi:puzzle-outline);
+//   - 有Agent启用:用各Agent自己的图标横向重叠排列,最多显示 3 个;
+//   - 启用Agent > 3 个:前 2 个显示Agent图标,第 3 个位置显示「+N」表示还有更多。
 // 每个栈元素结构:
-//   { key, kind:'default'|'tool'|'more', icon?, img?, title?, accent? }
+//   { key, kind:'default'|'agent'|'more', icon?, img?, title?, accent? }
 const MAX_ICON_STACK = 3
 function iconStack(node) {
-  // 全局 Agent:单独一个 earth 图标,语义已足够,不再叠工具图标
+  // 全局 Agent:单独一个 earth 图标,语义已足够,不再叠Agent图标
   if (isGlobalAgent(node)) {
     return [{
       key: '__global__',
@@ -239,34 +239,34 @@ function iconStack(node) {
       title: t('skills.treeNode.globalAgentTip'),
     }]
   }
-  const tools = node.skill_meta?.applied_tools || []
-  // 无任何工具启用:回退默认拼图图标
-  if (!tools.length) {
+  const agents = node.skill_meta?.applied_agents || []
+  // 无任何Agent启用:回退默认拼图图标
+  if (!agents.length) {
     return [{ key: '__default__', kind: 'default', icon: 'mdi:puzzle-outline' }]
   }
-  // 有工具启用:构造工具图标栈
+  // 有Agent启用:构造Agent图标栈
   const stack = []
-  // 超过上限时,前 (MAX-1) 个显示真实工具图标,最后一格留给「+N」
-  const showCount = tools.length > MAX_ICON_STACK ? MAX_ICON_STACK - 1 : tools.length
+  // 超过上限时,前 (MAX-1) 个显示真实Agent图标,最后一格留给「+N」
+  const showCount = agents.length > MAX_ICON_STACK ? MAX_ICON_STACK - 1 : agents.length
   for (let i = 0; i < showCount; i++) {
-    const tid = tools[i]
+    const tid = agents[i]
     stack.push({
       key: tid,
-      kind: 'tool',
-      img: toolIconFile(tid) ? toolIconURL(toolIconFile(tid)) : '',
-      icon: toolIcon(tid),
+      kind: 'agent',
+      img: agentIconFile(tid) ? agentIconURL(agentIconFile(tid)) : '',
+      icon: agentIcon(tid),
       accent: TOOL_ACCENT[tid] || 'default',
-      title: toolFullTitle(tid),
+      title: agentFullTitle(tid),
     })
   }
-  // 溢出:最后一格显示「+N」,hover 提示剩余工具完整名
-  if (tools.length > MAX_ICON_STACK) {
-    const rest = tools.slice(showCount)
+  // 溢出:最后一格显示「+N」,hover 提示剩余Agent完整名
+  if (agents.length > MAX_ICON_STACK) {
+    const rest = agents.slice(showCount)
     stack.push({
       key: '__more__',
       kind: 'more',
       more: rest.length,
-      title: rest.map((tid) => toolFullTitle(tid)).join('、'),
+      title: rest.map((tid) => agentFullTitle(tid)).join('、'),
     })
   }
   return stack
@@ -330,7 +330,7 @@ function iconStack(node) {
         </span>
       </div>
 
-      <!-- skill 行:卡片样式 — 点击选中;卡片下方显示已被哪些工具全局启用。
+      <!-- skill 行:卡片样式 — 点击选中;卡片下方显示已被哪些Agent全局启用。
            2026-06-30 改:draggable + @dragstart 放到 .tree-row-skill 自己(同 .tree-row-group)。 -->
       <div
         v-else
@@ -345,12 +345,12 @@ function iconStack(node) {
       >
         <div class="tree-skill-main">
           <div class="tree-skill-head">
-            <!-- 2026-07-17 改:卡片前的图标从「单个 skill 类型图标」升级为「工具图标栈」。
+            <!-- 2026-07-17 改:卡片前的图标从「单个 skill 类型图标」升级为「Agent图标栈」。
                  - 全局 Agent:单个 earth 图标(emerald);
-                 - 无工具启用:默认拼图图标;
-                 - 有工具启用:各工具真实图标横向重叠,最多 3 个,超出末位显「+N」。
+                 - 无Agent启用:默认拼图图标;
+                 - 有Agent启用:各Agent真实图标横向重叠,最多 3 个,超出末位显「+N」。
                  重叠靠 margin-left 负值实现,后一个盖在前一个上,视觉更紧凑。
-                 移除了原底部完整工具名 chip 列表(tree-skill-tools),节省卡片空间。 -->
+                 移除了原底部完整Agent名 chip 列表(tree-skill-agents),节省卡片空间。 -->
             <div class="tree-skill-iconstack" :title="iconStack(node).length === 1 ? iconStack(node)[0].title : ''">
               <span
                 v-for="(it, idx) in iconStack(node)"
@@ -366,7 +366,7 @@ function iconStack(node) {
               >
                 <!-- 溢出「+N」 -->
                 <span v-if="it.kind === 'more'" class="tree-icon-more">+{{ it.more }}</span>
-                <!-- 工具真实 logo -->
+                <!-- Agent真实 logo -->
                 <img
                   v-else-if="it.img"
                   :src="it.img"
@@ -375,7 +375,7 @@ function iconStack(node) {
                   height="14"
                   class="tree-icon-img"
                 />
-                <!-- 兜底 mdi 图标(默认图标 / 工具无 icon_file) -->
+                <!-- 兜底 mdi 图标(默认图标 / Agent无 icon_file) -->
                 <IconPark v-else :icon="it.icon" width="14" height="14" />
               </span>
             </div>
@@ -387,8 +387,8 @@ function iconStack(node) {
       </div>
 
       <!-- 递归子节点(仅分组,展开时)。
-           2026-07-08 修:必须把 :tools-by-id 也透传,否则子分组下的 skill 节点
-           拿不到 toolsById,toolIconFile(tid) 永远拿不到 icon_file → 退化到
+           2026-07-08 修:必须把 :agents-by-id 也透传,否则子分组下的 skill 节点
+           拿不到 agentsById,agentIconFile(tid) 永远拿不到 icon_file → 退化到
            硬编码 mdi 兜底,显示不出"数据库配置的图标"。 -->
       <TreeNode
         v-if="node.is_group && !isCollapsed(node) && (node.children || []).length"
@@ -396,7 +396,7 @@ function iconStack(node) {
         :selected-path="selectedPath"
         :collapsed-paths="collapsedPaths"
         :drop-target-path="dropTargetPath"
-        :tools-by-id="toolsById"
+        :agents-by-id="agentsById"
         :depth="depth + 1"
         :parent-path="fullPath(node)"
         @select-skill="(n) => emit('select-skill', n)"
@@ -543,8 +543,8 @@ function iconStack(node) {
   gap: 6px;
   min-width: 0;
 }
-/* 2026-07-17 改:tree-skill-icon 系列样式退役,替换为「工具图标栈」样式。
-   图标栈:head 最左侧一排重叠的圆形图标(工具 logo / 默认图标 / +N)。 */
+/* 2026-07-17 改:tree-skill-icon 系列样式退役,替换为「Agent图标栈」样式。
+   图标栈:head 最左侧一排重叠的圆形图标(Agent logo / 默认图标 / +N)。 */
 .tree-skill-iconstack {
   display: inline-flex;
   align-items: center;
@@ -566,16 +566,16 @@ function iconStack(node) {
 .tree-icon-slot + .tree-icon-slot {
   margin-left: -4px;
 }
-/* 默认图标(无工具启用 / 全局 Agent):不重叠,单独一个 */
+/* 默认图标(无Agent启用 / 全局 Agent):不重叠,单独一个 */
 .tree-icon-slot.is-default {
   color: var(--text-dim);
 }
 .tree-icon-slot.accent-is-global-agent {
   color: var(--accent-emerald);
 }
-/* 2026-07-17 改:去掉工具分色的边框/淡底 — 用户反馈图标外圈那层颜色多余。
-   现在所有槽统一中性描边 + 卡片底色,只保留重叠的视觉层次,不再按工具染色。 */
-/* 溢出「+N」槽:主色数字,提示还有更多工具 */
+/* 2026-07-17 改:去掉Agent分色的边框/淡底 — 用户反馈图标外圈那层颜色多余。
+   现在所有槽统一中性描边 + 卡片底色,只保留重叠的视觉层次,不再按Agent染色。 */
+/* 溢出「+N」槽:主色数字,提示还有更多Agent */
 .tree-icon-slot.is-more {
   color: var(--text-dim);
 }
@@ -585,7 +585,7 @@ function iconStack(node) {
   line-height: 1;
   font-family: 'JetBrains Mono', monospace;
 }
-/* 工具真实 logo:圆内居中,不拉伸 */
+/* Agent真实 logo:圆内居中,不拉伸 */
 .tree-icon-img {
   display: block;
   width: 14px;

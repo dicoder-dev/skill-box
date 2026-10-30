@@ -20,8 +20,8 @@ import { listProjects } from '@/api/skillbox/projects'
 import { runSkillTest } from '@/api/skillbox/skill_test'
 // 2026-07-17 改造:tag 弹窗 → version 历史 inline panel(嵌入 SkillScopePanel 内部),
 // 这里不再 import VersionHistoryModal。
-// 2026-07-03 增:apply / batch 响应的统一判定工具,把 Service.Apply 宽容路径
-// (逐 tool 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
+// 2026-07-03 增:apply / batch 响应的统一判定方式,把 Service.Apply 宽容路径
+// (逐 agent 失败不阻断但仍返 200)下的部分失败显式标出,前端弹 partial_failed toast。
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
 // 2026-07-13 改:AIDialog 入口迁到 SkillFileInlinePanel 右侧 AI 面板,AIDialog 组件
 // 保留文件不删(后续若需"全局 AI 操作"可启用),这里不再 import。
@@ -49,10 +49,10 @@ import OnboardingImportDialog from '@/components/OnboardingImportDialog.vue'
 import { useToastStore } from '@/core/store/toast'
 // 2026-06-29 增:skill 树形 store — 集中管理 tree / 选中 / 折叠 / drop 目标
 import { useSkillTreeStore } from '@/core/store/skill-tree'
-// 2026-07-03 增:tools store — 给 TreeNode 注入工具元数据,
+// 2026-07-03 增:agents store — 给 TreeNode 注入Agent元数据,
   // 让首页 skill 树 chip 前的图标用真 logo (icon_file 优先 + mdi 兜底),
   // 而不是硬编码的 mdi 字符串。
-import { useToolsStore } from '@/core/store/tools'
+import { useAgentsStore } from '@/core/store/agents'
 import { useResizablePanel } from '@/core/composables/useResizablePanel'
 
 const { t } = useI18n()
@@ -132,9 +132,9 @@ async function saveInlineEdit() {
   try {
     // 2026-07-07 改:scope 区从 SkillsView 搬到 SkillFileInlinePanel 后,
     // 这里的 apply 回放逻辑删除 — InlinePanel 自管 scope,会监听 skillbox:scope-refresh
-    // 事件拉取最新状态。SKILL.md 写盘到 home store 后,下次 enabled tool 重新
+    // 事件拉取最新状态。SKILL.md 写盘到 home store 后,下次 enabled agent 重新
     // 加载时(symlink 模式)自然拿到新内容;copy 模式需用户在 InlinePanel 手动
-    // 重启用工具(预期行为,避免自动回放踩到 forceUndoApply 等副作用)。
+    // 重启用Agent(预期行为,避免自动回放踩到 forceUndoApply 等副作用)。
     const targetSkill = { ...current.value }
     // 先同步到 currentMeta(用户视角的"立刻反馈")
     currentMeta.description = newDescription
@@ -162,9 +162,9 @@ async function saveInlineEdit() {
     editing.value = false
     // 2026-07-07 改:scope 区从 SkillsView 搬到 SkillFileInlinePanel 后,这里不再
     // 遍历 enabled scope 调 apply(InlinePanel 自管 scope-status,磁盘副本同步
-    // 由用户在工具列表手动重启用,或下次 enabled tool 重新加载时自然拿到新内容)。
+    // 由用户在Agent列表手动重启用,或下次 enabled agent 重新加载时自然拿到新内容)。
     // 触发 InlinePanel 重拉一次 scope,这样刚保存的 SKILL.md 元数据如果改了
-    // tool/scope 关联也能及时反映。
+    // agent/scope 关联也能及时反映。
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
     toast.success(t('skills.editor.saveOk', { name: targetSkill.name }))
   } catch (e) {
@@ -189,27 +189,27 @@ function rebuildSkillMd(newBody, newTriggers, newDescription) {
 // 全局 toast
 const toast = useToastStore()
 
-// 2026-07-03 增:工具元数据 store,给 TreeNode 注入 logo。
-// load() 在 onMounted 启动时已经由 ToolsView 跑过一次,但 SkillsView 进入时可能 store 还没填,
+// 2026-07-03 增:Agent元数据 store,给 TreeNode 注入 logo。
+// load() 在 onMounted 启动时已经由 AgentsView 跑过一次,但 SkillsView 进入时可能 store 还没填,
 // 这里兜底:首次进入时调一次 load()。
-const toolsStore = useToolsStore()
-const toolsById = computed(() => {
+const agentsStore = useAgentsStore()
+const agentsById = computed(() => {
   const m = {}
-  for (const t of toolsStore.items || []) {
-    if (t && t.tool_id) m[t.tool_id] = t
+  for (const t of agentsStore.items || []) {
+    if (t && t.agent_id) m[t.agent_id] = t
   }
   return m
 })
 
-// 2026-07-07 改:toolIcon 不再依赖 scopeTools(scope 已搬走),改用 toolsById 查
-// toolsStore,缺省时退化到 puzzle outline。toolsStore 在 onMounted 时 load,
+// 2026-07-07 改:agentIcon 不再依赖 scopeAgents(scope 已搬走),改用 agentsById 查
+// agentsStore,缺省时退化到 puzzle outline。agentsStore 在 onMounted 时 load,
 // 编辑器弹窗(APPLY_TOOLS)直接读这里取 icon 即可,不会触发额外请求。
-function toolIcon(toolID) {
-  const t = toolsById.value[toolID]
+function agentIcon(agentID) {
+  const t = agentsById.value[agentID]
   return t?.icon || 'mdi:puzzle-outline'
 }
 // 2026-07-13 改:AI 入口从 SkillsView 顶栏 actions slot 迁到 SkillFileInlinePanel
-// 文件工具栏大纲图标位置(右侧 AI 对话面板替换大纲区域)。aiOpen / toggleAI 已
+// 文件Agent栏大纲图标位置(右侧 AI 对话面板替换大纲区域)。aiOpen / toggleAI 已
 // 删除,onAIApply 保留(由 InlinePanel emit('ai-apply-skill') 触发,处理 SKILL.md
 // 应用的落盘 + dispatchEvent 同步)。
 
@@ -302,7 +302,7 @@ function skillKey(p) {
 // 2026-07-07 改:scope 区搬到 SkillFileInlinePanel 后,apply/unapply 全部在
 // InlinePanel 内部完成,这里不再需要 patch 列表项 — InlinePanel 完成 apply/undo
 // 后会 dispatch 'skillbox:scope-refresh',parent 只需 reload 列表(store 内部会
-// 重新同步 applied_tools)。原 patchAppliedTools 整段删除。
+// 重新同步 applied_agents)。原 patchAppliedAgents 整段删除。
 
 // AI 输入的上下文 = 当前 skill 的 body
 const currentSkillMd = computed(() => currentBody.value || '')
@@ -473,8 +473,8 @@ async function loadCurrent(row) {
   currentError.value = ''
   // 2026-07-07 改:scope 区已搬到 SkillFileInlinePanel,parent 不再需要清旧 scope
   // 状态 — InlinePanel 通过 watch props.skill 变化自动重拉 scope-status 并
-  // 重置折叠态(null = 全展开)。这里把旧版"清 selectedToolID / scopeHits /
-  // scopeTools / scopeProjects / scopeError"那段删掉。
+  // 重置折叠态(null = 全展开)。这里把旧版"清 selectedAgentID / scopeHits /
+  // scopeAgents / scopeProjects / scopeError"那段删掉。
   try {
     // 2026-06-29 改:用 path 传(支持多级分组);name 是叶子短名(后端 SplitPath 兜底)
     const full = await getSkill({
@@ -655,7 +655,7 @@ async function openInFolder() {
 }
 
 // ====== 复制路径 ======
-// 2026-07-04 改:从工具栏图标按钮搬到右键菜单(node 参数版),
+// 2026-07-04 改:从Agent栏图标按钮搬到右键菜单(node 参数版),
 // 兼容 toolbar(current 走 _full)和右键(node)两条调用链。
 // 路径优先用 current._full.canonical.source_path(详情区后端给的真实物理路径),
 // 否则 storeRoot + node.path 拼出绝对路径,跟 openSkillInFolder 逻辑保持一致。
@@ -684,7 +684,7 @@ const draft = reactive({
   scope: 'global', project_id: 0, name: '', version: '0.1.0',
   description: '', triggers: [], // 2026-07-10 改:触发词从逗号分隔文本改成数组,弹窗里动态增删
   body: '',
-  applyTools: [], // 2026-06-26:新建时勾选的"适用工具"列表
+  applyAgents: [], // 2026-06-26:新建时勾选的"适用Agent"列表
 })
 const editingKey = ref(null)
 // 2026-06-26:弹窗内需要的项目列表(用于"项目作用域"下拉)
@@ -735,21 +735,21 @@ async function loadEditorProjects(keyword = '') {
   finally { editorProjectsLoading.value = false }
 }
 
-// 工具列表(写死 5 个,跟 scope-status 工具行保持一致;不查后端)
+// Agent列表(写死 5 个,跟 scope-status Agent行保持一致;不查后端)
 const APPLY_TOOLS = [
-  { tool_id: 'codex', display: 'Codex' },
-  { tool_id: 'claude', display: 'Claude' },
-  { tool_id: 'opencode', display: 'OpenCode' },
-  { tool_id: 'cursor', display: 'Cursor' },
-  { tool_id: 'trae', display: 'Trae' },
+  { agent_id: 'codex', display: 'Codex' },
+  { agent_id: 'claude', display: 'Claude' },
+  { agent_id: 'opencode', display: 'OpenCode' },
+  { agent_id: 'cursor', display: 'Cursor' },
+  { agent_id: 'trae', display: 'Trae' },
 ]
-function toggleApplyTool(toolID) {
-  const i = draft.applyTools.indexOf(toolID)
-  if (i >= 0) draft.applyTools.splice(i, 1)
-  else draft.applyTools.push(toolID)
+function toggleApplyAgent(agentID) {
+  const i = draft.applyAgents.indexOf(agentID)
+  if (i >= 0) draft.applyAgents.splice(i, 1)
+  else draft.applyAgents.push(agentID)
 }
-function isApplyToolChecked(toolID) {
-  return draft.applyTools.includes(toolID)
+function isApplyAgentChecked(agentID) {
+  return draft.applyAgents.includes(agentID)
 }
 
 // 2026-07-10 改:触发词用 draft.triggers(数组)直接生成 manifest,
@@ -790,37 +790,37 @@ async function submit() {
     else await createSkill(payload)
     // 2026-07-18 增:保存后通知 VersionHistoryPanel 重拉 log。
     notifyGitRefresh({ source: 'apply-rollback', name: payload.name })
-    // 2026-06-26 增:创建/更新后,遍历勾选的工具调 apply 让 skill 在目标工具生效
+    // 2026-06-26 增:创建/更新后,遍历勾选的Agent调 apply 让 skill 在目标Agent生效
     // 失败不阻断保存(apply 是"额外"动作),但要弹 toast 提示
-    if (draft.applyTools.length) {
+    if (draft.applyAgents.length) {
       // 2026-07-03 改:同 doApplyOne —— Service.Apply 宽容路径下 HTTP 200 也可能
       // 落盘失败,要 inspectApplyResult 读 res.partial_failure 显式判定。
       const failItems = []
-      for (const tid of draft.applyTools) {
+      for (const tid of draft.applyAgents) {
         try {
           const res = await applySkill({
             name: draft.name,
             scope: draft.scope,
             project_id: draft.project_id || 0,
-            tools: [tid],
+            agents: [tid],
           })
           const ins = inspectApplyResult(res)
           if (!ins.allOk) {
-            failItems.push(...ins.failedItems.map((f) => ({ tool: f.tool || tid, msg: f.error })))
+            failItems.push(...ins.failedItems.map((f) => ({ agent: f.agent || tid, msg: f.error })))
           }
         } catch (e) {
-          failItems.push({ tool: tid, msg: e?.message || String(e) })
+          failItems.push({ agent: tid, msg: e?.message || String(e) })
         }
       }
       if (failItems.length) {
-        const detail = formatFailedDetail(failItems.map((f) => ({ tool: f.tool, error: f.msg })))
+        const detail = formatFailedDetail(failItems.map((f) => ({ agent: f.agent, error: f.msg })))
         toast.error(t('skills.apply.partialFailed', {
-          ok: draft.applyTools.length - failItems.length,
-          total: draft.applyTools.length,
+          ok: draft.applyAgents.length - failItems.length,
+          total: draft.applyAgents.length,
           detail,
         }), 6000)
       } else {
-        toast.success(t('skills.editor.applyAllSuccess', { n: draft.applyTools.length }))
+        toast.success(t('skills.editor.applyAllSuccess', { n: draft.applyAgents.length }))
       }
     }
     editorOpen.value = false
@@ -834,19 +834,19 @@ async function submit() {
 
 // ====== 删除 ======
 // 2026-06-29 改:删除链路 — 弹窗带 cascade 复选框(默认勾选);
-// 勾选时,删完 skillbox 库内的副本后,循环拉 scope-status 拿到所有 (tool, scope, project)
-// 命中,再循环调 forceUndoApply 同步清理工具目录(后端 service 已支持按 (scope, project, name, tool)
+// 勾选时,删完 skillbox 库内的副本后,循环拉 scope-status 拿到所有 (agent, scope, project)
+// 命中,再循环调 forceUndoApply 同步清理Agent目录(后端 service 已支持按 (scope, project, name, agent)
 // 删磁盘副本,无需新加批量接口)。
 
-// 工具目录清理的"幂等批量"实现:对每个 hit 调一次 forceUndoApply,失败聚合到 failList。
+// Agent目录清理的"幂等批量"实现:对每个 hit 调一次 forceUndoApply,失败聚合到 failList。
 // 不会因为某个 hit 失败就中断。
-async function cleanupToolDirs(name, version) {
+async function cleanupAgentDirs(name, version) {
   if (!name) return { okCount: 0, failCount: 0, fails: [] }
   let statusResp
   try {
     statusResp = await getSkillScopeStatus({ name, version: version || '' })
   } catch (e) {
-    return { okCount: 0, failCount: 0, fails: [{ tool: '*', msg: e?.message || String(e) }] }
+    return { okCount: 0, failCount: 0, fails: [{ agent: '*', msg: e?.message || String(e) }] }
   }
   const hits = (statusResp?.hits || []).filter((h) => h.exists)
   if (hits.length === 0) return { okCount: 0, failCount: 0, fails: [] }
@@ -858,11 +858,11 @@ async function cleanupToolDirs(name, version) {
         scope: h.scope,
         project_id: h.project_id || 0,
         name,
-        tool: h.tool_id,
+        agent: h.agent_id,
       })
       okCount++
     } catch (e) {
-      fails.push({ tool: h.tool_id, scope: h.scope, msg: e?.message || String(e) })
+      fails.push({ agent: h.agent_id, scope: h.scope, msg: e?.message || String(e) })
     }
   }
   return { okCount, failCount: fails.length, fails }
@@ -933,13 +933,13 @@ async function confirmDelete() {
       // 否则下一次 mount + reload 仍会用旧 path 去 flatItems 里找,虽然
       // 找不到会走兜底,但频繁删 / mount 仍会留脏数据,显式清更稳。
       skillTree.clearSelected()
-      // 同步工具目录
+      // 同步Agent目录
       if (cascade) {
-        const r = await cleanupToolDirs(target.name, target.version)
+        const r = await cleanupAgentDirs(target.name, target.version)
         if (r.failCount > 0) {
           toast.error(t('skills.list.skillCascadePartial', {
             n: r.failCount,
-            detail: r.fails.slice(0, 3).map((f) => `${f.tool}:${f.msg}`).join('; '),
+            detail: r.fails.slice(0, 3).map((f) => `${f.agent}:${f.msg}`).join('; '),
           }))
         } else if (r.okCount > 0) {
           toast.success(t('skills.list.skillCascadeOk', { name: target.name, n: r.okCount }))
@@ -959,17 +959,17 @@ async function confirmDelete() {
           toast.error(t('skills.list.groupDeleteFailed', { msg: r2.error }))
           return
         }
-        // 级联成功后,同步删每个 skill 的工具目录
+        // 级联成功后,同步删每个 skill 的Agent目录
         if (cascade) {
           let totalCleaned = 0
           let totalFailed = 0
           const failSummary = []
           for (const sp of r2.deleted_skill_paths || []) {
             const name = sp.split('/').pop()
-            const cr = await cleanupToolDirs(name, '')
+            const cr = await cleanupAgentDirs(name, '')
             totalCleaned += cr.okCount
             totalFailed += cr.failCount
-            for (const f of cr.fails) failSummary.push(`${name}@${f.tool}:${f.msg}`)
+            for (const f of cr.fails) failSummary.push(`${name}@${f.agent}:${f.msg}`)
           }
           if (totalFailed > 0) {
             toast.error(t('skills.list.skillCascadePartial', {
@@ -1611,8 +1611,8 @@ const rootDropHover = ref(false)
 // 内部监听这个事件后自己 loadScopeStatus。这样保持单一真相源。
 //
 // 2026-07-08 改:SkillsView 收到 skills:refresh / skillbox:skills-refresh 后,
-// **必须**也 reload 一次 skill 树 — 树节点的 applied_tools 字段来自
-// ListTree 后端注入,前端不重算。用户在右侧 scope 面板启用/停用某 tool 后,
+// **必须**也 reload 一次 skill 树 — 树节点的 applied_agents 字段来自
+// ListTree 后端注入,前端不重算。用户在右侧 scope 面板启用/停用某 agent 后,
 // 左侧 chip 才会跟着更新(否则永远是初始拉到的旧值)。
 // 同一份 reload 在 InlinePanel / ScopePanel 自己 dispatch 出的
 // skillbox:scope-refresh 上也复用 — 不分两条路径,统一走 onScopeChange。
@@ -1630,7 +1630,7 @@ function onSkillsRefresh() {
 // 2026-07-08 增:apply / unapply 触发的"列表也要刷"事件统一入口。
 // - 转发 skillbox:scope-refresh 给 InlinePanel,刷新右侧 scope 状态
 //   (InlinePanel 内的 ScopePanel 自己也在监听这个事件,会自己 loadScope)。
-// - 调 skillTree.load() 重拉树,刷新左侧 chip(applied_tools 字段)
+// - 调 skillTree.load() 重拉树,刷新左侧 chip(applied_agents 字段)
 //   跟 store 的 reload 路径一致(带 keyword / 保留选中态),不会清空。
 // 之所以不在 onSkillsRefresh 里也加 reload:skills:refresh 是 Settings
 // 迁移场景,迁移完成会重置 store 状态,这里由调用方决定何时 reload;
@@ -1678,11 +1678,11 @@ onMounted(() => {
   // 场景"(Settings 改完),不重拉树不行;scope-refresh 是用户日常操作,
   // 必须走静默 load,避免 loading 闪屏。
   window.addEventListener('skillbox:scope-refresh', onScopeChange)
-  // 2026-07-03 增:首次进入时拉工具列表,让 TreeNode 的 chip icon 有数据。
-  // 如果用户先进 ToolsView 再进首页,这里 load() 会复用 store.items 缓存,
+  // 2026-07-03 增:首次进入时拉Agent列表,让 TreeNode 的 chip icon 有数据。
+  // 如果用户先进 AgentsView 再进首页,这里 load() 会复用 store.items 缓存,
   // 实际不发请求(items.length > 0)。
-  if (!toolsStore.items || toolsStore.items.length === 0) {
-    toolsStore.load().catch(() => { /* 失败也不影响 skill 列表渲染 */ })
+  if (!agentsStore.items || agentsStore.items.length === 0) {
+    agentsStore.load().catch(() => { /* 失败也不影响 skill 列表渲染 */ })
   }
   // grid 列宽拖拽初始化（setup 时 skillsLayoutEl 还没挂载，这里再写一次）
   syncSkillsListWidth()
@@ -1758,7 +1758,7 @@ onUnmounted(() => {
           :collapsed-paths="skillTree.collapsedPaths"
           :drop-target-path="skillTree.dropTargetPath"
           :depth="0"
-          :tools-by-id="toolsById"
+          :agents-by-id="agentsById"
           @select-skill="selectItem"
           @context-menu-skill="onSkillContextMenu"
           @context-menu-group="onGroupContextMenu"
@@ -1897,7 +1897,7 @@ onUnmounted(() => {
             </template>
           </template>
           <!-- 2026-07-12 改:顶栏 actions 只保留"测试" + "AI",把"标签/在文件夹打开/删除"3 个图标
-               从工具栏移除(用户反馈用不到,移到右键菜单或 list 行操作里更合适)。
+               从Agent栏移除(用户反馈用不到,移到右键菜单或 list 行操作里更合适)。
                原 5 个按钮 → 现 2 个,空 class 注释同步更新。 -->
           <template #actions>
             <button
@@ -1910,7 +1910,7 @@ onUnmounted(() => {
               <span v-if="testing" class="spinner spinner-sm"></span>
               <IconPark v-else icon="mdi:test-tube" width="15" height="15" />
             </button>
-            <!-- 2026-07-13 改:AI 按钮从此处移除,迁到 SkillFileInlinePanel 文件工具栏
+            <!-- 2026-07-13 改:AI 按钮从此处移除,迁到 SkillFileInlinePanel 文件Agent栏
                  大纲图标位置(由 InlinePanel 内部渲染,点击切换右侧 AI 对话面板)。 -->
           </template>
         </SkillFileInlinePanel>
@@ -2028,26 +2028,26 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- 2026-06-26 新增:适用工具多选 — 提交后自动在勾选的工具上 enable -->
+        <!-- 2026-06-26 新增:适用Agent多选 — 提交后自动在勾选的Agent上 enable -->
         <div class="editor-field-full">
-          <label>{{ t('skills.editor.applyTools') }} <small>({{ t('skills.editor.applyToolsHint') }})</small></label>
-          <div class="chip-row apply-tools-row">
+          <label>{{ t('skills.editor.applyAgents') }} <small>({{ t('skills.editor.applyAgentsHint') }})</small></label>
+          <div class="chip-row apply-agents-row">
             <button
-              v-for="tool in APPLY_TOOLS"
-              :key="tool.tool_id"
+              v-for="agent in APPLY_TOOLS"
+              :key="agent.agent_id"
               type="button"
-              :class="['chip', 'chip-tool-pick', isApplyToolChecked(tool.tool_id) ? 'chip-active' : '']"
-              :title="tool.display"
-              @click="toggleApplyTool(tool.tool_id)"
+              :class="['chip', 'chip-agent-pick', isApplyAgentChecked(agent.agent_id) ? 'chip-active' : '']"
+              :title="agent.display"
+              @click="toggleApplyAgent(agent.agent_id)"
             >
-              <IconPark :icon="toolIcon(tool.tool_id)" width="12" height="12" />
-              <span>{{ tool.display }}</span>
+              <IconPark :icon="agentIcon(agent.agent_id)" width="12" height="12" />
+              <span>{{ agent.display }}</span>
             </button>
-            <span v-if="!draft.applyTools.length" class="chip-empty muted">
-              {{ t('skills.editor.applyToolsNone') }}
+            <span v-if="!draft.applyAgents.length" class="chip-empty muted">
+              {{ t('skills.editor.applyAgentsNone') }}
             </span>
-            <span v-else class="chip-tool-selected-hint muted">
-              {{ t('skills.editor.applyToolsSelected', { n: draft.applyTools.length }) }}
+            <span v-else class="chip-agent-selected-hint muted">
+              {{ t('skills.editor.applyAgentsSelected', { n: draft.applyAgents.length }) }}
             </span>
           </div>
         </div>
@@ -2581,7 +2581,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.skill-item-tool-chip {
+.skill-item-agent-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2593,7 +2593,7 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1;
 }
-.skill-item-tool-chip:hover {
+.skill-item-agent-chip:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
@@ -2834,7 +2834,7 @@ onUnmounted(() => {
 .detail-toolbar {
   /* 2026-07-07 改:detail-toolbar 简化为单行。
      旧版 .detail-title-block / .detail-name / .detail-version / .detail-desc-row /
-     .detail-triggers-row / .triggers-label / .scope-card / .scope-row / .chip-tool* /
+     .detail-triggers-row / .triggers-label / .scope-card / .scope-row / .chip-agent* /
      .chip-scope-target* / .chip-flash / .chip-busy / .chip-mini-* 整段删除。
      顶部 toolbar 现在只放一个 .detail-toolbar-name(面包屑) + .detail-actions(5 个图标按钮)。
      toolbar 整体 padding 收紧,vertical center,贴合"轻量级"风格。 */
@@ -3137,14 +3137,14 @@ onUnmounted(() => {
 
 /* ============================================
    2026-07-07 改:Scope 两级布局(2026-06-24 旧版)整段删除。
-   旧 .scope-row / .scope-row-label / .chip-tool / .chip-scope-target* /
+   旧 .scope-row / .scope-row-label / .chip-agent / .chip-scope-target* /
    .chip-busy / .chip-flash / .chip-mini-* / .chip-count / .chip-spinner /
-   .chip-tool-selected / .chip-tool-syncing 全部不再使用。
+   .chip-agent-selected / .chip-agent-syncing 全部不再使用。
    新的 scope 区在 SkillFileInlinePanel 内部,样式走 .sfip-scope*。
    ============================================ */
 
-/* 编辑器弹窗"适用工具"chip 行尾提示(保留,2026-06-26 引入,跟 .chip-tool-pick 配合用) */
-.chip-tool-selected-hint {
+/* 编辑器弹窗"适用Agent"chip 行尾提示(保留,2026-06-26 引入,跟 .chip-agent-pick 配合用) */
+.chip-agent-selected-hint {
   font-size: 11px;
   padding-left: 4px;
 }
@@ -3638,11 +3638,11 @@ onUnmounted(() => {
 }
 .project-select:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* 2026-06-26 新增:适用工具多选 chip(借用 scope chip-tool 风格,差异化在 active 色) */
-.apply-tools-row {
+/* 2026-06-26 新增:适用Agent多选 chip(借用 scope chip-agent 风格,差异化在 active 色) */
+.apply-agents-row {
   padding: 4px 0;
 }
-.chip-tool-pick {
+.chip-agent-pick {
   cursor: pointer;
   background: var(--bg-card);
   color: var(--text);
@@ -3650,17 +3650,17 @@ onUnmounted(() => {
   border-style: solid;
   font-family: inherit;
 }
-.chip-tool-pick.chip-active {
+.chip-agent-pick.chip-active {
   background: var(--text);
   color: var(--bg-card);
   border-color: var(--text);
   border-style: solid;
 }
-.chip-tool-pick.chip-active:hover {
+.chip-agent-pick.chip-active:hover {
   background: var(--text);
   color: var(--bg-card);
 }
-.chip-tool-pick:not(.chip-active):hover {
+.chip-agent-pick:not(.chip-active):hover {
   background: var(--bg-hover);
   color: var(--text);
   border-color: var(--text-faint);

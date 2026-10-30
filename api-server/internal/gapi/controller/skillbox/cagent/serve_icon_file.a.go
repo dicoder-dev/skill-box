@@ -1,7 +1,7 @@
 // Package cagent - serve_icon_file.a.go
 // GET /api/files/agent-icons/*filename
 //
-// 静态服务 ~/.skill-box/agent-icons/ 下的图片文件(用户上传 + seed 嵌入的)。
+// 静态服务 ~/.skill-box/tool-icons/ 下的图片文件(用户上传 + seed 嵌入的)。
 // 防穿越:文件名必须经过 agenticon.ValidIconFileName 校验。
 //
 // 这里用 ginp.RouterAppend 注册 GET 路由(参数 filename),而不是 FileServer,
@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/agent/agenticon"
 	"ginp-api/pkg/ginp"
+	"github.com/gin-gonic/gin"
 )
 
 // ServeIconFile GET /api/files/agent-icons/&lt;filename&gt;
@@ -26,7 +26,7 @@ import (
 //     落不到这里;用 :param 段绑定是没歧义的精确子路径匹配。
 //   - 调用方 fetch URL 拼成 "/api/files/agent-icons/<basename>" 不变。
 //
-// 静态文件服务 ~/.skill-box/agent-icons/&lt;name&gt;,文件名必须经过
+// 静态文件服务 ~/.skill-box/tool-icons/&lt;name&gt;,文件名必须经过
 // agenticon.ValidIconFileName + filepath.Base 二重校验防穿越。
 func ServeIconFile(c *ginp.ContextPlus) {
 	name := strings.TrimSpace(c.Param("filename"))
@@ -102,7 +102,7 @@ func init() {
 		PermissionName: "skillbox.files.tool_icons",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "files.tool_icons",
-			Description:   "静态服务用户上传/seed 的Agent图标;文件名必须是合法 basename",
+			Description:   "静态服务用户上传/seed 的 Agent 图标;文件名必须是合法 basename",
 			RequestParams: struct{}{},
 		},
 	})

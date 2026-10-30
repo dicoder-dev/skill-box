@@ -4,8 +4,8 @@
 // 用户不满意 — 该格式对所有 skill 一致,无法反映实际改动。现在统一通过本包生成:
 //
 //   - LLMEnabled=true: 调 LLM 让模型看 diff 生成 conventional commit message;
-//                      模型错误/超时 → 降级到模板路径(commit 仍落盘 + 推记录
-//                      错误,不阻断 store.Save)
+//     模型错误/超时 → 降级到模板路径(commit 仍落盘 + 推记录
+//     错误,不阻断 store.Save)
 //   - LLMEnabled=false: 用固定模板(按时间戳 / 按文件名 / op+文件名 三选)
 //
 // 设计要点:

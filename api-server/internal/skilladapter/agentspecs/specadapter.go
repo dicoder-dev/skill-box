@@ -50,8 +50,8 @@ func NewSpecAdapter(spec *AgentSpec) *skilladapter.BaseAdapter {
 		Display: spec.DisplayName,
 		// 字段名沿用 IconEmoji,语义已统一为 mdi 名字符串(2026-06-30 改造)。
 		// 旧 emoji 内容已废弃,BaseAdapter.Icon() 直接返回该字段。
-		IconEmoji: spec.MdiIcon,
-		Agents:     user,
+		IconEmoji:   spec.MdiIcon,
+		Agents:      user,
 		SystemPaths: system,
 	}
 }

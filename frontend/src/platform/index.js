@@ -142,7 +142,7 @@ function createWebPlatform() {
         }
       },
       // 2026-07-04 增:删除磁盘路径(文件或目录树),幂等(不存在返 ok=true)。
-      // 供 ProjectsView 工具 skill 弹窗的"删除 skill"使用,前端必须二次确认。
+      // 供 ProjectsView Agent skill 弹窗的"删除 skill"使用,前端必须二次确认。
       async removePath(path) {
         try {
           const r = await http.post('/api/desktop/fs/remove-path', { path })

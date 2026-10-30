@@ -195,7 +195,7 @@ func TestSkillHubAdapter_E2E_DiscoverDownload(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
 		"/api/skills": {
 			status: 200,
-			body: `{"code":0,"data":{"skills":[{"slug":"x","name":"X","version":"0.1.0","description":"x","ownerName":"alice","tags":[],"homepage":"https://x","updated_at":1782878868630}],"total":1}}`,
+			body:   `{"code":0,"data":{"skills":[{"slug":"x","name":"X","version":"0.1.0","description":"x","ownerName":"alice","tags":[],"homepage":"https://x","updated_at":1782878868630}],"total":1}}`,
 		},
 		"/api/v1/skills/x/skill.md": {
 			status: 200,

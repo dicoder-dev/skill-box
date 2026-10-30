@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
+	"github.com/go-kratos/blades"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

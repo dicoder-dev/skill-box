@@ -5,13 +5,13 @@ package caiprovider
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestUpdateProvider 更新 provider(PATCH 语义:空字段不改)。

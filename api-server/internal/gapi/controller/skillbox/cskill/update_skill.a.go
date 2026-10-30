@@ -3,11 +3,11 @@ package cskill
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestUpdateSkill 更新入参。按 name 定位,body 里给新 manifest / files。

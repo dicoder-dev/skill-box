@@ -11,14 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// LoadAllFromDB 从 tools + tool_paths 表加载全部 enabled=true 的Agent,
+// LoadAllFromDB 从 tools + tool_paths 表加载全部 enabled=true 的 Agent,
 // 转成 []*AgentSpec。
 //
-// 2026-06-30 二改:替代原 LoadAll() 的"读 yaml"实现,Agent元数据从编译期
+// 2026-06-30 二改:替代原 LoadAll() 的"读 yaml"实现,Agent 元数据从编译期
 // 内嵌变成运行时 DB 拉。每次启动 / 每次 reload 都会调一次。
 //
 // 关键约束:
-//   - 排除 enabled=false 的Agent(用户禁用,不注册 adapter)
+//   - 排除 enabled=false 的 Agent(用户禁用,不注册 adapter)
 //   - 同一 tool_id 在 DB 层面靠 uniqueIndex 兜底;这里再校验一次(防御
 //     race condition / DB 异常)
 //   - 每个 agent 的 path 按 (scope, category, path_order) 排序后填入 AgentSpec.Paths
@@ -66,7 +66,7 @@ func LoadAllFromDB(db *gorm.DB) ([]*AgentSpec, error) {
 // 失败:Validate 不通过(空 tool_id / 空 display_name / 空 mdi_icon / 路径为空)。
 func toSpec(t *entity.Agent, paths []*entity.AgentPath) (*AgentSpec, error) {
 	spec := &AgentSpec{
-		AgentID:      t.AgentID,
+		AgentID:     t.AgentID,
 		DisplayName: t.DisplayName,
 		MdiIcon:     t.MdiIcon,
 		Maturity:    t.Maturity,

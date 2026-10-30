@@ -17,24 +17,26 @@ import (
 // RequestToggleGlobalAgent 把 skill 切换为「全局 Agent」状态。
 //
 // 设计依据(2026-07-12):
-//   后端不维护独立的 global_agent 字段 —— "全局 Agent" 的单一事实是磁盘上
-//   ~/.agents/skills/<name>/SKILL.md 是否存在。store.buildTreeNode 每次 ListTree
-//   都实时检测该路径,store 是"只读系统",不缓存"曾经导入过"的历史状态。
 //
-//   用户在 Skill 作用域面板上点 "全局 Agent" tag:
-//     - enabled=true  → 把当前 skill 的所有文件镜像到 ~/.agents/skills/<name>/
-//     - enabled=false → 删除 ~/.agents/skills/<name>/ 整个目录
+//	后端不维护独立的 global_agent 字段 —— "全局 Agent" 的单一事实是磁盘上
+//	~/.agents/skills/<name>/SKILL.md 是否存在。store.buildTreeNode 每次 ListTree
+//	都实时检测该路径,store 是"只读系统",不缓存"曾经导入过"的历史状态。
 //
-//   写盘后无需任何 store 状态变更 —— 下次 ListTree 自动 detect 到新状态,
-//   左侧 skill 卡片 tag 与本面板 tag 自动同步。
+//	用户在 Skill 作用域面板上点 "全局 Agent" tag:
+//	  - enabled=true  → 把当前 skill 的所有文件镜像到 ~/.agents/skills/<name>/
+//	  - enabled=false → 删除 ~/.agents/skills/<name>/ 整个目录
+//
+//	写盘后无需任何 store 状态变更 —— 下次 ListTree 自动 detect 到新状态,
+//	左侧 skill 卡片 tag 与本面板 tag 自动同步。
 //
 // 入参:
-//   name       - skill name(必填;SKILL.md manifest.name,跟目录名一致)
-//   version    - skill version(可选,只用于日志)
-//   group_path - skill 在 store 内的分组相对路径(2026-07-12 增:支持多级分组;
-//                旧版只用 name 走 store.Load 只能命中根下直接子目录,
-//                像 "frontend/react/use-cache" 这类嵌套 skill 必然 404)
-//   enabled    - true=开启镜像, false=删除目录
+//
+//	name       - skill name(必填;SKILL.md manifest.name,跟目录名一致)
+//	version    - skill version(可选,只用于日志)
+//	group_path - skill 在 store 内的分组相对路径(2026-07-12 增:支持多级分组;
+//	             旧版只用 name 走 store.Load 只能命中根下直接子目录,
+//	             像 "frontend/react/use-cache" 这类嵌套 skill 必然 404)
+//	enabled    - true=开启镜像, false=删除目录
 type RequestToggleGlobalAgent struct {
 	Name      string `json:"name" form:"name"`
 	Version   string `json:"version" form:"version"`

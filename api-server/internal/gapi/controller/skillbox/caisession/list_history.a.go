@@ -8,13 +8,13 @@ package caisession
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/internal/skillboxdata"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestListHistory 列表请求。
@@ -66,7 +66,7 @@ func init() {
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "ai.history.list",
 			Description:   "列 <source_path>/.skill-box/history/ 下全部对话的 metadata(不含 messages);id/title/preview/ts/provider/model/size,按 ts desc",
-			RequestParams:  RequestListHistory{},
+			RequestParams: RequestListHistory{},
 		},
 	})
 }

@@ -1,30 +1,30 @@
 // Package cagent - create_agent.a.go
 // POST /api/skillbox/agents/create
 //
-// 新建一个用户Agent(is_system 强制 false)。
+// 新建一个用户 Agent(is_system 强制 false)。
 package cagent
 
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestCreateAgent 新建入参。
 type RequestCreateAgent struct {
-	AgentID      string                  `json:"agent_id"`
-	DisplayName string                  `json:"display_name"`
-	MdiIcon     string                  `json:"mdi_icon"`
-	IconFile    string                  `json:"icon_file"`
-	Maturity    string                  `json:"maturity"`
-	Note        string                  `json:"note"`
-	Enabled     bool                    `json:"enabled"`
-	SortOrder   int                     `json:"sort_order"`
-	Paths       []RequestPathInput      `json:"paths"`
+	AgentID     string             `json:"agent_id"`
+	DisplayName string             `json:"display_name"`
+	MdiIcon     string             `json:"mdi_icon"`
+	IconFile    string             `json:"icon_file"`
+	Maturity    string             `json:"maturity"`
+	Note        string             `json:"note"`
+	Enabled     bool               `json:"enabled"`
+	SortOrder   int                `json:"sort_order"`
+	Paths       []RequestPathInput `json:"paths"`
 }
 
 // RequestPathInput 单条 path 入参。
@@ -39,7 +39,7 @@ type RequestPathInput struct {
 func CreateAgent(c *ginp.ContextPlus, req *RequestCreateAgent) {
 	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	in := &sagent.CreateInput{
-		AgentID:      req.AgentID,
+		AgentID:     req.AgentID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
 		IconFile:    req.IconFile,
@@ -82,7 +82,7 @@ func init() {
 		PermissionName: "skillbox.agents.create",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.create",
-			Description:   "新建Agent(用户级,is_system 强制 false);前端改完建议再调 /agents/reload 让 adapter 立刻生效",
+			Description:   "新建 Agent(用户级,is_system 强制 false);前端改完建议再调 /agents/reload 让 adapter 立刻生效",
 			RequestParams: RequestCreateAgent{},
 		},
 	})

@@ -197,8 +197,8 @@ func TestImportFromZipBytes_NoSKILL(t *testing.T) {
 // TestImportFromZipBytes_MultiSkill zip 含多个 skill,全部导入。
 func TestImportFromZipBytes_MultiSkill(t *testing.T) {
 	buf := newZip(t, map[string]string{
-		"skills/foo/SKILL.md": "---\nname: foo\ndescription: foo description ok\n---\n# foo\n",
-		"skills/bar/SKILL.md": "---\nname: bar\ndescription: bar description ok\n---\n# bar\n",
+		"skills/foo/SKILL.md":  "---\nname: foo\ndescription: foo description ok\n---\n# foo\n",
+		"skills/bar/SKILL.md":  "---\nname: bar\ndescription: bar description ok\n---\n# bar\n",
 		"skills/foo/extra.txt": "foo extra",
 	})
 

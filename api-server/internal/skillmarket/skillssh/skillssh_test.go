@@ -90,10 +90,10 @@ func firstNonEmptyRT(s ...string) string {
 
 func TestSplitRemoteID(t *testing.T) {
 	cases := []struct {
-		in         string
-		wantRepo   string
-		wantName   string
-		wantOK     bool
+		in       string
+		wantRepo string
+		wantName string
+		wantOK   bool
 	}{
 		{"vercel-labs/agent-skills@vercel-react-best-practices", "vercel-labs/agent-skills", "vercel-react-best-practices", true},
 		{"owner/repo@skill", "owner/repo", "skill", true},
@@ -184,7 +184,7 @@ func TestDownload_ExtraPathCandidates(t *testing.T) {
 		"/foo/bar/main/.claude/skills/hi/SKILL.md": {
 			status: 200,
 			ct:     "text/markdown",
-			body: "---\nname: hi\nversion: 0.2.0\n---\n# Hi\n",
+			body:   "---\nname: hi\nversion: 0.2.0\n---\n# Hi\n",
 		},
 	}}
 	a := NewWithClient(&http.Client{Transport: rt})
@@ -278,10 +278,10 @@ triggers:
 func TestDownload_AllCandidatesFail(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
 		// 全部 404,触发 fallback err
-		"/o/r/main/skills/x/SKILL.md":      {status: 404, body: ""},
-		"/o/r/main/x/SKILL.md":             {status: 404, body: ""},
-		"/o/r/master/skills/x/SKILL.md":    {status: 404, body: ""},
-		"/o/r/master/x/SKILL.md":           {status: 404, body: ""},
+		"/o/r/main/skills/x/SKILL.md":   {status: 404, body: ""},
+		"/o/r/main/x/SKILL.md":          {status: 404, body: ""},
+		"/o/r/master/skills/x/SKILL.md": {status: 404, body: ""},
+		"/o/r/master/x/SKILL.md":        {status: 404, body: ""},
 	}}
 	a := NewWithClient(&http.Client{Transport: rt})
 	a.SetRawBaseOverride("https://stub")
@@ -329,10 +329,10 @@ func TestDownload_RateLimited_AbortsImmediately(t *testing.T) {
 func TestDownload_AllFail_HitsFallbackCatalog(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
 		// 全部 404
-		"/anthropics/skills/main/skills/pdf/SKILL.md":     {status: 404, body: ""},
-		"/anthropics/skills/main/pdf/SKILL.md":            {status: 404, body: ""},
-		"/anthropics/skills/master/skills/pdf/SKILL.md":   {status: 404, body: ""},
-		"/anthropics/skills/master/pdf/SKILL.md":          {status: 404, body: ""},
+		"/anthropics/skills/main/skills/pdf/SKILL.md":           {status: 404, body: ""},
+		"/anthropics/skills/main/pdf/SKILL.md":                  {status: 404, body: ""},
+		"/anthropics/skills/master/skills/pdf/SKILL.md":         {status: 404, body: ""},
+		"/anthropics/skills/master/pdf/SKILL.md":                {status: 404, body: ""},
 		"/anthropics/skills/main/.claude/skills/pdf/SKILL.md":   {status: 404, body: ""},
 		"/anthropics/skills/master/.claude/skills/pdf/SKILL.md": {status: 404, body: ""},
 	}}
@@ -350,10 +350,10 @@ func TestDownload_AllFail_HitsFallbackCatalog(t *testing.T) {
 // 2026-07-09 增:全失败 + remoteID 不在 knownCatalogFallback → 仍返错。
 func TestDownload_AllFail_NoFallback(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
-		"/some/unknown-skill-id/main/skills/x/SKILL.md":   {status: 404, body: ""},
-		"/some/unknown-skill-id/main/x/SKILL.md":          {status: 404, body: ""},
-		"/some/unknown-skill-id/master/skills/x/SKILL.md": {status: 404, body: ""},
-		"/some/unknown-skill-id/master/x/SKILL.md":        {status: 404, body: ""},
+		"/some/unknown-skill-id/main/skills/x/SKILL.md":           {status: 404, body: ""},
+		"/some/unknown-skill-id/main/x/SKILL.md":                  {status: 404, body: ""},
+		"/some/unknown-skill-id/master/skills/x/SKILL.md":         {status: 404, body: ""},
+		"/some/unknown-skill-id/master/x/SKILL.md":                {status: 404, body: ""},
 		"/some/unknown-skill-id/main/.claude/skills/x/SKILL.md":   {status: 404, body: ""},
 		"/some/unknown-skill-id/master/.claude/skills/x/SKILL.md": {status: 404, body: ""},
 	}}
@@ -518,13 +518,13 @@ func auditsMockResponse(skills []map[string]any) string {
 		} `json:"result"`
 	}
 	type sk struct {
-		Rank           int   `json:"rank"`
-		Source         string `json:"source"`
-		SkillID        string `json:"skillId"`
-		Name           string `json:"name"`
-		AgentTrustHub  *ath  `json:"agentTrustHub"`
-		Socket         any   `json:"socket"`
-		Snyk           any   `json:"snyk"`
+		Rank          int    `json:"rank"`
+		Source        string `json:"source"`
+		SkillID       string `json:"skillId"`
+		Name          string `json:"name"`
+		AgentTrustHub *ath   `json:"agentTrustHub"`
+		Socket        any    `json:"socket"`
+		Snyk          any    `json:"snyk"`
 	}
 	out := struct {
 		Skills []sk `json:"skills"`
@@ -908,9 +908,9 @@ func TestDownload_TreeDeepAnchor(t *testing.T) {
 	}
 	// 相对路径应该是 anchor 去掉后的本地路径(不带 tools/video/ 前缀)
 	expectedPaths := map[string]bool{
-		"SKILL.md":                true,
-		"scripts/generate.py":    true,
-		"references/prompts.md":  true,
+		"SKILL.md":              true,
+		"scripts/generate.py":   true,
+		"references/prompts.md": true,
 	}
 	for _, f := range can.Files {
 		if !expectedPaths[f.Path] {
@@ -985,12 +985,12 @@ func TestDownload_TreeAnchorNotFound_NoFallback(t *testing.T) {
 	rt := &fakeRT{responses: map[string]fakeResp{
 		"/repos/some/unknown/git/trees/main?recursive=1":   {status: 404},
 		"/repos/some/unknown/git/trees/master?recursive=1": {status: 404},
-		"/some/unknown/main/skills/x/SKILL.md":   {status: 404},
-		"/some/unknown/main/x/SKILL.md":          {status: 404},
-		"/some/unknown/master/skills/x/SKILL.md": {status: 404},
-		"/some/unknown/master/x/SKILL.md":        {status: 404},
-		"/some/unknown/main/.claude/skills/x/SKILL.md":   {status: 404},
-		"/some/unknown/master/.claude/skills/x/SKILL.md": {status: 404},
+		"/some/unknown/main/skills/x/SKILL.md":             {status: 404},
+		"/some/unknown/main/x/SKILL.md":                    {status: 404},
+		"/some/unknown/master/skills/x/SKILL.md":           {status: 404},
+		"/some/unknown/master/x/SKILL.md":                  {status: 404},
+		"/some/unknown/main/.claude/skills/x/SKILL.md":     {status: 404},
+		"/some/unknown/master/.claude/skills/x/SKILL.md":   {status: 404},
 	}}
 	a := NewWithClient(&http.Client{Transport: rt})
 	_, err := a.Download(context.Background(), "https://skills.sh", "some/unknown@x")

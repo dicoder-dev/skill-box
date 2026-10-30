@@ -12,13 +12,13 @@
 import { ref, reactive, computed, onMounted, onUpdated, onUnmounted, watch, onErrorCaptured } from 'vue'
 import IconPark from '@/components/IconPark.vue'
 import Modal from '@/components/Modal.vue'
-import ToolIcon from '@/components/ToolIcon.vue'
+import AgentIcon from '@/components/AgentIcon.vue'
 import GitSyncPanel from '@/components/skill/GitSyncPanel.vue'
 import VersionHistoryPanel from '@/components/skill/VersionHistoryPanel.vue'
 import CollapsiblePanel from '@/components/CollapsiblePanel.vue'
 import AccordionGroup from '@/components/AccordionGroup.vue'
 import { useToastStore } from '@/core/store/toast'
-import { useToolsStore } from '@/core/store/tools'
+import { useAgentsStore } from '@/core/store/agents'
 import { useI18n } from 'vue-i18n'
 import { getSkillScopeStatus, applySkill, listApplies, undoApply, forceUndoApply, toggleGlobalAgent, getSkill, getStoreInfo } from '@/api/skillbox/skills'
 import { inspectApplyResult, formatFailedDetail } from '@/api/skillbox/apply_result.js'
@@ -47,28 +47,28 @@ const skillPath = computed(() => {
 })
 
 const toast = useToastStore()
-// 2026-07-07 改:作用域区图标 fallback — 后端 scope-status 返回的 tool 元数据不一定带 icon_file,
-// 优先用 store 里全量工具的 ToolView(自定义图标 + mdi_icon 完整配置)。
-const toolsStore = useToolsStore()
-const toolsById = computed(() => {
+// 2026-07-07 改:作用域区图标 fallback — 后端 scope-status 返回的 agent 元数据不一定带 icon_file,
+// 优先用 store 里全量Agent的 AgentView(自定义图标 + mdi_icon 完整配置)。
+const agentsStore = useAgentsStore()
+const agentsById = computed(() => {
   const m = {}
-  for (const t of toolsStore.items || []) {
-    if (t && t.tool_id) m[t.tool_id] = t
+  for (const t of agentsStore.items || []) {
+    if (t && t.agent_id) m[t.agent_id] = t
   }
   return m
 })
-function findTool(toolID) {
-  // 先在 toolsStore 全量工具表里查(有完整 icon_file / mdi_icon / display_name)
-  const fromStore = toolsById.value[toolID]
+function findAgent(agentID) {
+  // 先在 agentsStore 全量Agent表里查(有完整 icon_file / mdi_icon / display_name)
+  const fromStore = agentsById.value[agentID]
   if (fromStore) return fromStore
-  // 兜底:scope-status 返回的轻量 tool 元数据
-  const fromScope = scopeTools.value.find((x) => x.tool_id === toolID)
+  // 兜底:scope-status 返回的轻量 agent 元数据
+  const fromScope = scopeAgents.value.find((x) => x.agent_id === agentID)
   return fromScope || null
 }
-function toolDisplay(toolID) {
-  const t = findTool(toolID)
-  if (!t) return toolShort(toolID)
-  return t.display_name || t.display || t.tool_id || toolShort(toolID)
+function agentDisplay(agentID) {
+  const t = findAgent(agentID)
+  if (!t) return agentShort(agentID)
+  return t.display_name || t.display || t.agent_id || agentShort(agentID)
 }
 
 // 2026-07-13 改:SkillScopePanel 文案走 i18n key(原本是 LABEL_* 硬编码常量,
@@ -94,21 +94,21 @@ const LABEL_TITLE_ERROR = 'skills.scope.loadError'
 const LABEL_RETRY = 'skills.scope.retry'
 // 2026-07-12 增:顶部"全局 Agent Skill" tag 文案常量(跟 TreeNode 卡片上的 tag 一致)。
 // 用户反馈把"全局 Agent"补全成"全局 Agent Skill"——更明确指向"这是一个全局
-// Agent 的技能",跟普通工具作用域区分。
+// Agent 的技能",跟普通Agent作用域区分。
 const LABEL_GLOBAL_AGENT = 'skills.scope.globalAgent'
 const LABEL_GLOBAL_AGENT_TIP = 'skills.scope.globalAgentTip'
 // 2026-07-12 增:tag 右侧两个图标按钮的 tip 文案。
-// - info 按钮 = 弹窗提示全局 Agent 的说明 + 列出适配的工具
+// - info 按钮 = 弹窗提示全局 Agent 的说明 + 列出适配的Agent
 // - folder 按钮 = 直接打开 ~/.agents/skills/ 共享池根目录
 const LABEL_GLOBAL_AGENT_INFO_TIP = 'skills.scope.globalAgentInfoTip'
 const LABEL_GLOBAL_AGENT_FOLDER_TIP = 'skills.scope.globalAgentFolderTip'
 
 // 2026-07-12 增:info 弹窗内文案(常量字符串,不依赖 i18n,跟组件其它 LABEL_* 一致)。
-// 2026-07-12 改:联网搜索后改写"适配全局 Agent 的工具"清单为固定值 ——
-// 不要动态过滤 toolsStore(那边字段可能跟用户实际安装的工具不一致,
-// 也覆盖不到未在 store 注册的工具)。固定清单基于公开资料总结:
+// 2026-07-12 改:联网搜索后改写"适配全局 Agent 的Agent"清单为固定值 ——
+// 不要动态过滤 agentsStore(那边字段可能跟用户实际安装的Agent不一致,
+// 也覆盖不到未在 store 注册的Agent)。固定清单基于公开资料总结:
 //
-//   ✅ 支持 ~/.agents/skills/ 的工具:
+//   ✅ 支持 ~/.agents/skills/ 的Agent:
 //     - GitHub Copilot(VS Code Agent Skills 文档明确)
 //     - Antigravity(Google,antigravity.google/docs/skills)
 //     - Claude Code(项目级 .agents/skills/ 共享标准)
@@ -116,7 +116,7 @@ const LABEL_GLOBAL_AGENT_FOLDER_TIP = 'skills.scope.globalAgentFolderTip'
 //     - Qwen Code(已支持 Skills 标准)
 //     - Cursor(项目级 .cursor/skills/,个人级尚未确认 .agents 路径)
 //
-//   ⚠️ 待确认/暂不支持个人级 ~/.agents/skills/ 的工具:
+//   ⚠️ 待确认/暂不支持个人级 ~/.agents/skills/ 的Agent:
 //     - Claude Code 个人级实际是 ~/.claude/skills/(非 .agents/skills/)
 //     - Trae — 文档未明确支持 .agents 路径
 //     - Cline — 文档未提及 .agents/skills
@@ -126,18 +126,18 @@ const LABEL_GLOBAL_AGENT_FOLDER_TIP = 'skills.scope.globalAgentFolderTip'
 // 解耦(后端只看磁盘 .agents/skills/<name>/SKILL.md 存不存在)。
 const LABEL_INFO_TITLE = 'skills.scope.globalAgentInfoTitle'
 const LABEL_INFO_DESC = 'skills.scope.globalAgentInfoDesc'
-const LABEL_INFO_TOOL_TITLE = 'skills.scope.globalAgentCompatibleToolsTitle'
+const LABEL_INFO_TOOL_TITLE = 'skills.scope.globalAgentCompatibleAgentsTitle'
 const LABEL_INFO_TOOL_SUPPORTED = 'skills.scope.globalAgentSupported'
 const LABEL_INFO_TOOL_PARTIAL = 'skills.scope.globalAgentPartial'
 const LABEL_INFO_TOOL_EMPTY = 'skills.scope.globalAgentEmpty'
 
-const scopeTools = ref([])
+const scopeAgents = ref([])
 const scopeHits = ref([])
 const scopeLoading = ref(false)
 const scopeError = ref('')
 const scopeCollapsed = ref(null)
 // 2026-07-07 增:作用域区整体可展开/收起(标题栏点击切换)。
-// true = 整体收起(只看到标题);false = 展开(看到工具列表)。
+// true = 整体收起(只看到标题);false = 展开(看到Agent列表)。
 // 2026-07-07 改 v2:默认 false — 用户进首页就应该能看到作用域生效位置,
 // 不需要先点开"问号图标"。scopeExpanded 跟"作用域"面板展开状态同步;
 // 2026-07-17 改:从内部 ref 改成父级 AccordionGroup 的 active id 派生,
@@ -154,16 +154,16 @@ function toggleSection() {
 }
 
 const busyKey = ref('')
-function busyKeyFor(toolID, scope, projectID) {
-  return `${toolID}|${scope}|${projectID || 0}`
+function busyKeyFor(agentID, scope, projectID) {
+  return `${agentID}|${scope}|${projectID || 0}`
 }
 function isScopeTargetBusy(group, target) {
-  return busyKey.value === busyKeyFor(group.tool_id, target.scope, target.project_id)
+  return busyKey.value === busyKeyFor(group.agent_id, target.scope, target.project_id)
 }
 
-function toolShort(toolID) {
-  if (!toolID) return '?'
-  return toolID.charAt(0).toUpperCase() + toolID.slice(1)
+function agentShort(agentID) {
+  if (!agentID) return '?'
+  return agentID.charAt(0).toUpperCase() + agentID.slice(1)
 }
 // 2026-07-16 改:project 作用域显示真实项目名(从 projects 数据表读取),
 // 不再硬拼 i18n 文本「项目 #N」。用户在项目页配置的 name 是事实来源;
@@ -202,12 +202,12 @@ function targetLabel(target) {
   return projectLabel(target.project_id)
 }
 
-const scopeGroupByTool = computed(() => {
+const scopeGroupByAgent = computed(() => {
   const out = []
-  for (const tool of scopeTools.value) {
-    const toolHits = scopeHits.value.filter((h) => h.tool_id === tool.tool_id)
+  for (const agent of scopeAgents.value) {
+    const agentHits = scopeHits.value.filter((h) => h.agent_id === agent.agent_id)
     const map = new Map()
-    for (const h of toolHits) {
+    for (const h of agentHits) {
       const key = h.scope === 'global' ? 'global' : `p:${h.project_id}`
       if (!map.has(key)) {
         map.set(key, {
@@ -228,45 +228,45 @@ const scopeGroupByTool = computed(() => {
       return a.project_id - b.project_id
     })
     out.push({
-      tool_id: tool.tool_id,
-      display: toolDisplay(tool.tool_id),
-      // 不在 group 上挂 icon 字段了,template 用 ToolIcon + findTool(tool_id) 直接取
-      hitCount: toolHits.filter((h) => h.exists).length,
-      hasHit: toolHits.some((h) => h.exists),
-      // 2026-07-08 增:工具是否在全局作用域启用。template 据此在数量标签前显示"全局"chip。
-      hasGlobal: toolHits.some((h) => h.scope === 'global' && h.exists),
+      agent_id: agent.agent_id,
+      display: agentDisplay(agent.agent_id),
+      // 不在 group 上挂 icon 字段了,template 用 AgentIcon + findAgent(agent_id) 直接取
+      hitCount: agentHits.filter((h) => h.exists).length,
+      hasHit: agentHits.some((h) => h.exists),
+      // 2026-07-08 增:Agent是否在全局作用域启用。template 据此在数量标签前显示"全局"chip。
+      hasGlobal: agentHits.some((h) => h.scope === 'global' && h.exists),
       targets,
     })
   }
-  // 2026-07-07 改:作用域区工具排序 — 按 hitCount(存在命中数)降序,越多越前面;
-  // 同数按 tool_id 字母序兜底,保证排序稳定。
+  // 2026-07-07 改:作用域区Agent排序 — 按 hitCount(存在命中数)降序,越多越前面;
+  // 同数按 agent_id 字母序兜底,保证排序稳定。
   out.sort((a, b) => {
     if (b.hitCount !== a.hitCount) return b.hitCount - a.hitCount
-    return String(a.tool_id).localeCompare(String(b.tool_id))
+    return String(a.agent_id).localeCompare(String(b.agent_id))
   })
   return out
 })
 
-function isCollapsed(toolID) {
+function isCollapsed(agentID) {
   if (!scopeCollapsed.value) return false
-  return scopeCollapsed.value.has(toolID)
+  return scopeCollapsed.value.has(agentID)
 }
-function toggle(toolID) {
+function toggle(agentID) {
   const cur = scopeCollapsed.value || new Set()
   const next = new Set(cur)
-  if (next.has(toolID)) next.delete(toolID)
-  else next.add(toolID)
+  if (next.has(agentID)) next.delete(agentID)
+  else next.add(agentID)
   // 2026-07-07 修:全展开时(null)删除最后一个折叠项 → 重新回到全展开(null);
-  // 全折叠(所有 tool 都折叠)时,保留 Set(否则所有 group 同时展开太挤)。
-  const allCollapsed = next.size === scopeTools.value.length && scopeTools.value.length > 0
+  // 全折叠(所有 agent 都折叠)时,保留 Set(否则所有 group 同时展开太挤)。
+  const allCollapsed = next.size === scopeAgents.value.length && scopeAgents.value.length > 0
   scopeCollapsed.value = next.size === 0 ? null : (allCollapsed ? next : next)
 }
 
-// 2026-07-07 改 v3:默认折叠全部工具,用户主动点开才展开。
+// 2026-07-07 改 v3:默认折叠全部Agent,用户主动点开才展开。
 // 旧版 scopeCollapsed = null → isCollapsed 返 false → 全展开,信息密度太高。
 function resetCollapsed() {
-  if (scopeTools.value && scopeTools.value.length) {
-    scopeCollapsed.value = new Set(scopeTools.value.map((t) => t.tool_id))
+  if (scopeAgents.value && scopeAgents.value.length) {
+    scopeCollapsed.value = new Set(scopeAgents.value.map((t) => t.agent_id))
   } else {
     scopeCollapsed.value = null
   }
@@ -282,7 +282,7 @@ async function loadScope({ resetCollapsed: shouldReset } = {}) {
       name: sk.name,
       version: sk.version,
     })
-    scopeTools.value = resp?.tools || []
+    scopeAgents.value = resp?.agents || []
     scopeHits.value = resp?.hits || []
     // 2026-07-07 改 v4:
     //   - resetCollapsed=true  → 切 skill(初次进入)时调用,默认折叠全部
@@ -307,7 +307,7 @@ function _syncWatch() {
   _lastSkillName = curName
   _lastSkillVersion = curVersion
   if (!curName) return
-  // 2026-07-07 改 v4:切 skill 必须 reset 折叠态,旧折叠对该 skill 的 tool_id 集合无意义。
+  // 2026-07-07 改 v4:切 skill 必须 reset 折叠态,旧折叠对该 skill 的 agent_id 集合无意义。
   // loadScope 内部根据参数决定是否 reset。
   loadScope({ resetCollapsed: true })
   // 2026-07-12 增:切 skill 也要重查"全局 Agent"状态,旧 skill 的 is_global_agent
@@ -379,8 +379,8 @@ async function onToggleGlobalAgentClick() {
     // 走 dispatchEvent('skillbox:scope-refresh') 让 SkillsView / ScopePanel 内部
     // 各自刷新(loadScope 自己不重查 isGlobalAgent,这里再单独补一次)。
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
-    // 顺便 reload 自身 scope-status(用户可能希望看到工具列表里某些 tool 的
-    // applied_tools 发生变化 — 但其实跟全局 Agent tag 无关,这里保留以防万一)。
+    // 顺便 reload 自身 scope-status(用户可能希望看到Agent列表里某些 agent 的
+    // applied_agents 发生变化 — 但其实跟全局 Agent tag 无关,这里保留以防万一)。
     loadScope()
     // 再主动重查一次 is_global_agent 后端权威值(写盘后端 store 可能要 stat
     // 真实路径,跟前端期望严格一致)。
@@ -406,75 +406,75 @@ function onScopeRefresh() {
   loadProjectsMap(true)
 }
 
-// 2026-07-12 增:info 弹窗 — 列出"哪些工具适配了 ~/.agents/skills/"。
+// 2026-07-12 增:info 弹窗 — 列出"哪些Agent适配了 ~/.agents/skills/"。
 //
-// 2026-07-12 改:从动态 toolsStore 过滤改为固定清单(用户反馈"目前来说是
+// 2026-07-12 改:从动态 agentsStore 过滤改为固定清单(用户反馈"目前来说是
 // 固定的")。理由:
-//   - toolsStore 是后端返回的工具元数据表,跟"哪些工具真的支持 .agents/skills
-//     个人级路径"是两回事 —— store 里有的工具不一定支持这条路径,反之亦然
+//   - agentsStore 是后端返回的Agent元数据表,跟"哪些Agent真的支持 .agents/skills
+//     个人级路径"是两回事 —— store 里有的Agent不一定支持这条路径,反之亦然
 //   - 联网搜索结果显示当前生态对 ~/.agents/skills/ 的支持矩阵尚未稳定,
 //     走动态过滤会误导用户(显示一堆"已支持"但其实只支持其他路径)
 //   - 固定清单是产品文档级别的"事实快照",跟后端 store 解耦,后续有官方
 //     声明变化时统一改这一个常量即可
 //
-// 工具对象结构:
-//   - name:    显示名(用 mdi: 字段给 ToolIcon 渲染图标,没图标就 fallback)
+// Agent对象结构:
+//   - name:    显示名(用 mdi: 字段给 AgentIcon 渲染图标,没图标就 fallback)
 //   - mdi:     mdi icon 名
 //   - status:  'supported' | 'partial' | 'unsupported' 三种状态
-//   - note:    备注 key(走 i18n,skills.scope.toolNotes.*)
+//   - note:    备注 key(走 i18n,skills.scope.agentNotes.*)
 const GLOBAL_AGENT_SUPPORTED_TOOLS = [
   {
     name: 'GitHub Copilot',
     mdi: 'mdi:github',
     status: 'supported',
-    noteKey: 'skills.scope.toolNotes.vscode',
+    noteKey: 'skills.scope.agentNotes.vscode',
   },
   {
     name: 'Antigravity',
     mdi: 'mdi:rocket-launch-outline',
     status: 'supported',
-    noteKey: 'skills.scope.toolNotes.antigravity',
+    noteKey: 'skills.scope.agentNotes.antigravity',
   },
   {
     name: 'Claude Code',
     mdi: 'mdi:anthropic',
     status: 'partial',
-    noteKey: 'skills.scope.toolNotes.claude',
+    noteKey: 'skills.scope.agentNotes.claude',
   },
   {
     name: 'Codex CLI',
     mdi: 'mdi:console-line',
     status: 'supported',
-    noteKey: 'skills.scope.toolNotes.codex',
+    noteKey: 'skills.scope.agentNotes.codex',
   },
   {
     name: 'Qwen Code',
     mdi: 'mdi:language-python',
     status: 'supported',
-    noteKey: 'skills.scope.toolNotes.qwen',
+    noteKey: 'skills.scope.agentNotes.qwen',
   },
   {
     name: 'Cursor',
     mdi: 'mdi:cursor-default-click-outline',
     status: 'partial',
-    noteKey: 'skills.scope.toolNotes.cursor',
+    noteKey: 'skills.scope.agentNotes.cursor',
   },
   {
     name: 'Trae IDE',
     mdi: 'mdi:application-outline',
     status: 'unsupported',
-    noteKey: 'skills.scope.toolNotes.opencode',
+    noteKey: 'skills.scope.agentNotes.opencode',
   },
   {
     name: 'Cline',
     mdi: 'mdi:robot-outline',
     status: 'unsupported',
-    noteKey: 'skills.scope.toolNotes.other',
+    noteKey: 'skills.scope.agentNotes.other',
   },
 ]
 const globalAgentInfoOpen = ref(false)
 // 显示顺序:supported → partial → unsupported;同状态按字母序稳定排序。
-const globalAgentTools = computed(() => {
+const globalAgentAgents = computed(() => {
   const out = [...GLOBAL_AGENT_SUPPORTED_TOOLS]
   const order = { supported: 0, partial: 1, unsupported: 2 }
   out.sort((a, b) => {
@@ -562,25 +562,25 @@ onUnmounted(() => {
 
 // ===== Apply / Undo =====
 async function doApplyOne(target, group) {
-  busyKey.value = busyKeyFor(group.tool_id, target.scope, target.project_id)
+  busyKey.value = busyKeyFor(group.agent_id, target.scope, target.project_id)
   const sk = props.skill
   try {
     const res = await applySkill({
       name: sk.name,
       scope: target.scope,
       project_id: target.project_id || 0,
-      tools: [group.tool_id],
+      agents: [group.agent_id],
     })
     await loadScope()
     // 2026-07-08 修:apply 完成后必须 dispatch 事件,让 SkillsView 重新拉
-    // skill 树 — 树节点的 applied_tools 字段不重算的话,左侧 chip 永远显示
-    // 旧状态(用户禁用某 tool 后,左侧 chip 仍显示该 tool)。
+    // skill 树 — 树节点的 applied_agents 字段不重算的话,左侧 chip 永远显示
+    // 旧状态(用户禁用某 agent 后,左侧 chip 仍显示该 agent)。
     // 注释里早就写了"apply 完成后 dispatch skillbox:scope-refresh",
     // 但实际代码漏掉了,这次补上。
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
     const ins = inspectApplyResult(res)
     if (ins.allOk) {
-      toast.success(t('skills.scope.enableSuccess', { tool: group.display, scope: targetLabel(target) }))
+      toast.success(t('skills.scope.enableSuccess', { agent: group.display, scope: targetLabel(target) }))
     } else {
       const detail = formatFailedDetail(ins.failedItems)
       toast.error(t('skills.scope.partialFailed') + ': ' + detail, 6000)
@@ -594,13 +594,13 @@ async function doApplyOne(target, group) {
 }
 
 async function doUnapplyOne(target, group) {
-  busyKey.value = busyKeyFor(group.tool_id, target.scope, target.project_id)
+  busyKey.value = busyKeyFor(group.agent_id, target.scope, target.project_id)
   const sk = props.skill
   try {
     const list = await listApplies({
       scope: target.scope,
       name: sk.name,
-      tool: group.tool_id,
+      agent: group.agent_id,
       status: 'applied',
       page: 1,
       size: 1,
@@ -611,7 +611,7 @@ async function doUnapplyOne(target, group) {
         scope: target.scope,
         project_id: target.project_id || 0,
         name: sk.name,
-        tool: group.tool_id,
+        agent: group.agent_id,
       })
     } else {
       await undoApply({ apply_id: last.id })
@@ -619,7 +619,7 @@ async function doUnapplyOne(target, group) {
     await loadScope()
     // 2026-07-08 修:同 doApplyOne,unapply 后也必须 dispatch,左侧 chip 才会同步消失。
     window.dispatchEvent(new CustomEvent('skillbox:scope-refresh'))
-    toast.success(t('skills.scope.disableSuccess', { tool: group.display, scope: targetLabel(target) }))
+    toast.success(t('skills.scope.disableSuccess', { agent: group.display, scope: targetLabel(target) }))
   } catch (e) {
     toast.error(t('skills.scope.disableFailed', { msg: e?.message || e }))
   } finally {
@@ -637,14 +637,14 @@ async function handleClick(group, target) {
     confirmAction.value = {
       kind: 'unapply',
       title: t(LABEL_DISABLE),
-      message: t('skills.scope.disableConfirm', { tool: group.display, scope: targetLabel(target), name: props.skill.name }),
+      message: t('skills.scope.disableConfirm', { agent: group.display, scope: targetLabel(target), name: props.skill.name }),
       group, target,
     }
   } else {
     confirmAction.value = {
       kind: 'apply',
       title: t(LABEL_ENABLE),
-      message: t('skills.scope.enableConfirm', { name: props.skill.name, tool: group.display, scope: targetLabel(target) }),
+      message: t('skills.scope.enableConfirm', { name: props.skill.name, agent: group.display, scope: targetLabel(target) }),
       group, target,
     }
   }
@@ -690,7 +690,7 @@ onErrorCaptured((err) => {
   <!-- 2026-07-08 改:作用域区高度锁死策略
        - sectionCollapsed=true(整体收起):只显示 header 一行,高度由内容决定,约 36px
        - sectionCollapsed=false(整体展开):面板高度锁成固定值(SECTION_EXPANDED_HEIGHT),
-        内部 list 用 overflow:auto 滚动;无论用户点击几个工具展开其下 targets,
+        内部 list 用 overflow:auto 滚动;无论用户点击几个Agent展开其下 targets,
         面板自身高度永远不变,只内部滚动,不再把 .sfip-tree-wrap 挤压缩小
        - 实现:.ssp-scope 切换 .is-expanded class,展开态下设 height + flex-basis 固定,
         .ssp-scope-list 设 max-height + overflow-y auto 内部滚动 -->
@@ -705,7 +705,7 @@ onErrorCaptured((err) => {
        v-model:active="activePanel" 管 active 面板 ID;null = 全折叠。 -->
   <AccordionGroup v-model:active="activePanel">
   <CollapsiblePanel
-    v-if="!scopeLoading && (scopeGroupByTool?.length || 0)"
+    v-if="!scopeLoading && (scopeGroupByAgent?.length || 0)"
     :expanded="scopeExpanded"
     :title="t(LABEL_SCOPE)"
     icon="Local"
@@ -713,20 +713,20 @@ onErrorCaptured((err) => {
     @update:expanded="onScopePanelToggle"
   >
     <template #title-meta>
-      <span class="ssp-scope-header-count">{{ t('skills.scope.toolCountShort', { n: scopeGroupByTool.length }) }}</span>
+      <span class="ssp-scope-header-count">{{ t('skills.scope.agentCountShort', { n: scopeGroupByAgent.length }) }}</span>
     </template>
     <ul class="ssp-scope-list">
       <!-- 2026-07-12 增 v2:作用域区首位"全局 Agent Skill" 行。
            跟左侧 skill 卡片"全局 Agent" tag 同源(后端 getSkill 返回的 is_global_agent
            + 走 skillstore.ResolveGlobalSourcePath 实时 stat ~/.agents/skills/<name>/
-           SKILL.md),用户点 tag 切换后会立刻刷新工具列表(scope-refresh event)。
+           SKILL.md),用户点 tag 切换后会立刻刷新Agent列表(scope-refresh event)。
            设计要点(2026-07-12 用户反馈增):
-             - 永远排在第一个(放在 v-for 上方,跟其他工具互不影响)
+             - 永远排在第一个(放在 v-for 上方,跟其他Agent互不影响)
              - 没有展开/折叠(没有 targets 列表)
              - 整行 = 左侧 toggle button(胶囊)+ 右侧 2 个图标按钮(info / folder)
              - 选中态 = emerald 浅底+边框+主色字,未选中=透明+灰文字+无边框
-             - 行下方一道横杠把 tag 区跟下方工具列表视觉分隔
-             - info 按钮弹窗列出"哪些工具适配了 ~/.agents/skills/"(从 toolsStore 拿)
+             - 行下方一道横杠把 tag 区跟下方Agent列表视觉分隔
+             - info 按钮弹窗列出"哪些Agent适配了 ~/.agents/skills/"(从 agentsStore 拿)
              - folder 按钮调 platform.fs.reveal 打开 ~/.agents/skills/ 共享池根目录 -->
       <li class="ssp-scope-group ssp-scope-group-global">
         <div class="ssp-global-agent-row">
@@ -750,7 +750,7 @@ onErrorCaptured((err) => {
             <span class="ssp-global-agent-label">{{ t(LABEL_GLOBAL_AGENT) }}</span>
           </button>
           <!-- 2026-07-12 增:tag 右侧两个图标按钮 — info 提示 / folder 打开目录。
-               跟 tag 之间留 4px 间距,跟工具列表的 chevron 视觉权重一致。
+               跟 tag 之间留 4px 间距,跟Agent列表的 chevron 视觉权重一致。
                点击事件用 stop 防止冒泡触发外层 tag(嵌套 button 不允许,
                实际上这里不是嵌套 — tag 和图标按钮是 div 里的两个并列 button,
                用 stop 是防御性)。
@@ -771,43 +771,43 @@ onErrorCaptured((err) => {
             <IconPark icon="mdi:folder-outline" width="11" height="11" />
           </button>
         </div>
-        <!-- 2026-07-12 增:tag 行下方一根横杠,跟下方工具列表视觉分组。
-             全局 Agent 跟"普通工具作用域"是两种语义不同的"位置",用分隔线
+        <!-- 2026-07-12 增:tag 行下方一根横杠,跟下方Agent列表视觉分组。
+             全局 Agent 跟"普通Agent作用域"是两种语义不同的"位置",用分隔线
              强调边界;横杠颜色用 var(--border) 弱化,跟列表内 group 间距一致。 -->
         <hr class="ssp-global-agent-divider" />
       </li>
       <li
-        v-for="group in (scopeGroupByTool || [])"
-        :key="group.tool_id"
+        v-for="group in (scopeGroupByAgent || [])"
+        :key="group.agent_id"
         class="ssp-scope-group"
       >
         <button
           type="button"
           class="ssp-scope-row"
           :data-tip="group.display"
-          @click="toggle(group.tool_id)"
+          @click="toggle(group.agent_id)"
         >
           <IconPark
-            :icon="isCollapsed(group.tool_id) ? 'mdi:plus' : 'mdi:minus'"
+            :icon="isCollapsed(group.agent_id) ? 'mdi:plus' : 'mdi:minus'"
             width="12"
             height="12"
             class="ssp-scope-chevron"
           />
-          <!-- 2026-07-07 改:用 ToolIcon 渲染真图标(icon_file 优先 + mdi 兜底),
-               findTool 优先查 toolsStore 全量工具表;store 没数据时降级到
-               scopeTools(后端 scope-status 返回的轻量工具元数据)。 -->
-          <ToolIcon
-            :tool="findTool(group.tool_id) || { mdi_icon: 'mdi:puzzle-outline' }"
+          <!-- 2026-07-07 改:用 AgentIcon 渲染真图标(icon_file 优先 + mdi 兜底),
+               findAgent 优先查 agentsStore 全量Agent表;store 没数据时降级到
+               scopeAgents(后端 scope-status 返回的轻量Agent元数据)。 -->
+          <AgentIcon
+            :agent="findAgent(group.agent_id) || { mdi_icon: 'mdi:puzzle-outline' }"
             :size="13"
-            class="ssp-scope-tool-icon"
+            class="ssp-scope-agent-icon"
           />
           <span class="ssp-scope-row-name">{{ group.display }}</span>
-          <!-- 2026-07-08 增:工具启用了全局时,在数量标签前显示"全局"chip,
+          <!-- 2026-07-08 增:Agent启用了全局时,在数量标签前显示"全局"chip,
                让用户一眼看出"这个 skill 是生效在全局还是项目级"。 -->
           <span v-if="group.hasGlobal" class="ssp-scope-row-global" :title="t('skills.scope.globalEnabledTip')">{{ t(LABEL_GLOBAL) }}</span>
           <span v-if="group.hitCount > 0" class="ssp-scope-row-count">{{ group.hitCount }}</span>
         </button>
-        <ul v-if="!isCollapsed(group.tool_id)" class="ssp-scope-targets">
+        <ul v-if="!isCollapsed(group.agent_id)" class="ssp-scope-targets">
           <li v-for="target in group.targets" :key="target.key">
             <button
               type="button"
@@ -870,12 +870,12 @@ onErrorCaptured((err) => {
     </template>
   </Modal>
 
-  <!-- 2026-07-12 增:全局 Agent 信息弹窗 — 列出适配 ~/.agents/skills/ 的工具。
+  <!-- 2026-07-12 增:全局 Agent 信息弹窗 — 列出适配 ~/.agents/skills/ 的Agent。
        跟 confirm 弹窗分两个独立 Modal 组件实例,各自管理 v-model。内容:
        - 顶部描述(全局 Agent 共享池语义)
-       - 中间"适配工具"标题 + 工具列表(固定清单,带状态 chip + 备注)
+       - 中间"适配Agent"标题 + Agent列表(固定清单,带状态 chip + 备注)
        - 状态:supported(绿) / partial(琥珀) / unsupported(灰)
-       - 每行:工具图标 + 名称 + 状态 chip + 备注文字 -->
+       - 每行:Agent图标 + 名称 + 状态 chip + 备注文字 -->
   <Modal
     v-model="globalAgentInfoOpen"
     size="md"
@@ -884,31 +884,31 @@ onErrorCaptured((err) => {
   >
     <div class="ssp-info-body">
       <p class="ssp-info-desc">{{ t(LABEL_INFO_DESC) }}</p>
-      <h4 class="ssp-info-tool-title">{{ t(LABEL_INFO_TOOL_TITLE) }}</h4>
-      <ul v-if="globalAgentTools.length" class="ssp-info-tool-list">
+      <h4 class="ssp-info-agent-title">{{ t(LABEL_INFO_TOOL_TITLE) }}</h4>
+      <ul v-if="globalAgentAgents.length" class="ssp-info-agent-list">
         <li
-          v-for="t in globalAgentTools"
+          v-for="t in globalAgentAgents"
           :key="t.name"
-          :class="['ssp-info-tool-item', `ssp-info-tool-${t.status}`]"
+          :class="['ssp-info-agent-item', `ssp-info-agent-${t.status}`]"
         >
-          <IconPark :icon="t.mdi" width="14" height="14" class="ssp-info-tool-icon" />
-          <span class="ssp-info-tool-name">{{ t.name }}</span>
+          <IconPark :icon="t.mdi" width="14" height="14" class="ssp-info-agent-icon" />
+          <span class="ssp-info-agent-name">{{ t.name }}</span>
           <span
             v-if="t.status === 'supported'"
-            class="ssp-info-tool-badge ssp-info-tool-badge-supported"
+            class="ssp-info-agent-badge ssp-info-agent-badge-supported"
           >{{ t(LABEL_INFO_TOOL_SUPPORTED) }}</span>
           <span
             v-else-if="t.status === 'partial'"
-            class="ssp-info-tool-badge ssp-info-tool-badge-partial"
+            class="ssp-info-agent-badge ssp-info-agent-badge-partial"
           >{{ t(LABEL_INFO_TOOL_PARTIAL) }}</span>
           <span
             v-else
-            class="ssp-info-tool-badge ssp-info-tool-badge-unsupported"
+            class="ssp-info-agent-badge ssp-info-agent-badge-unsupported"
           >—</span>
-          <span class="ssp-info-tool-note">{{ t.noteKey ? t(t.noteKey) : '' }}</span>
+          <span class="ssp-info-agent-note">{{ t.noteKey ? t(t.noteKey) : '' }}</span>
         </li>
       </ul>
-      <p v-else class="ssp-info-tool-empty">{{ t(LABEL_INFO_TOOL_EMPTY) }}</p>
+      <p v-else class="ssp-info-agent-empty">{{ t(LABEL_INFO_TOOL_EMPTY) }}</p>
     </div>
     <template #footer>
       <button type="button" class="primary" @click="closeGlobalAgentInfo">{{ t('common.close') }}</button>
@@ -937,11 +937,11 @@ onErrorCaptured((err) => {
   /* 2026-07-08 改:折叠态(sectionCollapsed=true)下只显示 header,
      高度由内容自然撑开,不设固定高度,避免空占空间 */
 }
-/* 2026-07-08 增:展开态下高度锁死 —— 用户反馈"点击工具展开 targets 时
+/* 2026-07-08 增:展开态下高度锁死 —— 用户反馈"点击Agent展开 targets 时
    此面板高度不能变"。实现方式:
    - panel 自身 height + flex-basis 锁成 SECTION_EXPANDED_HEIGHT(300px),
-     不论里面 tool 列表展开几个 targets,panel 占用的 flex 空间恒定
-   - .ssp-scope-list(工具组列表)内部 max-height + overflow-y auto,
+     不论里面 agent 列表展开几个 targets,panel 占用的 flex 空间恒定
+   - .ssp-scope-list(Agent组列表)内部 max-height + overflow-y auto,
      内容溢出走内部滚动,不会再撑开 panel
    这样保证展开状态下 .sfip-tree-wrap(文件树)的高度不被压缩 */
 .ssp-scope.is-expanded {
@@ -1006,13 +1006,13 @@ onErrorCaptured((err) => {
   list-style: none;
   margin: 0;
   padding: 0 0 6px;
-  /* 2026-07-07 修:列表容器限制宽度,长工具名/路径不撑出父级 */
+  /* 2026-07-07 修:列表容器限制宽度,长Agent名/路径不撑出父级 */
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
   /* 2026-07-08 改:展开态下,list 占 panel 减 header 的剩余高度,
-     内部工具组展开后溢出走 overflow-y auto,不再撑开外层 panel */
+     内部Agent组展开后溢出走 overflow-y auto,不再撑开外层 panel */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -1052,7 +1052,7 @@ onErrorCaptured((err) => {
 }
 .ssp-scope-row:hover { background: var(--bg-hover); }
 .ssp-scope-chevron { color: var(--text-faint); flex-shrink: 0; }
-.ssp-scope-tool-icon {
+.ssp-scope-agent-icon {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -1063,7 +1063,7 @@ onErrorCaptured((err) => {
 .ssp-scope-row-name {
   flex: 1;
   font-weight: 500;
-  /* 2026-07-07 修:长工具名截断,否则"启用"按钮会被挤出 */
+  /* 2026-07-07 修:长Agent名截断,否则"启用"按钮会被挤出 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1077,7 +1077,7 @@ onErrorCaptured((err) => {
   border-radius: 999px;
   flex-shrink: 0;
 }
-/* 2026-07-08 增:工具启用全局时的"全局"chip。
+/* 2026-07-08 增:Agent启用全局时的"全局"chip。
    2026-07-08 改 v2:跟 .ssp-scope-row-count 视觉一致(同色同字号同圆角),
    之前用实心蓝底+白字跟数量徽章视觉打架,看着像两个不同元素;
    用户反馈希望保持同款 — 区分靠位置(数量标签在前)+ 文案("全局" vs 数字)。 */
@@ -1195,7 +1195,7 @@ onErrorCaptured((err) => {
    设计目标:
      - 选中 = emerald 浅底 + 边框 + 主色字(跟 TreeNode .tree-skill-badge-global-agent
        同款色相,视觉一致)
-     - 未选中 = 完全透明背景 + 无边框 + 灰文字(跟工具列表的"未启用"状态
+     - 未选中 = 完全透明背景 + 无边框 + 灰文字(跟Agent列表的"未启用"状态
        视觉接近,只是一个轻量的标签)
    实现:
      - 胶囊 padding 1px 8px(比原 row padding 小很多,贴合 tag 形态)
@@ -1255,7 +1255,7 @@ onErrorCaptured((err) => {
 
 /* 2026-07-12 增 v2:整行 row 容器 — 包住左侧 tag + 右侧两个图标按钮。
    display:flex + align-items:center 让 tag 和图标按钮在同一基线水平排列,
-   跟工具行 .ssp-scope-row 视觉对齐。
+   跟Agent行 .ssp-scope-row 视觉对齐。
    2026-07-16 改:用户反馈右侧空白过多。两个图标按钮靠右贴边 →
    info 按钮 margin-left:auto 推到 row 最右,folder 紧跟其后 4px 间距。
    margin 跟旧版一致(左右 12px),保证 tag 的胶囊视觉位置不变。 */
@@ -1267,7 +1267,7 @@ onErrorCaptured((err) => {
      row 直接顶住 .cp-body 的 padding,内部 tag 自身有 padding,视觉上仍然有呼吸感。 */
   margin: 0 12px;
 }
-/* 2026-07-12 增:tag 右侧两个图标按钮 — 跟工具行 chevron 同尺寸(11~12px),
+/* 2026-07-12 增:tag 右侧两个图标按钮 — 跟Agent行 chevron 同尺寸(11~12px),
    视觉权重轻,不抢 tag 的视觉中心。
    - 未选中态:透明背景 + 灰文字 + 透明边框,hover 时淡灰底
    - 选中态:跟 tag 同色系(emerald),跟 tag 整体协调(可视为 tag 的附属)
@@ -1313,7 +1313,7 @@ onErrorCaptured((err) => {
   opacity: 1;
 }
 
-/* 2026-07-12 增 v2:tag 行下方的横杠,跟下方工具列表视觉分组。
+/* 2026-07-12 增 v2:tag 行下方的横杠,跟下方Agent列表视觉分组。
    跟旧版 border-bottom 区别:这里改用 hr + 显式 margin,占据独立一行,
    视觉上像"标题区 / 内容区"的分割,而不是 group 之间的小间隙。
    颜色用 var(--border) 弱化(跟文件树 header 底边一致)。 */
@@ -1332,11 +1332,11 @@ onErrorCaptured((err) => {
 
 /* 2026-07-12 增:全局 Agent info 弹窗样式。
    - 描述:跟普通段落同色,line-height 1.6 便于阅读
-   - 工具标题:h4 字号 12px(比正文小),字色 dim,letter-spacing 跟其他
+   - Agent标题:h4 字号 12px(比正文小),字色 dim,letter-spacing 跟其他
      section header 对齐
-   - 工具列表:flex wrap 让 chip 在窄屏自然换行
+   - Agent列表:flex wrap 让 chip 在窄屏自然换行
    - 单个 chip:浅 emerald 底 + 翠绿字 + icon + 名称,跟"全局 Agent Skill"
-     主题色一致,用户一眼看出"这些是适配工具" */
+     主题色一致,用户一眼看出"这些是适配Agent" */
 .ssp-info-body {
   font-size: 13px;
   color: var(--text);
@@ -1346,7 +1346,7 @@ onErrorCaptured((err) => {
   line-height: 1.6;
   color: var(--text-dim);
 }
-.ssp-info-tool-title {
+.ssp-info-agent-title {
   margin: 0 0 8px;
   font-size: 12px;
   font-weight: 600;
@@ -1354,7 +1354,7 @@ onErrorCaptured((err) => {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.ssp-info-tool-list {
+.ssp-info-agent-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1366,7 +1366,7 @@ onErrorCaptured((err) => {
    理由:chip 胶囊在状态"部分支持/不支持"时无法区分,改成 row 列表让
    用户能横向对比 + 看备注。flex 布局,icon + name + badge 左对齐,
    note 占剩余宽度自动换行。 */
-.ssp-info-tool-item {
+.ssp-info-agent-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1378,7 +1378,7 @@ onErrorCaptured((err) => {
   line-height: 1.5;
   flex-wrap: wrap;
 }
-.ssp-info-tool-icon {
+.ssp-info-agent-icon {
   flex-shrink: 0;
   color: var(--text-dim);
   width: 14px;
@@ -1387,7 +1387,7 @@ onErrorCaptured((err) => {
   align-items: center;
   justify-content: center;
 }
-.ssp-info-tool-name {
+.ssp-info-agent-name {
   font-weight: 600;
   color: var(--text);
   flex-shrink: 0;
@@ -1396,7 +1396,7 @@ onErrorCaptured((err) => {
    - supported: emerald(跟 tag 选中态同色系,统一"全局 Agent"主题)
    - partial: amber(琥珀,提示"能用但有限制")
    - unsupported: gray(灰,提示"暂不支持") */
-.ssp-info-tool-badge {
+.ssp-info-agent-badge {
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 600;
@@ -1405,29 +1405,29 @@ onErrorCaptured((err) => {
   border: 1px solid transparent;
   white-space: nowrap;
 }
-.ssp-info-tool-badge-supported {
+.ssp-info-agent-badge-supported {
   background: var(--accent-emerald-bg);
   color: var(--accent-emerald);
   border-color: var(--accent-emerald-border);
 }
-.ssp-info-tool-badge-partial {
+.ssp-info-agent-badge-partial {
   background: rgba(245, 158, 11, 0.1);
   color: #b45309;
   border-color: rgba(245, 158, 11, 0.3);
 }
-.ssp-info-tool-badge-unsupported {
+.ssp-info-agent-badge-unsupported {
   background: var(--bg);
   color: var(--text-faint);
   border-color: var(--border);
 }
-.ssp-info-tool-note {
+.ssp-info-agent-note {
   flex: 1 1 100%;
   font-size: 11px;
   color: var(--text-faint);
   margin-top: 2px;
   word-break: break-word;
 }
-.ssp-info-tool-empty {
+.ssp-info-agent-empty {
   margin: 0;
   font-size: 12px;
   color: var(--text-faint);

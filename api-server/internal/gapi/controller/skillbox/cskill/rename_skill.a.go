@@ -4,10 +4,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestRenameSkill 重命名 skill 入参(2026-07-11 增)。

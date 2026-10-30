@@ -16,16 +16,16 @@ import (
 	"strings"
 	"time"
 
-	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/gapi/controller/skillbox/cskill"
+	"ginp-api/internal/gapi/entity"
+	mmarket "ginp-api/internal/gapi/model/skillbox/mmarketskill"
+	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
+	mskillapply "ginp-api/internal/gapi/model/skillbox/mskillapply"
 	"ginp-api/internal/gapi/service/project/sproject"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/settings"
 	"ginp-api/internal/skilladapter"
 	"ginp-api/internal/skillapp"
-	mmarket "ginp-api/internal/gapi/model/skillbox/mmarketskill"
-	mmarketsource "ginp-api/internal/gapi/model/skillbox/mmarketsource"
-	mskillapply "ginp-api/internal/gapi/model/skillbox/mskillapply"
 
 	"ginp-api/pkg/logger"
 	"ginp-api/pkg/where"
@@ -35,8 +35,8 @@ import (
 // 业务错误。
 var (
 	ErrSkillNotFound = errors.New("skillapp: skill not found")
-	ErrEmptyAgents     = errors.New("skillapp: no agents specified")
-	ErrAgentNotFound   = errors.New("skillapp: agent not in registry")
+	ErrEmptyAgents   = errors.New("skillapp: no agents specified")
+	ErrAgentNotFound = errors.New("skillapp: agent not in registry")
 )
 
 // Service 业务服务。
@@ -124,15 +124,15 @@ type ApplyInput struct {
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
 	Name      string   `json:"name"`
-	Agents     []string `json:"agents"`
+	Agents    []string `json:"agents"`
 }
 
 // ApplyResult 单 skill apply 结果(多 agent)。
 type ApplyResult struct {
-	Name     string                  `json:"name"`
-	Version  string                  `json:"version"`
-	Applies  []*skillapp.ApplyResult `json:"applies"`
-	AllOK    bool                    `json:"all_ok"`
+	Name    string                  `json:"name"`
+	Version string                  `json:"version"`
+	Applies []*skillapp.ApplyResult `json:"applies"`
+	AllOK   bool                    `json:"all_ok"`
 }
 
 // recordApply 写一条 SkillApply 行。
@@ -167,7 +167,7 @@ func (s *Service) recordApply(scope string, projectID uint, name, agent string, 
 		Scope:       scope,
 		ProjectID:   projectID,
 		Name:        name,
-		Agent:        agent,
+		Agent:       agent,
 		Status:      res.Status,
 		ApplyMode:   mode,
 		TargetPath:  res.TargetPath,
@@ -225,22 +225,22 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 			Scope:       scope,
 			ProjectID:   in.ProjectID,
 			ProjectRoot: projectRoot,
-			Agents:       []string{agent},
+			Agents:      []string{agent},
 			Canonical:   full,
 		})
 		if err != nil {
 			out.AllOK = false
 			s.Event("apply_failed", full.Manifest.Name, map[string]any{
-				"agent":   agent,
-				"scope":  scope,
-				"error":  err.Error(),
+				"agent": agent,
+				"scope": scope,
+				"error": err.Error(),
 			})
 		}
 		if res != nil {
 			s.recordApply(scope, in.ProjectID, full.Manifest.Name, agent, res)
 			if res.ApplyID > 0 && res.Status == skillapp.StatusApplied {
 				s.Event("apply", full.Manifest.Name, map[string]any{
-					"agent":        agent,
+					"agent":       agent,
 					"scope":       scope,
 					"target_path": res.TargetPath,
 					"apply_id":    res.ApplyID,
@@ -291,7 +291,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 				Scope:        scope,
 				ProjectID:    it.ProjectID,
 				ProjectRoot:  projectRoot,
-				Agent:         agent,
+				Agent:        agent,
 				Canonical:    full,
 			})
 		}
@@ -307,7 +307,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		if bir.Result.ApplyID > 0 {
 			if bir.Result.Status == skillapp.StatusApplied {
 				s.Event("apply", bir.SkillName, map[string]any{
-					"agent":        bir.Agent,
+					"agent":       bir.Agent,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
 					"apply_id":    bir.Result.ApplyID,
@@ -315,7 +315,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 				})
 			} else if bir.Result.Status == skillapp.StatusFailed {
 				s.Event("apply_failed", bir.SkillName, map[string]any{
-					"agent":        bir.Agent,
+					"agent":       bir.Agent,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
 					"batch":       true,
@@ -352,7 +352,7 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	if err := skillapp.UndoWithSnapshot(row.TargetPath, row.PreSnapshot); err != nil {
 		s.Event("undo_failed", row.Name, map[string]any{
 			"apply_id":    applyID,
-			"agent":        row.Agent,
+			"agent":       row.Agent,
 			"target_path": row.TargetPath,
 			"error":       err.Error(),
 		})
@@ -366,7 +366,7 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	}
 	s.Event("undo", row.Name, map[string]any{
 		"apply_id":    applyID,
-		"agent":        row.Agent,
+		"agent":       row.Agent,
 		"target_path": row.TargetPath,
 	})
 	return &UndoResult{ApplyID: applyID, NewStatus: row.Status, RolledBackAt: now}, nil
@@ -376,18 +376,18 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 //
 // 2026-06-25 增:用于"scope-status 命中但 DB 没 apply 记录"场景(用户手动 cp /
 // 外部安装)。逻辑:
-//   1) 先在 DB 按 (scope, project_id, name, agent) 找最近一条 status=applied
-//      记录,找到就走标准 Undo(走 pre-snapshot 还原)。
-//   2) 没记录:用 scope-status 扫,找该 (agent, scope, project_id) 命中
-//      (exists=true) 的 resolved 路径,直接调 ForceRemoveFromPath 删整个目录。
-//   3) DB 插一条占位 status=rolled_back 记录,applied_at/rolled_back_at 都
-//      用 now(),target_path 记录实际删的路径,agent/scope/project_id/name
-//      按入参填。
+//  1. 先在 DB 按 (scope, project_id, name, agent) 找最近一条 status=applied
+//     记录,找到就走标准 Undo(走 pre-snapshot 还原)。
+//  2. 没记录:用 scope-status 扫,找该 (agent, scope, project_id) 命中
+//     (exists=true) 的 resolved 路径,直接调 ForceRemoveFromPath 删整个目录。
+//  3. DB 插一条占位 status=rolled_back 记录,applied_at/rolled_back_at 都
+//     用 now(),target_path 记录实际删的路径,agent/scope/project_id/name
+//     按入参填。
 type ForceUndoInput struct {
 	Scope     string
 	ProjectID uint
 	Name      string
-	Agent      string
+	Agent     string
 }
 
 func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
@@ -433,20 +433,20 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	// 3) DB 写占位 rolled_back 记录
 	now := time.Now()
 	placeholder := &entity.SkillApply{
-		Scope:       scope,
-		ProjectID:   in.ProjectID,
-		Name:        in.Name,
+		Scope:        scope,
+		ProjectID:    in.ProjectID,
+		Name:         in.Name,
 		Agent:        in.Agent,
-		Status:      skillapp.StatusRolledBack,
-		TargetPath:  resolved,
-		PreSnapshot: "",
-		AppliedAt:   now,
+		Status:       skillapp.StatusRolledBack,
+		TargetPath:   resolved,
+		PreSnapshot:  "",
+		AppliedAt:    now,
 		RolledBackAt: &now,
 	}
 	created, _ := s.applyModel().Create(placeholder)
 	if created != nil {
 		s.Event("force_undo", in.Name, map[string]any{
-			"agent":        in.Agent,
+			"agent":       in.Agent,
 			"scope":       scope,
 			"target_path": resolved,
 			"apply_id":    created.ID,
@@ -454,7 +454,7 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 		return &UndoResult{ApplyID: created.ID, NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
 	}
 	s.Event("force_undo", in.Name, map[string]any{
-		"agent":        in.Agent,
+		"agent":       in.Agent,
 		"scope":       scope,
 		"target_path": resolved,
 	})
@@ -471,7 +471,7 @@ func (s *Service) resolveByScopeStatus(name, scope string, projectID uint, agent
 type ListInput struct {
 	Scope  string
 	Name   string
-	Agent   string
+	Agent  string
 	Status string
 	Page   int
 	Size   int
@@ -629,42 +629,42 @@ var (
 
 // MigrateModeResult 单条迁移结果。
 type MigrateModeEntry struct {
-	ApplyID   uint   `json:"apply_id"`
-	Scope     string `json:"scope"`
-	Name      string `json:"name"`
+	ApplyID    uint   `json:"apply_id"`
+	Scope      string `json:"scope"`
+	Name       string `json:"name"`
 	Agent      string `json:"agent"`
-	Target    string `json:"target"`
-	FromMode  string `json:"from_mode"`
-	ToMode    string `json:"to_mode"`
-	OK        bool   `json:"ok"`
-	Skipped   bool   `json:"skipped"`             // target 已被外部修改,跳过避免破坏
+	Target     string `json:"target"`
+	FromMode   string `json:"from_mode"`
+	ToMode     string `json:"to_mode"`
+	OK         bool   `json:"ok"`
+	Skipped    bool   `json:"skipped"` // target 已被外部修改,跳过避免破坏
 	SkipReason string `json:"skip_reason,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 // MigrateModeResult 整体结果。
 type MigrateModeResult struct {
-	FromMode string              `json:"from_mode"`
-	ToMode   string              `json:"to_mode"`
-	Total    int                 `json:"total"`
-	OK       int                 `json:"ok"`
-	Skipped  int                 `json:"skipped"`
-	Failed   int                 `json:"failed"`
-	Entries  []MigrateModeEntry  `json:"entries"`
+	FromMode string             `json:"from_mode"`
+	ToMode   string             `json:"to_mode"`
+	Total    int                `json:"total"`
+	OK       int                `json:"ok"`
+	Skipped  int                `json:"skipped"`
+	Failed   int                `json:"failed"`
+	Entries  []MigrateModeEntry `json:"entries"`
 }
 
 // MigrateMode 把所有 status=applied 的 skill_applies 行,从当前模式切换到 targetMode。
 //
 // 流程:
-//   1) 先把 settings.apply_mode 设为 targetMode(供后续 apply 走新模式),并
-//      记录 fromMode(供回滚 / 报告用)。
-//   2) 列出 status=applied 的所有行;每行根据 (scope, project_id, name) 拿
-//      canonical,根据 agent 拿 adapter;然后判断 target_path 当前是目录还是
-//      symlink,与 fromMode 是不是一致。
-//   3) 一致(已在新模式 / 老 apply 行没有 mode 字段视为 copy):跳过。
-//   4) 不一致:按目标模式落盘(从老 target 拷到新 target,或从老 symlink
-//      还原成 copy 实体),失败时回滚到原状态(整个过程"先复制后替换",避免
-//      半成品状态)。
+//  1. 先把 settings.apply_mode 设为 targetMode(供后续 apply 走新模式),并
+//     记录 fromMode(供回滚 / 报告用)。
+//  2. 列出 status=applied 的所有行;每行根据 (scope, project_id, name) 拿
+//     canonical,根据 agent 拿 adapter;然后判断 target_path 当前是目录还是
+//     symlink,与 fromMode 是不是一致。
+//  3. 一致(已在新模式 / 老 apply 行没有 mode 字段视为 copy):跳过。
+//  4. 不一致:按目标模式落盘(从老 target 拷到新 target,或从老 symlink
+//     还原成 copy 实体),失败时回滚到原状态(整个过程"先复制后替换",避免
+//     半成品状态)。
 //
 // 不传 targetMode 时默认 = 当前 settings 模式(便于前端"重新迁移"用)。
 func (s *Service) MigrateMode(targetMode string) (*MigrateModeResult, error) {
@@ -707,7 +707,7 @@ func (s *Service) MigrateMode(targetMode string) (*MigrateModeResult, error) {
 			ApplyID:  row.ID,
 			Scope:    row.Scope,
 			Name:     row.Name,
-			Agent:     row.Agent,
+			Agent:    row.Agent,
 			Target:   row.TargetPath,
 			FromMode: fromMode,
 			ToMode:   targetMode,

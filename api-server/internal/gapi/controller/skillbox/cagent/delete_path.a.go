@@ -5,11 +5,11 @@
 package cagent
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/model/skillbox/magent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestDeletePath 删 path 入参(按主键 id 删)。

@@ -22,7 +22,7 @@ import (
 //     ~/.codex/skills/xxx"也能立即看到,不需要 import 流程。
 //   - 入参只接受 name(必填)+ version(可选,只用于日志/未来扩展;目录名只
 //     取决于 name,不影响判断)。
-//   - 返回结构: agents 数组列出所有已知Agent(供前端渲染第一行),hits 数组
+//   - 返回结构: agents 数组列出所有已知 Agent(供前端渲染第一行),hits 数组
 //     给出 (agent, scope, project_id) 组合 + exists + 绝对路径,前端用 exists
 //     字段决定 chip 高亮。
 type RequestSkillScopeStatus struct {
@@ -32,35 +32,35 @@ type RequestSkillScopeStatus struct {
 
 // RespondSkillScopeStatus 响应。
 type RespondSkillScopeStatus struct {
-	Name    string             `json:"name"`
-	Version string             `json:"version"`
-	Agents   []scopeStatusAgent  `json:"agents"`
-	Hits    []scopeStatusHit   `json:"hits"`
+	Name     string               `json:"name"`
+	Version  string               `json:"version"`
+	Agents   []scopeStatusAgent   `json:"agents"`
+	Hits     []scopeStatusHit     `json:"hits"`
 	Projects []scopeStatusProject `json:"projects"`
 }
 
 type scopeStatusAgent struct {
-	AgentID      string `json:"agent_id"`
+	AgentID     string `json:"agent_id"`
 	DisplayName string `json:"display_name"`
 	Icon        string `json:"icon"`
 }
 
 type scopeStatusProject struct {
-	ID   uint   `json:"id"`
-	Name string `json:"name"`
-	Alias string `json:"alias"`
+	ID       uint   `json:"id"`
+	Name     string `json:"name"`
+	Alias    string `json:"alias"`
 	RootPath string `json:"root_path"`
 }
 
 type scopeStatusHit struct {
 	AgentID      string `json:"agent_id"`
-	Scope       string `json:"scope"`        // global | project
-	ProjectID   uint   `json:"project_id"`   // 0 表示 global
+	Scope        string `json:"scope"`                   // global | project
+	ProjectID    uint   `json:"project_id"`              // 0 表示 global
 	ProjectLabel string `json:"project_label,omitempty"` // 拼好的展示文本(仅 project 命中用)
-	Path        string `json:"path"`         // 候选 skill 目录(不含 name 子目录)
-	Resolved    string `json:"resolved"`     // 实际检查的绝对路径(<path>/<name>/)
-	Exists      bool   `json:"exists"`
-	IsSystem    bool   `json:"is_system"`    // 候选路径是否属 adapter 的 system 档(只读参考)
+	Path         string `json:"path"`                    // 候选 skill 目录(不含 name 子目录)
+	Resolved     string `json:"resolved"`                // 实际检查的绝对路径(<path>/<name>/)
+	Exists       bool   `json:"exists"`
+	IsSystem     bool   `json:"is_system"` // 候选路径是否属 adapter 的 system 档(只读参考)
 }
 
 // GetSkillScopeStatus GET /api/skillbox/skills/scope-status?name=&version=
@@ -77,7 +77,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 	agents := make([]scopeStatusAgent, 0, len(adapters))
 	for _, a := range adapters {
 		agents = append(agents, scopeStatusAgent{
-			AgentID:      a.AgentID(),
+			AgentID:     a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 		})
@@ -111,12 +111,12 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 				resolved := filepath.Join(p, name)
 				hits = append(hits, scopeStatusHit{
 					AgentID:   a.AgentID(),
-					Scope:    skilladapter.ScopeGlobal,
+					Scope:     skilladapter.ScopeGlobal,
 					ProjectID: 0,
-					Path:     p,
-					Resolved: resolved,
-					Exists:   skillDirExists(resolved),
-					IsSystem: a.IsSystemPath(p),
+					Path:      p,
+					Resolved:  resolved,
+					Exists:    skillDirExists(resolved),
+					IsSystem:  a.IsSystemPath(p),
 				})
 			}
 		} else {
@@ -141,7 +141,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 						label = "#" + strconv.FormatUint(uint64(p.ID), 10)
 					}
 					hits = append(hits, scopeStatusHit{
-						AgentID:       a.AgentID(),
+						AgentID:      a.AgentID(),
 						Scope:        skilladapter.ScopeProject,
 						ProjectID:    p.ID,
 						ProjectLabel: label,
@@ -160,7 +160,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 	c.SuccessData(RespondSkillScopeStatus{
 		Name:     name,
 		Version:  version,
-		Agents:    agents,
+		Agents:   agents,
 		Projects: projects,
 		Hits:     hits,
 	}, "scope-status ok")
@@ -169,7 +169,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 // skillDirExists 检查 <resolved> 是否是存在的 skill 目录(自身含 SKILL.md 或含子目录里有 SKILL.md)。
 //
 // 实现:必须 <resolved>/SKILL.md 存在(对齐 BaseAdapter.readSkillDir 入口);
-// 不做深度递归 — scope-status 关心"我有没有放在Agent期望的位置",不是
+// 不做深度递归 — scope-status 关心"我有没有放在 Agent 期望的位置",不是
 // "我有没有放在任意子目录里"。后者是 Scan 的活,scope-status 故意不做,
 // 避免误报(用户随手建的子目录不应该算"已应用")。
 func skillDirExists(resolved string) bool {
@@ -224,7 +224,7 @@ func ResolveHit(name, scope string, projectID uint, agent string) (string, error
 	}
 	a, ok := skilladapter.DefaultRegistry().Get(agent)
 	if !ok {
-		return "", nil // Agent不存在 → 视作未命中
+		return "", nil // Agent 不存在 → 视作未命中
 	}
 	paths, err := a.DiscoverPaths(scope)
 	if err != nil {

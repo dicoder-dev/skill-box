@@ -1,8 +1,9 @@
 // Package gitconfig 管理 ~/.skill-box/ 下的 Git 远端配置 + token 文件(2026-07-17 增)。
 //
 // 存储位置:
-//   ~/.skill-box/config.yaml   ← YAML 配置文件(沿用项目全局 cfg 系统)
-//   ~/.skill-box/.git_token     ← GitHub PAT,0600 权限
+//
+//	~/.skill-box/config.yaml   ← YAML 配置文件(沿用项目全局 cfg 系统)
+//	~/.skill-box/.git_token     ← GitHub PAT,0600 权限
 //
 // 本包对外只暴露 GitRemoteConfig 结构 + Load / Save / Validate / 写 token。
 // skillversion 主包通过 GetGitRemoteConfig() 拿远端配置(避免循环依赖)。
@@ -123,9 +124,9 @@ func DefaultTokenFile() string {
 //
 // 2026-07-17:这是 token 写盘的唯一入口 — 任何 HTTP controller 都不直接 os.WriteFile,
 // 必须走本函数。理由:
-//   1. 强制 0600 权限(防其他用户读到)
-//   2. 路径不在 home dir 时(用户配了绝对路径)按用户配置走,不强制改成 home
-//   3. 失败时清理半成品
+//  1. 强制 0600 权限(防其他用户读到)
+//  2. 路径不在 home dir 时(用户配了绝对路径)按用户配置走,不强制改成 home
+//  3. 失败时清理半成品
 func WriteToken(path, token string) error {
 	token = strings.TrimSpace(token)
 	if token == "" {

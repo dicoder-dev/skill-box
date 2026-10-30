@@ -16,7 +16,7 @@ import (
 )
 
 // setupTestDB 起一个 sqlite 临时文件 DB,跑 tools + tool_paths AutoMigrate,
-// 写一条用户Agent,验证 sagent 业务规则。
+// 写一条用户 Agent,验证 sagent 业务规则。
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dir := t.TempDir()
@@ -32,13 +32,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestCreate_AndList 新建Agent后能从 List 看到。
+// TestCreate_AndList 新建 Agent 后能从 List 看到。
 func TestCreate_AndList(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 
 	_, err := svc.Create(&sagent.CreateInput{
-		AgentID:      "myagent",
+		AgentID:     "myagent",
 		DisplayName: "My Agent",
 		MdiIcon:     "mdi:agents",
 		Maturity:    "stable",
@@ -89,11 +89,11 @@ func TestCreate_DuplicateAgentID(t *testing.T) {
 	}
 }
 
-// TestDelete_SystemFrozen 系统Agent不可删。
+// TestDelete_SystemFrozen 系统 Agent 不可删。
 func TestDelete_SystemFrozen(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
-	// 手工塞一条系统Agent(模拟 seed 出来的)
+	// 手工塞一条系统 Agent(模拟 seed 出来的)
 	if err := db.Create(&entity.Agent{
 		AgentID: "sys-agent", DisplayName: "S", MdiIcon: "mdi:s", IsSystem: true, Enabled: true,
 	}).Error; err != nil {
@@ -113,7 +113,7 @@ func TestUpdate_AndReload(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 
-	// seed 一个Agent
+	// seed 一个 Agent
 	created, err := svc.Create(&sagent.CreateInput{
 		AgentID: "user-agent", DisplayName: "Old Name", MdiIcon: "mdi:agents", Maturity: "stable",
 		Enabled: true,
@@ -164,7 +164,7 @@ func TestUpdate_AndReload(t *testing.T) {
 	}
 }
 
-// TestDelete_Cascade 删 user Agent应级联删 tool_paths。
+// TestDelete_Cascade 删 user Agent 应级联删 tool_paths。
 func TestDelete_Cascade(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
@@ -197,7 +197,7 @@ func TestCreate_DuplicateScopeCategoryPaths(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 	_, err := svc.Create(&sagent.CreateInput{
-		AgentID:      "dup",
+		AgentID:     "dup",
 		DisplayName: "Dup",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",
@@ -220,7 +220,7 @@ func TestUpdate_DuplicateScopeCategoryPaths(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 	if _, err := svc.Create(&sagent.CreateInput{
-		AgentID:      "updup",
+		AgentID:     "updup",
 		DisplayName: "UpDup",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",
@@ -248,7 +248,7 @@ func TestAddOnePath_Conflict(t *testing.T) {
 	db := setupTestDB(t)
 	svc := sagent.New(db, db)
 	if _, err := svc.Create(&sagent.CreateInput{
-		AgentID:      "addp",
+		AgentID:     "addp",
 		DisplayName: "AddP",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",

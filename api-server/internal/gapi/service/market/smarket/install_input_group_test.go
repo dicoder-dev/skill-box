@@ -14,7 +14,7 @@ func TestNormalizeGroupPathForMarket(t *testing.T) {
 	}{
 		// 2026-07-10 改:新增 "skillhub-cn" 兼容旧 "skillhub"(DB 老记录)
 		{"skillhub-cn", "skillhub-cn"},
-		{"skillhub", "skillhub"}, // 老 sourceType 仍认
+		{"skillhub", "skillhub"},   // 老 sourceType 仍认
 		{"skills.sh", "skills-sh"}, // 关键 case:点 → 短横
 		{"github", "github"},
 		{"Skills.sh", "skills-sh"}, // 大小写归一
@@ -39,7 +39,7 @@ func TestDefaultGroupPathFor(t *testing.T) {
 		// 2026-07-10 改:SourceSkillhub 改成 "skillhub-cn",对应分组目录也是 "skillhub-cn"。
 		// "skillhub" 老字符串保留兼容(DB 老记录),但走旧 ID 时分组也写老名,不会跟新名冲突。
 		{skillmarket.SourceSkillhub, "skillhub-cn"}, // "skillhub-cn"
-		{"skillhub", "skillhub"},                   // 兼容老 type
+		{"skillhub", "skillhub"},                    // 兼容老 type
 		{"skillssh", "skills.sh"},
 		{"github", ""}, // 2026-07-09 改:github 不在 defaultGroupPathFor 里(由 deriveGroupPath 按 owner 生成)
 		{"unknown", ""},
@@ -86,17 +86,17 @@ func TestDeriveGroupPath(t *testing.T) {
 // 2026-07-09 增:splitOwnerFromRemote 单元测试
 func TestSplitOwnerFromRemote(t *testing.T) {
 	cases := []struct {
-		in       string
+		in        string
 		wantOwner string
-		wantOK   bool
+		wantOK    bool
 	}{
 		{"anthropics/skills@skills/pdf", "anthropics", true},
 		{"vercel-labs/agent-skills@vercel-react-best-practices", "vercel-labs", true},
 		{"anthropics/skills@pdf", "anthropics", true},
 		{"no-at-sign-but-has-slash", "", false}, // 字符串里只有 - 没 /,拆不出
-		{"slug", "", false},     // 没 @ 也没 /,拆不出 owner
-		{"/repo@skill", "", false}, // 第一个字符就是 /,slash=0
-		{"owner/@skill", "", false}, // 末段是空(空 skill name,但拆 owner 应该成功;这个 case 视实现而定)
+		{"slug", "", false},                     // 没 @ 也没 /,拆不出 owner
+		{"/repo@skill", "", false},              // 第一个字符就是 /,slash=0
+		{"owner/@skill", "", false},             // 末段是空(空 skill name,但拆 owner 应该成功;这个 case 视实现而定)
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

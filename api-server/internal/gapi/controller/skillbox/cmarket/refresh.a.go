@@ -5,11 +5,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/internal/skillmarket"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestRefreshMarket 刷新请求。

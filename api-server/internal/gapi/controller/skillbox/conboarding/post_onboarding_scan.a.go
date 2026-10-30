@@ -3,11 +3,11 @@ package conboarding
 import (
 	"os"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestOnboardingScan 无入参(后续可加 scope=global|project)。
@@ -16,7 +16,7 @@ type RequestOnboardingScan struct{}
 // RespondOnboardingScan scan 后的精简 Report。
 type RespondOnboardingScan = skillimporterReportEnvelope
 
-// PostOnboardingScan 跑一次跨Agent扫描,把结果缓存到包级变量供后续 import 用。
+// PostOnboardingScan 跑一次跨 Agent 扫描,把结果缓存到包级变量供后续 import 用。
 func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 	store, err := skillstore.New()
 	if err != nil {
@@ -34,7 +34,7 @@ func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 
 	envelope := skillimporterReportEnvelope{
 		ScannedAt: report.FinishedAt,
-		Agents:     report.Agents,
+		Agents:    report.Agents,
 		Summary:   report.AgentSummary,
 		HasReport: true,
 	}
@@ -51,8 +51,8 @@ func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 	}
 	for _, fs := range report.FoundSkills {
 		envelope.Found = append(envelope.Found, onboardingFoundLite{
-			AgentID:     fs.AgentID,
-			AgentName:   fs.AgentName,
+			AgentID:    fs.AgentID,
+			AgentName:  fs.AgentName,
 			Name:       fs.Canonical.Manifest.Name,
 			Version:    fs.Canonical.Manifest.Version,
 			SourcePath: fs.SourcePath,
@@ -82,7 +82,7 @@ func init() {
 		PermissionName: "skillbox.onboarding.scan",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "onboarding.scan",
-			Description:   "跑一次跨Agent扫描并把 Report 缓存到进程,供 import 接口消费",
+			Description:   "跑一次跨 Agent 扫描并把 Report 缓存到进程,供 import 接口消费",
 			RequestParams: RequestOnboardingScan{},
 		},
 	})

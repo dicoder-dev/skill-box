@@ -1,10 +1,10 @@
 package cmarket
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestListMarketSkills 列表请求。

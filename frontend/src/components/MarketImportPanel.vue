@@ -804,7 +804,7 @@ const previewAuthor = computed(() => {
   gap: 8px;
   padding: 14px 14px 12px;
   text-align: left;
-  /* 2026-07-18 改:用更明显的渐变底色 + 加深边框,跟"工具"/"全局目录"/"本地" tab
+  /* 2026-07-18 改:用更明显的渐变底色 + 加深边框,跟"Agent"/"全局目录"/"本地" tab
      的卡片形成明显区分,提升三方导入 tab 在弹窗里的视觉权重 */
   background: linear-gradient(135deg,
     color-mix(in srgb, var(--accent) 8%, var(--surface-2, transparent)),

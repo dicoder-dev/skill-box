@@ -9,13 +9,13 @@ package caisession
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/internal/skillboxdata"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestSaveHistory v2:单条 HistoryItem。
@@ -24,13 +24,13 @@ import (
 // 本接口对 messages 内容形状无要求,前端可传任何 user/assistant 完整字段;
 // 上层 preview 自动从首条 assistant content 算(skillboxdata.WriteConv 兜底)。
 type RequestSaveHistory struct {
-	SourcePath string                 `json:"source_path"`
+	SourcePath string                   `json:"source_path"`
 	Item       skillboxdata.HistoryItem `json:"item"`
 }
 
 // ResponseSaveHistory 写盘结果。
 type ResponseSaveHistory struct {
-	Ok    bool   `json:"ok"`
+	Ok     bool   `json:"ok"`
 	ConvID string `json:"conv_id"`
 }
 
@@ -79,7 +79,7 @@ func init() {
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "ai.history.save",
 			Description:   "单条 upsert AI 对话到 <source_path>/.skill-box/history/<conv-id>.json;source_path 必须在 store.root 下且含 SKILL.md;超 2MB 返 400 conv_too_large",
-			RequestParams:  RequestSaveHistory{},
+			RequestParams: RequestSaveHistory{},
 		},
 	})
 }

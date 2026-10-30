@@ -1,12 +1,12 @@
 package cmarket
 
 import (
-	"github.com/gin-gonic/gin"
+	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/internal/gapi/service/skill/sskill"
-	"ginp-api/internal/db/dbs"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestListMarketSources 列表请求(query)。

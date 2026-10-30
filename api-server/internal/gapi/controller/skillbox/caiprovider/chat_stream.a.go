@@ -7,8 +7,8 @@
 //   - 错误事件:  data: {"kind":"error","err":"..."}\n\n
 //
 // 入参两种风格(任选其一):
-//   1) { provider?, model?, messages:[...], temperature?, max_tokens? }
-//   2) { provider?, preset_id, vars:{...} }  ← 自动渲染 prompt
+//  1. { provider?, model?, messages:[...], temperature?, max_tokens? }
+//  2. { provider?, preset_id, vars:{...} }  ← 自动渲染 prompt
 //
 // 2026-07-14 改造:aiengine 全量切到 go-kratos/blades。
 // controller 不再关心 aiengine 内部实现,只把 *blades.ModelResponse 转 SSE。
@@ -19,21 +19,21 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
+	"github.com/go-kratos/blades"
 )
 
 // RequestChat 流式对话入参。
 // Provider 留空时由 engine 按 priority 选默认;PresetID + Vars 触发预设。
 //
 // Messages 兼容两种格式(都是 Message 的合法子集):
-//   1) 标准: { role, parts:[{text:...}] }           ← 喂给 ModelProvider
-//   2) 简化: { role, content: "..." }                ← 前端 chatStream 走这个
+//  1. 标准: { role, parts:[{text:...}] }           ← 喂给 ModelProvider
+//  2. 简化: { role, content: "..." }                ← 前端 chatStream 走这个
 //
 // 2026-07-14 加:实测前端发的是简化格式(只填 content 不填 parts)。
 // *blades.Message 直接 JSON 反序列化会把 content 字段丢掉(没有 json tag),
@@ -43,15 +43,15 @@ import (
 type RequestChat struct {
 	Provider string            `json:"provider"`
 	Model    string            `json:"model"`
-	Messages []ChatMessage      `json:"messages"`
+	Messages []ChatMessage     `json:"messages"`
 	PresetID string            `json:"preset_id"`
 	Vars     map[string]string `json:"vars"`
 }
 
 // ChatMessage 中间结构,兼容"标准"和"简化"两种入参。
 type ChatMessage struct {
-	Role    string          `json:"role"`
-	Content string          `json:"content"`
+	Role    string            `json:"role"`
+	Content string            `json:"content"`
 	Parts   []ChatMessagePart `json:"parts,omitempty"`
 }
 

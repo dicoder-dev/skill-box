@@ -7,18 +7,19 @@ type stubAdapter struct {
 	id string
 }
 
-func (s *stubAdapter) AgentID() string             { return s.id }
-func (s *stubAdapter) DisplayName() string        { return "Stub " + s.id }
-func (s *stubAdapter) Icon() string               { return ":ghost:" }
+func (s *stubAdapter) AgentID() string                        { return s.id }
+func (s *stubAdapter) DisplayName() string                    { return "Stub " + s.id }
+func (s *stubAdapter) Icon() string                           { return ":ghost:" }
 func (s *stubAdapter) DiscoverPaths(string) ([]string, error) { return nil, nil }
-func (s *stubAdapter) Scan(string) ([]Canonical, error)        { return nil, nil }
-func (s *stubAdapter) Apply(Canonical, string) error           { return nil }
-func (s *stubAdapter) LocalName(c Canonical) string            { return c.Manifest.Name }
-func (s *stubAdapter) Validate(Canonical) error                { return nil }
+func (s *stubAdapter) Scan(string) ([]Canonical, error)       { return nil, nil }
+func (s *stubAdapter) Apply(Canonical, string) error          { return nil }
+func (s *stubAdapter) LocalName(c Canonical) string           { return c.Manifest.Name }
+func (s *stubAdapter) Validate(Canonical) error               { return nil }
 func (s *stubAdapter) IsSystemPath(string) bool               { return false }
+
 // 2026-07-08 增:Adapter 接口加 UserPath,stub 同步加一行让编译过;
 // 真测试逻辑见 applier_test.go,这里 stub 行为是"没配 user path"。
-func (s *stubAdapter) UserPath(string) (string, error)         { return "", nil }
+func (s *stubAdapter) UserPath(string) (string, error) { return "", nil }
 
 func TestRegistry_RegisterGetAll(t *testing.T) {
 	// 用独立 registry 避免污染 package-level 默认表。

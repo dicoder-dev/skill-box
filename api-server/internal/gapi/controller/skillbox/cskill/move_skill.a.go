@@ -3,10 +3,10 @@ package cskill
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestMoveSkill 移动 skill 到另一分组。

@@ -16,11 +16,11 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/skillpkg"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // PostOnboardingImportZipBytes 入口。

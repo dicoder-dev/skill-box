@@ -18,18 +18,18 @@ var onboardingCache = struct {
 
 // skillimporterReportEnvelope 包一层时间戳,避免直接暴露 importer.Report。
 type skillimporterReportEnvelope struct {
-	ScannedAt time.Time             `json:"scanned_at"`
+	ScannedAt  time.Time             `json:"scanned_at"`
 	Agents     []string              `json:"agents"`
 	AgentPaths []string              `json:"agent_paths"`
-	Summary   map[string]int        `json:"summary"`
-	Found     []onboardingFoundLite `json:"found"`
-	HasReport bool                  `json:"has_report"`
+	Summary    map[string]int        `json:"summary"`
+	Found      []onboardingFoundLite `json:"found"`
+	HasReport  bool                  `json:"has_report"`
 }
 
 // onboardingFoundLite 状态接口只暴露轻量字段,避免把整个 canonical 倾到前端。
 type onboardingFoundLite struct {
-	AgentID     string `json:"agent_id"`
-	AgentName   string `json:"agent_name"`
+	AgentID    string `json:"agent_id"`
+	AgentName  string `json:"agent_name"`
 	Name       string `json:"name"`
 	Version    string `json:"version"`
 	SourcePath string `json:"source_path"`
@@ -42,14 +42,14 @@ type RequestOnboardingStatus struct{}
 
 // RespondOnboardingStatus onboarding 当前状态。
 type RespondOnboardingStatus struct {
-	Adapters  []adapterStatus `json:"adapters"`
-	LastScan  *time.Time      `json:"last_scan,omitempty"`
-	HasReport bool            `json:"has_report"`
+	Adapters   []adapterStatus `json:"adapters"`
+	LastScan   *time.Time      `json:"last_scan,omitempty"`
+	HasReport  bool            `json:"has_report"`
 	TotalFound int             `json:"total_found"`
 }
 
 type adapterStatus struct {
-	AgentID      string `json:"agent_id"`
+	AgentID     string `json:"agent_id"`
 	DisplayName string `json:"display_name"`
 	Icon        string `json:"icon"`
 	GlobalPath  string `json:"global_path"`
@@ -66,7 +66,7 @@ func GetOnboardingStatus(c *ginp.ContextPlus, _ *RequestOnboardingStatus) {
 	for _, a := range skilladapter.All() {
 		paths, _ := a.DiscoverPaths(skilladapter.ScopeGlobal)
 		s := adapterStatus{
-			AgentID:      a.AgentID(),
+			AgentID:     a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 		}

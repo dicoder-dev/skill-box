@@ -1,7 +1,7 @@
 <script setup>
 // AIDialog.vue — 全局 AI 操作弹窗(替换旧 AIPanel 嵌入侧栏)。
 //
-// 触发:SkillsView 的工具栏 AI 图标 → v-model="open"。
+// 触发:SkillsView 的Agent栏 AI 图标 → v-model="open"。
 // 当前内置操作:
 //   - 翻译 Skill(translate_skill preset)
 //   - 优化 Frontmatter(优化 frontmatter preset) — 暂用旧 preset 不重新设计 UI
@@ -20,7 +20,7 @@
 //   - 复用 ai.js 的 chatStream 客户端,带 abort
 //   - 翻译的实际 system prompt 由后端 aiengine types.go 里的 translate_skill
 //     preset 注入,前端这里的 raw prompt 文本仅作「预览 + 复制」用途
-//     (用户可拿去别的工具跑,后端不受影响)
+//     (用户可拿去别的Agent跑,后端不受影响)
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Modal from '@/components/Modal.vue'

@@ -8,9 +8,9 @@ import (
 
 // 比较结论。
 const (
-	StatusUpToDate    = "upToDate"
-	StatusAvailable   = "available"
-	StatusMustUpdate  = "mustUpdate"
+	StatusUpToDate     = "upToDate"
+	StatusAvailable    = "available"
+	StatusMustUpdate   = "mustUpdate"
 	StatusIncomparable = "incomparable" // 一侧不是有效 semver
 )
 

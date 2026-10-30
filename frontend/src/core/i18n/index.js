@@ -51,7 +51,7 @@ export default i18n
 
 // 2026-07-07 增:plainT(key, values) — 完全脱离 vue-i18n 的 Proxy / Composer 包装,
 // 直接读 language 包取值。给"compute critical 路径"用(例如 SkillFileInlinePanel 的
-// scopeGroupByTool computed — 这种路径一旦 throw 会直接把整段 component update 弄崩,
+// scopeGroupByAgent computed — 这种路径一旦 throw 会直接把整段 component update 弄崩,
 // 控制台只看到 "Unhandled Promise Rejection" / "t is not a function")。
 //
 // vue-i18n 9 的 t/getLocale 暴露路径全部走 Proxy,

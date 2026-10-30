@@ -12,7 +12,7 @@ import (
 type UndoRecord struct {
 	ID         uint
 	TargetPath string
-	Agent       string
+	Agent      string
 	Status     string
 	AppliedAt  time.Time
 }
@@ -30,7 +30,7 @@ func Undo(rec *UndoRecord) error {
 		return fmt.Errorf("skillapp: cannot undo a failed apply (id=%d)", rec.ID)
 	}
 	// SkillApply.PreSnapshot 是 JSON;由 service 解析后传进 Undo;
-// 这里只负责"按 PreSnapshot 恢复 target 目录"。
+	// 这里只负责"按 PreSnapshot 恢复 target 目录"。
 	return nil
 }
 

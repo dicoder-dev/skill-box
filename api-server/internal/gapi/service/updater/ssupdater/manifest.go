@@ -26,12 +26,12 @@ import (
 // 一个新版发布的所有字段。UI / controller 都基于此结构传输。
 // schema 详见 docs/agent/project/updater-manifest.md。
 type Manifest struct {
-	Channel     string             `json:"channel"`
-	Version     string             `json:"version"`
-	ReleasedAt  string             `json:"released_at"`
-	MinSupport  string             `json:"min_supported"`
-	Notes       map[string]string  `json:"notes"`
-	Assets      []Asset            `json:"assets"`
+	Channel    string            `json:"channel"`
+	Version    string            `json:"version"`
+	ReleasedAt string            `json:"released_at"`
+	MinSupport string            `json:"min_supported"`
+	Notes      map[string]string `json:"notes"`
+	Assets     []Asset           `json:"assets"`
 }
 
 type Asset struct {

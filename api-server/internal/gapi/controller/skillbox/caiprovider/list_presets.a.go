@@ -7,8 +7,8 @@ package caiprovider
 import (
 	"github.com/gin-gonic/gin"
 
-	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/aiengine"
+	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/ai/sai"
 	"ginp-api/internal/settings"
 	"ginp-api/pkg/ginp"

@@ -52,13 +52,13 @@ type SourceConfigJSON struct {
 //   - ErrRemoteNotFound → 404 「找不到」
 //   - ErrSkillMalformed → 422 「文件格式有问题」
 var (
-	ErrSourceNotFound   = errors.New("skillmarket: source not found")
-	ErrSourceDisabled   = errors.New("skillmarket: source disabled")
-	ErrSourceNotImpl    = errors.New("skillmarket: source not implemented")
-	ErrRemoteNotFound   = errors.New("skillmarket: remote skill not found")
-	ErrSkillMalformed   = errors.New("skillmarket: skill malformed")
-	ErrRemoteFetchFail  = errors.New("skillmarket: remote fetch failed")
-	ErrEmptyRemoteID    = errors.New("skillmarket: empty remote id")
+	ErrSourceNotFound  = errors.New("skillmarket: source not found")
+	ErrSourceDisabled  = errors.New("skillmarket: source disabled")
+	ErrSourceNotImpl   = errors.New("skillmarket: source not implemented")
+	ErrRemoteNotFound  = errors.New("skillmarket: remote skill not found")
+	ErrSkillMalformed  = errors.New("skillmarket: skill malformed")
+	ErrRemoteFetchFail = errors.New("skillmarket: remote fetch failed")
+	ErrEmptyRemoteID   = errors.New("skillmarket: empty remote id")
 )
 
 // MarketItem 列表里的一项(只列轻量字段;详情走 Detail)。
@@ -77,9 +77,9 @@ type MarketItem struct {
 // MarketDetail 详情(列表 + 文件清单 / 额外元数据)。
 type MarketDetail struct {
 	MarketItem
-	License   string                 `json:"license,omitempty"`
-	Homepage  string                 `json:"homepage,omitempty"`
-	Extra     map[string]any         `json:"extra,omitempty"`
+	License   string                  `json:"license,omitempty"`
+	Homepage  string                  `json:"homepage,omitempty"`
+	Extra     map[string]any          `json:"extra,omitempty"`
 	Canonical *skilladapter.Canonical `json:"canonical,omitempty"`
 }
 

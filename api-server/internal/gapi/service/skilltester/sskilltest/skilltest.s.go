@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-kratos/blades"
 	"ginp-api/internal/aiengine"
 	"ginp-api/internal/gapi/entity"
 	maiprovider "ginp-api/internal/gapi/model/skillbox/maiprovider"
@@ -30,6 +29,7 @@ import (
 	"ginp-api/internal/skillstore"
 	"ginp-api/internal/skilltester"
 	"ginp-api/pkg/where"
+	"github.com/go-kratos/blades"
 
 	"gorm.io/gorm"
 )
@@ -77,7 +77,7 @@ type RunRequest struct {
 
 // RunResult 业务层返回(已落库)。
 type RunResult struct {
-	Run     *entity.SkillTestRun     `json:"run"`
+	Run     *entity.SkillTestRun      `json:"run"`
 	Results []*entity.SkillTestResult `json:"results"`
 }
 

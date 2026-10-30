@@ -1,20 +1,20 @@
 // Package cagent - delete_agent.a.go
 // POST /api/skillbox/agents/delete
 //
-// 删一个用户Agent。系统Agent(is_system=true)不可删。
+// 删一个用户 Agent。系统 Agent(is_system=true)不可删。
 package cagent
 
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
-// RequestDeleteAgent 删Agent入参。
+// RequestDeleteAgent 删 Agent 入参。
 type RequestDeleteAgent struct {
 	AgentID string `json:"agent_id"`
 }
@@ -47,7 +47,7 @@ func init() {
 		PermissionName: "skillbox.agents.delete",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.delete",
-			Description:   "删一个用户Agent(系统Agent is_system=true 不可删);改完建议再调 /agents/reload",
+			Description:   "删一个用户 Agent(系统 Agent is_system=true 不可删);改完建议再调 /agents/reload",
 			RequestParams: RequestDeleteAgent{},
 		},
 	})

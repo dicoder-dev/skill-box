@@ -18,7 +18,7 @@ type fakeAdapter struct {
 	dir string
 }
 
-func (f *fakeAdapter) AgentID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string     { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
 func (f *fakeAdapter) Icon() string        { return "?" }
 func (f *fakeAdapter) DiscoverPaths(scope string) ([]string, error) {
@@ -32,8 +32,9 @@ func (f *fakeAdapter) Apply(c skilladapter.Canonical, targetDir string) error {
 	return os.MkdirAll(targetDir, 0o755)
 }
 func (f *fakeAdapter) LocalName(c skilladapter.Canonical) string { return c.Manifest.Name }
-func (f *fakeAdapter) Validate(c skilladapter.Canonical) error    { return nil }
-func (f *fakeAdapter) IsSystemPath(p string) bool                  { return false }
+func (f *fakeAdapter) Validate(c skilladapter.Canonical) error   { return nil }
+func (f *fakeAdapter) IsSystemPath(p string) bool                { return false }
+
 // 2026-07-08 增:Adapter 接口加 UserPath,stub 默认返 f.dir(与 DiscoverPaths 等价,
 // importer 测试不关心写盘落点,所以单值就够)。
 func (f *fakeAdapter) UserPath(string) (string, error) { return f.dir, nil }
@@ -274,7 +275,7 @@ func TestScan_NilStoreErrors(t *testing.T) {
 //   - normalizeForStore 必须从 description 抽 trigger,保证 store.Save 不拒收
 func TestImport_NormalizeFixesTriggers(t *testing.T) {
 	_, _, tmp := setupReg(t)
-	// setupReg 的 fakeAdapter 用Agent A / B 写死的内容;直接复用,挑一个缺 trigger 的 skill。
+	// setupReg 的 fakeAdapter 用 Agent A / B 写死的内容;直接复用,挑一个缺 trigger 的 skill。
 	// 这里再额外写一个带缺字段 frontmatter 的 skill,验证 normalize。
 	extraDir := t.TempDir()
 	writeSkillWithFM(t, extraDir, "no-triggers",

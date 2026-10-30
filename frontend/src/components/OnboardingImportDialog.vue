@@ -2,17 +2,17 @@
 // OnboardingImportDialog - 弹窗形态的"导入技能"。
 //
 // 2026-07-01 改:顶部加 tab,两种入口并列:
-//   - 「扫描工具」:走 OnboardingView(扫已装编程工具目录,勾选导入)
+//   - 「扫描Agent」:走 OnboardingView(扫已装编程Agent目录,勾选导入)
 //   - 「从本地导入」:走 LocalImportPanel(选本地文件夹/zip,直接落地)
 //
 // 2026-07-10 改:新增第三个 Tab「全局目录」
 //   - 「全局目录」:走 GlobalImportPanel(列出 ~/.agents/skills 下所有候选 skill,
-//     搜索 + 多选后批量导入),独立于 scan tab 的「按工具」语义,
+//     搜索 + 多选后批量导入),独立于 scan tab 的「按Agent」语义,
 //     也不依赖用户手动选文件夹/zip。
 //
-// 2026-07-18 改:Tab 顺序调整为「从三方导入 / 工具 / 全局目录 / 从本地导入」,
+// 2026-07-18 改:Tab 顺序调整为「从三方导入 / Agent / 全局目录 / 从本地导入」,
 //   第一位「从三方导入」走 MarketImportPanel(URL 输入框 + sources 列表);
-//   「扫描工具」改名为「工具」(key 名不变,只改 i18n 值);
+//   「扫描Agent」改名为「Agent」(key 名不变,只改 i18n 值);
 //   弹窗顶部 tab 上方新增 GroupPathSelect 横栏,4 tab 共享同一选中态,
 //   通过 provide('targetGroupPath') 传给所有子组件(本次只 MarketImportPanel
 //   实际透传 group_path,其他 3 tab 暂未支持,但 UI 全部可见)。
@@ -56,7 +56,7 @@ function close() {
 
 // 2026-07-07 改:不再只在用户点"完成"按钮时才走 imported,
 // 而是子面板完成导入即通知父组件,刷新首页。
-// 三条路径(扫工具 / 本地导入 / 全局目录)都通过这个事件通知父组件。
+// 三条路径(扫Agent / 本地导入 / 全局目录)都通过这个事件通知父组件。
 // 父组件(SkillsView)一般用 importOpen=false 关闭弹窗,然后 reload() 列表。
 // 用 ref 缓存"上次已上报 result 的指纹",防止同一结果重复通知页面刷新。
 //   - 指纹 = JSON 字符串,简单可靠。

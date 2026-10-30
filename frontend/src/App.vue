@@ -7,8 +7,8 @@ import ProjectsView from './views/ProjectsView.vue'
 import SkillsView from './views/SkillsView.vue'
 import MarketView from './views/MarketView.vue'
 import SettingsView from './views/SettingsView.vue'
-// 2026-07-01 增:工具元数据管理视图
-import ToolsView from './views/ToolsView.vue'
+// 2026-07-01 增:Agent元数据管理视图
+import AgentsView from './views/AgentsView.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import { listSkills } from '@/api/skillbox/skills'
 import { listProjects } from '@/api/skillbox/projects'
@@ -133,8 +133,8 @@ onUnmounted(() => window.removeEventListener('resize', checkViewport))
 const stats = ref({
   skills: 0,
   projects: 0,
-  toolsReady: 0,
-  toolsTotal: 0,
+  agentsReady: 0,
+  agentsTotal: 0,
 })
 const backendOK = ref(false)
 
@@ -148,8 +148,8 @@ async function refreshStats() {
     stats.value.skills = skillRes?.total || 0
     stats.value.projects = projRes?.total || 0
     const adapters = obRes?.adapters || []
-    stats.value.toolsTotal = adapters.length
-    stats.value.toolsReady = adapters.filter((a) => a.global_ok).length
+    stats.value.agentsTotal = adapters.length
+    stats.value.agentsReady = adapters.filter((a) => a.global_ok).length
     backendOK.value = true
   } catch (_) {
     backendOK.value = false
@@ -159,19 +159,19 @@ async function refreshStats() {
 onMounted(refreshStats)
 
 // 侧栏/顶栏配置
-// 顺序:技能 / 工具 / 项目 / 市场 / 设置 — 把"工具"提前到"项目"之前。
+// 顺序:技能 / Agent / 项目 / 市场 / 设置 — 把"Agent"提前到"项目"之前。
 // 2026-07-11 改:侧栏改为纯图标条(hover tooltip),导航主体迁到顶栏,
 // 此处 navItems 同时供侧栏图标按钮和顶栏 tab 按钮复用,key/icon/label 不变。
 // 2026-07-16 改:技能图标语义升级为「主页」图标 —
 //   侧栏技能  mdi:puzzle-outline → 'Home' (iconpark 原生组件名,语义「主页/入口」,跟默认落地 tab 一致)
 //   顶栏技能徽章 用 Puzzle (iconpark 原生,'Puzzle',语义「技能模块化」,承接原侧栏 Puzzle)
-//   工具 / 项目 / 市场 / 设置 全部保持 mdi: 字符串形式不动
+//   Agent / 项目 / 市场 / 设置 全部保持 mdi: 字符串形式不动
 // 注意:navItems 现在侧栏和徽章共用一份 icon 会让徽章图标跟着变 Home,
 // 所以顶栏技能徽章必须单独写 icon="Puzzle",不再复用 n.icon。
-// 项目 / 工具徽章仍复用 n.icon。
+// 项目 / Agent徽章仍复用 n.icon。
 const navItems = computed(() => [
   { key: 'skills',    label: t('app.nav.skills.label'),    icon: 'Home' },
-  { key: 'tools',     label: t('app.nav.tools.label'),     icon: 'mdi:tools' },
+  { key: 'agents',     label: t('app.nav.agents.label'),     icon: 'mdi:agents' },
   { key: 'projects',  label: t('app.nav.projects.label'),  icon: 'mdi:folder-multiple-outline' },
   { key: 'market',    label: t('app.nav.market.label'),    icon: 'mdi:cart-outline' },
   { key: 'settings',  label: t('app.nav.settings.label'),  icon: 'mdi:cog-outline' },
@@ -256,9 +256,9 @@ onUnmounted(() => {
           <strong>{{ stats.projects }}</strong>
         </div>
         <div class="stat-badge stat-badge-emerald">
-          <IconPark icon="mdi:tools" width="12" height="12" />
-          <span>{{ t('app.toolsLabel') }}</span>
-          <strong>{{ stats.toolsReady }}/{{ stats.toolsTotal }}</strong>
+          <IconPark icon="mdi:agents" width="12" height="12" />
+          <span>{{ t('app.agentsLabel') }}</span>
+          <strong>{{ stats.agentsReady }}/{{ stats.agentsTotal }}</strong>
         </div>
 
         <!-- 2026-07-14 增:升级角标(只在 hasUpdate=true 时出现)。点击直接跳到 settings
@@ -374,7 +374,7 @@ onUnmounted(() => {
       <!-- 内容区域 -->
       <div class="content-area">
         <ProjectsView v-if="tab === 'projects'" />
-        <ToolsView v-else-if="tab === 'tools'" />
+        <AgentsView v-else-if="tab === 'agents'" />
         <SkillsView v-else-if="tab === 'skills'" />
         <MarketView v-else-if="tab === 'market'" />
         <SettingsView v-else-if="tab === 'settings'" />
@@ -768,7 +768,7 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-/* 三种语义色彩 - 技能(蓝) / 项目(紫) / 工具(翠) */
+/* 三种语义色彩 - 技能(蓝) / 项目(紫) / Agent(翠) */
 .stat-badge-blue {
   background: var(--accent-blue-bg);
   border-color: var(--accent-blue-border);

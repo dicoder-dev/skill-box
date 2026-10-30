@@ -10,7 +10,7 @@
 //
 // 完成后 emit 'done' 通知父弹窗(OnboardingImportDialog)关闭,父视图刷新列表。
 //
-// 2026-07-01 新增,跟 OnboardingView(扫工具)并列放在 OnboardingImportDialog tab 容器里。
+// 2026-07-01 新增,跟 OnboardingView(扫Agent)并列放在 OnboardingImportDialog tab 容器里。
 // 2026-07-11 改:支持 zip / tar / tar.gz / tgz / tar.bz2 / tbz2 / tar.xz / txz
 // 八种格式,accept 列表 + 文件选择对话框都同步带上,前后端契约一致。
 

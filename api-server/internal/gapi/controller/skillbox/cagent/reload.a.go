@@ -1,16 +1,16 @@
 // Package cagent - reload.a.go
 // POST /api/skillbox/agents/reload
 //
-// 重新从 DB 拉一次Agent元数据,刷 skilladapter.DefaultRegistry。
-// 前端改完Agent后调一次,让 adapter 立刻反映新数据。
+// 重新从 DB 拉一次 Agent 元数据,刷 skilladapter.DefaultRegistry。
+// 前端改完 Agent 后调一次,让 adapter 立刻反映新数据。
 package cagent
 
 import (
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestReload 重新加载入参(无参)。
@@ -37,7 +37,7 @@ func init() {
 		PermissionName: "skillbox.agents.reload",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "agents.reload",
-			Description:   "重新从 DB 加载Agent到 skilladapter.Registry;前端改完Agent后调一次,立刻生效",
+			Description:   "重新从 DB 加载 Agent 到 skilladapter.Registry;前端改完 Agent 后调一次,立刻生效",
 			RequestParams: RequestReload{},
 		},
 	})

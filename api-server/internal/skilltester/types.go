@@ -1,7 +1,7 @@
 // Package skilltester 跑 skill 的"测试":
-//   1. 静态 lint(frontmatter 完整性 / 文件路径合法性 / 必填字段 / 长度阈值 / 硬编码 secret 扫描)
-//   2. 脚本执行(skill 自带 test.sh / 自定义 command,带超时)
-//   3. AI 走查(走 aiengine + safety_check preset,无 provider / 无 key 时降级为 skipped)
+//  1. 静态 lint(frontmatter 完整性 / 文件路径合法性 / 必填字段 / 长度阈值 / 硬编码 secret 扫描)
+//  2. 脚本执行(skill 自带 test.sh / 自定义 command,带超时)
+//  3. AI 走查(走 aiengine + safety_check preset,无 provider / 无 key 时降级为 skipped)
 //
 // 整体设计见 docs/project/需求规划.md 第 6.4 节。
 package skilltester

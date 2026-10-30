@@ -12,8 +12,8 @@ var version = "0.2.0"
 // rootCmd 表示在不调用任何子命令时的基本命令
 var rootCmd = &cobra.Command{
 	Use:   "gencode",
-	Short: "GINP 代码生成Agent",
-	Long: `GINP 代码生成Agent - 基于 service 层的命令行Agent
+	Short: "GINP 代码生成 Agent",
+	Long: `GINP 代码生成 Agent - 基于 service 层的命令行 Agent
 
 支持的功能：
   - entity: 实体管理（列表、生成、删除）
@@ -43,7 +43,7 @@ func Execute() {
 func init() {
 	// 添加版本标志
 	rootCmd.Flags().BoolP("version", "v", false, "打印版本号")
-	
+
 	// 重写使用 -v 标志时的默认行为
 	rootCmd.SetVersionTemplate(`{{printf "GAPI 版本: %s" .Version}}`)
 	rootCmd.Version = version

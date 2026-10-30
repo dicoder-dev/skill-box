@@ -87,9 +87,9 @@ func TestWriteHistory_Truncate(t *testing.T) {
 	var items []HistoryItem
 	for i := 0; i < 30; i++ {
 		items = append(items, HistoryItem{
-			ID:    string(rune('a' + i%26)),
-			Title: "x",
-			Ts:    int64(1000 + i),
+			ID:       string(rune('a' + i%26)),
+			Title:    "x",
+			Ts:       int64(1000 + i),
 			Messages: mkBig(string(rune('a' + i%26))),
 		})
 	}

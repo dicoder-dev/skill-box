@@ -17,9 +17,9 @@
 // 报"branch master not found"的根因:旧版 anchorPrefix 硬拼 skillPath + "/",
 // ROOT 场景会让 tree 过滤空、触发 branch fallback、把无关的 master 404 误报上来。
 // 新版:
-//   1) 加 isRootSkill(skillPath, repoName) 判定 ROOT 语义
-//   2) 加 branchNotFoundError sentinel,Download 循环只对"真分支不存在"走 fallback
-//   3) fetchTreePaths / downloadFromTree / parseZipball 在 ROOT 时把锚点置 ""
+//  1. 加 isRootSkill(skillPath, repoName) 判定 ROOT 语义
+//  2. 加 branchNotFoundError sentinel,Download 循环只对"真分支不存在"走 fallback
+//  3. fetchTreePaths / downloadFromTree / parseZipball 在 ROOT 时把锚点置 ""
 package github
 
 import (
@@ -68,7 +68,7 @@ type Adapter struct {
 // New 构造 Adapter(用 httpx 长生命周期 client,跨多次复用 TLS 连接)。
 //
 // 2026-07-10 调:timeout 60s。raw.githubusercontent.com 单文件 ~300ms,
-	// Trees API ~1.2s,极端慢网络 + 12 文件并发仍 <30s,60s 留余量。
+// Trees API ~1.2s,极端慢网络 + 12 文件并发仍 <30s,60s 留余量。
 func New() *Adapter {
 	return &Adapter{httpClient: httpx.NewClient(60 * time.Second)}
 }
@@ -139,12 +139,12 @@ func (a *Adapter) Detail(ctx context.Context, baseURL, remoteID string) (*skillm
 //     codeload zipball 3.8MB 完整下载要 30s+
 //
 // 当前方案(实测 3s 端到端):
-//   1) api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1
-//      → 1.2s 拿全仓库文件树(元数据,不含文件内容)
-//   2) 过滤出 skillPath 前缀的 blob 条目(SKILL.md + scripts/ + references/ 等)
-//   3) 并发拉 raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
-//      → 每个 ~300ms,6 并发下 12 个文件 ~2s
-//   4) SKILL.md 走 ParseSkillMD 出 Manifest,其它作 files
+//  1. api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1
+//     → 1.2s 拿全仓库文件树(元数据,不含文件内容)
+//  2. 过滤出 skillPath 前缀的 blob 条目(SKILL.md + scripts/ + references/ 等)
+//  3. 并发拉 raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
+//     → 每个 ~300ms,6 并发下 12 个文件 ~2s
+//  4. SKILL.md 走 ParseSkillMD 出 Manifest,其它作 files
 func (a *Adapter) Download(ctx context.Context, baseURL, remoteID string) (*skilladapter.Canonical, error) {
 	repo, skillPath, ok := splitRemoteID(remoteID)
 	if !ok {

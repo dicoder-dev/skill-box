@@ -4,10 +4,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestRenameGroup 重命名分组入参。

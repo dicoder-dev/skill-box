@@ -2,6 +2,7 @@ package router
 
 //显式导入：来确保它的 init 函数被调用
 import (
+	_ "ginp-api/internal/gapi/controller/skillbox/cagent"
 	_ "ginp-api/internal/gapi/controller/skillbox/caiprovider"
 	_ "ginp-api/internal/gapi/controller/skillbox/caisession" // 2026-07-14 增:补 import,否则 4 个 ai/history 路由没注册,Gin 默认 404
 	_ "ginp-api/internal/gapi/controller/skillbox/cdesktop"
@@ -13,7 +14,6 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillpkg"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskilltest"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillversion" // 2026-07-17 增:go-git 版本管理 11 个 HTTP API
-	_ "ginp-api/internal/gapi/controller/skillbox/cagent"
 	_ "ginp-api/internal/gapi/controller/system/cindex"
 	_ "ginp-api/internal/gapi/controller/user/cuser"
 	//{{placeholder_router_import}}//

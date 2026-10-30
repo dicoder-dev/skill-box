@@ -55,7 +55,7 @@ export function testConnection(payload) {
 }
 
 /**
- * 解析 SSE 流的工具:逐行读 chunks,以 \n\n 分帧。
+ * 解析 SSE 流的方式:逐行读 chunks,以 \n\n 分帧。
  * 每个回调拿到一个 data 字符串(去掉 "data: " 前缀);DONE 标记触达时返回。
  *
  * @param {Response} resp        fetch 的 Response

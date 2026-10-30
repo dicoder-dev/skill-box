@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/market/smarket"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestPullMarketSkillV2 一站式拉取入参(2026-07-01 改名:RequestInstallMarketSkillV2 → RequestPullMarketSkillV2)。
@@ -19,7 +19,7 @@ type RequestPullMarketSkillV2 struct {
 	RemoteID  string   `json:"remote_id"`
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
-	Agents     []string `json:"agents"`      // 可选;空数组 = 只写盘不 apply(2026-06-30 改)
+	Agents    []string `json:"agents"`     // 可选;空数组 = 只写盘不 apply(2026-06-30 改)
 	FinalName string   `json:"final_name"` // 可选;支持"另存为"重命名
 	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
 	// 空 = 装到根(未分组);非空时写到 Manifest.GroupPath,store 落到子目录。
@@ -31,7 +31,7 @@ type RequestInstallMarketSkillV2 = RequestPullMarketSkillV2
 
 // RespondPullMarketSkillV2 响应(2026-07-01 改名:RespondInstallMarketSkillV2 → RespondPullMarketSkillV2)。
 //
-// 含 apply 摘要、canonical、跳过的Agent列表;前端用来判断装到几个Agent、哪些失败。
+// 含 apply 摘要、canonical、跳过的 Agent 列表;前端用来判断装到几个 Agent、哪些失败。
 type RespondPullMarketSkillV2 = smarket.PullV2Result
 
 // RespondInstallMarketSkillV2 旧名 alias(2026-07-01 deprecated),新代码请用 RespondPullMarketSkillV2。
@@ -40,8 +40,8 @@ type RespondInstallMarketSkillV2 = RespondPullMarketSkillV2
 // PullMarketSkillV2 POST /api/skillbox/market/install-v2
 //
 // 一站式:三方 → 写盘 → apply 到 agents(scope 默认 global)。
-// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedAgents 列出失败Agent,
-// 整体仍返 200(已装到本地,只是部分Agent未启用)。
+// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedAgents 列出失败 Agent,
+// 整体仍返 200(已装到本地,只是部分 Agent 未启用)。
 //
 // 2026-07-01 改名:InstallMarketSkillV2 → PullMarketSkillV2。HTTP 路径 /install-v2
 // 保留不变(向后兼容);PermissionName 改 pull.v2,install.v2 同步留 alias。
@@ -57,7 +57,7 @@ func PullMarketSkillV2(c *ginp.ContextPlus, req *RequestPullMarketSkillV2) {
 		RemoteID:  req.RemoteID,
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
-		Agents:     req.Agents,
+		Agents:    req.Agents,
 		FinalName: req.FinalName,
 		GroupPath: req.GroupPath,
 	})
@@ -92,7 +92,7 @@ func init() {
 		PermissionName: "skillbox.market.pull.v2",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "market.pull.v2",
-			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到Agent(scope 默认 global,agents 默认本机全部 5 个Agent)",
+			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到 Agent(scope 默认 global,agents 默认本机全部 5 个 Agent)",
 			RequestParams: RequestPullMarketSkillV2{},
 		},
 	})

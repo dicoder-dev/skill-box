@@ -13,7 +13,7 @@ import (
 // 转换 + ~/ 展开,与 DB 无关(不需要 sqlite 实例)。
 func TestSpecAdapter_PathExpansion(t *testing.T) {
 	spec := &AgentSpec{
-		AgentID:      "test",
+		AgentID:     "test",
 		DisplayName: "Test",
 		MdiIcon:     "mdi:test",
 		Paths: AgentPaths{

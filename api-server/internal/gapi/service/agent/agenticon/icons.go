@@ -1,8 +1,8 @@
-// Package agenticon 提供Agent自定义图标文件的物理存储管理。
+// Package agenticon 提供 Agent 自定义图标文件的物理存储管理。
 //
 // 设计:
-//   - 图标文件存到 ~/.<AppName>/agent-icons/<name>.<ext>
-//     即 ~/.skill-box/agent-icons/claude.png 这种 basename 形式
+//   - 图标文件存到 ~/.<AppName>/tool-icons/<name>.<ext>
+//     即 ~/.skill-box/tool-icons/claude.png 这种 basename 形式
 //   - 调用方只传 basename(无路径分隔符,无 ../) — 此处做最终兜底校验
 //   - 列表接口返回的内容必须经过 validIconFileName — 防路径穿越
 //
@@ -22,7 +22,7 @@ import (
 
 const (
 	// iconsDirName ~/.skill-box 下的子目录名
-	iconsDirName = "agent-icons"
+	iconsDirName = "tool-icons"
 )
 
 // allowedExts 后缀白名单。
@@ -49,7 +49,7 @@ func ValidIconFileName(name string) bool {
 	return false
 }
 
-// Dir 返回Agent图标目录的绝对路径(末尾无分隔符),目录若不存在则 MkdirAll。
+// Dir 返回 Agent 图标目录的绝对路径(末尾无分隔符),目录若不存在则 MkdirAll。
 func Dir() (string, error) {
 	base := sharefunc.DataDir()
 	if base == "" {

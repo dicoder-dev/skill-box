@@ -6,7 +6,7 @@
 //   POST   /api/skillbox/projects/create
 //   POST   /api/skillbox/projects/update
 //   POST   /api/skillbox/projects/delete
-//   GET    /api/skillbox/projects/scan?project_id=N  - 扫描项目被哪些工具 / skill 引用
+//   GET    /api/skillbox/projects/scan?project_id=N  - 扫描项目被哪些Agent / skill 引用
 
 import { http } from '@/core/utils/requests'
 
@@ -30,7 +30,7 @@ export function deleteProject(id) {
   return http.post('/api/skillbox/projects/delete', { id })
 }
 
-// scanProject 扫描指定项目被哪些工具 / skill 引用。
+// scanProject 扫描指定项目被哪些Agent / skill 引用。
 // 纯读接口,每次请求服务端都会重扫磁盘(不读 DB),前端按 project 缓存避免重复调用。
 export function scanProject(projectId) {
   return http.get('/api/skillbox/projects/scan', { project_id: projectId })

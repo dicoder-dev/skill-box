@@ -4,11 +4,11 @@ import (
 	"errors"
 	"path/filepath"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/skillstore"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestGetSkill 按 name 或 path 查;full=true 时返回 canonical + files(给编辑器用)。
@@ -53,9 +53,9 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 		if errors.Is(gerr, sskill.ErrCorruptedFile) {
 			logger.Error("skill get: corrupted file: %v", gerr)
 			c.JSON(422, gin.H{
-				"error":      gerr.Error(),
-				"code":       "corrupted_file",
-				"hint":       "磁盘上的 SKILL.md 包含非 UTF-8 字节,可能已损坏。请检查源文件内容,或从备份恢复。",
+				"error": gerr.Error(),
+				"code":  "corrupted_file",
+				"hint":  "磁盘上的 SKILL.md 包含非 UTF-8 字节,可能已损坏。请检查源文件内容,或从备份恢复。",
 			})
 			return
 		}
@@ -79,33 +79,33 @@ func GetSkill(c *ginp.ContextPlus, req *RequestGetSkill) {
 	isGlobalAgent := globalSourcePath != ""
 	if req.Full {
 		c.JSON(200, gin.H{
-			"name":           canon.Manifest.Name,
-			"version":        canon.Manifest.Version,
-			"description":    canon.Manifest.Description,
-			"triggers":       canon.Manifest.Triggers,
-			"author":         canon.Manifest.Author,
-			"license":        canon.Manifest.License,
-			"depends_on":     canon.Manifest.DependsOn,
-			"source_path":    sourcePath,
-			"path":           req.Path,
-			"group_path":     canon.Manifest.GroupPath,
-			"canonical":      canon,
-			"is_global_agent": isGlobalAgent,
+			"name":               canon.Manifest.Name,
+			"version":            canon.Manifest.Version,
+			"description":        canon.Manifest.Description,
+			"triggers":           canon.Manifest.Triggers,
+			"author":             canon.Manifest.Author,
+			"license":            canon.Manifest.License,
+			"depends_on":         canon.Manifest.DependsOn,
+			"source_path":        sourcePath,
+			"path":               req.Path,
+			"group_path":         canon.Manifest.GroupPath,
+			"canonical":          canon,
+			"is_global_agent":    isGlobalAgent,
 			"global_source_path": globalSourcePath,
 		})
 		return
 	}
 	c.JSON(200, gin.H{
-		"name":           canon.Manifest.Name,
-		"version":        canon.Manifest.Version,
-		"description":    canon.Manifest.Description,
-		"triggers":       canon.Manifest.Triggers,
-		"author":         canon.Manifest.Author,
-		"license":        canon.Manifest.License,
-		"depends_on":     canon.Manifest.DependsOn,
-		"source_path":    sourcePath,
-		"path":           req.Path,
-		"group_path":     canon.Manifest.GroupPath,
+		"name":            canon.Manifest.Name,
+		"version":         canon.Manifest.Version,
+		"description":     canon.Manifest.Description,
+		"triggers":        canon.Manifest.Triggers,
+		"author":          canon.Manifest.Author,
+		"license":         canon.Manifest.License,
+		"depends_on":      canon.Manifest.DependsOn,
+		"source_path":     sourcePath,
+		"path":            req.Path,
+		"group_path":      canon.Manifest.GroupPath,
 		"is_global_agent": isGlobalAgent,
 	})
 }

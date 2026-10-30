@@ -23,18 +23,18 @@ export function getSkill(params) {
 }
 
 /**
- * 实时扫描所有 adapter 路径,返回某 skill 在 (tool, scope, project) 笛卡尔积下
+ * 实时扫描所有 adapter 路径,返回某 skill 在 (agent, scope, project) 笛卡尔积下
  * 哪些位置真实存在 SKILL.md。纯文件系统检查,无 DB 写入。
- * 响应: { name, version, tools: [...], projects: [...], hits: [...] }
+ * 响应: { name, version, agents: [...], projects: [...], hits: [...] }
  */
 export function getSkillScopeStatus(params) {
   return http.get('/api/skillbox/skills/scope-status', params)
 }
 
 /**
- * 把 skillbox 库里的 skill 复制到目标工具的 (scope, project) 位置。
- * 入参: { scope, project_id, name, tools: [toolID] }
- * 响应: { name, version, applies: [{tool, target_path, status, apply_id, ...}], all_ok }
+ * 把 skillbox 库里的 skill 复制到目标Agent的 (scope, project) 位置。
+ * 入参: { scope, project_id, name, agents: [agentID] }
+ * 响应: { name, version, applies: [{agent, target_path, status, apply_id, ...}], all_ok }
  * 注意:同名已存在时直接覆盖(走 skillapp 内置的 PreSnapshot + 原子写)。
  * 来源:api-server/internal/gapi/controller/skillbox/cskillapply/apply_skill.a.go
  */
@@ -44,8 +44,8 @@ export function applySkill(payload) {
 
 /**
  * 列出 skill 的 apply 历史,用于在 unapply 时找到最近一条未撤销的 apply 行。
- * 入参: { scope, name, tool, status(可选 'applied'/'rolled_back'), page, size }
- * 响应: { items: [{id, tool, scope, project_id, name, target_path, status, ...}], total, ... }
+ * 入参: { scope, name, agent, status(可选 'applied'/'rolled_back'), page, size }
+ * 响应: { items: [{id, agent, scope, project_id, name, target_path, status, ...}], total, ... }
  * 注:行主键 json 字段是 "id"(不是 "apply_id"),前端用 last.id 取出来再调 undoApply。
  */
 export function listApplies(params) {
@@ -62,13 +62,13 @@ export function undoApply(payload) {
 }
 
 /**
- * 强制按 (scope, project_id, name, tool) 撤销。
+ * 强制按 (scope, project_id, name, agent) 撤销。
  * 用于"scope-status 命中但 DB 没 apply 记录"场景(用户手动 cp / 外部安装)。
  * 后端会:
- *   1) 先按 (scope, project_id, name, tool) 找最近 applied 记录,找到走标准 undo;
+ *   1) 先按 (scope, project_id, name, agent) 找最近 applied 记录,找到走标准 undo;
  *   2) 没记录:用 scope-status 扫,定位到磁盘 resolved 路径,直接删整个目录;
  *   3) DB 插一条占位 status=rolled_back 记录。
- * 入参: { scope, project_id, name, tool }
+ * 入参: { scope, project_id, name, agent }
  * 来源:api-server/internal/gapi/controller/skillbox/cskillapply/force_undo_skill.a.go
  */
 export function forceUndoApply(payload) {

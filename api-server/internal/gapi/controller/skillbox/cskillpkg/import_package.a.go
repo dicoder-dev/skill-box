@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillpkg/sskillpkg"
@@ -21,12 +20,13 @@ import (
 	"ginp-api/internal/skillpkg"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestImportPackage 导入 JSON 入参(给"只走 JSON"的客户端用,优先 raw body)。
 type RequestImportPackage struct {
-	TargetScope string                     `json:"target_scope"`
-	ProjectID   uint                       `json:"project_id"`
+	TargetScope string                      `json:"target_scope"`
+	ProjectID   uint                        `json:"project_id"`
 	Skills      []skillpkg.ImportSkillEntry `json:"skills"`
 }
 

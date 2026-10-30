@@ -30,17 +30,17 @@ const filter = reactive({ keyword: '', page: 1, size: 12 })
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / filter.size)))
 
 // 扫描结果缓存:按 project_id 缓存,避免重复请求(2026-06-29 卡片化新增)
-//   scans[id] = { scanned_at, tools: [{ tool_id, display_name, icon, count, skills: [...] }] }
+//   scans[id] = { scanned_at, agents: [{ agent_id, display_name, icon, count, skills: [...] }] }
 //   scans[id].error = "xxx" 表示本次扫描失败
 const scans = reactive({})
 const scanLoading = reactive({})
 
-// 工具 skill 列表 Modal(点击 chip 触发)
+// Agent skill 列表 Modal(点击 chip 触发)
 const skillsModal = reactive({
   open: false,
   title: '',
   project: '',
-  tool: '',
+  agent: '',
   skills: [],
 })
 
@@ -70,7 +70,7 @@ async function reload() {
   }
 }
 
-// ensureScanned 对单个项目跑"工具 / skill 扫描",并把结果缓存到 scans[p.id]。
+// ensureScanned 对单个项目跑"Agent / skill 扫描",并把结果缓存到 scans[p.id]。
 //
 // 触发时机:卡片 mouseenter(避免一进页面就 N 个并发请求炸后端)
 // + reload 后兜底(items.value 整体重拉一遍时一次性补齐)。
@@ -84,7 +84,7 @@ async function ensureScanned(p) {
     scans[p.id] = r
   } catch (e) {
     // 扫描失败时也写入占位,这样 hover 时不会一直转圈
-    scans[p.id] = { scanned_at: null, tools: [], error: e?.message || String(e) }
+    scans[p.id] = { scanned_at: null, agents: [], error: e?.message || String(e) }
     console.warn('[projects] scanProject failed:', p.id, e?.message || e)
   } finally {
     scanLoading[p.id] = false
@@ -102,17 +102,17 @@ async function openInFinder(p) {
   }
 }
 
-// openToolSkills 弹出 Modal,展示该项目在该工具下的所有 skill。
-function openToolSkills(p, tool) {
+// openAgentSkills 弹出 Modal,展示该项目在该Agent下的所有 skill。
+function openAgentSkills(p, agent) {
   skillsModal.open = true
   skillsModal.project = p.name || p.alias || `#${p.id}`
-  skillsModal.tool = tool.display_name || tool.tool_id
-  skillsModal.title = t('projects.toolSkillsTitle', {
+  skillsModal.agent = agent.display_name || agent.agent_id
+  skillsModal.title = t('projects.agentSkillsTitle', {
     project: skillsModal.project,
-    tool: skillsModal.tool,
-    count: tool.count,
+    agent: skillsModal.agent,
+    count: agent.count,
   })
-  skillsModal.skills = tool.skills || []
+  skillsModal.skills = agent.skills || []
 }
 
 // revealSkill 在系统文件管理器中打开该 skill 的物理目录。
@@ -316,7 +316,7 @@ onMounted(reload)
       </div>
     </header>
 
-    <!-- 工具栏 -->
+    <!-- Agent栏 -->
     <div class="toolbar">
       <div class="search-box">
         <IconPark icon="mdi:magnify" width="16" height="16" class="search-icon" />
@@ -556,28 +556,28 @@ onMounted(reload)
           </p>
           <p class="project-card-path" :title="p.root_path">{{ p.root_path }}</p>
 
-          <!-- 底部:工具 chips(数量 + 弹 Modal 列 skill) -->
-          <div class="project-card-tools">
-            <span v-if="scanLoading[p.id]" class="tools-loading">
+          <!-- 底部:Agent chips(数量 + 弹 Modal 列 skill) -->
+          <div class="project-card-agents">
+            <span v-if="scanLoading[p.id]" class="agents-loading">
               <span class="spinner spinner-sm"></span>
             </span>
             <button
-              v-for="tool in (scans[p.id]?.tools || [])"
-              :key="tool.tool_id"
-              class="tool-chip"
-              :title="tool.display_name"
-              @click.stop="openToolSkills(p, tool)"
+              v-for="agent in (scans[p.id]?.agents || [])"
+              :key="agent.agent_id"
+              class="agent-chip"
+              :title="agent.display_name"
+              @click.stop="openAgentSkills(p, agent)"
             >
-              <span class="chip-label">{{ tool.tool_id }}</span>
-              <span class="chip-count">{{ tool.count }}</span>
+              <span class="chip-label">{{ agent.agent_id }}</span>
+              <span class="chip-count">{{ agent.count }}</span>
             </button>
             <span
-              v-if="!scanLoading[p.id] && (scans[p.id]?.tools || []).length === 0 && !scans[p.id]?.error"
-              class="tools-empty"
+              v-if="!scanLoading[p.id] && (scans[p.id]?.agents || []).length === 0 && !scans[p.id]?.error"
+              class="agents-empty"
             >
-              {{ t('projects.noTools') }}
+              {{ t('projects.noAgents') }}
             </span>
-            <span v-if="scans[p.id]?.error" class="tools-error">
+            <span v-if="scans[p.id]?.error" class="agents-error">
               <IconPark icon="mdi:alert-circle-outline" width="11" height="11" />
               {{ t('projects.scanFailed') }}
             </span>
@@ -609,7 +609,7 @@ onMounted(reload)
       </footer>
     </div>
 
-    <!-- 工具 skill 列表 Modal(点击 chip 触发) -->
+    <!-- Agent skill 列表 Modal(点击 chip 触发) -->
     <Modal v-model="skillsModal.open" :title="skillsModal.title" size="md">
       <ul v-if="skillsModal.skills.length" class="skill-list">
         <li v-for="s in skillsModal.skills" :key="s.source_path || s.name" class="skill-list-item">
@@ -668,14 +668,14 @@ onMounted(reload)
 
 <style scoped>
 .projects-view {
-  /* 占满 content-area(与 MarketView / ToolsView 一致) */
+  /* 占满 content-area(与 MarketView / AgentsView 一致) */
   width: 100%;
   color: var(--text);
   transition: color 0.3s ease;
 }
 
 /* ===== 项目主题:Amber Workshop(独立作用域变量) =====
-   与 ToolsView 的 Emerald Workshop、MarketView 的 Sky→Cyan 形成区分;
+   与 AgentsView 的 Emerald Workshop、MarketView 的 Sky→Cyan 形成区分;
    amber/orange 暖色调,语义贴合"项目目录 / 工作空间"。 */
 .projects-view {
   /* 主色:amber-500(暖橙,代表"项目 / 文件夹") */
@@ -744,7 +744,7 @@ onMounted(reload)
   transition: color 0.3s ease;
 }
 
-/* 工具栏 */
+/* Agent栏 */
 .toolbar {
   display: flex;
   align-items: center;
@@ -753,12 +753,12 @@ onMounted(reload)
   flex-wrap: wrap;
 }
 
-/* 工具栏右侧:把 CTA 推靠右,与 ToolsView 风格统一 */
+/* Agent栏右侧:把 CTA 推靠右,与 AgentsView 风格统一 */
 .toolbar > .primary {
   margin-left: auto;
 }
 
-/* "导入项目"按钮:amber→orange 渐变 CTA,与 ToolsView 的新建按钮风格对齐 */
+/* "导入项目"按钮:amber→orange 渐变 CTA,与 AgentsView 的新建按钮风格对齐 */
 .toolbar > button.primary {
   background: linear-gradient(135deg, var(--prj-primary) 0%, var(--prj-accent) 100%);
   color: #ffffff;
@@ -959,7 +959,7 @@ onMounted(reload)
 }
 
 .project-card:hover {
-  /* hover 时主题色淡边 + 轻微抬起,与 ToolsView 风格统一 */
+  /* hover 时主题色淡边 + 轻微抬起,与 AgentsView 风格统一 */
   border-color: color-mix(in srgb, var(--prj-primary) 35%, var(--border));
   border-left-color: var(--prj-primary);
   box-shadow: var(--shadow-card);
@@ -1076,7 +1076,7 @@ onMounted(reload)
   white-space: nowrap;
 }
 
-.project-card-tools {
+.project-card-agents {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1084,19 +1084,19 @@ onMounted(reload)
   align-items: center;
 }
 
-.tools-loading {
+.agents-loading {
   display: inline-flex;
   align-items: center;
   color: var(--text-faint);
   font-size: 11px;
 }
 
-.tools-empty {
+.agents-empty {
   font-size: 11px;
   color: var(--text-faint);
 }
 
-.tools-error {
+.agents-error {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1104,8 +1104,8 @@ onMounted(reload)
   color: var(--danger);
 }
 
-/* 工具 chip:claude5 风格(小写工具名 + 角标数字) */
-.tool-chip {
+/* Agent chip:claude5 风格(小写Agent名 + 角标数字) */
+.agent-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1121,7 +1121,7 @@ onMounted(reload)
   font-family: 'JetBrains Mono', monospace;
 }
 
-.tool-chip:hover {
+.agent-chip:hover {
   border-color: var(--prj-primary);
   color: var(--prj-primary-hover);
   background: var(--prj-bg-strong);
@@ -1157,7 +1157,7 @@ onMounted(reload)
   opacity: 1;
 }
 
-/* 工具 skill 列表 Modal 内部样式 */
+/* Agent skill 列表 Modal 内部样式 */
 .skill-list {
   margin: 0;
   padding: 0;

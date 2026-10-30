@@ -9,10 +9,10 @@ import (
 // TestRoutesRegistered 验证 5 个 apply 相关端点都注册到 router 表。
 func TestRoutesRegistered(t *testing.T) {
 	want := map[string]string{
-		"/api/skillbox/skills/apply":      ginp.HttpPost,
+		"/api/skillbox/skills/apply":       ginp.HttpPost,
 		"/api/skillbox/skills/apply/batch": ginp.HttpPost,
-		"/api/skillbox/skills/apply/undo": ginp.HttpPost,
-		"/api/skillbox/skills/apply/list": ginp.HttpGet,
+		"/api/skillbox/skills/apply/undo":  ginp.HttpPost,
+		"/api/skillbox/skills/apply/list":  ginp.HttpGet,
 		"/api/skillbox/skills/updates":     ginp.HttpGet,
 	}
 	all := ginp.GetAllRouter()

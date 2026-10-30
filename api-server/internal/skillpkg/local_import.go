@@ -3,10 +3,10 @@
 // 从本地文件夹 / 压缩包导入 skill 到 skillstore。
 //
 // 跟现有 Importer.Import 的区别:
-//   - Importer.Import 是"扫描已装编程Agent的目录 → 选中条目 → store.Save",
+//   - Importer.Import 是"扫描已装编程 Agent 的目录 → 选中条目 → store.Save",
 //     走的是 skillimporter.Report 流。
 //   - 这里用户主动选一个本地文件夹 / 压缩包,直接解析 SKILL.md → Canonical
-//     → store.Save,不动其它Agent。
+//     → store.Save,不动其它 Agent。
 //
 // 校验:目录或压缩包内必须存在 SKILL.md(用户原话要求)。命中数为 0 时返
 // ErrNoSkillMD,caller 转 HTTP 400,前端 toast 提示。
@@ -329,15 +329,15 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
 			AgentID: "",
-			Name:   filepath.Base(dir),
-			OK:     false,
-			Error:  err.Error(),
+			Name:    filepath.Base(dir),
+			OK:      false,
+			Error:   err.Error(),
 		})
 		return results
 	}
 	if err := store.Save(canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
-			AgentID:  "",
+			AgentID: "",
 			Name:    canonical.Manifest.Name,
 			Version: canonical.Manifest.Version,
 			OK:      false,
@@ -346,7 +346,7 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 		return results
 	}
 	results = append(results, skillimporter.ImportResult{
-		AgentID:  "",
+		AgentID: "",
 		Name:    canonical.Manifest.Name,
 		Version: canonical.Manifest.Version,
 		OK:      true,
@@ -373,9 +373,9 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 		// 理论不可能:groupEntriesBySkillDir 只收集含 SKILL.md 的目录。
 		results = append(results, skillimporter.ImportResult{
 			AgentID: "",
-			Name:   path.Base(skillDir),
-			OK:     false,
-			Error:  "internal: skill dir without SKILL.md",
+			Name:    path.Base(skillDir),
+			OK:      false,
+			Error:   "internal: skill dir without SKILL.md",
 		})
 		return results
 	}
@@ -384,9 +384,9 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
 			AgentID: "",
-			Name:   path.Base(skillDir),
-			OK:     false,
-			Error:  fmt.Sprintf("read SKILL.md: %v", err),
+			Name:    path.Base(skillDir),
+			OK:      false,
+			Error:   fmt.Sprintf("read SKILL.md: %v", err),
 		})
 		return results
 	}
@@ -395,9 +395,9 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
 			AgentID: "",
-			Name:   path.Base(skillDir),
-			OK:     false,
-			Error:  fmt.Sprintf("parse SKILL.md: %v", err),
+			Name:    path.Base(skillDir),
+			OK:      false,
+			Error:   fmt.Sprintf("parse SKILL.md: %v", err),
 		})
 		return results
 	}
@@ -418,7 +418,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 			// 单文件失败不让整条 skill 报废,记录到 Manifest 之外不方便,
 			// 这里直接 abort 当前 skill,让 caller 看到 Error。
 			results = append(results, skillimporter.ImportResult{
-				AgentID:  "",
+				AgentID: "",
 				Name:    canonical.Manifest.Name,
 				Version: canonical.Manifest.Version,
 				OK:      false,
@@ -434,7 +434,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 
 	if err := store.Save(*canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
-			AgentID:  "",
+			AgentID: "",
 			Name:    canonical.Manifest.Name,
 			Version: canonical.Manifest.Version,
 			OK:      false,
@@ -443,7 +443,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 		return results
 	}
 	results = append(results, skillimporter.ImportResult{
-		AgentID:  "",
+		AgentID: "",
 		Name:    canonical.Manifest.Name,
 		Version: canonical.Manifest.Version,
 		OK:      true,
@@ -595,10 +595,10 @@ type archiveKind int
 const (
 	archiveUnknown archiveKind = iota
 	archiveZip
-	archiveTar          // 纯 tar(不压缩)
-	archiveTarGz        // tar + gzip
-	archiveTarBz2       // tar + bzip2
-	archiveTarXz        // tar + xz
+	archiveTar    // 纯 tar(不压缩)
+	archiveTarGz  // tar + gzip
+	archiveTarBz2 // tar + bzip2
+	archiveTarXz  // tar + xz
 )
 
 // 压缩包 magic bytes,用于格式识别(防扩展名被骗)。

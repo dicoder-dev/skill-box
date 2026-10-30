@@ -14,13 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RequestScanProject 扫描单个项目被哪些Agent / skill 引用。
+// RequestScanProject 扫描单个项目被哪些 Agent / skill 引用。
 //
 // 设计要点(2026-06-29):
 //   - 纯读接口,每次请求重扫磁盘;不写 DB(对齐 scope-status 的策略,避免"用户刚 cp skill"看不到)。
 //   - 复用 skilladapter.BaseAdapter.Scan + DiscoverPaths(ScopeProject),不新写扫描逻辑;
 //     symlink 解析也走 EvalSymlinks(SourceDir 字段已是真实路径)。
-//   - agents 数组只返回"该项目中至少命中 1 个 skill"的Agent,0 命中不进数组 → 卡片 UI 更干净。
+//   - agents 数组只返回"该项目中至少命中 1 个 skill"的 Agent,0 命中不进数组 → 卡片 UI 更干净。
 type RequestScanProject struct {
 	ProjectID uint `json:"project_id" form:"project_id"`
 }
@@ -34,12 +34,12 @@ type scannedSkill struct {
 	SourcePath string `json:"source_path"`
 }
 
-// scannedAgentSkill Agent维度的聚合,前端以 chip(claude5 样式)展示。
+// scannedAgentSkill Agent 维度的聚合,前端以 chip(claude5 样式)展示。
 //
 // Skills 字段一并返回,避免前端再 N+1 调接口取详情;count 直接 len(skills) 即可,
 // 但保留独立字段便于日后扩展(比如按"是否启用"过滤后 count != len(skills))。
 type scannedAgentSkill struct {
-	AgentID      string         `json:"agent_id"`
+	AgentID     string         `json:"agent_id"`
 	DisplayName string         `json:"display_name"`
 	Icon        string         `json:"icon"`
 	Count       int            `json:"count"`
@@ -48,9 +48,9 @@ type scannedAgentSkill struct {
 
 // RespondScanProject 响应。
 type RespondScanProject struct {
-	ProjectID uint               `json:"project_id"`
-	ScannedAt time.Time          `json:"scanned_at"`
-	Agents     []scannedAgentSkill `json:"agents"`
+	ProjectID uint                `json:"project_id"`
+	ScannedAt time.Time           `json:"scanned_at"`
+	Agents    []scannedAgentSkill `json:"agents"`
 }
 
 // ScanProject GET /api/skillbox/projects/scan?project_id=N
@@ -83,7 +83,7 @@ func ScanProject(c *ginp.ContextPlus, req *RequestScanProject) {
 	out := RespondScanProject{
 		ProjectID: req.ProjectID,
 		ScannedAt: time.Now(),
-		Agents:     []scannedAgentSkill{},
+		Agents:    []scannedAgentSkill{},
 	}
 	for _, a := range adapters {
 		rels, err := a.DiscoverPaths(skilladapter.ScopeProject)
@@ -108,10 +108,10 @@ func ScanProject(c *ginp.ContextPlus, req *RequestScanProject) {
 			}
 		}
 		if len(skills) == 0 {
-			continue // 该Agent在本项目下没 skill → 不进 agents 数组
+			continue // 该 Agent 在本项目下没 skill → 不进 agents 数组
 		}
 		out.Agents = append(out.Agents, scannedAgentSkill{
-			AgentID:      a.AgentID(),
+			AgentID:     a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 			Count:       len(skills),
@@ -131,8 +131,8 @@ func init() {
 		NeedPermission: false,
 		PermissionName: "skillbox.projects.scan",
 		Swagger: &ginp.SwaggerInfo{
-			Title:       "projects.scan",
-			Description: "扫描指定项目被哪些Agent / skill 引用,纯文件系统检查,每次请求都重扫(不读 DB)。",
+			Title:         "projects.scan",
+			Description:   "扫描指定项目被哪些 Agent / skill 引用,纯文件系统检查,每次请求都重扫(不读 DB)。",
 			RequestParams: RequestScanProject{},
 		},
 	})

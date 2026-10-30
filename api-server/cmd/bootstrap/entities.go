@@ -28,7 +28,7 @@ var EntityAutoMigrateList = []any{
 	new(entity.MarketSkill),
 	new(entity.OnboardingState),
 	new(entity.Setting),
-	// 2026-06-30 二改:Agent元数据从 yaml embed 迁到 DB,前端可编辑
+	// 2026-06-30 二改:Agent 元数据从 yaml embed 迁到 DB,前端可编辑
 	new(entity.Agent),
 	new(entity.AgentPath),
 }

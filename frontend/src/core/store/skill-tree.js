@@ -34,7 +34,7 @@ import {
 // {
 //   name, path, is_group,
 //   children?: TreeNode[],
-//   skill_meta?: { name, version, description, triggers, applied_tools }
+//   skill_meta?: { name, version, description, triggers, applied_agents }
 // }
 
 export const useSkillTreeStore = defineStore('skill-tree', () => {

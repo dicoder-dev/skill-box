@@ -39,8 +39,8 @@ const hasReport = ref(false)
 
 const scanReport = ref(null)
 const selected = ref(new Set())
-// 当前激活的工具 tab id;phase === 'scan' 时使用。
-const activeToolId = ref('')
+// 当前激活的Agent tab id;phase === 'scan' 时使用。
+const activeAgentId = ref('')
 
 const importResult = ref(null)
 
@@ -52,18 +52,18 @@ const existingNames = ref(new Set())
 // 不在 scan 时一次性读(可能 N 个文件、慢),改为 phase2 渲染时按需拉。
 const skillTitles = ref({})
 
-// tool_id → mdi 图标映射。
+// agent_id → mdi 图标映射。
 // 后端 IconEmoji 字段已废弃(2026-06-23 清理乱码字节,项目规范禁 emoji),
-// 改由前端按 tool_id 决定图标,5 个工具都给到语义化的 mdi 图标。
-const toolIconMap = {
+// 改由前端按 agent_id 决定图标,5 个Agent都给到语义化的 mdi 图标。
+const agentIconMap = {
   claude: 'mdi:robot-outline',
   codex: 'mdi:cube-outline',
   cursor: 'mdi:cursor-default-click-outline',
   opencode: 'mdi:code-braces',
   trae: 'mdi:shield-outline',
 }
-function iconOf(toolId) {
-  return toolIconMap[toolId] || 'mdi:puzzle-outline'
+function iconOf(agentId) {
+  return agentIconMap[agentId] || 'mdi:puzzle-outline'
 }
 
 async function loadStatus() {
@@ -84,7 +84,7 @@ async function loadStatus() {
 
 async function loadExistingNames() {
   // 读客户端 store 里的所有 skill(只拿 name,page=1, size 拉满)。
-  // 用于 phase2 标"已存在" + 跨工具同名互斥。
+  // 用于 phase2 标"已存在" + 跨Agent同名互斥。
   try {
     const res = await listSkills({ page: 1, size: 1000 })
     const set = new Set()
@@ -99,7 +99,7 @@ async function loadExistingNames() {
 }
 
 function keyOf(found) {
-  return `${found.tool_id}::${found.name}@${found.version}`
+  return `${found.agent_id}::${found.name}@${found.version}`
 }
 
 async function doScan() {
@@ -109,19 +109,19 @@ async function doScan() {
   try {
     const [res] = await Promise.all([runOnboardingScan(), loadExistingNames()])
     scanReport.value = res
-    // 默认不勾选任何 skill —— 让用户自己选,避免跨工具同名 skill
-    // 默认勾第一个 tool 把其它全锁死(详见 disabledExclusive)。
+    // 默认不勾选任何 skill —— 让用户自己选,避免跨Agent同名 skill
+    // 默认勾第一个 agent 把其它全锁死(详见 disabledExclusive)。
     // 用户从 0 开始勾,选了 claude::find-skills 之后 trae::find-skills 会
-    // 自动 disabled + 提示"已被另一个工具勾选",符合预期。
+    // 自动 disabled + 提示"已被另一个Agent勾选",符合预期。
     selected.value = new Set()
     // 默认激活第一个有 user 级别发现的 tab,避免空 tab。
-    const firstTid = (res.tools || []).find(
+    const firstTid = (res.agents || []).find(
       (tid) =>
         (res.found || []).some(
-          (f) => f.tool_id === tid && f.category !== 'system',
+          (f) => f.agent_id === tid && f.category !== 'system',
         ),
-    ) || (res.tools || [])[0]
-    activeToolId.value = firstTid || ''
+    ) || (res.agents || [])[0]
+    activeAgentId.value = firstTid || ''
   } catch (e) {
     error.value = t('onboarding.errScan', { msg: e?.message || e })
   } finally {
@@ -131,7 +131,7 @@ async function doScan() {
 
 // 选中态切换(带重复检测)。
 //   - 客户端已存在 → 直接不允许切换,无效操作
-//   - 跨工具同名互斥:勾选 f 时,自动把"同名但不同 tool_id"的勾选清掉
+//   - 跨Agent同名互斥:勾选 f 时,自动把"同名但不同 agent_id"的勾选清掉
 function toggleSelect(found) {
   if (isDisabled(found)) return
   const k = keyOf(found)
@@ -139,15 +139,15 @@ function toggleSelect(found) {
   if (s.has(k)) {
     s.delete(k)
   } else {
-    // 跨工具同名互斥:同名(name, version)只能选一个 tool_id
+    // 跨Agent同名互斥:同名(name, version)只能选一个 agent_id
     s = selectExclusiveByName(s, found)
     s.add(k)
   }
   selected.value = s
 }
 
-// 把 selected 中所有"与 f 同名但 tool_id 不同"的项移除。
-// 在勾选方块触发时调用,实现"选一个后,另一个工具的同名项自动取消"。
+// 把 selected 中所有"与 f 同名但 agent_id 不同"的项移除。
+// 在勾选方块触发时调用,实现"选一个后,另一个Agent的同名项自动取消"。
 function selectExclusiveByName(s, found) {
   const next = new Set(s)
   const nameKey = String(found.name).toLowerCase()
@@ -157,7 +157,7 @@ function selectExclusiveByName(s, found) {
     if (
       String(n).toLowerCase() === nameKey &&
       v === found.version &&
-      tid !== found.tool_id
+      tid !== found.agent_id
     ) {
       next.delete(k)
     }
@@ -168,9 +168,9 @@ function selectExclusiveByName(s, found) {
 // 是否应该被禁用:
 //   1) system 级别 → 不可勾选(后端也允许,但 UI 锁死)
 //   2) 客户端 store 已存在同名 skill → 置灰 + 提示"客户端已存在"
-//   3) 跨工具同名互斥:同 (name, version) 已被另一个 tool_id 勾上 → 当前 disabled
+//   3) 跨Agent同名互斥:同 (name, version) 已被另一个 agent_id 勾上 → 当前 disabled
 //      自身 key 不在 selected 里(还没勾自己),直接看 selected 里有没有别的
-//      tool_id 的同名同版本即可 —— 不要用 sel === k 排除自己,因为 k 是 found
+//      agent_id 的同名同版本即可 —— 不要用 sel === k 排除自己,因为 k 是 found
 //      自己,selected 里压根没有,k 永远不等于 sel。
 function isDisabled(found) {
   if (found.category === 'system') return true
@@ -183,7 +183,7 @@ function isDisabled(found) {
     if (
       String(n).toLowerCase() === wantName &&
       v === wantVer &&
-      tid !== found.tool_id
+      tid !== found.agent_id
     ) {
       return true
     }
@@ -201,23 +201,23 @@ function disabledReason(found) {
   return t('onboarding.phase2.disabledExclusive')
 }
 
-// 按 tool_id 分组的 skill 列表 + 元数据(显示名 / 数量 / 当前 tab id)。
+// 按 agent_id 分组的 skill 列表 + 元数据(显示名 / 数量 / 当前 tab id)。
 //
 // 组内排序:user 级别在前 system 级别在后 —— 用户日常用的 skill 优先展示,
 // 系统自带 / plugin 内建 / vendor curated 的列在下方,只读不可勾选。
-const foundByTool = computed(() => {
+const foundByAgent = computed(() => {
   const groups = {}
-  // 先按 scanReport.tools 顺序建空组,保证 tab 顺序稳定(后端已排序:只保留有 found 的)
-  for (const tid of scanReport.value?.tools || []) {
+  // 先按 scanReport.agents 顺序建空组,保证 tab 顺序稳定(后端已排序:只保留有 found 的)
+  for (const tid of scanReport.value?.agents || []) {
     groups[tid] = { name: '', items: [] }
   }
   for (const f of scanReport.value?.found || []) {
-    if (!groups[f.tool_id]) {
-      // found 里有但 tools 里没有的(理论上后端已过滤,这里是兜底)
-      groups[f.tool_id] = { name: f.tool_name || f.tool_id, items: [] }
+    if (!groups[f.agent_id]) {
+      // found 里有但 agents 里没有的(理论上后端已过滤,这里是兜底)
+      groups[f.agent_id] = { name: f.agent_name || f.agent_id, items: [] }
     }
-    if (!groups[f.tool_id].name) groups[f.tool_id].name = f.tool_name || f.tool_id
-    groups[f.tool_id].items.push(f)
+    if (!groups[f.agent_id].name) groups[f.agent_id].name = f.agent_name || f.agent_id
+    groups[f.agent_id].items.push(f)
   }
   // 组内排序。
   // 2026-07-08 改:rank 优先级 —— 可勾选的项排最上面;客户端 store 已存在的同名
@@ -239,7 +239,7 @@ const foundByTool = computed(() => {
 //   0 = 可勾选(category=user 且 客户端 store 没同名)
 //   1 = 客户端已存在同名(user 但已被 import,置灰)
 //   2 = system 级别(置灰,后端不允许)
-// 注意复用 isDisabled 的 category 判定,但不去看跨工具同名互斥(selected.value),
+// 注意复用 isDisabled 的 category 判定,但不去看跨Agent同名互斥(selected.value),
 // 避免"勾上某个就乱序" — 排序应是稳定的快照视图,不该跟 selected 状态耦合。
 function sortRank(f) {
   if (f && f.category === 'system') return 2
@@ -248,10 +248,10 @@ function sortRank(f) {
   return 0
 }
 
-const toolTabs = computed(() =>
-  Object.entries(foundByTool.value).map(([tid, g]) => ({
-    toolId: tid,
-    // 兜底:极端情况下 name 仍为空,用 toolId 顶上
+const agentTabs = computed(() =>
+  Object.entries(foundByAgent.value).map(([tid, g]) => ({
+    agentId: tid,
+    // 兜底:极端情况下 name 仍为空,用 agentId 顶上
     name: g.name || tid,
     count: g.items.filter((f) => f.category !== 'system').length,
     totalCount: g.items.length,
@@ -259,37 +259,37 @@ const toolTabs = computed(() =>
   })),
 )
 
-// 工具内"全选/全不选":只动当前 tab 的 user 级别 skill,跳过 system + 客户端已存在 + 跨工具已占。
-function selectAllInTool(tid) {
+// Agent内"全选/全不选":只动当前 tab 的 user 级别 skill,跳过 system + 客户端已存在 + 跨Agent已占。
+function selectAllInAgent(tid) {
   let s = new Set(selected.value)
-  for (const f of foundByTool.value[tid]?.items || []) {
+  for (const f of foundByAgent.value[tid]?.items || []) {
     if (isDisabled(f)) continue
     s = selectExclusiveByName(s, f)
     s.add(keyOf(f))
   }
   selected.value = s
 }
-function selectNoneInTool(tid) {
+function selectNoneInAgent(tid) {
   const s = new Set(selected.value)
-  for (const f of foundByTool.value[tid]?.items || []) {
+  for (const f of foundByAgent.value[tid]?.items || []) {
     if (f.category === 'system') continue
     s.delete(keyOf(f))
   }
   selected.value = s
 }
-function selectedInTool(tid) {
+function selectedInAgent(tid) {
   let n = 0
-  for (const f of foundByTool.value[tid]?.items || []) {
+  for (const f of foundByAgent.value[tid]?.items || []) {
     if (f.category === 'system') continue
     if (selected.value.has(keyOf(f))) n++
   }
   return n
 }
 
-// 可选数量(去掉 system + 客户端已存在 + 跨工具已占)。
-function selectableInTool(tid) {
+// 可选数量(去掉 system + 客户端已存在 + 跨Agent已占)。
+function selectableInAgent(tid) {
   let n = 0
-  for (const f of foundByTool.value[tid]?.items || []) {
+  for (const f of foundByAgent.value[tid]?.items || []) {
     if (!isDisabled(f)) n++
   }
   return n
@@ -374,9 +374,9 @@ async function doImport() {
     // 但我们已经在 UI 上禁了 system(不勾)+ 已存在的(不勾),selected 不可能
     // 等于 found.length;一旦出现这个巧合,[] 会把 system 也导进去,违反约束。
     const items = Array.from(selected.value).map((k) => {
-      const [tool_id, nameVer] = k.split('::')
+      const [agent_id, nameVer] = k.split('::')
       const [name, version] = nameVer.split('@')
-      return { tool_id, name, version }
+      return { agent_id, name, version }
     })
     const res = await runOnboardingImport(items)
     importResult.value = res
@@ -403,7 +403,7 @@ function reset() {
   scanReport.value = null
   importResult.value = null
   selected.value = new Set()
-  activeToolId.value = ''
+  activeAgentId.value = ''
   // 2026-07-07 增:再扫一次时清掉上次的结果指纹锁,确保下一次成功导入能再次上报
   if (resetImportDoneSig) resetImportDoneSig()
 }
@@ -417,18 +417,18 @@ onMounted(async () => {
   await doScan()
 })
 
-// ===== 工具 tab 栏横向拖拽滑动 =====
-// 2026-07-08 增:.tool-tabs 用 overflow-x:auto + 隐藏滚动条,只能靠 shift+wheel 才能
+// ===== Agent tab 栏横向拖拽滑动 =====
+// 2026-07-08 增:.agent-tabs 用 overflow-x:auto + 隐藏滚动条,只能靠 shift+wheel 才能
 // 横向滚(wails3 webview 在 vertical wheel 上不识别为 horizontal,Mac trackpad 也只
 // 是 native scroll)。CSS 原生不提供"鼠标拖拽滑动",这里加一个轻量 mousedown +
 // mousemove + mouseup 把鼠标横向位移换算成 scrollLeft。
 // 设计:
-//   - 仅在 .tool-tabs 区域拖;滚动条放在空白处,不拦截 tab 点击。
+//   - 仅在 .agent-tabs 区域拖;滚动条放在空白处,不拦截 tab 点击。
 //   - 拖动期间临时给容器加 .is-dragging 类(cursor:grabbing + 阻止文本选中)。
 //   - 拖动期间阻止原生 click(避免拖完误触 tab 切换):
 //     用一个临时"位移阈值 4px"决定是否真的是拖;小于阈值说明是 click,放行。
 //   - 横向 wheel 兜底:把 vertical delta 喂给 scrollLeft(垂直被原生滚动条吃掉)。
-const toolTabsRef = ref(null)
+const agentTabsRef = ref(null)
 const tabBarDragging = ref(false)
 let _dragStartX = 0
 let _dragStartScrollLeft = 0
@@ -439,9 +439,9 @@ function onTabBarMouseDown(e) {
   // 仅左键、且起点在容器内空白处:如果点在 button 上,我们仍然允许启动拖拽
   // (拖到一半再松开不会触发 click,因为 mouseup 会调 preventDefault 配合 _dragJustDragged)
   if (e.button !== 0) return
-  const el = toolTabsRef.value
+  const el = agentTabsRef.value
   if (!el || !el.contains(e.target)) return
-  // 如果点中的是 button(.tool-tab),暂存状态,在 mousemove 决定是否进入拖模式
+  // 如果点中的是 button(.agent-tab),暂存状态,在 mousemove 决定是否进入拖模式
   // (tab 点击优先级更高)。这里只要 mousedown 在容器里就启动监听。
   _dragStartX = e.clientX
   _dragStartScrollLeft = el.scrollLeft
@@ -453,7 +453,7 @@ function onTabBarMouseDown(e) {
 }
 
 function onTabBarMouseMove(e) {
-  const el = toolTabsRef.value
+  const el = agentTabsRef.value
   if (!el) return
   const dx = e.clientX - _dragStartX
   _dragMoved = Math.abs(dx)
@@ -485,7 +485,7 @@ function onTabBarMouseUp() {
 
 // 横向 wheel 兜底(wails3 webview + Mac 上很多场景 vertical wheel 不天然横转)
 function onTabBarWheel(e) {
-  const el = toolTabsRef.value
+  const el = agentTabsRef.value
   if (!el) return
   // 优先尊重用户主动按了 shift(浏览器原生会横转 — 但这里也接管,使行为一致)
   // 没按 shift、且 deltaY 是垂直、且容器有水平溢出 → 把 vertical delta 喂给横滚
@@ -514,7 +514,7 @@ onUnmounted(() => {
       {{ success }}
     </p>
 
-    <!-- 阶段 2: 扫描 + 勾选(tab 面板,按工具拆分) -->
+    <!-- 阶段 2: 扫描 + 勾选(tab 面板,按Agent拆分) -->
     <section v-else-if="phase === 'scan'" class="card">
       <header class="card-header card-header-row">
         <h3>
@@ -552,21 +552,21 @@ onUnmounted(() => {
       </div>
 
       <div v-else>
-        <!-- 工具 tab 栏:瑞士风,上划线 + 数字徽章 -->
+        <!-- Agent tab 栏:瑞士风,上划线 + 数字徽章 -->
         <div
-          ref="toolTabsRef"
-          :class="['tool-tabs', { 'is-dragging': tabBarDragging }]"
+          ref="agentTabsRef"
+          :class="['agent-tabs', { 'is-dragging': tabBarDragging }]"
           role="tablist"
           @mousedown="onTabBarMouseDown"
           @wheel.passive="onTabBarWheel"
         >
           <button
-            v-for="tab in toolTabs"
-            :key="tab.toolId"
+            v-for="tab in agentTabs"
+            :key="tab.agentId"
             role="tab"
-            :aria-selected="activeToolId === tab.toolId"
-            :class="['tool-tab', { active: activeToolId === tab.toolId }]"
-            @click="activeToolId = tab.toolId"
+            :aria-selected="activeAgentId === tab.agentId"
+            :class="['agent-tab', { active: activeAgentId === tab.agentId }]"
+            @click="activeAgentId = tab.agentId"
           >
             <IconPark :icon="tab.icon" width="16" height="16" class="tab-icon" />
             <span class="tab-name">{{ tab.name }}</span>
@@ -577,32 +577,32 @@ onUnmounted(() => {
         </div>
 
         <!-- 当前 tab 内容 -->
-        <div v-if="activeToolId && foundByTool[activeToolId]" class="tool-panel">
+        <div v-if="activeAgentId && foundByAgent[activeAgentId]" class="agent-panel">
           <div class="bulk-actions">
-            <button class="sm" @click="selectAllInTool(activeToolId)">
+            <button class="sm" @click="selectAllInAgent(activeAgentId)">
               {{ t('onboarding.phase2.selectAll') }}
             </button>
-            <button class="sm ghost" @click="selectNoneInTool(activeToolId)">
+            <button class="sm ghost" @click="selectNoneInAgent(activeAgentId)">
               {{ t('onboarding.phase2.selectNone') }}
             </button>
             <span class="selection-info">
               {{ t('onboarding.phase2.selected', {
-                  sel: selectedInTool(activeToolId),
-                  total: selectableInTool(activeToolId),
+                  sel: selectedInAgent(activeAgentId),
+                  total: selectableInAgent(activeAgentId),
               }) }}
             </span>
           </div>
 
           <!-- 分档小标题:用户 skill 在前,系统 skill 在后 -->
           <div
-            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'user' || !f.category)"
+            v-if="foundByAgent[activeAgentId].items.some((f) => f.category === 'user' || !f.category)"
             class="cat-label cat-user"
           >
             <IconPark icon="mdi:account-circle-outline" width="14" height="14" />
             {{ t('onboarding.phase2.catUser') }}
           </div>
-          <ul v-if="foundByTool[activeToolId].items.some((f) => f.category !== 'system')" class="found-list">
-            <li v-for="f in foundByTool[activeToolId].items.filter((x) => x.category !== 'system')"
+          <ul v-if="foundByAgent[activeAgentId].items.some((f) => f.category !== 'system')" class="found-list">
+            <li v-for="f in foundByAgent[activeAgentId].items.filter((x) => x.category !== 'system')"
                 :key="keyOf(f)"
                 :class="{ selected: selected.has(keyOf(f)), disabled: isDisabled(f) }">
               <label
@@ -651,21 +651,21 @@ onUnmounted(() => {
           </ul>
 
           <div
-            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')"
+            v-if="foundByAgent[activeAgentId].items.some((f) => f.category === 'system')"
             class="cat-divider"
           >
             <span class="cat-divider-text">{{ t('onboarding.phase2.catSectionDivider') }}</span>
           </div>
           <div
-            v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')"
+            v-if="foundByAgent[activeAgentId].items.some((f) => f.category === 'system')"
             class="cat-label cat-system"
           >
             <IconPark icon="mdi:lock-outline" width="14" height="14" />
             {{ t('onboarding.phase2.catSystem') }}
             <span class="cat-hint">— {{ t('onboarding.phase2.catSystemHint') }}</span>
           </div>
-          <ul v-if="foundByTool[activeToolId].items.some((f) => f.category === 'system')" class="found-list found-list-system">
-            <li v-for="f in foundByTool[activeToolId].items.filter((x) => x.category === 'system')"
+          <ul v-if="foundByAgent[activeAgentId].items.some((f) => f.category === 'system')" class="found-list found-list-system">
+            <li v-for="f in foundByAgent[activeAgentId].items.filter((x) => x.category === 'system')"
                 :key="keyOf(f)"
                 class="system-item">
               <span class="found-item found-item-system">
@@ -731,7 +731,7 @@ onUnmounted(() => {
 
       <ul v-if="importResult?.results?.length" class="result-list">
         <li v-for="(r, i) in importResult.results" :key="i" :class="r.ok ? 'result-ok' : 'result-error'">
-          <span class="r-tool">{{ r.tool_id || r.tool || t('common.dash') }}</span>
+          <span class="r-agent">{{ r.agent_id || r.agent || t('common.dash') }}</span>
           <span class="r-name"><code>{{ r.name || r.canonical?.manifest?.name }}</code></span>
           <span class="r-msg">{{ r.error || r.message || (r.ok ? 'OK' : 'failed') }}</span>
         </li>
@@ -926,7 +926,7 @@ onUnmounted(() => {
 .icon-cell {
   color: var(--accent-blue);
 }
-.tool-icon {
+.agent-icon {
   vertical-align: middle;
 }
 
@@ -971,8 +971,8 @@ onUnmounted(() => {
   margin-left: auto;
 }
 
-/* 工具 tab 栏:瑞士风,上划线 + 数字徽章 */
-.tool-tabs {
+/* Agent tab 栏:瑞士风,上划线 + 数字徽章 */
+.agent-tabs {
   display: flex;
   gap: 4px;
   margin-bottom: 16px;
@@ -990,23 +990,23 @@ onUnmounted(() => {
   touch-action: pan-x;
 }
 
-.tool-tabs.is-dragging {
+.agent-tabs.is-dragging {
   cursor: grabbing;
   scroll-behavior: auto;
 }
 
-.tool-tabs.is-dragging * {
+.agent-tabs.is-dragging * {
   /* 拖动期间禁用子元素 click hover 高亮,避免视觉残留 */
   pointer-events: none;
 }
 
-.tool-tabs::-webkit-scrollbar {
+.agent-tabs::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
 
-.tool-tab {
+.agent-tab {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1023,24 +1023,24 @@ onUnmounted(() => {
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 
-.tool-tab:hover:not(.active) {
+.agent-tab:hover:not(.active) {
   color: var(--text);
 }
 
-.tool-tab.active {
+.agent-tab.active {
   color: var(--accent-blue);
   border-bottom-color: var(--accent-blue);
 }
 
-.tool-tab .tab-icon {
+.agent-tab .tab-icon {
   flex-shrink: 0;
 }
 
-.tool-tab .tab-name {
+.agent-tab .tab-name {
   font-weight: 500;
 }
 
-.tool-tab .tab-count {
+.agent-tab .tab-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1056,18 +1056,18 @@ onUnmounted(() => {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.tool-tab.active .tab-count {
+.agent-tab.active .tab-count {
   background: var(--accent-blue-bg);
   color: var(--accent-blue);
 }
 
-.tool-tab .tab-count-sys {
+.agent-tab .tab-count-sys {
   margin-left: 4px;
   color: var(--text-faint);
   font-weight: 500;
 }
 
-.tool-tab.active .tab-count-sys {
+.agent-tab.active .tab-count-sys {
   color: var(--text-dim);
 }
 
@@ -1158,8 +1158,8 @@ onUnmounted(() => {
   margin-left: 4px;
 }
 
-/* 当前 tab 内容区(单工具的 skill 列表) */
-.tool-panel {
+/* 当前 tab 内容区(单Agent的 skill 列表) */
+.agent-panel {
   padding-top: 4px;
 }
 
@@ -1422,10 +1422,10 @@ onUnmounted(() => {
 .result-ok .r-name,
 .result-error .r-name { color: var(--text); }
 
-.result-ok .r-tool,
-.result-error .r-tool { color: var(--text-dim); }
+.result-ok .r-agent,
+.result-error .r-agent { color: var(--text-dim); }
 
-.r-tool {
+.r-agent {
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-dim);
 }

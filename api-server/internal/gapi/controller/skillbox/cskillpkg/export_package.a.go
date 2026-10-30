@@ -13,13 +13,13 @@ import (
 	"io"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skillpkg/sskillpkg"
 	"ginp-api/internal/skillpkg"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestExportPackage 导出入参。

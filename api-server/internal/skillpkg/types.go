@@ -37,7 +37,7 @@ type PackageManifest struct {
 
 // SkillSummary 索引里每条 skill 的轻量元数据。
 type SkillSummary struct {
-	Key       string `json:"key"`        // "name@version",与 import 时的引用一致
+	Key       string `json:"key"` // "name@version",与 import 时的引用一致
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 	Scope     string `json:"scope"`      // 默认 target scope(可被 import 入参覆盖)
@@ -48,9 +48,9 @@ type SkillSummary struct {
 
 // ExportRequest 导出端入参。
 type ExportRequest struct {
-	Skills    []SkillRef `json:"skills"`              // 至少 1 个
-	SourceApp string     `json:"source_app,omitempty"` // 来源(可选)
-	SourceDesc string    `json:"source_desc,omitempty"`
+	Skills     []SkillRef `json:"skills"`               // 至少 1 个
+	SourceApp  string     `json:"source_app,omitempty"` // 来源(可选)
+	SourceDesc string     `json:"source_desc,omitempty"`
 }
 
 // SkillRef 标识一个要导出的 skill。
@@ -64,32 +64,32 @@ type SkillRef struct {
 // ImportRequest 导入端入参。
 // Skills 为空 = 装包内全部;否则按 Key 装指定子集。
 type ImportRequest struct {
-	SourceDesc string             `json:"source_desc,omitempty"` // 可选备注
-	TargetScope string            `json:"target_scope"`          // global | project
-	ProjectID  uint               `json:"project_id"`            // target_scope=project 时必填
-	Skills     []ImportSkillEntry `json:"skills,omitempty"`      // 空 = 全部
+	SourceDesc  string             `json:"source_desc,omitempty"` // 可选备注
+	TargetScope string             `json:"target_scope"`          // global | project
+	ProjectID   uint               `json:"project_id"`            // target_scope=project 时必填
+	Skills      []ImportSkillEntry `json:"skills,omitempty"`      // 空 = 全部
 }
 
 // ImportSkillEntry 单个要装的 skill。
 type ImportSkillEntry struct {
-	Key        string `json:"key"`                   // "name@version"
+	Key         string `json:"key"`                    // "name@version"
 	TargetScope string `json:"target_scope,omitempty"` // 覆盖包级 target_scope
-	ProjectID  uint   `json:"project_id,omitempty"`   // 同上
+	ProjectID   uint   `json:"project_id,omitempty"`   // 同上
 }
 
 // ImportResult 导入结果汇总。
 type ImportResult struct {
-	ImportedAt string                 `json:"imported_at"`
-	Total      int                    `json:"total"`
-	OK         int                    `json:"ok"`
-	Failed     int                    `json:"failed"`
-	Items      []ImportResultItem     `json:"items"`
+	ImportedAt string             `json:"imported_at"`
+	Total      int                `json:"total"`
+	OK         int                `json:"ok"`
+	Failed     int                `json:"failed"`
+	Items      []ImportResultItem `json:"items"`
 }
 
 // ImportResultItem 单条导入结果。
 type ImportResultItem struct {
-	Key      string `json:"key"`
-	OK       bool   `json:"ok"`
-	Error    string `json:"error,omitempty"`
-	SkillID  uint   `json:"skill_id,omitempty"`
+	Key     string `json:"key"`
+	OK      bool   `json:"ok"`
+	Error   string `json:"error,omitempty"`
+	SkillID uint   `json:"skill_id,omitempty"`
 }

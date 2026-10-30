@@ -3,12 +3,12 @@ package cskilltest
 import (
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
 	"ginp-api/internal/gapi/service/skill/sskill"
 	"ginp-api/internal/gapi/service/skilltester/sskilltest"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 // RequestListSkillTests 列表入参(支持 query / body 兼容)。2026-06-24 改造:用 (scope, name) 定位。
