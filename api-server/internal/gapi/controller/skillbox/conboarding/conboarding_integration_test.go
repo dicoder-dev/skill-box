@@ -47,15 +47,15 @@ func TestImportFlow_PreservesSkillContent(t *testing.T) {
 
 	// 模拟 scan 缓存只留轻量字段
 	cached := struct {
-		ToolID     string
-		ToolName   string
+		AgentID     string
+		AgentName   string
 		Name       string
 		Version    string
 		SourcePath string
 		Category   string
 	}{
-		ToolID:     "trae",
-		ToolName:   "Trae",
+		AgentID:     "trae",
+		AgentName:   "Trae",
 		Name:       scannedCanonical.Manifest.Name,
 		Version:    scannedCanonical.Manifest.Version,
 		SourcePath: realPath,
@@ -77,8 +77,8 @@ func TestImportFlow_PreservesSkillContent(t *testing.T) {
 	// 走 importer.Import
 	report := &skillimporter.Report{
 		FoundSkills: []skillimporter.FoundSkill{{
-			ToolID:     cached.ToolID,
-			ToolName:   cached.ToolName,
+			AgentID:     cached.AgentID,
+			AgentName:   cached.AgentName,
 			SourcePath: cached.SourcePath,
 			Canonical:  full,
 		}},

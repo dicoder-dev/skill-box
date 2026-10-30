@@ -26,7 +26,7 @@ type RespondMigrateMode = sskillapp.MigrateModeResult
 // 才能批量改。
 //
 // 失败策略:逐行迁移,某行失败不影响其他行;汇总在 Entries 里,前端可展示给用户
-// 哪些行失败(常见原因:源 skill 已从 store 删 / tool adapter 不支持 symlink)。
+// 哪些行失败(常见原因:源 skill 已从 store 删 / agent adapter 不支持 symlink)。
 func MigrateApplyMode(c *ginp.ContextPlus, req *RequestMigrateMode) {
 	if req.Mode == "" {
 		c.JSON(400, gin.H{"error": "mode required (copy/symlink)"})

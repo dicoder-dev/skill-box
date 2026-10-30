@@ -263,11 +263,11 @@ func TestPullV2_GlobalOk_UsingFallback(t *testing.T) {
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	skillApp := sskillapp.New(env.db, env.db, factory)
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
-	// 走 v2 路径,2026-06-30 改:tools=nil 不再默认 AllTools,只写盘不 apply。
-	// 这里显式传 Tools=AllTools 测"apply 路径"分支
+	// 走 v2 路径,2026-06-30 改:agents=nil 不再默认 AllAgents,只写盘不 apply。
+	// 这里显式传 Agents=AllAgents 测"apply 路径"分支
 	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
-		Tools: skilladapter.AllTools,
+		Agents: skilladapter.AllAgents,
 	})
 	if err != nil {
 		t.Fatalf("pull-v2 should succeed via fallback: %v", err)
@@ -281,8 +281,8 @@ func TestPullV2_GlobalOk_UsingFallback(t *testing.T) {
 	if out.Version == "" {
 		t.Error("version should be set")
 	}
-	if len(out.Tools) != len(skilladapter.AllTools) {
-		t.Errorf("expected %d tools (AllTools), got %d", len(skilladapter.AllTools), len(out.Tools))
+	if len(out.Agents) != len(skilladapter.AllAgents) {
+		t.Errorf("expected %d agents (AllAgents), got %d", len(skilladapter.AllAgents), len(out.Agents))
 	}
 	// 写盘应已存在(store 后台扫到 code-review)
 	if !store.Exists("code-review") {
@@ -330,8 +330,8 @@ func TestPullV2_FinalName_Rename(t *testing.T) {
 	}
 }
 
-// TestPullV2_EmptyTools_OnlyWrite 2026-06-30 增:Tools=nil/[] 时只写盘不 apply。
-func TestPullV2_EmptyTools_OnlyWrite(t *testing.T) {
+// TestPullV2_EmptyAgents_OnlyWrite 2026-06-30 增:Agents=nil/[] 时只写盘不 apply。
+func TestPullV2_EmptyAgents_OnlyWrite(t *testing.T) {
 	env := newTestEnv(t)
 	if err := env.svc.EnsureDefaultSources(); err != nil {
 		t.Fatal(err)
@@ -356,21 +356,21 @@ func TestPullV2_EmptyTools_OnlyWrite(t *testing.T) {
 	factory := func() (*sskill.Service, error) { return ssvc, nil }
 	skillApp := sskillapp.New(env.db, env.db, factory)
 	v2 := smarket.NewWithApply(env.db, env.db, factory, skillApp)
-	// Tools 不传(零值 nil)→ 只写盘
+	// Agents 不传(零值 nil)→ 只写盘
 	out, err := v2.PullV2(context.Background(), &smarket.PullV2Input{
 		SourceID: src.ID, RemoteID: "code-review", Scope: "global",
 	})
 	if err != nil {
-		t.Fatalf("pull-v2 with empty tools: %v", err)
+		t.Fatalf("pull-v2 with empty agents: %v", err)
 	}
 	if !store.Exists("code-review") {
 		t.Error("expected skill written to store")
 	}
-	if len(out.Tools) != 0 {
-		t.Errorf("expected 0 tools (empty), got %d", len(out.Tools))
+	if len(out.Agents) != 0 {
+		t.Errorf("expected 0 agents (empty), got %d", len(out.Agents))
 	}
 	if out.ApplyResult != nil {
-		t.Errorf("expected no apply result when tools is empty, got %+v", out.ApplyResult)
+		t.Errorf("expected no apply result when agents is empty, got %+v", out.ApplyResult)
 	}
 }
 

@@ -1,4 +1,4 @@
-package mtool
+package magent
 
 import (
 	"fmt"
@@ -11,17 +11,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// ToolPathModel 工具路径子表 model。
-type ToolPathModel struct {
+// AgentPathModel 工具路径子表 model。
+type AgentPathModel struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
 }
 
-func NewToolPathModel(dbWrite_, dbRead_ *gorm.DB) *ToolPathModel {
-	return &ToolPathModel{dbWrite: dbWrite_, dbRead: dbRead_}
+func NewAgentPathModel(dbWrite_, dbRead_ *gorm.DB) *AgentPathModel {
+	return &AgentPathModel{dbWrite: dbWrite_, dbRead: dbRead_}
 }
 
-func (s *ToolPathModel) Create(dtoCreate *entity.ToolPath) (*entity.ToolPath, error) {
+func (s *AgentPathModel) Create(dtoCreate *entity.AgentPath) (*entity.AgentPath, error) {
 	err := dbops.Create(dtoCreate, s.dbWrite)
 	if err != nil {
 		return nil, err
@@ -32,8 +32,8 @@ func (s *ToolPathModel) Create(dtoCreate *entity.ToolPath) (*entity.ToolPath, er
 	return dtoCreate, nil
 }
 
-func (s *ToolPathModel) FindOne(wheres []*where.Condition) (*entity.ToolPath, error) {
-	out := new(entity.ToolPath)
+func (s *AgentPathModel) FindOne(wheres []*where.Condition) (*entity.AgentPath, error) {
+	out := new(entity.AgentPath)
 	err := dbops.FindOne(&dbops.FindOneConfig{
 		Wheres:    wheres,
 		Db:        s.dbRead,
@@ -48,8 +48,8 @@ func (s *ToolPathModel) FindOne(wheres []*where.Condition) (*entity.ToolPath, er
 	return out, nil
 }
 
-func (s *ToolPathModel) FindList(wheres []*where.Condition, extra *where.Extra) ([]*entity.ToolPath, uint, error) {
-	var list []*entity.ToolPath
+func (s *AgentPathModel) FindList(wheres []*where.Condition, extra *where.Extra) ([]*entity.AgentPath, uint, error) {
+	var list []*entity.AgentPath
 	err := dbops.FindList(&dbops.FindListConfig{
 		Conditions:    wheres,
 		Db:            s.dbRead,
@@ -59,44 +59,44 @@ func (s *ToolPathModel) FindList(wheres []*where.Condition, extra *where.Extra) 
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := dbops.GetTotal(wheres, new(entity.ToolPath), s.dbRead)
+	total, err := dbops.GetTotal(wheres, new(entity.AgentPath), s.dbRead)
 	if err != nil {
-		return []*entity.ToolPath{}, 0, err
+		return []*entity.AgentPath{}, 0, err
 	}
 	return list, uint(total), nil
 }
 
-func (s *ToolPathModel) Update(wheres []*where.Condition, dtoUpdate *entity.ToolPath, columnsCfg ...string) error {
+func (s *AgentPathModel) Update(wheres []*where.Condition, dtoUpdate *entity.AgentPath, columnsCfg ...string) error {
 	return dbops.Update(&dbops.UpdateConfNew{
 		Wheres:           wheres,
-		NewEntity:        new(entity.ToolPath),
+		NewEntity:        new(entity.AgentPath),
 		Db:               s.dbWrite,
 		UpdateColumnsCfg: columnsCfg,
 		DataUpdate:       dtoUpdate,
 	})
 }
 
-func (s *ToolPathModel) Delete(wheres []*where.Condition) error {
+func (s *AgentPathModel) Delete(wheres []*where.Condition) error {
 	return dbops.Delete(&dbops.DeleteConfig{
 		Wheres:     wheres,
 		Db:         s.dbWrite,
 		SoftDelete: false,
-		NewEntity:  new(entity.ToolPath),
+		NewEntity:  new(entity.AgentPath),
 	})
 }
 
-func (s *ToolPathModel) DeleteByID(id uint) error {
+func (s *AgentPathModel) DeleteByID(id uint) error {
 	return s.Delete(where.New(FieldPathID, "=", id).Conditions())
 }
 
-// DeleteByToolID 删一个工具的全部 path(级联删时使用)。
-func (s *ToolPathModel) DeleteByToolID(toolID uint) error {
-	return s.Delete(where.New(FieldPathToolID, "=", toolID).Conditions())
+// DeleteByAgentID 删一个工具的全部 path(级联删时使用)。
+func (s *AgentPathModel) DeleteByAgentID(agentID uint) error {
+	return s.Delete(where.New(FieldPathAgentID, "=", agentID).Conditions())
 }
 
-// FindByToolID 查一个工具的全部 path,按 (scope, category, path_order) 排序。
-func (s *ToolPathModel) FindByToolID(toolID uint) ([]*entity.ToolPath, error) {
-	list, _, err := s.FindList(where.New(FieldPathToolID, "=", toolID).Conditions(), nil)
+// FindByAgentID 查一个工具的全部 path,按 (scope, category, path_order) 排序。
+func (s *AgentPathModel) FindByAgentID(agentID uint) ([]*entity.AgentPath, error) {
+	list, _, err := s.FindList(where.New(FieldPathAgentID, "=", agentID).Conditions(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -115,19 +115,19 @@ func (s *ToolPathModel) FindByToolID(toolID uint) ([]*entity.ToolPath, error) {
 	return list, nil
 }
 
-// FindAllByToolIDs 批量查多个工具的 path(避免 N+1),返回 map[toolID][]ToolPath。
-func (s *ToolPathModel) FindAllByToolIDs(toolIDs []uint) (map[uint][]*entity.ToolPath, error) {
-	if len(toolIDs) == 0 {
-		return map[uint][]*entity.ToolPath{}, nil
+// FindAllByAgentIDs 批量查多个工具的 path(避免 N+1),返回 map[agentID][]AgentPath。
+func (s *AgentPathModel) FindAllByAgentIDs(agentIDs []uint) (map[uint][]*entity.AgentPath, error) {
+	if len(agentIDs) == 0 {
+		return map[uint][]*entity.AgentPath{}, nil
 	}
-	conds := where.New(FieldPathToolID, "IN", toolIDs).Conditions()
+	conds := where.New(FieldPathAgentID, "IN", agentIDs).Conditions()
 	list, _, err := s.FindList(conds, nil)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[uint][]*entity.ToolPath, len(toolIDs))
+	out := make(map[uint][]*entity.AgentPath, len(agentIDs))
 	for _, p := range list {
-		out[p.ToolID] = append(out[p.ToolID], p)
+		out[p.AgentID] = append(out[p.AgentID], p)
 	}
 	// 各自内部排好序
 	for k := range out {

@@ -19,7 +19,7 @@ type fakeAdapter struct {
 	touched  *[]string
 }
 
-func (f *fakeAdapter) ToolID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string      { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
 func (f *fakeAdapter) Icon() string        { return "?"
 }
@@ -108,7 +108,7 @@ func TestApplyOne_Success_PreSnapshot(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err != nil {
@@ -145,7 +145,7 @@ func TestApplyOne_RollsBack_OnApplyError(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err == nil {
@@ -174,7 +174,7 @@ func TestApplyOne_RejectsBadScope(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     "moon",
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
 	if err == nil || !strings.Contains(err.Error(), "invalid scope") {
@@ -182,18 +182,18 @@ func TestApplyOne_RejectsBadScope(t *testing.T) {
 	}
 }
 
-func TestApplyOne_RejectsUnknownTool(t *testing.T) {
+func TestApplyOne_RejectsUnknownAgent(t *testing.T) {
 	root := t.TempDir()
 	fa := &fakeAdapter{id: "fake", root: root}
 	reg := newReg(t, fa)
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"ghost"},
+		Agents:     []string{"ghost"},
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
-	if !errors.Is(err, skillapp.ErrToolNotFound) {
-		t.Errorf("err = %v, want ErrToolNotFound", err)
+	if !errors.Is(err, skillapp.ErrAgentNotFound) {
+		t.Errorf("err = %v, want ErrAgentNotFound", err)
 	}
 }
 
@@ -204,17 +204,17 @@ func TestApplyOne_RejectsUnknownTool(t *testing.T) {
 // 修复后:resolveRegistry 内部判 nil,返回 defaultRegistry,Get 正常工作。
 func TestApplyOne_NilRegistry_FallsBackToDefault(t *testing.T) {
 	// 注册到 defaultRegistry(全进程共享,可能有别的测试残留,清理时加锁)
-	toolID := "test-fallback-tool"
+	agentID := "test-fallback-agent"
 	t.Cleanup(func() {
 		// 没暴露 unregister,所以让 defaultRegistry 留着这个 id — 不影响其他测试。
-		// 只要 toolID 唯一,不会跟其他 fake 冲突。
+		// 只要 agentID 唯一,不会跟其他 fake 冲突。
 	})
 	// 注册一个 stub adapter 到默认 registry
 	defaultReg := skilladapter.DefaultRegistry()
-	// 防御:如果 toolID 已经被注册(比如其他测试用同一个 id),跳过
-	if _, exists := defaultReg.Get(toolID); !exists {
+	// 防御:如果 agentID 已经被注册(比如其他测试用同一个 id),跳过
+	if _, exists := defaultReg.Get(agentID); !exists {
 		root := t.TempDir()
-		fa := &fakeAdapter{id: toolID, root: root}
+		fa := &fakeAdapter{id: agentID, root: root}
 		defaultReg.Register(fa)
 	}
 
@@ -222,7 +222,7 @@ func TestApplyOne_NilRegistry_FallsBackToDefault(t *testing.T) {
 	ap := skillapp.NewApplier(nil)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{toolID},
+		Agents:     []string{agentID},
 		Canonical: ptrCanon(sampleCanon("fallback-skill")),
 	})
 	if err != nil {
@@ -240,7 +240,7 @@ func TestApplyOne_RejectsEmptyFiles(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: &skilladapter.Canonical{Manifest: skilladapter.Manifest{Name: "x"}},
 	})
 	if !errors.Is(err, skillapp.ErrEmptyFiles) {
@@ -248,18 +248,18 @@ func TestApplyOne_RejectsEmptyFiles(t *testing.T) {
 	}
 }
 
-func TestApplyOne_RejectsEmptyTools(t *testing.T) {
+func TestApplyOne_RejectsEmptyAgents(t *testing.T) {
 	root := t.TempDir()
 	fa := &fakeAdapter{id: "fake", root: root}
 	reg := newReg(t, fa)
 	ap := skillapp.NewApplier(reg)
 	_, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     nil,
+		Agents:     nil,
 		Canonical: ptrCanon(sampleCanon("alpha")),
 	})
-	if !errors.Is(err, skillapp.ErrEmptyTools) {
-		t.Errorf("err = %v, want ErrEmptyTools", err)
+	if !errors.Is(err, skillapp.ErrEmptyAgents) {
+		t.Errorf("err = %v, want ErrEmptyAgents", err)
 	}
 }
 
@@ -271,7 +271,7 @@ func TestSnapshotDir_NonExistent(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("beta")),
 	})
 	if err != nil {
@@ -296,7 +296,7 @@ func TestApplyOne_SymlinkMode_CreatesSymlink(t *testing.T) {
 	canon.SourceDir = t.TempDir() // 模拟 skillstore 源端
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -346,7 +346,7 @@ func TestApplyOne_SymlinkMode_UndoRemovesLink(t *testing.T) {
 
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -377,7 +377,7 @@ func TestApplyOne_CopyMode_Default(t *testing.T) {
 	canon := sampleCanon("zeta")
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(canon),
 	})
 	if err != nil {
@@ -407,7 +407,7 @@ func TestApplyOne_PartialFailure_OnApplyError(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("theta")),
 	})
 	if err == nil {
@@ -434,7 +434,7 @@ func TestApplyOne_PartialFailure_OnSuccess(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"fake"},
+		Agents:     []string{"fake"},
 		Canonical: ptrCanon(sampleCanon("iota")),
 	})
 	if err != nil {
@@ -472,7 +472,7 @@ func TestApplyOne_SymlinkMode_RealDisk(t *testing.T) {
 	ap1 := skillapp.NewApplier(reg)
 	ap1.Mode = skillapp.ModeSymlink
 	res1, err := ap1.ApplyOne(skillapp.ApplyInput{
-		Scope: skilladapter.ScopeGlobal, Tools: []string{"fake"}, Canonical: ptrCanon(canon),
+		Scope: skilladapter.ScopeGlobal, Agents: []string{"fake"}, Canonical: ptrCanon(canon),
 	})
 	if err != nil {
 		t.Fatalf("symlink apply: %v", err)
@@ -488,7 +488,7 @@ func TestApplyOne_SymlinkMode_RealDisk(t *testing.T) {
 	// 先把 fakeAdapter 的 Apply 升级:复制标准 BaseAdapter 的"清理旧 target"
 	// 行为,这样从 symlink 切到 copy 时,旧 symlink 会被先删,新 copy 才生效。
 	res2, err := ap2.ApplyOne(skillapp.ApplyInput{
-		Scope: skilladapter.ScopeGlobal, Tools: []string{"fake"}, Canonical: ptrCanon(canon),
+		Scope: skilladapter.ScopeGlobal, Agents: []string{"fake"}, Canonical: ptrCanon(canon),
 	})
 	if err != nil {
 		t.Fatalf("copy apply: %v", err)
@@ -509,7 +509,7 @@ func TestApplyOne_SymlinkMode_RealDisk(t *testing.T) {
 
 // multiPathFakeAdapter 2026-07-08 增:DiscoverPaths 故意返 [user, system] 两条 path,
 // UserPath 只返 user 那条。锁死 resolveTargetDir 走 UserPath 而不是 DiscoverPaths
-// —— 这是修复首页 apply 报 "tool X has 2 paths" 的关键判定。
+// —— 这是修复首页 apply 报 "agent X has 2 paths" 的关键判定。
 //
 // 复用了上面 fakeAdapter 的 Apply / ApplyLink / Scan / LocalName 等行为,
 // 只覆盖 DiscoverPaths / UserPath 这两个差异点,避免重复大段实现。
@@ -548,7 +548,7 @@ func TestApplyOne_UsesUserPath_NotDiscoverPaths(t *testing.T) {
 
 	res, err := ap.ApplyOne(skillapp.ApplyInput{
 		Scope:     skilladapter.ScopeGlobal,
-		Tools:     []string{"claude-ish"},
+		Agents:     []string{"claude-ish"},
 		Canonical: ptrCanon(sampleCanon("code-review")),
 	})
 	if err != nil {

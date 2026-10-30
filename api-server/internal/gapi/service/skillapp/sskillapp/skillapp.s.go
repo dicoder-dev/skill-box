@@ -35,8 +35,8 @@ import (
 // 业务错误。
 var (
 	ErrSkillNotFound = errors.New("skillapp: skill not found")
-	ErrEmptyTools     = errors.New("skillapp: no tools specified")
-	ErrToolNotFound   = errors.New("skillapp: tool not in registry")
+	ErrEmptyAgents     = errors.New("skillapp: no agents specified")
+	ErrAgentNotFound   = errors.New("skillapp: agent not in registry")
 )
 
 // Service 业务服务。
@@ -124,10 +124,10 @@ type ApplyInput struct {
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
 	Name      string   `json:"name"`
-	Tools     []string `json:"tools"`
+	Agents     []string `json:"agents"`
 }
 
-// ApplyResult 单 skill apply 结果(多 tool)。
+// ApplyResult 单 skill apply 结果(多 agent)。
 type ApplyResult struct {
 	Name     string                  `json:"name"`
 	Version  string                  `json:"version"`
@@ -139,11 +139,11 @@ type ApplyResult struct {
 //
 // 2026-06-25 修:之前每次 apply 都 Create,同名同 scope 重复 apply 会撞
 // skill_applies 的 (scope, project_id, name) uniqueIndex。现在改 upsert:
-// 存在同键行 → Update(applied_at/pre_snapshot/target_path/tool/status),
+// 存在同键行 → Update(applied_at/pre_snapshot/target_path/agent/status),
 // 不存在 → Create。这样 redo / 重新启用 都安全。
 // 2026-07-02 增:apply_mode 字段(当前 settings.apply_mode),便于模式切换
 // 时只迁"对得上"的行,以及前端展示当前 apply 用的是哪种模式。
-func (s *Service) recordApply(scope string, projectID uint, name, tool string, res *skillapp.ApplyResult) {
+func (s *Service) recordApply(scope string, projectID uint, name, agent string, res *skillapp.ApplyResult) {
 	if res == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Service) recordApply(scope string, projectID uint, name, tool string, r
 	mode := s.currentApplyMode()
 	existing, _ := s.applyModel().FindLatestByKey(scope, projectID, name)
 	if existing != nil {
-		existing.Tool = tool
+		existing.Agent = agent
 		existing.Status = res.Status
 		existing.ApplyMode = mode
 		existing.TargetPath = res.TargetPath
@@ -167,7 +167,7 @@ func (s *Service) recordApply(scope string, projectID uint, name, tool string, r
 		Scope:       scope,
 		ProjectID:   projectID,
 		Name:        name,
-		Tool:        tool,
+		Agent:        agent,
 		Status:      res.Status,
 		ApplyMode:   mode,
 		TargetPath:  res.TargetPath,
@@ -180,7 +180,7 @@ func (s *Service) recordApply(scope string, projectID uint, name, tool string, r
 	}
 }
 
-// Apply 跑一次 apply:从 sskill 拿 canonical,逐 tool apply。
+// Apply 跑一次 apply:从 sskill 拿 canonical,逐 agent apply。
 //
 // 2026-06-29 改造:scope=project 时,先把 in.ProjectID 查成项目 root_path 再传给 applier;
 // 这是 Apply 写"真实项目根"而不是 ~/.skillbox/projects/<id>/ 占位的关键。
@@ -191,8 +191,8 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 	if strings.TrimSpace(in.Name) == "" {
 		return nil, fmt.Errorf("%w: name 必填", ErrSkillNotFound)
 	}
-	if len(in.Tools) == 0 {
-		return nil, ErrEmptyTools
+	if len(in.Agents) == 0 {
+		return nil, ErrEmptyAgents
 	}
 	full, err := s.loadFull(in.Name)
 	if err != nil {
@@ -215,7 +215,7 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 		Version: full.Manifest.Version,
 		AllOK:   true,
 	}
-	for _, tool := range in.Tools {
+	for _, agent := range in.Agents {
 		scope := in.Scope
 		if scope == "" {
 			scope = skilladapter.ScopeGlobal
@@ -225,22 +225,22 @@ func (s *Service) Apply(in *ApplyInput) (*ApplyResult, error) {
 			Scope:       scope,
 			ProjectID:   in.ProjectID,
 			ProjectRoot: projectRoot,
-			Tools:       []string{tool},
+			Agents:       []string{agent},
 			Canonical:   full,
 		})
 		if err != nil {
 			out.AllOK = false
 			s.Event("apply_failed", full.Manifest.Name, map[string]any{
-				"tool":   tool,
+				"agent":   agent,
 				"scope":  scope,
 				"error":  err.Error(),
 			})
 		}
 		if res != nil {
-			s.recordApply(scope, in.ProjectID, full.Manifest.Name, tool, res)
+			s.recordApply(scope, in.ProjectID, full.Manifest.Name, agent, res)
 			if res.ApplyID > 0 && res.Status == skillapp.StatusApplied {
 				s.Event("apply", full.Manifest.Name, map[string]any{
-					"tool":        tool,
+					"agent":        agent,
 					"scope":       scope,
 					"target_path": res.TargetPath,
 					"apply_id":    res.ApplyID,
@@ -259,7 +259,7 @@ type BatchApplyInput struct {
 	Atomic bool         `json:"atomic"`
 }
 
-// BatchApply 多 skill × 多 tool 笛卡尔积。
+// BatchApply 多 skill × 多 agent 笛卡尔积。
 //
 // 2026-06-29 改造:同 Apply — scope=project 时把 project_id 查成 root_path 传下去。
 func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error) {
@@ -280,7 +280,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 				return nil, err
 			}
 		}
-		for _, tool := range it.Tools {
+		for _, agent := range it.Agents {
 			scope := it.Scope
 			if scope == "" {
 				scope = skilladapter.ScopeGlobal
@@ -291,7 +291,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 				Scope:        scope,
 				ProjectID:    it.ProjectID,
 				ProjectRoot:  projectRoot,
-				Tool:         tool,
+				Agent:         agent,
 				Canonical:    full,
 			})
 		}
@@ -303,11 +303,11 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 		if bir.Result == nil {
 			continue
 		}
-		s.recordApply(bir.Scope, bir.ProjectID, bir.SkillName, bir.Tool, bir.Result)
+		s.recordApply(bir.Scope, bir.ProjectID, bir.SkillName, bir.Agent, bir.Result)
 		if bir.Result.ApplyID > 0 {
 			if bir.Result.Status == skillapp.StatusApplied {
 				s.Event("apply", bir.SkillName, map[string]any{
-					"tool":        bir.Tool,
+					"agent":        bir.Agent,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
 					"apply_id":    bir.Result.ApplyID,
@@ -315,7 +315,7 @@ func (s *Service) BatchApply(in *BatchApplyInput) (*skillapp.BatchOutput, error)
 				})
 			} else if bir.Result.Status == skillapp.StatusFailed {
 				s.Event("apply_failed", bir.SkillName, map[string]any{
-					"tool":        bir.Tool,
+					"agent":        bir.Agent,
 					"scope":       bir.Scope,
 					"target_path": bir.Result.TargetPath,
 					"batch":       true,
@@ -352,7 +352,7 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	if err := skillapp.UndoWithSnapshot(row.TargetPath, row.PreSnapshot); err != nil {
 		s.Event("undo_failed", row.Name, map[string]any{
 			"apply_id":    applyID,
-			"tool":        row.Tool,
+			"agent":        row.Agent,
 			"target_path": row.TargetPath,
 			"error":       err.Error(),
 		})
@@ -366,36 +366,36 @@ func (s *Service) Undo(applyID uint) (*UndoResult, error) {
 	}
 	s.Event("undo", row.Name, map[string]any{
 		"apply_id":    applyID,
-		"tool":        row.Tool,
+		"agent":        row.Agent,
 		"target_path": row.TargetPath,
 	})
 	return &UndoResult{ApplyID: applyID, NewStatus: row.Status, RolledBackAt: now}, nil
 }
 
-// ForceUndoInput 强制按 (scope, project_id, name, tool) 撤销,不走 apply_id 流程。
+// ForceUndoInput 强制按 (scope, project_id, name, agent) 撤销,不走 apply_id 流程。
 //
 // 2026-06-25 增:用于"scope-status 命中但 DB 没 apply 记录"场景(用户手动 cp /
 // 外部安装)。逻辑:
-//   1) 先在 DB 按 (scope, project_id, name, tool) 找最近一条 status=applied
+//   1) 先在 DB 按 (scope, project_id, name, agent) 找最近一条 status=applied
 //      记录,找到就走标准 Undo(走 pre-snapshot 还原)。
-//   2) 没记录:用 scope-status 扫,找该 (tool, scope, project_id) 命中
+//   2) 没记录:用 scope-status 扫,找该 (agent, scope, project_id) 命中
 //      (exists=true) 的 resolved 路径,直接调 ForceRemoveFromPath 删整个目录。
 //   3) DB 插一条占位 status=rolled_back 记录,applied_at/rolled_back_at 都
-//      用 now(),target_path 记录实际删的路径,tool/scope/project_id/name
+//      用 now(),target_path 记录实际删的路径,agent/scope/project_id/name
 //      按入参填。
 type ForceUndoInput struct {
 	Scope     string
 	ProjectID uint
 	Name      string
-	Tool      string
+	Agent      string
 }
 
 func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	if in == nil {
 		return nil, skillapp.ErrApplyNotFound
 	}
-	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Tool) == "" {
-		return nil, fmt.Errorf("skillapp: force undo: name/tool required")
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Agent) == "" {
+		return nil, fmt.Errorf("skillapp: force undo: name/agent required")
 	}
 	scope := strings.ToLower(strings.TrimSpace(in.Scope))
 	if scope == "" {
@@ -407,7 +407,7 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	conds = append(conds, where.New(mskillapply.FieldScope, "=", scope).Conditions()...)
 	conds = append(conds, where.New(mskillapply.FieldProjectID, "=", in.ProjectID).Conditions()...)
 	conds = append(conds, where.New(mskillapply.FieldName, "=", in.Name).Conditions()...)
-	conds = append(conds, where.New(mskillapply.FieldTool, "=", in.Tool).Conditions()...)
+	conds = append(conds, where.New(mskillapply.FieldAgent, "=", in.Agent).Conditions()...)
 	conds = append(conds, where.New(mskillapply.FieldStatus, "=", skillapp.StatusApplied).Conditions()...)
 	rows, _, err := s.applyModel().FindList(conds, &where.Extra{
 		PageNum: 1, PageSize: 1,
@@ -418,13 +418,13 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	}
 
 	// 2) DB 没记录 → 走 scope-status 强制删磁盘
-	resolved, err := s.resolveByScopeStatus(in.Name, scope, in.ProjectID, in.Tool)
+	resolved, err := s.resolveByScopeStatus(in.Name, scope, in.ProjectID, in.Agent)
 	if err != nil {
 		return nil, err
 	}
 	if resolved == "" {
 		return nil, fmt.Errorf("skillapp: force undo: no active hit for %s/%s/%s/%d",
-			scope, in.Name, in.Tool, in.ProjectID)
+			scope, in.Name, in.Agent, in.ProjectID)
 	}
 	if err := skillapp.ForceRemoveFromPath(resolved); err != nil {
 		return nil, fmt.Errorf("skillapp: force undo: %w", err)
@@ -436,7 +436,7 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 		Scope:       scope,
 		ProjectID:   in.ProjectID,
 		Name:        in.Name,
-		Tool:        in.Tool,
+		Agent:        in.Agent,
 		Status:      skillapp.StatusRolledBack,
 		TargetPath:  resolved,
 		PreSnapshot: "",
@@ -446,7 +446,7 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 	created, _ := s.applyModel().Create(placeholder)
 	if created != nil {
 		s.Event("force_undo", in.Name, map[string]any{
-			"tool":        in.Tool,
+			"agent":        in.Agent,
 			"scope":       scope,
 			"target_path": resolved,
 			"apply_id":    created.ID,
@@ -454,24 +454,24 @@ func (s *Service) ForceUndo(in *ForceUndoInput) (*UndoResult, error) {
 		return &UndoResult{ApplyID: created.ID, NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
 	}
 	s.Event("force_undo", in.Name, map[string]any{
-		"tool":        in.Tool,
+		"agent":        in.Agent,
 		"scope":       scope,
 		"target_path": resolved,
 	})
 	return &UndoResult{NewStatus: skillapp.StatusRolledBack, RolledBackAt: now}, nil
 }
 
-// resolveByScopeStatus 通过 scope-status 扫描找 (tool, scope, project_id) 命中
+// resolveByScopeStatus 通过 scope-status 扫描找 (agent, scope, project_id) 命中
 // 的 resolved 路径。复用 cskill.ResolveHit。
-func (s *Service) resolveByScopeStatus(name, scope string, projectID uint, tool string) (string, error) {
-	return cskill.ResolveHit(name, scope, projectID, tool)
+func (s *Service) resolveByScopeStatus(name, scope string, projectID uint, agent string) (string, error) {
+	return cskill.ResolveHit(name, scope, projectID, agent)
 }
 
 // ListInput 列表过滤(2026-06-24:按 scope+name 过滤)。
 type ListInput struct {
 	Scope  string
 	Name   string
-	Tool   string
+	Agent   string
 	Status string
 	Page   int
 	Size   int
@@ -494,8 +494,8 @@ func (s *Service) List(in ListInput) (*ListResult, error) {
 	if n := strings.TrimSpace(in.Name); n != "" {
 		conds = append(conds, where.New(mskillapply.FieldName, "=", n).Conditions()...)
 	}
-	if t := strings.TrimSpace(in.Tool); t != "" {
-		conds = append(conds, where.New(mskillapply.FieldTool, "=", t).Conditions()...)
+	if t := strings.TrimSpace(in.Agent); t != "" {
+		conds = append(conds, where.New(mskillapply.FieldAgent, "=", t).Conditions()...)
 	}
 	if st := strings.TrimSpace(in.Status); st != "" {
 		if !skillapp.IsStatusValid(st) {
@@ -632,7 +632,7 @@ type MigrateModeEntry struct {
 	ApplyID   uint   `json:"apply_id"`
 	Scope     string `json:"scope"`
 	Name      string `json:"name"`
-	Tool      string `json:"tool"`
+	Agent      string `json:"agent"`
 	Target    string `json:"target"`
 	FromMode  string `json:"from_mode"`
 	ToMode    string `json:"to_mode"`
@@ -659,7 +659,7 @@ type MigrateModeResult struct {
 //   1) 先把 settings.apply_mode 设为 targetMode(供后续 apply 走新模式),并
 //      记录 fromMode(供回滚 / 报告用)。
 //   2) 列出 status=applied 的所有行;每行根据 (scope, project_id, name) 拿
-//      canonical,根据 tool 拿 adapter;然后判断 target_path 当前是目录还是
+//      canonical,根据 agent 拿 adapter;然后判断 target_path 当前是目录还是
 //      symlink,与 fromMode 是不是一致。
 //   3) 一致(已在新模式 / 老 apply 行没有 mode 字段视为 copy):跳过。
 //   4) 不一致:按目标模式落盘(从老 target 拷到新 target,或从老 symlink
@@ -707,7 +707,7 @@ func (s *Service) MigrateMode(targetMode string) (*MigrateModeResult, error) {
 			ApplyID:  row.ID,
 			Scope:    row.Scope,
 			Name:     row.Name,
-			Tool:     row.Tool,
+			Agent:     row.Agent,
 			Target:   row.TargetPath,
 			FromMode: fromMode,
 			ToMode:   targetMode,
@@ -729,9 +729,9 @@ func (s *Service) MigrateMode(targetMode string) (*MigrateModeResult, error) {
 			continue
 		}
 		// 拿 adapter
-		ad, ok := reg.Get(row.Tool)
+		ad, ok := reg.Get(row.Agent)
 		if !ok {
-			entry.Error = "tool adapter not found: " + row.Tool
+			entry.Error = "agent adapter not found: " + row.Agent
 			res.Failed++
 			res.Entries = append(res.Entries, entry)
 			continue
@@ -814,7 +814,7 @@ func (s *Service) writeTargetFresh(ad skilladapter.Adapter, c *skilladapter.Cano
 			ApplyLink(skilladapter.Canonical, string) error
 		})
 		if !ok {
-			return fmt.Errorf("tool %s does not support symlink mode (missing ApplyLink)", ad.ToolID())
+			return fmt.Errorf("agent %s does not support symlink mode (missing ApplyLink)", ad.AgentID())
 		}
 		return linker.ApplyLink(*c, row.TargetPath)
 	}

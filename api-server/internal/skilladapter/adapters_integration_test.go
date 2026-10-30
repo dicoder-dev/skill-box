@@ -8,8 +8,8 @@ import (
 
 	"ginp-api/internal/gapi/entity"
 	"ginp-api/internal/skilladapter"
-	"ginp-api/internal/skilladapter/toolspecs"
-	"ginp-api/internal/toolseed"
+	"ginp-api/internal/skilladapter/agentspecs"
+	"ginp-api/internal/agentseed"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -28,13 +28,13 @@ func setupRegistryFromSQLite(t *testing.T) *gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	// AutoMigrate e_tool + e_tool_path(测试用最小集)
-	if err := db.AutoMigrate(&entity.Tool{}, &entity.ToolPath{}); err != nil {
+	if err := db.AutoMigrate(&entity.Agent{}, &entity.AgentPath{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if err := toolseed.EnsureSeeded(db, db); err != nil {
+	if err := agentseed.EnsureSeeded(db, db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if err := toolspecs.ReloadAllFromDB(db); err != nil {
+	if err := agentspecs.ReloadAllFromDB(db); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
 	return db
@@ -43,7 +43,7 @@ func setupRegistryFromSQLite(t *testing.T) *gorm.DB {
 // TestAllAdaptersRegistered 验证默认 Registry 在 DB 加载后包含全部默认工具。
 //
 // 2026-06-30 二改:adapter 不再 init() 自动注册,而是依赖启动期
-// toolspecs.ReloadAllFromDB(db);本测试用 sqlite 内存 DB 模拟"seed + reload"
+// agentspecs.ReloadAllFromDB(db);本测试用 sqlite 内存 DB 模拟"seed + reload"
 // 全流程,验证 9 个默认工具 + Icon() 字段透传。
 func TestAllAdaptersRegistered(t *testing.T) {
 	_ = setupRegistryFromSQLite(t)
@@ -51,24 +51,24 @@ func TestAllAdaptersRegistered(t *testing.T) {
 	all := skilladapter.All()
 	ids := make(map[string]bool, len(all))
 	for _, a := range all {
-		if a.ToolID() == "" {
-			t.Errorf("adapter with empty ToolID: %+v", a)
+		if a.AgentID() == "" {
+			t.Errorf("adapter with empty AgentID: %+v", a)
 		}
-		ids[a.ToolID()] = true
+		ids[a.AgentID()] = true
 		if a.DisplayName() == "" {
-			t.Errorf("adapter %s has empty DisplayName", a.ToolID())
+			t.Errorf("adapter %s has empty DisplayName", a.AgentID())
 		}
 		icon := a.Icon()
 		if icon == "" {
-			t.Errorf("adapter %s has empty Icon (mdi_icon in spec missing?)", a.ToolID())
+			t.Errorf("adapter %s has empty Icon (mdi_icon in spec missing?)", a.AgentID())
 		}
 		if !strings.HasPrefix(icon, "mdi:") {
-			t.Errorf("adapter %s icon %q must start with mdi:", a.ToolID(), icon)
+			t.Errorf("adapter %s icon %q must start with mdi:", a.AgentID(), icon)
 		}
 	}
 	// 5 个老工具必须存在(向后兼容);新工具(antigravity/cline/codebuddy/jetbrains)
 	// 不在此断言,数量由 seed 9 个默认决定。
-	for _, want := range skilladapter.AllTools {
+	for _, want := range skilladapter.AllAgents {
 		if !ids[want] {
 			t.Errorf("missing legacy adapter for %q", want)
 		}
@@ -217,7 +217,7 @@ func TestRenderSkillMD_SkillNotFirst(t *testing.T) {
 }
 
 func TestAdapterApply_PopulatesSkillDir(t *testing.T) {
-	a, ok := skilladapter.Get(skilladapter.ToolTrae)
+	a, ok := skilladapter.Get(skilladapter.AgentTrae)
 	if !ok {
 		t.Skip("trae adapter not registered")
 	}

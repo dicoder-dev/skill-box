@@ -1,22 +1,22 @@
-// Package ctool - update_tool.a.go
-// POST /api/skillbox/tools/update
+// Package cagent - update_agent.a.go
+// POST /api/skillbox/agents/update
 //
 // 改一个工具的元数据;系统工具的 tool_id / is_system 不可改(本接口忽略这两个字段)。
-package ctool
+package cagent
 
 import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestUpdateTool 改工具入参。
-type RequestUpdateTool struct {
-	ToolID      string              `json:"tool_id"` // locator,不可改
+// RequestUpdateAgent 改工具入参。
+type RequestUpdateAgent struct {
+	AgentID      string              `json:"agent_id"` // locator,不可改
 	DisplayName *string             `json:"display_name,omitempty"`
 	MdiIcon     *string             `json:"mdi_icon,omitempty"`
 	IconFile    *string             `json:"icon_file,omitempty"`
@@ -27,11 +27,11 @@ type RequestUpdateTool struct {
 	Paths       *[]RequestPathInput `json:"paths,omitempty"`
 }
 
-// UpdateTool POST /api/skillbox/tools/update
-func UpdateTool(c *ginp.ContextPlus, req *RequestUpdateTool) {
-	svc := stool.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	in := &stool.UpdateInput{
-		ToolID:      req.ToolID,
+// UpdateAgent POST /api/skillbox/agents/update
+func UpdateAgent(c *ginp.ContextPlus, req *RequestUpdateAgent) {
+	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	in := &sagent.UpdateInput{
+		AgentID:      req.AgentID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
 		IconFile:    req.IconFile,
@@ -47,18 +47,18 @@ func UpdateTool(c *ginp.ContextPlus, req *RequestUpdateTool) {
 	out, err := svc.Update(in)
 	if err != nil {
 		switch {
-		case errors.Is(err, stool.ErrNotFound):
+		case errors.Is(err, sagent.ErrNotFound):
 			c.JSON(404, gin.H{"error": err.Error()})
-		case errors.Is(err, stool.ErrEmptyDisplay),
-			errors.Is(err, stool.ErrEmptyMdi),
-			errors.Is(err, stool.ErrBadIconFile),
-			errors.Is(err, stool.ErrBadMaturity),
-			errors.Is(err, stool.ErrBadCategory),
-			errors.Is(err, stool.ErrBadScope),
-			errors.Is(err, stool.ErrEmptyPath):
+		case errors.Is(err, sagent.ErrEmptyDisplay),
+			errors.Is(err, sagent.ErrEmptyMdi),
+			errors.Is(err, sagent.ErrBadIconFile),
+			errors.Is(err, sagent.ErrBadMaturity),
+			errors.Is(err, sagent.ErrBadCategory),
+			errors.Is(err, sagent.ErrBadScope),
+			errors.Is(err, sagent.ErrEmptyPath):
 			c.JSON(400, gin.H{"error": err.Error()})
 		default:
-			logger.Error("tool update: %v", err)
+			logger.Error("agent update: %v", err)
 			c.JSON(500, gin.H{"error": err.Error()})
 		}
 		return
@@ -68,16 +68,16 @@ func UpdateTool(c *ginp.ContextPlus, req *RequestUpdateTool) {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/update",
-		Handler:        ginp.BindParamsHandler(UpdateTool, &RequestUpdateTool{}),
+		Path:           "/api/skillbox/agents/update",
+		Handler:        ginp.BindParamsHandler(UpdateAgent, &RequestUpdateAgent{}),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.update",
+		PermissionName: "skillbox.agents.update",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.update",
-			Description:   "改工具元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /tools/reload",
-			RequestParams: RequestUpdateTool{},
+			Title:         "agents.update",
+			Description:   "改工具元数据;Paths 非 null 表示\"覆盖式替换\";改完建议再调 /agents/reload",
+			RequestParams: RequestUpdateAgent{},
 		},
 	})
 }

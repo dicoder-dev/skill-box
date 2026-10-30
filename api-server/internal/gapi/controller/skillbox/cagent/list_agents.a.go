@@ -1,30 +1,30 @@
-// Package ctool - list_tools.a.go
-// GET /api/skillbox/tools
+// Package cagent - list_agents.a.go
+// GET /api/skillbox/agents
 //
 // 列出所有 AI 编程工具(系统 + 用户),含每条 path。
 // 供前端 Settings / SkillsView 用。
-package ctool
+package cagent
 
 import (
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestListTools 列表请求(无参)。
-type RequestListTools struct{}
+// RequestListAgents 列表请求(无参)。
+type RequestListAgents struct{}
 
-// RespondListTools 响应 = 工具视图列表。
-type RespondListTools = []stool.ToolView
+// RespondListAgents 响应 = 工具视图列表。
+type RespondListAgents = []sagent.AgentView
 
-// ListTools GET /api/skillbox/tools
-func ListTools(c *ginp.ContextPlus, _ *RequestListTools) {
-	svc := stool.New(dbs.GetWriteDb(), dbs.GetReadDb())
+// ListAgents GET /api/skillbox/agents
+func ListAgents(c *ginp.ContextPlus, _ *RequestListAgents) {
+	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	rows, err := svc.List()
 	if err != nil {
-		logger.Error("tool list: %v", err)
+		logger.Error("agent list: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -33,16 +33,16 @@ func ListTools(c *ginp.ContextPlus, _ *RequestListTools) {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools",
-		Handler:        ginp.BindParamsHandler(ListTools, &RequestListTools{}),
+		Path:           "/api/skillbox/agents",
+		Handler:        ginp.BindParamsHandler(ListAgents, &RequestListAgents{}),
 		HttpType:       ginp.HttpGet,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.list",
+		PermissionName: "skillbox.agents.list",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.list",
+			Title:         "agents.list",
 			Description:   "列出全部 AI 编程工具元数据(含 path),系统工具 is_system=true",
-			RequestParams: RequestListTools{},
+			RequestParams: RequestListAgents{},
 		},
 	})
 }

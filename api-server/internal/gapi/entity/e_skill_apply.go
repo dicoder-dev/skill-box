@@ -21,7 +21,7 @@ type SkillApply struct {
 	Scope        string     `gorm:"type:varchar(16);column:scope;index;comment:作用域;uniqueIndex:idx_skill_apply_lookup" json:"scope,omitempty"`
 	ProjectID    uint       `gorm:"column:project_id;comment:项目ID;uniqueIndex:idx_skill_apply_lookup" json:"project_id,omitempty"`
 	Name         string     `gorm:"type:varchar(128);column:name;comment:skill 名;uniqueIndex:idx_skill_apply_lookup" json:"name,omitempty"`
-	Tool         string     `gorm:"type:varchar(32);column:tool;index;comment:目标工具 ID" json:"tool,omitempty"`
+	Agent         string     `gorm:"type:varchar(32);column:agent;index;comment:目标工具 ID" json:"agent,omitempty"`
 	Status       string     `gorm:"type:varchar(16);column:status;index;comment:状态" json:"status,omitempty"`
 	ApplyMode    string     `gorm:"type:varchar(16);column:apply_mode;index;comment:apply 模式(copy/symlink)" json:"apply_mode,omitempty"`
 	TargetPath   string     `gorm:"type:varchar(512);column:target_path;comment:落盘路径" json:"target_path,omitempty"`

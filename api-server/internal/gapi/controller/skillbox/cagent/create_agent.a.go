@@ -1,22 +1,22 @@
-// Package ctool - create_tool.a.go
-// POST /api/skillbox/tools/create
+// Package cagent - create_agent.a.go
+// POST /api/skillbox/agents/create
 //
 // 新建一个用户工具(is_system 强制 false)。
-package ctool
+package cagent
 
 import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestCreateTool 新建入参。
-type RequestCreateTool struct {
-	ToolID      string                  `json:"tool_id"`
+// RequestCreateAgent 新建入参。
+type RequestCreateAgent struct {
+	AgentID      string                  `json:"agent_id"`
 	DisplayName string                  `json:"display_name"`
 	MdiIcon     string                  `json:"mdi_icon"`
 	IconFile    string                  `json:"icon_file"`
@@ -35,11 +35,11 @@ type RequestPathInput struct {
 	PathOrder int    `json:"path_order"`
 }
 
-// CreateTool POST /api/skillbox/tools/create
-func CreateTool(c *ginp.ContextPlus, req *RequestCreateTool) {
-	svc := stool.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	in := &stool.CreateInput{
-		ToolID:      req.ToolID,
+// CreateAgent POST /api/skillbox/agents/create
+func CreateAgent(c *ginp.ContextPlus, req *RequestCreateAgent) {
+	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	in := &sagent.CreateInput{
+		AgentID:      req.AgentID,
 		DisplayName: req.DisplayName,
 		MdiIcon:     req.MdiIcon,
 		IconFile:    req.IconFile,
@@ -52,19 +52,19 @@ func CreateTool(c *ginp.ContextPlus, req *RequestCreateTool) {
 	out, err := svc.Create(in)
 	if err != nil {
 		switch {
-		case errors.Is(err, stool.ErrEmptyToolID),
-			errors.Is(err, stool.ErrEmptyDisplay),
-			errors.Is(err, stool.ErrEmptyMdi),
-			errors.Is(err, stool.ErrBadIconFile),
-			errors.Is(err, stool.ErrBadMaturity),
-			errors.Is(err, stool.ErrBadCategory),
-			errors.Is(err, stool.ErrBadScope),
-			errors.Is(err, stool.ErrEmptyPath):
+		case errors.Is(err, sagent.ErrEmptyAgentID),
+			errors.Is(err, sagent.ErrEmptyDisplay),
+			errors.Is(err, sagent.ErrEmptyMdi),
+			errors.Is(err, sagent.ErrBadIconFile),
+			errors.Is(err, sagent.ErrBadMaturity),
+			errors.Is(err, sagent.ErrBadCategory),
+			errors.Is(err, sagent.ErrBadScope),
+			errors.Is(err, sagent.ErrEmptyPath):
 			c.JSON(400, gin.H{"error": err.Error()})
-		case errors.Is(err, stool.ErrToolIDConflict):
+		case errors.Is(err, sagent.ErrAgentIDConflict):
 			c.JSON(409, gin.H{"error": err.Error()})
 		default:
-			logger.Error("tool create: %v", err)
+			logger.Error("agent create: %v", err)
 			c.JSON(500, gin.H{"error": err.Error()})
 		}
 		return
@@ -74,24 +74,24 @@ func CreateTool(c *ginp.ContextPlus, req *RequestCreateTool) {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/create",
-		Handler:        ginp.BindParamsHandler(CreateTool, &RequestCreateTool{}),
+		Path:           "/api/skillbox/agents/create",
+		Handler:        ginp.BindParamsHandler(CreateAgent, &RequestCreateAgent{}),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.create",
+		PermissionName: "skillbox.agents.create",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.create",
-			Description:   "新建工具(用户级,is_system 强制 false);前端改完建议再调 /tools/reload 让 adapter 立刻生效",
-			RequestParams: RequestCreateTool{},
+			Title:         "agents.create",
+			Description:   "新建工具(用户级,is_system 强制 false);前端改完建议再调 /agents/reload 让 adapter 立刻生效",
+			RequestParams: RequestCreateAgent{},
 		},
 	})
 }
 
-func convertPaths(in []RequestPathInput) []stool.PathInput {
-	out := make([]stool.PathInput, 0, len(in))
+func convertPaths(in []RequestPathInput) []sagent.PathInput {
+	out := make([]sagent.PathInput, 0, len(in))
 	for _, p := range in {
-		out = append(out, stool.PathInput{
+		out = append(out, sagent.PathInput{
 			Scope: p.Scope, Category: p.Category, Path: p.Path, PathOrder: p.PathOrder,
 		})
 	}

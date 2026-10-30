@@ -20,7 +20,7 @@ import (
 //   - 纯读接口,每次请求重扫磁盘;不写 DB(对齐 scope-status 的策略,避免"用户刚 cp skill"看不到)。
 //   - 复用 skilladapter.BaseAdapter.Scan + DiscoverPaths(ScopeProject),不新写扫描逻辑;
 //     symlink 解析也走 EvalSymlinks(SourceDir 字段已是真实路径)。
-//   - tools 数组只返回"该项目中至少命中 1 个 skill"的工具,0 命中不进数组 → 卡片 UI 更干净。
+//   - agents 数组只返回"该项目中至少命中 1 个 skill"的工具,0 命中不进数组 → 卡片 UI 更干净。
 type RequestScanProject struct {
 	ProjectID uint `json:"project_id" form:"project_id"`
 }
@@ -34,12 +34,12 @@ type scannedSkill struct {
 	SourcePath string `json:"source_path"`
 }
 
-// scannedToolSkill 工具维度的聚合,前端以 chip(claude5 样式)展示。
+// scannedAgentSkill 工具维度的聚合,前端以 chip(claude5 样式)展示。
 //
 // Skills 字段一并返回,避免前端再 N+1 调接口取详情;count 直接 len(skills) 即可,
 // 但保留独立字段便于日后扩展(比如按"是否启用"过滤后 count != len(skills))。
-type scannedToolSkill struct {
-	ToolID      string         `json:"tool_id"`
+type scannedAgentSkill struct {
+	AgentID      string         `json:"agent_id"`
 	DisplayName string         `json:"display_name"`
 	Icon        string         `json:"icon"`
 	Count       int            `json:"count"`
@@ -50,7 +50,7 @@ type scannedToolSkill struct {
 type RespondScanProject struct {
 	ProjectID uint               `json:"project_id"`
 	ScannedAt time.Time          `json:"scanned_at"`
-	Tools     []scannedToolSkill `json:"tools"`
+	Agents     []scannedAgentSkill `json:"agents"`
 }
 
 // ScanProject GET /api/skillbox/projects/scan?project_id=N
@@ -83,12 +83,12 @@ func ScanProject(c *ginp.ContextPlus, req *RequestScanProject) {
 	out := RespondScanProject{
 		ProjectID: req.ProjectID,
 		ScannedAt: time.Now(),
-		Tools:     []scannedToolSkill{},
+		Agents:     []scannedAgentSkill{},
 	}
 	for _, a := range adapters {
 		rels, err := a.DiscoverPaths(skilladapter.ScopeProject)
 		if err != nil {
-			logger.Warn("project scan: %s DiscoverPaths(project) failed: %v", a.ToolID(), err)
+			logger.Warn("project scan: %s DiscoverPaths(project) failed: %v", a.AgentID(), err)
 			continue
 		}
 		var skills []scannedSkill
@@ -97,7 +97,7 @@ func ScanProject(c *ginp.ContextPlus, req *RequestScanProject) {
 			cans, err := a.Scan(abs)
 			if err != nil {
 				// Scan 内部已经把"目录不存在"当 nil,这里非空 err 通常是权限问题
-				logger.Warn("project scan: %s Scan(%s) failed: %v", a.ToolID(), abs, err)
+				logger.Warn("project scan: %s Scan(%s) failed: %v", a.AgentID(), abs, err)
 				continue
 			}
 			for _, k := range cans {
@@ -108,10 +108,10 @@ func ScanProject(c *ginp.ContextPlus, req *RequestScanProject) {
 			}
 		}
 		if len(skills) == 0 {
-			continue // 该工具在本项目下没 skill → 不进 tools 数组
+			continue // 该工具在本项目下没 skill → 不进 agents 数组
 		}
-		out.Tools = append(out.Tools, scannedToolSkill{
-			ToolID:      a.ToolID(),
+		out.Agents = append(out.Agents, scannedAgentSkill{
+			AgentID:      a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 			Count:       len(skills),

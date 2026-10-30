@@ -7,7 +7,7 @@ type stubAdapter struct {
 	id string
 }
 
-func (s *stubAdapter) ToolID() string             { return s.id }
+func (s *stubAdapter) AgentID() string             { return s.id }
 func (s *stubAdapter) DisplayName() string        { return "Stub " + s.id }
 func (s *stubAdapter) Icon() string               { return ":ghost:" }
 func (s *stubAdapter) DiscoverPaths(string) ([]string, error) { return nil, nil }
@@ -25,7 +25,7 @@ func TestRegistry_RegisterGetAll(t *testing.T) {
 	r := &Registry{m: make(map[string]Adapter)}
 	a := &stubAdapter{id: "stub-a"}
 	r.mu.Lock()
-	r.m[a.ToolID()] = a
+	r.m[a.AgentID()] = a
 	r.mu.Unlock()
 
 	got, ok := r.Get("stub-a")
@@ -38,19 +38,19 @@ func TestRegistry_RegisterGetAll(t *testing.T) {
 	}
 
 	all := r.All()
-	if len(all) != 1 || all[0].ToolID() != "stub-a" {
+	if len(all) != 1 || all[0].AgentID() != "stub-a" {
 		t.Fatalf("All() = %v; want 1 entry stub-a", all)
 	}
 }
 
-func TestAllTools_Stable(t *testing.T) {
-	if len(AllTools) != 5 {
-		t.Fatalf("AllTools has %d entries; want 5", len(AllTools))
+func TestAllAgents_Stable(t *testing.T) {
+	if len(AllAgents) != 5 {
+		t.Fatalf("AllAgents has %d entries; want 5", len(AllAgents))
 	}
 	seen := make(map[string]bool, 5)
-	for _, id := range AllTools {
+	for _, id := range AllAgents {
 		if seen[id] {
-			t.Fatalf("AllTools contains duplicate %q", id)
+			t.Fatalf("AllAgents contains duplicate %q", id)
 		}
 		seen[id] = true
 	}

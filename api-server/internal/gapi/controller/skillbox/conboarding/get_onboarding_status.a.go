@@ -19,8 +19,8 @@ var onboardingCache = struct {
 // skillimporterReportEnvelope 包一层时间戳,避免直接暴露 importer.Report。
 type skillimporterReportEnvelope struct {
 	ScannedAt time.Time             `json:"scanned_at"`
-	Tools     []string              `json:"tools"`
-	ToolPaths []string              `json:"tool_paths"`
+	Agents     []string              `json:"agents"`
+	AgentPaths []string              `json:"agent_paths"`
 	Summary   map[string]int        `json:"summary"`
 	Found     []onboardingFoundLite `json:"found"`
 	HasReport bool                  `json:"has_report"`
@@ -28,8 +28,8 @@ type skillimporterReportEnvelope struct {
 
 // onboardingFoundLite 状态接口只暴露轻量字段,避免把整个 canonical 倾到前端。
 type onboardingFoundLite struct {
-	ToolID     string `json:"tool_id"`
-	ToolName   string `json:"tool_name"`
+	AgentID     string `json:"agent_id"`
+	AgentName   string `json:"agent_name"`
 	Name       string `json:"name"`
 	Version    string `json:"version"`
 	SourcePath string `json:"source_path"`
@@ -49,7 +49,7 @@ type RespondOnboardingStatus struct {
 }
 
 type adapterStatus struct {
-	ToolID      string `json:"tool_id"`
+	AgentID      string `json:"agent_id"`
 	DisplayName string `json:"display_name"`
 	Icon        string `json:"icon"`
 	GlobalPath  string `json:"global_path"`
@@ -66,7 +66,7 @@ func GetOnboardingStatus(c *ginp.ContextPlus, _ *RequestOnboardingStatus) {
 	for _, a := range skilladapter.All() {
 		paths, _ := a.DiscoverPaths(skilladapter.ScopeGlobal)
 		s := adapterStatus{
-			ToolID:      a.ToolID(),
+			AgentID:      a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 		}
@@ -74,7 +74,7 @@ func GetOnboardingStatus(c *ginp.ContextPlus, _ *RequestOnboardingStatus) {
 			if len(paths) > 1 {
 				// 单 path 模型下不应出现;只展示 paths[0] 并 warn,onboarding 是
 				// 只读展示接口,不能把整个列表搞崩。
-				logger.Warn("onboarding: tool %s has %d global paths (max 1), showing paths[0]", a.ToolID(), len(paths))
+				logger.Warn("onboarding: agent %s has %d global paths (max 1), showing paths[0]", a.AgentID(), len(paths))
 			}
 			s.GlobalPath = paths[0]
 			s.GlobalOK = pathExists(paths[0])

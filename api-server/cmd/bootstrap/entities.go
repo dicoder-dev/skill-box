@@ -8,7 +8,7 @@ import "ginp-api/internal/gapi/entity"
 //
 // Skill Box 表(见 docs/project/需求规划.md 第 6 节):
 // project / skill_apply / ai_provider / market_source / market_skill /
-// onboarding_state / setting / tool / tool_path
+// onboarding_state / setting / agent / tool_path
 //
 // 2026-06-24 改造:skill 表(对应 entity.Skill)弃用,源数据走 ~/.skill-box/skills/<name>/SKILL.md。
 // 2026-07-04 改造:audit_log 表下线,业务事件改写到 ~/.skill-box/logs/<YYYY-MM>/INFO.csv。
@@ -29,8 +29,8 @@ var EntityAutoMigrateList = []any{
 	new(entity.OnboardingState),
 	new(entity.Setting),
 	// 2026-06-30 二改:工具元数据从 yaml embed 迁到 DB,前端可编辑
-	new(entity.Tool),
-	new(entity.ToolPath),
+	new(entity.Agent),
+	new(entity.AgentPath),
 }
 
 // EntityGenerationList 需要自动生成的实体(代码生成器使用,运行期不参与)。

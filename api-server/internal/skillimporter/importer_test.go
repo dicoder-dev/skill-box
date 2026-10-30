@@ -18,7 +18,7 @@ type fakeAdapter struct {
 	dir string
 }
 
-func (f *fakeAdapter) ToolID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string      { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
 func (f *fakeAdapter) Icon() string        { return "?" }
 func (f *fakeAdapter) DiscoverPaths(scope string) ([]string, error) {
@@ -88,27 +88,27 @@ func setupReg(t *testing.T) (*skilladapter.Registry, *skillimporter.Importer, st
 	if err != nil {
 		t.Fatal(err)
 	}
-	toolA := filepath.Join(tmp, "toolA")
-	toolB := filepath.Join(tmp, "toolB")
-	if err := os.MkdirAll(toolA, 0o755); err != nil {
+	agentA := filepath.Join(tmp, "agentA")
+	agentB := filepath.Join(tmp, "agentB")
+	if err := os.MkdirAll(agentA, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(toolB, 0o755); err != nil {
+	if err := os.MkdirAll(agentB, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeSkill(t, toolA, "alpha", "alpha skill for tool A")
-	writeSkill(t, toolA, "beta", "beta skill for tool A")
-	writeSkill(t, toolB, "gamma", "gamma skill for tool B")
+	writeSkill(t, agentA, "alpha", "alpha skill for agent A")
+	writeSkill(t, agentA, "beta", "beta skill for agent A")
+	writeSkill(t, agentB, "gamma", "gamma skill for agent B")
 
 	reg := &skilladapter.Registry{}
-	reg.Register(&fakeAdapter{id: "toolA", dir: toolA})
-	reg.Register(&fakeAdapter{id: "toolB", dir: toolB})
+	reg.Register(&fakeAdapter{id: "agentA", dir: agentA})
+	reg.Register(&fakeAdapter{id: "agentB", dir: agentB})
 
 	im := skillimporter.New(store).WithRegistry(reg)
 	return reg, im, tmp
 }
 
-func TestScan_FindsAcrossTools(t *testing.T) {
+func TestScan_FindsAcrossAgents(t *testing.T) {
 	_, im, _ := setupReg(t)
 	r, err := im.Scan(skilladapter.ScopeGlobal)
 	if err != nil {
@@ -117,10 +117,10 @@ func TestScan_FindsAcrossTools(t *testing.T) {
 	if r.TotalFound != 3 {
 		t.Fatalf("TotalFound=%d; want 3", r.TotalFound)
 	}
-	if r.ToolSummary["toolA"] != 2 || r.ToolSummary["toolB"] != 1 {
-		t.Errorf("ToolSummary=%+v", r.ToolSummary)
+	if r.AgentSummary["agentA"] != 2 || r.AgentSummary["agentB"] != 1 {
+		t.Errorf("AgentSummary=%+v", r.AgentSummary)
 	}
-	// 排序后顺序:toolA alpha / toolA beta / toolB gamma
+	// 排序后顺序:agentA alpha / agentA beta / agentB gamma
 	if r.FoundSkills[0].Canonical.Manifest.Name != "alpha" {
 		t.Errorf("first=%+v", r.FoundSkills[0].Canonical.Manifest)
 	}
@@ -128,13 +128,13 @@ func TestScan_FindsAcrossTools(t *testing.T) {
 
 func TestScan_EmptyDirIsNotError(t *testing.T) {
 	tmp := t.TempDir()
-	emptyTool := filepath.Join(tmp, "empty")
-	if err := os.MkdirAll(emptyTool, 0o755); err != nil {
+	emptyAgent := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(emptyAgent, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	store, _ := skillstore.NewAt(filepath.Join(tmp, "store"))
 	reg := &skilladapter.Registry{}
-	reg.Register(&fakeAdapter{id: "empty", dir: emptyTool})
+	reg.Register(&fakeAdapter{id: "empty", dir: emptyAgent})
 	im := skillimporter.New(store).WithRegistry(reg)
 
 	r, err := im.Scan(skilladapter.ScopeGlobal)
@@ -165,33 +165,33 @@ func TestScan_MissingDirIsNotError(t *testing.T) {
 	}
 }
 
-// TestScan_ToolsFiltersZeroHit 覆盖 phase2 幽灵 tab 修复:
-// 即使 adapter 走完整流程但 0 命中,Tools 字段也必须把这种 tool 过滤掉,
+// TestScan_AgentsFiltersZeroHit 覆盖 phase2 幽灵 tab 修复:
+// 即使 adapter 走完整流程但 0 命中,Agents 字段也必须把这种 agent 过滤掉,
 // 否则前端 phase2 会渲染"空名字 + 数量 0"的 tab。
-func TestScan_ToolsFiltersZeroHit(t *testing.T) {
+func TestScan_AgentsFiltersZeroHit(t *testing.T) {
 	tmp := t.TempDir()
 	store, _ := skillstore.NewAt(filepath.Join(tmp, "store"))
-	// toolA 有内容;toolB 目录存在但 0 命中。
-	toolA := filepath.Join(tmp, "toolA")
-	toolB := filepath.Join(tmp, "toolB")
-	if err := os.MkdirAll(toolA, 0o755); err != nil {
+	// agentA 有内容;agentB 目录存在但 0 命中。
+	agentA := filepath.Join(tmp, "agentA")
+	agentB := filepath.Join(tmp, "agentB")
+	if err := os.MkdirAll(agentA, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(toolB, 0o755); err != nil {
+	if err := os.MkdirAll(agentB, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeSkill(t, toolA, "alpha", "alpha skill")
+	writeSkill(t, agentA, "alpha", "alpha skill")
 	reg := &skilladapter.Registry{}
-	reg.Register(&fakeAdapter{id: "toolA", dir: toolA})
-	reg.Register(&fakeAdapter{id: "toolB", dir: toolB})
+	reg.Register(&fakeAdapter{id: "agentA", dir: agentA})
+	reg.Register(&fakeAdapter{id: "agentB", dir: agentB})
 	im := skillimporter.New(store).WithRegistry(reg)
 
 	r, err := im.Scan(skilladapter.ScopeGlobal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Tools) != 1 || r.Tools[0] != "toolA" {
-		t.Errorf("Tools=%+v; want [toolA]", r.Tools)
+	if len(r.Agents) != 1 || r.Agents[0] != "agentA" {
+		t.Errorf("Agents=%+v; want [agentA]", r.Agents)
 	}
 }
 
@@ -229,7 +229,7 @@ func TestImport_Selective(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := im.Import(r, []skillimporter.ImportItem{
-		{ToolID: "toolA", Name: "alpha"},
+		{AgentID: "agentA", Name: "alpha"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestImport_NotInReport(t *testing.T) {
 	_, im, _ := setupReg(t)
 	r, _ := im.Scan(skilladapter.ScopeGlobal)
 	res, err := im.Import(r, []skillimporter.ImportItem{
-		{ToolID: "toolA", Name: "no-such-skill"},
+		{AgentID: "agentA", Name: "no-such-skill"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -253,12 +253,12 @@ func TestImport_NotInReport(t *testing.T) {
 	}
 }
 
-func TestFilterByTool(t *testing.T) {
+func TestFilterByAgent(t *testing.T) {
 	_, im, _ := setupReg(t)
 	r, _ := im.Scan(skilladapter.ScopeGlobal)
-	got := r.FilterByTool("toolA")
+	got := r.FilterByAgent("agentA")
 	if len(got) != 2 {
-		t.Errorf("filter toolA=%d; want 2", len(got))
+		t.Errorf("filter agentA=%d; want 2", len(got))
 	}
 }
 
@@ -289,7 +289,7 @@ func TestImport_NormalizeFixesTriggers(t *testing.T) {
 	im2 := skillimporter.New(skillstoreTestStore(t, tmp)).WithRegistry(reg)
 	r, _ := im2.Scan(skilladapter.ScopeGlobal)
 	res, err := im2.Import(r, []skillimporter.ImportItem{
-		{ToolID: "extra", Name: "no-triggers", Version: "0.1.0"},
+		{AgentID: "extra", Name: "no-triggers", Version: "0.1.0"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -365,8 +365,8 @@ func TestImport_NoDBWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := im2.Import(r, []skillimporter.ImportItem{
-		{ToolID: "toolA", Name: "alpha", Version: "0.1.0"},
-		{ToolID: "toolA", Name: "beta", Version: "0.1.0"},
+		{AgentID: "agentA", Name: "alpha", Version: "0.1.0"},
+		{AgentID: "agentA", Name: "beta", Version: "0.1.0"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -389,7 +389,7 @@ func TestImport_NoDBWrites(t *testing.T) {
 
 	// 重复导入同一项:应该走 store 覆盖式,不再有 unique 约束冲突
 	res2, err := im2.Import(r, []skillimporter.ImportItem{
-		{ToolID: "toolA", Name: "alpha", Version: "0.1.0"},
+		{AgentID: "agentA", Name: "alpha", Version: "0.1.0"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -402,10 +402,10 @@ func TestImport_NoDBWrites(t *testing.T) {
 // regFromTmp 复现 setupReg 的目录结构(只是导出一个 reg 给需要重用的场景)。
 func regFromTmp(t *testing.T, tmp string) *skilladapter.Registry {
 	t.Helper()
-	toolA := filepath.Join(tmp, "toolA")
-	toolB := filepath.Join(tmp, "toolB")
+	agentA := filepath.Join(tmp, "agentA")
+	agentB := filepath.Join(tmp, "agentB")
 	reg := &skilladapter.Registry{}
-	reg.Register(&fakeAdapter{id: "toolA", dir: toolA})
-	reg.Register(&fakeAdapter{id: "toolB", dir: toolB})
+	reg.Register(&fakeAdapter{id: "agentA", dir: agentA})
+	reg.Register(&fakeAdapter{id: "agentB", dir: agentB})
 	return reg
 }

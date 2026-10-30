@@ -63,7 +63,7 @@ func TestBaseAdapterScan_FollowsSymlink(t *testing.T) {
 	writeSKILLDir(t, realDir, "my-skill", "my real skill")
 
 	// 在另一处建 symlink 指向真实 skill 目录
-	linkRoot := filepath.Join(root, "tool", "skills")
+	linkRoot := filepath.Join(root, "agent", "skills")
 	if err := os.MkdirAll(linkRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}

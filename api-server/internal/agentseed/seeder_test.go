@@ -1,4 +1,4 @@
-package toolseed
+package agentseed
 
 // 同包测试:可访问私有 builtins 变量,无需导出 test-only 辅助函数。
 
@@ -19,7 +19,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := db.AutoMigrate(&entity.Tool{}, &entity.ToolPath{}); err != nil {
+	if err := db.AutoMigrate(&entity.Agent{}, &entity.AgentPath{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -32,12 +32,12 @@ func TestEnsureSeeded_Empty(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	var n int64
-	db.Model(&entity.Tool{}).Count(&n)
+	db.Model(&entity.Agent{}).Count(&n)
 	if n != 17 {
-		t.Errorf("expected 17 tools, got %d", n)
+		t.Errorf("expected 17 agents, got %d", n)
 	}
 	var paths int64
-	db.Model(&entity.ToolPath{}).Count(&paths)
+	db.Model(&entity.AgentPath{}).Count(&paths)
 	if paths < 30 {
 		// 17 个工具每个至少 2 条 path,合计 ≥ 30
 		t.Errorf("expected at least 30 paths, got %d", paths)
@@ -56,9 +56,9 @@ func TestEnsureSeeded_AlreadySeeded(t *testing.T) {
 		t.Fatalf("second seed (should be no-op): %v", err)
 	}
 	var n int64
-	db.Model(&entity.Tool{}).Count(&n)
+	db.Model(&entity.Agent{}).Count(&n)
 	if n != 17 {
-		t.Errorf("expected still 17 tools after no-op seed, got %d", n)
+		t.Errorf("expected still 17 agents after no-op seed, got %d", n)
 	}
 }
 
@@ -82,11 +82,11 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 			}
 			enabled := true
 			// claude 改成 disabled(模拟用户手动禁用),upsert 应当保留
-			if bt.ToolID == "claude" {
+			if bt.AgentID == "claude" {
 				enabled = false
 			}
-			if err := tx.Create(&entity.Tool{
-				ToolID: bt.ToolID, DisplayName: bt.DisplayName, MdiIcon: bt.MdiIcon,
+			if err := tx.Create(&entity.Agent{
+				AgentID: bt.AgentID, DisplayName: bt.DisplayName, MdiIcon: bt.MdiIcon,
 				IconFile: bt.IconFile, Maturity: bt.Maturity, Note: bt.Note,
 				IsSystem: true, Enabled: enabled, SortOrder: bt.SortOrder,
 			}).Error; err != nil {
@@ -94,8 +94,8 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 			}
 		}
 		// 再加 1 个用户自定义工具(应该不会被 upsert 影响)
-		if err := tx.Create(&entity.Tool{
-			ToolID: "my-custom-tool", DisplayName: "MyCustom", MdiIcon: "mdi:c",
+		if err := tx.Create(&entity.Agent{
+			AgentID: "my-custom-agent", DisplayName: "MyCustom", MdiIcon: "mdi:c",
 			IsSystem: false, Enabled: true, SortOrder: 999,
 		}).Error; err != nil {
 			return err
@@ -112,14 +112,14 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 
 	// 3) 验证总数 = 17 builtins + 1 user = 18
 	var total int64
-	db.Model(&entity.Tool{}).Count(&total)
+	db.Model(&entity.Agent{}).Count(&total)
 	if total != 18 {
-		t.Errorf("expected 18 tools (17 builtin + 1 user), got %d", total)
+		t.Errorf("expected 18 agents (17 builtin + 1 user), got %d", total)
 	}
 
 	// 4) 验证新增的 builtin(原 DB 里没有的)都在 DB 里,且 is_system=true,enabled=true
 	for _, id := range []string{"openclaw", "hermes", "goose", "roo", "continue"} {
-		var got entity.Tool
+		var got entity.Agent
 		if err := db.Where("tool_id = ?", id).First(&got).Error; err != nil {
 			t.Errorf("expected new builtin %q to be inserted, got err %v", id, err)
 			continue
@@ -133,7 +133,7 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 	}
 
 	// 5) 验证"用户改过 enabled=false 的 claude" 没被 upsert 覆盖回 true
-	var claude entity.Tool
+	var claude entity.Agent
 	if err := db.Where("tool_id = ?", "claude").First(&claude).Error; err != nil {
 		t.Fatalf("claude not found: %v", err)
 	}
@@ -142,15 +142,15 @@ func TestEnsureSeeded_IncrementalUpsert(t *testing.T) {
 	}
 
 	// 6) 验证用户自定义工具保持原样
-	var custom entity.Tool
-	if err := db.Where("tool_id = ?", "my-custom-tool").First(&custom).Error; err != nil {
-		t.Fatalf("user tool not found: %v", err)
+	var custom entity.Agent
+	if err := db.Where("tool_id = ?", "my-custom-agent").First(&custom).Error; err != nil {
+		t.Fatalf("user agent not found: %v", err)
 	}
 	if custom.IsSystem {
-		t.Errorf("user tool should keep is_system=false; got %v", custom.IsSystem)
+		t.Errorf("user agent should keep is_system=false; got %v", custom.IsSystem)
 	}
 	if custom.SortOrder != 999 {
-		t.Errorf("user tool sort_order should keep 999; got %d", custom.SortOrder)
+		t.Errorf("user agent sort_order should keep 999; got %d", custom.SortOrder)
 	}
 
 	// 7) 验证老 builtin 的 sort_order 也被 upsert 更新成新值(2026-07-18 重排过)

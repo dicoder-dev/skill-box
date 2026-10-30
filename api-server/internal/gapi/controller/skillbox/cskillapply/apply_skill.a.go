@@ -18,7 +18,7 @@ type RequestApplySkill struct {
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
 	Name      string   `json:"name"`
-	Tools     []string `json:"tools"`
+	Agents     []string `json:"agents"`
 }
 
 // RespondApplySkill 响应。
@@ -31,13 +31,13 @@ func ApplySkill(c *ginp.ContextPlus, req *RequestApplySkill) {
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
 		Name:      req.Name,
-		Tools:     req.Tools,
+		Agents:     req.Agents,
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, sskillapp.ErrSkillNotFound):
 			c.JSON(404, gin.H{"error": err.Error()})
-		case errors.Is(err, sskillapp.ErrEmptyTools):
+		case errors.Is(err, sskillapp.ErrEmptyAgents):
 			c.JSON(400, gin.H{"error": err.Error()})
 		default:
 			logger.Error("skill apply: %v", err)

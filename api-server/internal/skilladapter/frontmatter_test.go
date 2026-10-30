@@ -83,6 +83,6 @@ func TestBaseAdapterApplyLink_EmptySourceDir(t *testing.T) {
 		t.Fatalf("error message should include skill name, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "antigravity") {
-		t.Fatalf("error message should include tool id, got: %v", err)
+		t.Fatalf("error message should include agent id, got: %v", err)
 	}
 }

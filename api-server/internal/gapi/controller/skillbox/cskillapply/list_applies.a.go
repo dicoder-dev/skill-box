@@ -11,7 +11,7 @@ import (
 type RequestListApplies struct {
 	Scope string `json:"scope" form:"scope"`
 	Name  string `json:"name" form:"name"`
-	Tool  string `json:"tool" form:"tool"`
+	Agent  string `json:"agent" form:"agent"`
 	Status string `json:"status" form:"status"`
 	Page  int    `json:"page" form:"page"`
 	Size  int    `json:"size" form:"size"`
@@ -32,7 +32,7 @@ func ListApplies(c *ginp.ContextPlus, req *RequestListApplies) {
 	out, err := svc.List(sskillapp.ListInput{
 		Scope:  req.Scope,
 		Name:   req.Name,
-		Tool:   req.Tool,
+		Agent:   req.Agent,
 		Status: req.Status,
 		Page:   req.Page,
 		Size:   req.Size,

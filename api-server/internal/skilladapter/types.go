@@ -57,27 +57,27 @@ const (
 
 // 2026-07-08 增:Adapter.UserPath 防御性错误 —— user category 内同 (tool_id, scope) 多条 path
 // 数据脏,BaseAdapter.UserPath 在数据违反唯一约束时返回。前端 4xx 弹清晰提示。
-var ErrMultipleUserPaths = errors.New("skilladapter: tool has multiple user paths for scope (max 1)")
+var ErrMultipleUserPaths = errors.New("skilladapter: agent has multiple user paths for scope (max 1)")
 
-// ToolID 已支持的目标工具 ID 集合(legacy 命名常量,新工具以 toolspecs/*.yaml
+// AgentID 已支持的目标工具 ID 集合(legacy 命名常量,新工具以 agentspecs/*.yaml
 // 为准,不要在此追加;这里只保留最初 5 个老工具的常量以兼容旧调用方)。
 const (
-	ToolCodex    = "codex"
-	ToolClaude   = "claude"
-	ToolOpenCode = "opencode"
-	ToolCursor   = "cursor"
-	ToolTrae     = "trae"
+	AgentCodex    = "codex"
+	AgentClaude   = "claude"
+	AgentOpenCode = "opencode"
+	AgentCursor   = "cursor"
+	AgentTrae     = "trae"
 )
 
-// AllTools v1 时期硬编码的 5 个老工具 ID。
+// AllAgents v1 时期硬编码的 5 个老工具 ID。
 //
-// 2026-06-30 改造:AllTools 仅为兼容老调用方保留的"最小工具集",
-// 实际生效的工具清单以 defaultRegistry 为准(由 toolspecs 包在 init() 时
+// 2026-06-30 改造:AllAgents 仅为兼容老调用方保留的"最小工具集",
+// 实际生效的工具清单以 defaultRegistry 为准(由 agentspecs 包在 init() 时
 // 按 specs/*.yaml 注册)。新工具的 ID 不会再追加到这个 slice 里。
 //
 // 业务侧应使用 skilladapter.All() 或 skilladapter.Get(id) 拿 adapter,
-// 而不是遍历 AllTools 自行反查。
-var AllTools = []string{ToolCodex, ToolClaude, ToolOpenCode, ToolCursor, ToolTrae}
+// 而不是遍历 AllAgents 自行反查。
+var AllAgents = []string{AgentCodex, AgentClaude, AgentOpenCode, AgentCursor, AgentTrae}
 
 // Adapter canonical 与目标工具双向转换的接口。
 //
@@ -85,8 +85,8 @@ var AllTools = []string{ToolCodex, ToolClaude, ToolOpenCode, ToolCursor, ToolTra
 //   - Apply 必须是原子的(失败时不应留半成品);caller 负责整组事务的 rollback。
 //   - Scan 必须容错:遇到损坏文件跳过而不是整体失败,返回的 error 仅表示整体不可恢复。
 type Adapter interface {
-	// ToolID 工具唯一 ID,用于路由 / 落库。
-	ToolID() string
+	// AgentID 工具唯一 ID,用于路由 / 落库。
+	AgentID() string
 
 	// DisplayName UI 显示名(中英混合,前端走 i18n 覆盖)。
 	DisplayName() string
@@ -128,7 +128,7 @@ type Adapter interface {
 	// 数据脏时让 caller 立刻看到错误而不是默默取 paths[0] 写到错位置。
 	//
 	// 2026-07-08 增:修复 claude / codex 同时有 (global,user) + (global,system)
-	// 时 apply 报 "tool X has 2 paths" 的问题。DiscoverPaths 仍负责多 path
+	// 时 apply 报 "agent X has 2 paths" 的问题。DiscoverPaths 仍负责多 path
 	// 场景(scope-status 笛卡尔积 / importer 多根扫描),本方法只服务单值 apply。
 	UserPath(scope string) (string, error)
 }

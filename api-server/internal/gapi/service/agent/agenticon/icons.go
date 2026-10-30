@@ -1,15 +1,15 @@
-// Package toolicon 提供工具自定义图标文件的物理存储管理。
+// Package agenticon 提供工具自定义图标文件的物理存储管理。
 //
 // 设计:
-//   - 图标文件存到 ~/.<AppName>/tool-icons/<name>.<ext>
-//     即 ~/.skill-box/tool-icons/claude.png 这种 basename 形式
+//   - 图标文件存到 ~/.<AppName>/agent-icons/<name>.<ext>
+//     即 ~/.skill-box/agent-icons/claude.png 这种 basename 形式
 //   - 调用方只传 basename(无路径分隔符,无 ../) — 此处做最终兜底校验
 //   - 列表接口返回的内容必须经过 validIconFileName — 防路径穿越
 //
 // 为什么独立成一个包:
 //   - 上传 controller / 静态文件服务 controller / seed 数据 copy 三处都要用到
-//   - 不跟 stool service 耦合(避免 service 互相 import 死循环)
-package toolicon
+//   - 不跟 sagent service 耦合(避免 service 互相 import 死循环)
+package agenticon
 
 import (
 	"errors"
@@ -22,7 +22,7 @@ import (
 
 const (
 	// iconsDirName ~/.skill-box 下的子目录名
-	iconsDirName = "tool-icons"
+	iconsDirName = "agent-icons"
 )
 
 // allowedExts 后缀白名单。
@@ -53,7 +53,7 @@ func ValidIconFileName(name string) bool {
 func Dir() (string, error) {
 	base := sharefunc.DataDir()
 	if base == "" {
-		return "", errors.New("toolicon: home dir unresolved")
+		return "", errors.New("agenticon: home dir unresolved")
 	}
 	full := filepath.Join(base, iconsDirName)
 	if err := os.MkdirAll(full, 0o755); err != nil {
@@ -65,7 +65,7 @@ func Dir() (string, error) {
 // ResolveAbsPath 把 basename 解析为绝对路径,做兜底校验;不合规返 error。
 func ResolveAbsPath(name string) (string, error) {
 	if !ValidIconFileName(name) {
-		return "", errors.New("toolicon: invalid icon file name")
+		return "", errors.New("agenticon: invalid icon file name")
 	}
 	d, err := Dir()
 	if err != nil {

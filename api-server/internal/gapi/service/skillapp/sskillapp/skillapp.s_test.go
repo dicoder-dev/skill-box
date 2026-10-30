@@ -25,7 +25,7 @@ type fakeAdapter struct {
 	root string
 }
 
-func (f *fakeAdapter) ToolID() string      { return f.id }
+func (f *fakeAdapter) AgentID() string      { return f.id }
 func (f *fakeAdapter) DisplayName() string { return "Fake " + f.id }
 func (f *fakeAdapter) Icon() string        { return "?" }
 func (f *fakeAdapter) DiscoverPaths(scope string) ([]string, error) {
@@ -77,7 +77,7 @@ func newTestSvc(t *testing.T) (*sskillapp.Service, *sskill.Service, *skillstore.
 	return appSvc, ssvc, store, reg
 }
 
-func TestApply_NoTools_ErrEmptyTools(t *testing.T) {
+func TestApply_NoAgents_ErrEmptyAgents(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
 	// 1) 建一个 skill
 	_, err := ssvc.Create(&sskill.WriteInput{
@@ -95,10 +95,10 @@ func TestApply_NoTools_ErrEmptyTools(t *testing.T) {
 	}
 	_, err = svc.Apply(&sskillapp.ApplyInput{
 		Name:  "alpha",
-		Tools: nil,
+		Agents: nil,
 	})
-	if !errors.Is(err, sskillapp.ErrEmptyTools) {
-		t.Errorf("err = %v, want ErrEmptyTools", err)
+	if !errors.Is(err, sskillapp.ErrEmptyAgents) {
+		t.Errorf("err = %v, want ErrEmptyAgents", err)
 	}
 }
 
@@ -106,14 +106,14 @@ func TestApply_SkillNotFound(t *testing.T) {
 	svc, _, _, _ := newTestSvc(t)
 	_, err := svc.Apply(&sskillapp.ApplyInput{
 		Name:  "no-such-skill",
-		Tools: []string{"fake"},
+		Agents: []string{"fake"},
 	})
 	if !errors.Is(err, sskillapp.ErrSkillNotFound) {
 		t.Errorf("err = %v, want ErrSkillNotFound", err)
 	}
 }
 
-func TestApply_OneSkill_OneTool(t *testing.T) {
+func TestApply_OneSkill_OneAgent(t *testing.T) {
 	svc, ssvc, _, _ := newTestSvc(t)
 	_, err := ssvc.Create(&sskill.WriteInput{
 		Scope: skilladapter.ScopeGlobal,
@@ -130,7 +130,7 @@ func TestApply_OneSkill_OneTool(t *testing.T) {
 	}
 	out, err := svc.Apply(&sskillapp.ApplyInput{
 		Name:  "alpha",
-		Tools: []string{"fake"},
+		Agents: []string{"fake"},
 	})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
@@ -168,8 +168,8 @@ func TestBatchApply_Atomic(t *testing.T) {
 	}
 	out, err := svc.BatchApply(&sskillapp.BatchApplyInput{
 		Items: []sskillapp.ApplyInput{
-			{Name: "s1", Tools: []string{"fake"}},
-			{Name: "s2", Tools: []string{"fake"}},
+			{Name: "s1", Agents: []string{"fake"}},
+			{Name: "s2", Agents: []string{"fake"}},
 		},
 		Atomic: true,
 	})
@@ -228,7 +228,7 @@ func TestList_AfterApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Apply(&sskillapp.ApplyInput{Name: "alpha", Tools: []string{"fake"}}); err != nil {
+	if _, err := svc.Apply(&sskillapp.ApplyInput{Name: "alpha", Agents: []string{"fake"}}); err != nil {
 		t.Fatal(err)
 	}
 	res, err := svc.List(sskillapp.ListInput{Page: 1, Size: 10})
@@ -319,7 +319,7 @@ func TestMigrateMode_SwitchCopyToSymlink(t *testing.T) {
 	_, err = svc.Apply(&sskillapp.ApplyInput{
 		Scope: skilladapter.ScopeGlobal,
 		Name:  "mig-skill",
-		Tools: []string{"fake"},
+		Agents: []string{"fake"},
 	})
 	if err != nil {
 		t.Fatal(err)

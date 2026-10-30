@@ -54,7 +54,7 @@ func ListSkills(c *ginp.ContextPlus, req *RequestListSkills) {
 		if it.SkillMeta.UpdatedAt != "" {
 			row["updated_at"] = it.SkillMeta.UpdatedAt
 		}
-		row["applied_tools"] = GlobalAppliedTools(it.SkillMeta.Name)
+		row["applied_tools"] = GlobalAppliedAgents(it.SkillMeta.Name)
 		enriched = append(enriched, row)
 	}
 	// 分页(兼容字段)— 现在是文件扫描,实际一次性返回
@@ -79,7 +79,7 @@ func ListSkills(c *ginp.ContextPlus, req *RequestListSkills) {
 	// 让前端 TreeNode 卡片直接展示"被这些工具全局调用了" — 之前 tree 节点的
 	// SkillTreeMeta 没有 applied_tools 字段(只在扁平的 enriched 数组里),
 	// 导致树形 UI 的卡片永远显示 0 个工具。本层递归补齐。
-	enrichTreeAppliedTools(tree)
+	enrichTreeAppliedAgents(tree)
 	c.JSON(200, gin.H{
 		"items": enriched[start:end],
 		"total": total,
@@ -89,16 +89,16 @@ func ListSkills(c *ginp.ContextPlus, req *RequestListSkills) {
 	})
 }
 
-// enrichTreeAppliedTools 递归遍历 tree,给每个 skill 叶子节点的 SkillMeta
-// 补上 applied_tools(从 cskill.GlobalAppliedTools 拿)。
-func enrichTreeAppliedTools(nodes []skillstore.TreeNode) {
+// enrichTreeAppliedAgents 递归遍历 tree,给每个 skill 叶子节点的 SkillMeta
+// 补上 applied_tools(从 cskill.GlobalAppliedAgents 拿)。
+func enrichTreeAppliedAgents(nodes []skillstore.TreeNode) {
 	for i := range nodes {
 		n := &nodes[i]
 		if !n.IsGroup && n.SkillMeta != nil {
-			n.SkillMeta.AppliedTools = GlobalAppliedTools(n.SkillMeta.Name)
+			n.SkillMeta.AppliedAgents = GlobalAppliedAgents(n.SkillMeta.Name)
 		}
 		if n.IsGroup && len(n.Children) > 0 {
-			enrichTreeAppliedTools(n.Children)
+			enrichTreeAppliedAgents(n.Children)
 		}
 	}
 }

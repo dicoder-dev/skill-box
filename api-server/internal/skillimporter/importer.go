@@ -3,7 +3,7 @@
 // 设计要点(见 docs/project/需求规划.md 第 5.2 节):
 //   - 只读扫描:不修改任何目标工具目录(避免破坏现有 skill)
 //   - 落地策略:复制 canonical 内容到 skillstore(全局),不动原目录
-//   - 幂等:同一 (tool, name) 二次导入会覆盖,不会留垃圾
+//   - 幂等:同一 (agent, name) 二次导入会覆盖,不会留垃圾
 //   - 进度可观察:Report 暴露每工具/每路径命中数与失败原因
 //
 // 2026-06-24 改造:DB 弃用后 importer 只写 store,不再双写 mskill;WithDB 保留为 no-op。
@@ -36,8 +36,8 @@ const (
 
 // FoundSkill 单次扫描中发现的一个 skill。
 type FoundSkill struct {
-	ToolID     string                 `json:"tool_id"`
-	ToolName   string                 `json:"tool_name"`
+	AgentID     string                 `json:"agent_id"`
+	AgentName   string                 `json:"agent_name"`
 	SourcePath string                 `json:"source_path"` // 该 skill 在原工具里的绝对路径
 	Category   Category               `json:"category"`    // user | system
 	Canonical  skilladapter.Canonical `json:"canonical"`
@@ -45,7 +45,7 @@ type FoundSkill struct {
 
 // ScannedDir 单个扫描根目录的结果。
 type ScannedDir struct {
-	ToolID   string   `json:"tool_id"`
+	AgentID   string   `json:"agent_id"`
 	Path     string   `json:"path"`
 	Category Category `json:"category"` // user | system
 	Exists   bool     `json:"exists"`
@@ -57,12 +57,12 @@ type ScannedDir struct {
 type Report struct {
 	StartedAt   time.Time      `json:"started_at"`
 	FinishedAt  time.Time      `json:"finished_at"`
-	Tools       []string       `json:"tools"`
+	Agents       []string       `json:"agents"`
 	Dirs        []ScannedDir   `json:"dirs"`
 	FoundSkills []FoundSkill   `json:"found_skills"`
 	TotalFound  int            `json:"total_found"`
 	TotalDirs   int            `json:"total_dirs"`
-	ToolSummary map[string]int `json:"tool_summary"` // toolID -> count
+	AgentSummary map[string]int `json:"agent_summary"` // agentID -> count
 }
 
 // Importer 跨工具的导入器;scan / import 都通过它。
@@ -113,23 +113,23 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 	started := time.Now()
 	r := &Report{
 		StartedAt:   started,
-		Tools:       []string{},
+		Agents:       []string{},
 		Dirs:        []ScannedDir{},
 		FoundSkills: []FoundSkill{},
-		ToolSummary: map[string]int{},
+		AgentSummary: map[string]int{},
 	}
 
 	for _, a := range adapters {
-		r.Tools = append(r.Tools, a.ToolID())
+		r.Agents = append(r.Agents, a.AgentID())
 		paths, err := a.DiscoverPaths(scope)
 		if err != nil {
-			r.Dirs = append(r.Dirs, ScannedDir{ToolID: a.ToolID(), Errors: []string{err.Error()}})
+			r.Dirs = append(r.Dirs, ScannedDir{AgentID: a.AgentID(), Errors: []string{err.Error()}})
 			continue
 		}
 		if len(paths) == 0 {
-			// adapter 未声明任何路径(可能没装)。依然在 Tools 列表中占位,
+			// adapter 未声明任何路径(可能没装)。依然在 Agents 列表中占位,
 			// 让前端 phase1 的 adapter 状态表能展示;但 phase2(扫描结果)用
-			// 后处理过的 foundTools 过滤掉,避免出现"空名字 + 数量 0"的幽灵 tab。
+			// 后处理过的 foundAgents 过滤掉,避免出现"空名字 + 数量 0"的幽灵 tab。
 			continue
 		}
 		for _, p := range paths {
@@ -139,7 +139,7 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 			if sys, ok := a.(interface{ IsSystemPath(string) bool }); ok && sys.IsSystemPath(p) {
 				cat = CategorySystem
 			}
-			entry := ScannedDir{ToolID: a.ToolID(), Path: p, Category: cat}
+			entry := ScannedDir{AgentID: a.AgentID(), Path: p, Category: cat}
 			if _, err := filepath.EvalSymlinks(p); err != nil {
 				// 路径不存在或权限不足
 				r.Dirs = append(r.Dirs, entry)
@@ -158,51 +158,51 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 				if src == "" {
 					src = filepath.Join(p, a.LocalName(c))
 				}
-				// ToolName 兜底为 ToolID:极少数 adapter 可能没设 DisplayName,
-				// 前端 phase2 渲染 tool tab 时不允许出现空名字。
+				// AgentName 兜底为 AgentID:极少数 adapter 可能没设 DisplayName,
+				// 前端 phase2 渲染 agent tab 时不允许出现空名字。
 				tn := a.DisplayName()
 				if tn == "" {
-					tn = a.ToolID()
+					tn = a.AgentID()
 				}
 				r.FoundSkills = append(r.FoundSkills, FoundSkill{
-					ToolID:     a.ToolID(),
-					ToolName:   tn,
+					AgentID:     a.AgentID(),
+					AgentName:   tn,
 					SourcePath: src,
 					Category:   cat,
 					Canonical:  c,
 				})
 			}
 			entry.Found = len(cs)
-			r.ToolSummary[a.ToolID()] += entry.Found
+			r.AgentSummary[a.AgentID()] += entry.Found
 			r.Dirs = append(r.Dirs, entry)
 		}
 	}
 
 	r.TotalDirs = len(r.Dirs)
 	r.TotalFound = len(r.FoundSkills)
-	// 过滤 Tools:只保留有 found 命中的 toolID,避免 phase2 渲染"空名字 + 数量 0"
+	// 过滤 Agents:只保留有 found 命中的 agentID,避免 phase2 渲染"空名字 + 数量 0"
 	// 的幽灵 tab(典型场景:adapter 目录未找到 / 0 命中)。保持原相对顺序。
 	{
 		hit := make(map[string]bool, len(r.FoundSkills))
 		for _, fs := range r.FoundSkills {
-			hit[fs.ToolID] = true
+			hit[fs.AgentID] = true
 		}
-		filtered := r.Tools[:0]
-		for _, tid := range r.Tools {
+		filtered := r.Agents[:0]
+		for _, tid := range r.Agents {
 			if hit[tid] {
 				filtered = append(filtered, tid)
 			}
 		}
-		r.Tools = filtered
+		r.Agents = filtered
 	}
-	// 排序规则:user 在前 system 在后;同档内按 toolID + name 字典序。
+	// 排序规则:user 在前 system 在后;同档内按 agentID + name 字典序。
 	// 排序是给前端"按档位分组"的兜底;前端 Onboarding phase2 自己也会再分组渲染。
 	sort.Slice(r.FoundSkills, func(i, j int) bool {
 		if r.FoundSkills[i].Category != r.FoundSkills[j].Category {
 			return r.FoundSkills[i].Category == CategoryUser
 		}
-		if r.FoundSkills[i].ToolID != r.FoundSkills[j].ToolID {
-			return r.FoundSkills[i].ToolID < r.FoundSkills[j].ToolID
+		if r.FoundSkills[i].AgentID != r.FoundSkills[j].AgentID {
+			return r.FoundSkills[i].AgentID < r.FoundSkills[j].AgentID
 		}
 		return r.FoundSkills[i].Canonical.Manifest.Name < r.FoundSkills[j].Canonical.Manifest.Name
 	})
@@ -212,7 +212,7 @@ func (im *Importer) ScanWith(adapters []skilladapter.Adapter, scope string) (*Re
 
 // ImportItem 单条导入请求。
 type ImportItem struct {
-	ToolID string `json:"tool_id"`
+	AgentID string `json:"agent_id"`
 	Name   string `json:"name"`
 	// Version 可选,留空用 Report 里找到的 version
 	Version string `json:"version,omitempty"`
@@ -220,7 +220,7 @@ type ImportItem struct {
 
 // ImportResult 单条导入结果。
 type ImportResult struct {
-	ToolID  string `json:"tool_id"`
+	AgentID  string `json:"agent_id"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	OK      bool   `json:"ok"`
@@ -356,18 +356,18 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 	}
 
 	type key struct {
-		ToolID string
+		AgentID string
 		Name   string
 	}
 	index := make(map[key]FoundSkill, len(report.FoundSkills))
 	for _, fs := range report.FoundSkills {
-		index[key{fs.ToolID, fs.Canonical.Manifest.Name}] = fs
+		index[key{fs.AgentID, fs.Canonical.Manifest.Name}] = fs
 	}
 
 	if len(items) == 0 {
 		for _, fs := range report.FoundSkills {
 			items = append(items, ImportItem{
-				ToolID:  fs.ToolID,
+				AgentID:  fs.AgentID,
 				Name:    fs.Canonical.Manifest.Name,
 				Version: fs.Canonical.Manifest.Version,
 			})
@@ -376,10 +376,10 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 
 	out := make([]ImportResult, 0, len(items))
 	for _, it := range items {
-		fs, ok := index[key{it.ToolID, it.Name}]
+		fs, ok := index[key{it.AgentID, it.Name}]
 		if !ok {
 			out = append(out, ImportResult{
-				ToolID: it.ToolID, Name: it.Name,
+				AgentID: it.AgentID, Name: it.Name,
 				OK: false, Error: "not found in last scan",
 			})
 			continue
@@ -396,23 +396,23 @@ func (im *Importer) Import(report *Report, items []ImportItem) ([]ImportResult, 
 		NormalizeForStore(&c)
 		if err := im.store.Save(c, nil); err != nil {
 			out = append(out, ImportResult{
-				ToolID: it.ToolID, Name: it.Name, Version: ver,
+				AgentID: it.AgentID, Name: it.Name, Version: ver,
 				OK: false, Error: err.Error(),
 			})
 			continue
 		}
 		out = append(out, ImportResult{
-			ToolID: it.ToolID, Name: it.Name, Version: ver, OK: true,
+			AgentID: it.AgentID, Name: it.Name, Version: ver, OK: true,
 		})
 	}
 	return out, nil
 }
 
-// FilterByTool 返回 Report 中指定 tool 的 FoundSkill 列表(常用于前端"按工具分组展示")。
-func (r *Report) FilterByTool(toolID string) []FoundSkill {
+// FilterByAgent 返回 Report 中指定 agent 的 FoundSkill 列表(常用于前端"按工具分组展示")。
+func (r *Report) FilterByAgent(agentID string) []FoundSkill {
 	var out []FoundSkill
 	for _, fs := range r.FoundSkills {
-		if fs.ToolID == toolID {
+		if fs.AgentID == agentID {
 			out = append(out, fs)
 		}
 	}
@@ -424,6 +424,6 @@ func (r *Report) String() string {
 	if r == nil {
 		return "<nil report>"
 	}
-	return fmt.Sprintf("importer: %d dirs, %d skills across %d tools in %s",
-		r.TotalDirs, r.TotalFound, len(r.Tools), r.FinishedAt.Sub(r.StartedAt))
+	return fmt.Sprintf("importer: %d dirs, %d skills across %d agents in %s",
+		r.TotalDirs, r.TotalFound, len(r.Agents), r.FinishedAt.Sub(r.StartedAt))
 }

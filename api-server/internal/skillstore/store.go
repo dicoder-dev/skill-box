@@ -1157,9 +1157,9 @@ type TreeNode struct {
 
 // SkillTreeMeta 树节点中携带的 skill 轻量元数据。
 //
-// 2026-06-29 增:AppliedTools 是该 skill 被全局启用的工具 ID 列表(从
+// 2026-06-29 增:AppliedAgents 是该 skill 被全局启用的工具 ID 列表(从
 // cskillapply 的 scope-status 反推),供前端卡片"被这些工具全局调用了"显示。
-// 复用了 cskill 包里的 GlobalAppliedTools helper(同进程),避免在 store 层
+// 复用了 cskill 包里的 GlobalAppliedAgents helper(同进程),避免在 store 层
 // 重复实现 scope-status 扫描逻辑。
 // 2026-07-12 增:SourcePath 是该 skill 的"导入来源磁盘绝对路径"(EvalSymlinks
 // 后的真实路径)。仅在 skill 是从外部位置(如 ~/.agents/skills/)导入到 store
@@ -1171,7 +1171,7 @@ type SkillTreeMeta struct {
 	Description  string   `json:"description"`
 	Triggers     []string `json:"triggers"`
 	UpdatedAt    string   `json:"updated_at,omitempty"`
-	AppliedTools []string `json:"applied_tools,omitempty"`
+	AppliedAgents []string `json:"applied_agents,omitempty"`
 	// 2026-07-12 增:导入来源磁盘绝对路径(可选)。前端用 [\\/]\.agents[\\/]skills[\\/]
 	// 正则判断是否来自 ~/.agents/skills/ 全局 Agent 目录,贴"全局 Agent"标签。
 	SourcePath   string   `json:"source_path,omitempty"`

@@ -13,13 +13,13 @@ import (
 
 // RequestPullMarketSkillV2 一站式拉取入参(2026-07-01 改名:RequestInstallMarketSkillV2 → RequestPullMarketSkillV2)。
 //
-// 与 RequestPullMarketSkill 比:多 Tools / FinalName / GroupPath,内部自动 apply。
+// 与 RequestPullMarketSkill 比:多 Agents / FinalName / GroupPath,内部自动 apply。
 type RequestPullMarketSkillV2 struct {
 	SourceID  uint     `json:"source_id"`
 	RemoteID  string   `json:"remote_id"`
 	Scope     string   `json:"scope"`
 	ProjectID uint     `json:"project_id"`
-	Tools     []string `json:"tools"`      // 可选;空数组 = 只写盘不 apply(2026-06-30 改)
+	Agents     []string `json:"agents"`      // 可选;空数组 = 只写盘不 apply(2026-06-30 改)
 	FinalName string   `json:"final_name"` // 可选;支持"另存为"重命名
 	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
 	// 空 = 装到根(未分组);非空时写到 Manifest.GroupPath,store 落到子目录。
@@ -39,8 +39,8 @@ type RespondInstallMarketSkillV2 = RespondPullMarketSkillV2
 
 // PullMarketSkillV2 POST /api/skillbox/market/install-v2
 //
-// 一站式:三方 → 写盘 → apply 到 tools(scope 默认 global)。
-// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedTools 列出失败工具,
+// 一站式:三方 → 写盘 → apply 到 agents(scope 默认 global)。
+// 失败处理:写盘失败返 4xx/5xx;apply 部分失败时 SkippedAgents 列出失败工具,
 // 整体仍返 200(已装到本地,只是部分工具未启用)。
 //
 // 2026-07-01 改名:InstallMarketSkillV2 → PullMarketSkillV2。HTTP 路径 /install-v2
@@ -57,7 +57,7 @@ func PullMarketSkillV2(c *ginp.ContextPlus, req *RequestPullMarketSkillV2) {
 		RemoteID:  req.RemoteID,
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
-		Tools:     req.Tools,
+		Agents:     req.Agents,
 		FinalName: req.FinalName,
 		GroupPath: req.GroupPath,
 	})
@@ -92,7 +92,7 @@ func init() {
 		PermissionName: "skillbox.market.pull.v2",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "market.pull.v2",
-			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到工具(scope 默认 global,tools 默认本机全部 5 个工具)",
+			Description:   "三方市场 skill 一键拉取到本地 skill-box store 并自动 apply 到工具(scope 默认 global,agents 默认本机全部 5 个工具)",
 			RequestParams: RequestPullMarketSkillV2{},
 		},
 	})

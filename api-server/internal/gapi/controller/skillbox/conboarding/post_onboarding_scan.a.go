@@ -34,25 +34,25 @@ func PostOnboardingScan(c *ginp.ContextPlus, _ *RequestOnboardingScan) {
 
 	envelope := skillimporterReportEnvelope{
 		ScannedAt: report.FinishedAt,
-		Tools:     report.Tools,
-		Summary:   report.ToolSummary,
+		Agents:     report.Agents,
+		Summary:   report.AgentSummary,
 		HasReport: true,
 	}
-	toolPaths := map[string]string{}
+	agentPaths := map[string]string{}
 	for _, d := range report.Dirs {
 		if d.Exists {
-			toolPaths[d.ToolID] = d.Path
+			agentPaths[d.AgentID] = d.Path
 		}
 	}
-	for _, tid := range report.Tools {
-		if p, ok := toolPaths[tid]; ok {
-			envelope.ToolPaths = append(envelope.ToolPaths, p)
+	for _, tid := range report.Agents {
+		if p, ok := agentPaths[tid]; ok {
+			envelope.AgentPaths = append(envelope.AgentPaths, p)
 		}
 	}
 	for _, fs := range report.FoundSkills {
 		envelope.Found = append(envelope.Found, onboardingFoundLite{
-			ToolID:     fs.ToolID,
-			ToolName:   fs.ToolName,
+			AgentID:     fs.AgentID,
+			AgentName:   fs.AgentName,
 			Name:       fs.Canonical.Manifest.Name,
 			Version:    fs.Canonical.Manifest.Version,
 			SourcePath: fs.SourcePath,

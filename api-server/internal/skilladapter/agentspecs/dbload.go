@@ -1,18 +1,18 @@
-package toolspecs
+package agentspecs
 
 import (
 	"fmt"
 	"sort"
 
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/gapi/model/skillbox/mtool"
+	"ginp-api/internal/gapi/model/skillbox/magent"
 	"ginp-api/internal/skilladapter"
 
 	"gorm.io/gorm"
 )
 
 // LoadAllFromDB 从 e_tool + e_tool_path 表加载全部 enabled=true 的工具,
-// 转成 []*ToolSpec。
+// 转成 []*AgentSpec。
 //
 // 2026-06-30 二改:替代原 LoadAll() 的"读 yaml"实现,工具元数据从编译期
 // 内嵌变成运行时 DB 拉。每次启动 / 每次 reload 都会调一次。
@@ -21,52 +21,52 @@ import (
 //   - 排除 enabled=false 的工具(用户禁用,不注册 adapter)
 //   - 同一 tool_id 在 DB 层面靠 uniqueIndex 兜底;这里再校验一次(防御
 //     race condition / DB 异常)
-//   - 每个 tool 的 path 按 (scope, category, path_order) 排序后填入 ToolSpec.Paths
-func LoadAllFromDB(db *gorm.DB) ([]*ToolSpec, error) {
-	toolM := mtool.NewModel(db, db)
-	pathM := mtool.NewToolPathModel(db, db)
+//   - 每个 agent 的 path 按 (scope, category, path_order) 排序后填入 AgentSpec.Paths
+func LoadAllFromDB(db *gorm.DB) ([]*AgentSpec, error) {
+	agentM := magent.NewModel(db, db)
+	pathM := magent.NewAgentPathModel(db, db)
 
-	tools, err := toolM.ListAllEnabled()
+	agents, err := agentM.ListAllEnabled()
 	if err != nil {
-		return nil, fmt.Errorf("toolspecs: list enabled tools: %w", err)
+		return nil, fmt.Errorf("agentspecs: list enabled agents: %w", err)
 	}
-	if len(tools) == 0 {
+	if len(agents) == 0 {
 		return nil, nil
 	}
-	toolIDs := make([]uint, len(tools))
-	for i, t := range tools {
-		toolIDs[i] = t.ID
+	agentIDs := make([]uint, len(agents))
+	for i, t := range agents {
+		agentIDs[i] = t.ID
 	}
-	pathsByTool, err := pathM.FindAllByToolIDs(toolIDs)
+	pathsByAgent, err := pathM.FindAllByAgentIDs(agentIDs)
 	if err != nil {
-		return nil, fmt.Errorf("toolspecs: list paths: %w", err)
+		return nil, fmt.Errorf("agentspecs: list paths: %w", err)
 	}
 
-	out := make([]*ToolSpec, 0, len(tools))
-	seen := make(map[string]bool, len(tools))
-	for _, t := range tools {
-		if seen[t.ToolID] {
-			return nil, fmt.Errorf("toolspecs: duplicate tool_id %q in DB", t.ToolID)
+	out := make([]*AgentSpec, 0, len(agents))
+	seen := make(map[string]bool, len(agents))
+	for _, t := range agents {
+		if seen[t.AgentID] {
+			return nil, fmt.Errorf("agentspecs: duplicate tool_id %q in DB", t.AgentID)
 		}
-		seen[t.ToolID] = true
+		seen[t.AgentID] = true
 
-		paths := pathsByTool[t.ID]
+		paths := pathsByAgent[t.ID]
 		spec, err := toSpec(t, paths)
 		if err != nil {
-			return nil, fmt.Errorf("toolspecs: convert %s: %w", t.ToolID, err)
+			return nil, fmt.Errorf("agentspecs: convert %s: %w", t.AgentID, err)
 		}
 		out = append(out, spec)
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].ToolID < out[j].ToolID })
+	sort.Slice(out, func(i, j int) bool { return out[i].AgentID < out[j].AgentID })
 	return out, nil
 }
 
-// toSpec entity.Tool + []entity.ToolPath → ToolSpec。
+// toSpec entity.Agent + []entity.AgentPath → AgentSpec。
 // 失败:Validate 不通过(空 tool_id / 空 display_name / 空 mdi_icon / 路径为空)。
-func toSpec(t *entity.Tool, paths []*entity.ToolPath) (*ToolSpec, error) {
-	spec := &ToolSpec{
-		ToolID:      t.ToolID,
+func toSpec(t *entity.Agent, paths []*entity.AgentPath) (*AgentSpec, error) {
+	spec := &AgentSpec{
+		AgentID:      t.AgentID,
 		DisplayName: t.DisplayName,
 		MdiIcon:     t.MdiIcon,
 		Maturity:    t.Maturity,
@@ -81,7 +81,7 @@ func toSpec(t *entity.Tool, paths []*entity.ToolPath) (*ToolSpec, error) {
 			case "system":
 				spec.Paths.Global.System = append(spec.Paths.Global.System, p.Path)
 			default:
-				return nil, fmt.Errorf("tool %s: unknown category %q for global", t.ToolID, p.Category)
+				return nil, fmt.Errorf("agent %s: unknown category %q for global", t.AgentID, p.Category)
 			}
 		case skilladapter.ScopeProject:
 			switch p.Category {
@@ -90,10 +90,10 @@ func toSpec(t *entity.Tool, paths []*entity.ToolPath) (*ToolSpec, error) {
 			case "system":
 				spec.Paths.Project.System = append(spec.Paths.Project.System, p.Path)
 			default:
-				return nil, fmt.Errorf("tool %s: unknown category %q for project", t.ToolID, p.Category)
+				return nil, fmt.Errorf("agent %s: unknown category %q for project", t.AgentID, p.Category)
 			}
 		default:
-			return nil, fmt.Errorf("tool %s: unknown scope %q", t.ToolID, p.Scope)
+			return nil, fmt.Errorf("agent %s: unknown scope %q", t.AgentID, p.Scope)
 		}
 	}
 	if err := spec.Validate(); err != nil {

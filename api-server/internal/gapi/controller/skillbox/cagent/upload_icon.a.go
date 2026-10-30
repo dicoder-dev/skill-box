@@ -1,10 +1,10 @@
-// Package ctool - upload_icon.a.go
-// POST /api/skillbox/tools/upload-icon
+// Package cagent - upload_icon.a.go
+// POST /api/skillbox/agents/upload-icon
 //
-// multipart/form-data 接收单个图标文件,保存到 ~/.skill-box/tool-icons/<basename>,
+// multipart/form-data 接收单个图标文件,保存到 ~/.skill-box/agent-icons/<basename>,
 // 自动用 源文件 basename + 后缀 作为目标文件名(防冲突加时间戳前缀)。
 //
-// 返回:{name:"claude_1719300123.png"} — 前端拿到 name 后写 tool.icon_file。
+// 返回:{name:"claude_1719300123.png"} — 前端拿到 name 后写 agent.icon_file。
 //
 // 设计要点:
 //   - 文件最大 256 KB(够 1024x1024 png,实际够用)
@@ -16,7 +16,7 @@
 //     (see vendor/.../binding/form_mapping.go case multipart.FileHeader: return nil),
 //     导致 File 永远是 nil、binding:"required" 一直失败。
 //     改用 BindHandler + 手动 c.FormFile("file")。
-package ctool
+package cagent
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"ginp-api/internal/gapi/service/tool/toolicon"
+	"ginp-api/internal/gapi/service/agent/agenticon"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -41,10 +41,10 @@ const (
 // RespondUploadIcon 上传成功响应。
 type RespondUploadIcon struct {
 	Name string `json:"name"` // basename,如 "claude_1719300123.png"
-	URL  string `json:"url"`  // 完整 url,如 "/api/files/tool-icons/claude_1719300123.png"
+	URL  string `json:"url"`  // 完整 url,如 "/api/files/agent-icons/claude_1719300123.png"
 }
 
-// UploadIcon POST /api/skillbox/tools/upload-icon
+// UploadIcon POST /api/skillbox/agents/upload-icon
 //
 // Body: multipart/form-data
 //   - 字段 file: 单个图片文件
@@ -65,7 +65,7 @@ func UploadIcon(c *ginp.ContextPlus) {
 	// 后缀白名单
 	origName := filepath.Base(fileHeader.Filename)
 	ext := strings.ToLower(filepath.Ext(origName))
-	if !toolicon.ValidIconFileName("dummy"+ext) {
+	if !agenticon.ValidIconFileName("dummy"+ext) {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
 			"error": "unsupported extension: " + ext + " (allowed: .png/.svg/.jpg/.jpeg/.webp/.ico/.gif)",
 		})
@@ -99,7 +99,7 @@ func UploadIcon(c *ginp.ContextPlus) {
 	}
 	c.JSON(http.StatusOK, RespondUploadIcon{
 		Name: targetName,
-		URL:  "/api/files/tool-icons/" + targetName,
+		URL:  "/api/files/agent-icons/" + targetName,
 	})
 }
 
@@ -109,7 +109,7 @@ type RequestUploadIconByPath struct {
 	Path string `json:"path"`
 }
 
-// UploadIconByPath POST /api/skillbox/tools/upload-icon-by-path
+// UploadIconByPath POST /api/skillbox/agents/upload-icon-by-path
 //
 // 桌面端走 wails3 OpenFileDialog 拿到绝对路径后,后端读文件内容,
 // 走和 multipart 接口一样的 save 逻辑(白名单 / 大小限制 / 命名)。
@@ -143,7 +143,7 @@ func UploadIconByPath(c *ginp.ContextPlus, req *RequestUploadIconByPath) {
 	// 后缀白名单
 	origName := filepath.Base(abs)
 	ext := strings.ToLower(filepath.Ext(origName))
-	if !toolicon.ValidIconFileName("dummy"+ext) {
+	if !agenticon.ValidIconFileName("dummy"+ext) {
 		c.JSON(http.StatusUnsupportedMediaType, gin.H{
 			"error": "unsupported extension: " + ext + " (allowed: .png/.svg/.jpg/.jpeg/.webp/.ico/.gif)",
 		})
@@ -167,11 +167,11 @@ func UploadIconByPath(c *ginp.ContextPlus, req *RequestUploadIconByPath) {
 	}
 	c.JSON(http.StatusOK, RespondUploadIcon{
 		Name: targetName,
-		URL:  "/api/files/tool-icons/" + targetName,
+		URL:  "/api/files/agent-icons/" + targetName,
 	})
 }
 
-// saveIconBytes 共享的核心保存逻辑:校验大小、生成唯一文件名、调用 toolicon.SaveBytes。
+// saveIconBytes 共享的核心保存逻辑:校验大小、生成唯一文件名、调用 agenticon.SaveBytes。
 // 被 UploadIcon(multipart)和 UploadIconByPath(绝对路径)复用。
 func saveIconBytes(data []byte, origName string) (string, error) {
 	stem := strings.TrimSuffix(origName, filepath.Ext(origName))
@@ -182,7 +182,7 @@ func saveIconBytes(data []byte, origName string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(origName))
 	targetName := fmt.Sprintf("%d_%s%s", time.Now().Unix(), stem, ext)
 
-	if _, err := toolicon.SaveBytes(targetName, data); err != nil {
+	if _, err := agenticon.SaveBytes(targetName, data); err != nil {
 		logger.Error("upload icon save: %v", err)
 		return "", err
 	}
@@ -217,28 +217,28 @@ func sanitizeFileStem(stem string) string {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/upload-icon",
+		Path:           "/api/skillbox/agents/upload-icon",
 		Handler:        ginp.BindHandler(UploadIcon),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.upload_icon",
+		PermissionName: "skillbox.agents.upload_icon",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.upload_icon",
-			Description:   "上传工具自定义图标到 ~/.skill-box/tool-icons/,返回 basename;前端再把 name 写到 tool.icon_file",
+			Title:         "agents.upload_icon",
+			Description:   "上传工具自定义图标到 ~/.skill-box/agent-icons/,返回 basename;前端再把 name 写到 agent.icon_file",
 			RequestParams: struct{}{},
 		},
 	})
 	// 2026-07-03 增:桌面端按绝对路径上传,绕开 WKWebView 下 <input type=file> 被静默吞。
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/upload-icon-by-path",
+		Path:           "/api/skillbox/agents/upload-icon-by-path",
 		Handler:        ginp.BindParamsHandler(UploadIconByPath, &RequestUploadIconByPath{}),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.upload_icon_by_path",
+		PermissionName: "skillbox.agents.upload_icon_by_path",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.upload_icon_by_path",
+			Title:         "agents.upload_icon_by_path",
 			Description:   "桌面端按绝对路径上传图标(走 wails3 OpenFileDialog 拿 path,后端读文件复用同 save 逻辑)",
 			RequestParams: RequestUploadIconByPath{},
 		},

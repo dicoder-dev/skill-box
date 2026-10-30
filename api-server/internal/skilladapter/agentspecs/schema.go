@@ -1,4 +1,4 @@
-package toolspecs
+package agentspecs
 
 import (
 	"errors"
@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-// ToolSpec 单个 AI 编程工具的静态元数据,从 specs/<tool>.yaml 加载。
+// AgentSpec 单个 AI 编程工具的静态元数据,从 specs/<agent>.yaml 加载。
 //
 // 字段定义与 skilladapter.BaseAdapter 字段一一对应,加载后由
 // skilladapter.NewSpecAdapter 转成 BaseAdapter。
-type ToolSpec struct {
-	// ToolID 工具唯一 ID,用于路由、落库、前端 mdi 查找。
+type AgentSpec struct {
+	// AgentID 工具唯一 ID,用于路由、落库、前端 mdi 查找。
 	// 一旦定下不要轻易改 — DB / 前端都靠它做关联。
-	ToolID string `yaml:"tool_id" json:"tool_id"`
+	AgentID string `yaml:"tool_id" json:"agent_id"`
 
 	// DisplayName UI 展示名(中英混合,前端 i18n 可覆盖)。
 	DisplayName string `yaml:"display_name" json:"display_name"`
@@ -40,11 +40,11 @@ type ToolSpec struct {
 	//   - Category: user(用户自己装,可读可写) / system(工具自带 / vendor,只读)
 	//
 	// 任一 scope × category 都可省略,意味该档位没有扫描根(仍允许 scope 的其它档位工作)。
-	Paths ToolPaths `yaml:"paths" json:"paths"`
+	Paths AgentPaths `yaml:"paths" json:"paths"`
 }
 
-// ToolPaths 全局 / 项目级的路径配置。
-type ToolPaths struct {
+// AgentPaths 全局 / 项目级的路径配置。
+type AgentPaths struct {
 	Global  CategoryPaths `yaml:"global" json:"global"`
 	Project CategoryPaths `yaml:"project" json:"project"`
 }
@@ -57,44 +57,44 @@ type CategoryPaths struct {
 }
 
 // Validate 校验 spec 合法性 — 加载阶段必须全部通过,否则 fail-fast。
-func (s *ToolSpec) Validate() error {
-	if strings.TrimSpace(s.ToolID) == "" {
+func (s *AgentSpec) Validate() error {
+	if strings.TrimSpace(s.AgentID) == "" {
 		return errors.New("tool_id is required")
 	}
 	if strings.TrimSpace(s.DisplayName) == "" {
-		return fmt.Errorf("%s: display_name is required", s.ToolID)
+		return fmt.Errorf("%s: display_name is required", s.AgentID)
 	}
 	if strings.TrimSpace(s.MdiIcon) == "" {
-		return fmt.Errorf("%s: mdi_icon is required", s.ToolID)
+		return fmt.Errorf("%s: mdi_icon is required", s.AgentID)
 	}
 	if s.Maturity != "" {
 		switch s.Maturity {
 		case "stable", "experimental", "deprecated":
 			// ok
 		default:
-			return fmt.Errorf("%s: maturity must be stable|experimental|deprecated, got %q", s.ToolID, s.Maturity)
+			return fmt.Errorf("%s: maturity must be stable|experimental|deprecated, got %q", s.AgentID, s.Maturity)
 		}
 	}
-	if err := s.Paths.Validate(s.ToolID); err != nil {
+	if err := s.Paths.Validate(s.AgentID); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Validate 校验路径配置:每个 scope 至少有一个非空 category。
-func (p *ToolPaths) Validate(toolID string) error {
-	if err := p.Global.validateOne(toolID, "global"); err != nil {
+func (p *AgentPaths) Validate(agentID string) error {
+	if err := p.Global.validateOne(agentID, "global"); err != nil {
 		return err
 	}
-	if err := p.Project.validateOne(toolID, "project"); err != nil {
+	if err := p.Project.validateOne(agentID, "project"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *CategoryPaths) validateOne(toolID, scope string) error {
+func (c *CategoryPaths) validateOne(agentID, scope string) error {
 	if len(c.User) == 0 && len(c.System) == 0 {
-		return fmt.Errorf("%s: paths.%s is empty (need at least one user or system path)", toolID, scope)
+		return fmt.Errorf("%s: paths.%s is empty (need at least one user or system path)", agentID, scope)
 	}
 	return nil
 }

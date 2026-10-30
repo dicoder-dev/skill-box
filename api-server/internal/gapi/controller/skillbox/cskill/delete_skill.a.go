@@ -12,7 +12,7 @@ import (
 // RequestDeleteSkill 删除入参。
 //
 // 2026-06-29 改:支持多级分组 — 用 path(完整相对路径,如 "frontend/react")
-// 替代旧版只用 name。name 字段仍兼容旧调用(空时由 path 推导);cascade_tools
+// 替代旧版只用 name。name 字段仍兼容旧调用(空时由 path 推导);cascade_agents
 // 是前端在确认弹窗里勾选"同步清理工具目录"后传 true,后端只删 skillbox 库内
 // 的副本(走 DeleteByPath),工具目录的清理由前端循环调 forceUndoApply 实现
 // (后端保持单一职责)。

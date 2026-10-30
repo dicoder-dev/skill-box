@@ -15,15 +15,15 @@ import (
 )
 
 // RequestSkillScopeStatus 实时扫描所有已注册 adapter 的路径,返回某 skill 在
-// (tool, scope, project) 笛卡尔积下哪些位置真实存在 SKILL.md。
+// (agent, scope, project) 笛卡尔积下哪些位置真实存在 SKILL.md。
 //
 // 关键设计(2026-06-24):
 //   - 不存数据库,纯文件系统检查;每次请求都重扫,保证"用户刚把 skill 拷到
 //     ~/.codex/skills/xxx"也能立即看到,不需要 import 流程。
 //   - 入参只接受 name(必填)+ version(可选,只用于日志/未来扩展;目录名只
 //     取决于 name,不影响判断)。
-//   - 返回结构: tools 数组列出所有已知工具(供前端渲染第一行),hits 数组
-//     给出 (tool, scope, project_id) 组合 + exists + 绝对路径,前端用 exists
+//   - 返回结构: agents 数组列出所有已知工具(供前端渲染第一行),hits 数组
+//     给出 (agent, scope, project_id) 组合 + exists + 绝对路径,前端用 exists
 //     字段决定 chip 高亮。
 type RequestSkillScopeStatus struct {
 	Name    string `json:"name" form:"name"`
@@ -34,13 +34,13 @@ type RequestSkillScopeStatus struct {
 type RespondSkillScopeStatus struct {
 	Name    string             `json:"name"`
 	Version string             `json:"version"`
-	Tools   []scopeStatusTool  `json:"tools"`
+	Agents   []scopeStatusAgent  `json:"agents"`
 	Hits    []scopeStatusHit   `json:"hits"`
 	Projects []scopeStatusProject `json:"projects"`
 }
 
-type scopeStatusTool struct {
-	ToolID      string `json:"tool_id"`
+type scopeStatusAgent struct {
+	AgentID      string `json:"agent_id"`
 	DisplayName string `json:"display_name"`
 	Icon        string `json:"icon"`
 }
@@ -53,7 +53,7 @@ type scopeStatusProject struct {
 }
 
 type scopeStatusHit struct {
-	ToolID      string `json:"tool_id"`
+	AgentID      string `json:"agent_id"`
 	Scope       string `json:"scope"`        // global | project
 	ProjectID   uint   `json:"project_id"`   // 0 表示 global
 	ProjectLabel string `json:"project_label,omitempty"` // 拼好的展示文本(仅 project 命中用)
@@ -74,10 +74,10 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 
 	// 1. 列出所有已注册 adapter(顺序稳定,已排序)
 	adapters := skilladapter.All()
-	tools := make([]scopeStatusTool, 0, len(adapters))
+	agents := make([]scopeStatusAgent, 0, len(adapters))
 	for _, a := range adapters {
-		tools = append(tools, scopeStatusTool{
-			ToolID:      a.ToolID(),
+		agents = append(agents, scopeStatusAgent{
+			AgentID:      a.AgentID(),
 			DisplayName: a.DisplayName(),
 			Icon:        a.Icon(),
 		})
@@ -110,7 +110,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 			for _, p := range globalPaths {
 				resolved := filepath.Join(p, name)
 				hits = append(hits, scopeStatusHit{
-					ToolID:   a.ToolID(),
+					AgentID:   a.AgentID(),
 					Scope:    skilladapter.ScopeGlobal,
 					ProjectID: 0,
 					Path:     p,
@@ -120,7 +120,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 				})
 			}
 		} else {
-			logger.Warn("scope-status: %s DiscoverPaths(global) failed: %v", a.ToolID(), err)
+			logger.Warn("scope-status: %s DiscoverPaths(global) failed: %v", a.AgentID(), err)
 		}
 
 		// Project:DiscoverPaths 返回相对路径(每个项目一条命中)
@@ -141,7 +141,7 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 						label = "#" + strconv.FormatUint(uint64(p.ID), 10)
 					}
 					hits = append(hits, scopeStatusHit{
-						ToolID:       a.ToolID(),
+						AgentID:       a.AgentID(),
 						Scope:        skilladapter.ScopeProject,
 						ProjectID:    p.ID,
 						ProjectLabel: label,
@@ -153,14 +153,14 @@ func GetSkillScopeStatus(c *ginp.ContextPlus, req *RequestSkillScopeStatus) {
 				}
 			}
 		} else {
-			logger.Warn("scope-status: %s DiscoverPaths(project) failed: %v", a.ToolID(), err)
+			logger.Warn("scope-status: %s DiscoverPaths(project) failed: %v", a.AgentID(), err)
 		}
 	}
 
 	c.SuccessData(RespondSkillScopeStatus{
 		Name:     name,
 		Version:  version,
-		Tools:    tools,
+		Agents:    agents,
 		Projects: projects,
 		Hits:     hits,
 	}, "scope-status ok")
@@ -186,12 +186,12 @@ func skillDirExists(resolved string) bool {
 	return false
 }
 
-// GlobalAppliedTools 给出 name 在 global scope 下、命中(SKILL.md 存在)的 tool_id 列表。
+// GlobalAppliedAgents 给出 name 在 global scope 下、命中(SKILL.md 存在)的 tool_id 列表。
 //
 // 用途:list 接口注入每个 item 的 "applied_tools" 字段,前端不用再 N+1 调 scope-status。
 // 实现:对每个 adapter 拿 DiscoverPaths(global),逐个 stat <path>/<name>/SKILL.md,
 // 命中就 append。失败/warn 跟 GetSkillScopeStatus 行为一致。
-func GlobalAppliedTools(name string) []string {
+func GlobalAppliedAgents(name string) []string {
 	if name == "" {
 		return nil
 	}
@@ -200,12 +200,12 @@ func GlobalAppliedTools(name string) []string {
 	for _, a := range adapters {
 		paths, err := a.DiscoverPaths(skilladapter.ScopeGlobal)
 		if err != nil {
-			logger.Warn("global-applied: %s DiscoverPaths(global) failed: %v", a.ToolID(), err)
+			logger.Warn("global-applied: %s DiscoverPaths(global) failed: %v", a.AgentID(), err)
 			continue
 		}
 		for _, p := range paths {
 			if skillDirExists(filepath.Join(p, name)) {
-				out = append(out, a.ToolID())
+				out = append(out, a.AgentID())
 				break // 一个 adapter 多个 global 路径只算一次
 			}
 		}
@@ -213,16 +213,16 @@ func GlobalAppliedTools(name string) []string {
 	return out
 }
 
-// ResolveHit 给出 (name, scope, projectID, tool) 在 scope-status 扫描中命中的
+// ResolveHit 给出 (name, scope, projectID, agent) 在 scope-status 扫描中命中的
 // resolved 绝对路径(若 SKILL.md 存在);不存在返 ""。
 //
 // 2026-06-25 增:force-undo 路径(用户手动 cp / 外部安装)需要它来定位删哪。
 // 不存在返空串 + nil,跟其它 helper 风格一致。
-func ResolveHit(name, scope string, projectID uint, tool string) (string, error) {
+func ResolveHit(name, scope string, projectID uint, agent string) (string, error) {
 	if name == "" {
 		return "", nil
 	}
-	a, ok := skilladapter.DefaultRegistry().Get(tool)
+	a, ok := skilladapter.DefaultRegistry().Get(agent)
 	if !ok {
 		return "", nil // 工具不存在 → 视作未命中
 	}

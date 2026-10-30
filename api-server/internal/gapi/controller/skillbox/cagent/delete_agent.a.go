@@ -1,35 +1,35 @@
-// Package ctool - delete_tool.a.go
-// POST /api/skillbox/tools/delete
+// Package cagent - delete_agent.a.go
+// POST /api/skillbox/agents/delete
 //
 // 删一个用户工具。系统工具(is_system=true)不可删。
-package ctool
+package cagent
 
 import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
 
-// RequestDeleteTool 删工具入参。
-type RequestDeleteTool struct {
-	ToolID string `json:"tool_id"`
+// RequestDeleteAgent 删工具入参。
+type RequestDeleteAgent struct {
+	AgentID string `json:"agent_id"`
 }
 
-// DeleteTool POST /api/skillbox/tools/delete
-func DeleteTool(c *ginp.ContextPlus, req *RequestDeleteTool) {
-	svc := stool.New(dbs.GetWriteDb(), dbs.GetReadDb())
-	if err := svc.Delete(req.ToolID); err != nil {
+// DeleteAgent POST /api/skillbox/agents/delete
+func DeleteAgent(c *ginp.ContextPlus, req *RequestDeleteAgent) {
+	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	if err := svc.Delete(req.AgentID); err != nil {
 		switch {
-		case errors.Is(err, stool.ErrNotFound):
+		case errors.Is(err, sagent.ErrNotFound):
 			c.JSON(404, gin.H{"error": err.Error()})
-		case errors.Is(err, stool.ErrSystemToolFrozen):
+		case errors.Is(err, sagent.ErrSystemAgentFrozen):
 			c.JSON(400, gin.H{"error": err.Error()})
 		default:
-			logger.Error("tool delete: %v", err)
+			logger.Error("agent delete: %v", err)
 			c.JSON(500, gin.H{"error": err.Error()})
 		}
 		return
@@ -39,16 +39,16 @@ func DeleteTool(c *ginp.ContextPlus, req *RequestDeleteTool) {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/delete",
-		Handler:        ginp.BindParamsHandler(DeleteTool, &RequestDeleteTool{}),
+		Path:           "/api/skillbox/agents/delete",
+		Handler:        ginp.BindParamsHandler(DeleteAgent, &RequestDeleteAgent{}),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.delete",
+		PermissionName: "skillbox.agents.delete",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.delete",
-			Description:   "删一个用户工具(系统工具 is_system=true 不可删);改完建议再调 /tools/reload",
-			RequestParams: RequestDeleteTool{},
+			Title:         "agents.delete",
+			Description:   "删一个用户工具(系统工具 is_system=true 不可删);改完建议再调 /agents/reload",
+			RequestParams: RequestDeleteAgent{},
 		},
 	})
 }

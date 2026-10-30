@@ -30,8 +30,8 @@ func TestBatchApplier_AllOK(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	ba := skillapp.NewBatchApplier(ap)
 	items := []skillapp.BatchItem{
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
 	}
 	out := ba.Apply(items, false)
 	if !out.AllOK {
@@ -52,8 +52,8 @@ func TestBatchApplier_AtomicRollback(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	ba := skillapp.NewBatchApplier(ap)
 	items := []skillapp.BatchItem{
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
 	}
 	out := ba.Apply(items, true)
 	if out.AllOK {
@@ -78,8 +78,8 @@ func TestBatchApplier_NonAtomicKeepsSucceeded(t *testing.T) {
 	ap := skillapp.NewApplier(reg)
 	ba := skillapp.NewBatchApplier(ap)
 	items := []skillapp.BatchItem{
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
-		{Tool: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("a"))},
+		{Agent: "fake", Scope: skilladapter.ScopeGlobal, Canonical: ptrCanon(sampleCanon("b"))},
 	}
 	out := ba.Apply(items, false)
 	if out.AllOK {

@@ -19,24 +19,24 @@ type BaseAdapter struct {
 	IconEmoji string
 	// LocalNameFn canonical name → 目标工具的最终目录名。nil 时用 manifest.Name。
 	LocalNameFn func(c Canonical) string
-	// Tools 提供每个 scope 下的候选 skills 根目录;DiscoverPaths 直接返回。
-	Tools map[string][]string
+	// Agents 提供每个 scope 下的候选 skills 根目录;DiscoverPaths 直接返回。
+	Agents map[string][]string
 	// SystemPaths 标记哪些扫描根属于"系统级"(plugin 自带 / vendor curated 等),
 	// 前端 phase2 会把扫出来的 skill 列为不可勾选的"只读参考",避免把工具自带
 	// 的 skill 当作 user skill 误导入覆盖。空 map 表示该工具没有 system 路径。
 	SystemPaths map[string][]string
 }
 
-func (b *BaseAdapter) ToolID() string      { return b.ID }
+func (b *BaseAdapter) AgentID() string      { return b.ID }
 func (b *BaseAdapter) DisplayName() string { return b.Display }
 func (b *BaseAdapter) Icon() string        { return b.IconEmoji }
 
 func (b *BaseAdapter) DiscoverPaths(scope string) ([]string, error) {
-	// 合并 user 根(Tools)与 system 根(SystemPaths),统一返回;
+	// 合并 user 根(Agents)与 system 根(SystemPaths),统一返回;
 	// caller 通过 IsSystemPath 判断每条根的档位。
 	seen := make(map[string]bool)
 	var out []string
-	for _, p := range b.Tools[scope] {
+	for _, p := range b.Agents[scope] {
 		if seen[p] {
 			continue
 		}
@@ -91,17 +91,17 @@ func (b *BaseAdapter) LocalName(c Canonical) string {
 	return c.Manifest.Name
 }
 
-// UserPath 默认实现:取 Tools[scope] 单值。
+// UserPath 默认实现:取 Agents[scope] 单值。
 //
 // 2026-07-08 增:applier 写盘只关心 user category 的单条 path,system path 不参与。
 // 与 DiscoverPaths(并 user + system 后多 path,给 scope-status 多 chip 用)的
 // 职责分离:本方法只服务"单 user 写盘目标"语义。
 //
-// 空 Tools[scope] 返 "" + nil(让 caller 决定如何处理);多条视为数据脏,
+// 空 Agents[scope] 返 "" + nil(让 caller 决定如何处理);多条视为数据脏,
 // 返 ErrMultipleUserPaths(防御性,DB 层 uniqueIndex(tool_id, scope, category)
 // 应已兜底,这里是兜底兜底)。
 func (b *BaseAdapter) UserPath(scope string) (string, error) {
-	paths := b.Tools[scope]
+	paths := b.Agents[scope]
 	if len(paths) == 0 {
 		return "", nil
 	}

@@ -22,8 +22,8 @@ import (
 // 业务错误。
 var (
 	ErrEmptySkill      = errors.New("skillapp: skill is empty")
-	ErrEmptyTools      = errors.New("skillapp: no tools specified")
-	ErrToolNotFound    = errors.New("skillapp: tool adapter not found")
+	ErrEmptyAgents      = errors.New("skillapp: no agents specified")
+	ErrAgentNotFound    = errors.New("skillapp: agent adapter not found")
 	ErrEmptyFiles      = errors.New("skillapp: skill has no files")
 	ErrAlreadyRolled   = errors.New("skillapp: already rolled back")
 	ErrApplyNotFound   = errors.New("skillapp: apply record not found")
@@ -111,25 +111,25 @@ func IsStatusValid(s string) bool {
 // 2026-06-24 改造:不再用 SkillID 数字 ID,改用 SkillName 字符串作为唯一键。
 // 2026-06-29 增:ProjectRoot = project scope 的真实项目根目录(由 caller 从
 // sproject.Service 查 entity.Project.RootPath 得到);不为空时,apply 把
-// <Tool.Project.Rel> 直接拼到 ProjectRoot 下;为空时退回"占位实现"
+// <Agent.Project.Rel> 直接拼到 ProjectRoot 下;为空时退回"占位实现"
 // (home/.skillbox/projects/<ProjectID>/) — 占位逻辑已废,production 必须传。
 type ApplyInput struct {
 	SkillName   string                  // 来自 sskill 的 Canonical.Manifest.Name
 	Scope       string                  // global / project
 	ProjectID   uint                    // scope=project 时必填
 	ProjectRoot string                  // scope=project 时的项目 root_path(从 sproject 查)
-	Tools       []string                // 目标工具 ID 列表
+	Agents       []string                // 目标工具 ID 列表
 	Canonical   *skilladapter.Canonical // 来自 sskill.Get
 }
 
-// ApplyOutput 单次 apply 的产出(每个 tool 一行 entity.SkillApply)。
+// ApplyOutput 单次 apply 的产出(每个 agent 一行 entity.SkillApply)。
 type ApplyOutput struct {
 	Applies []*AppliedItem `json:"applies"`
 }
 
-// AppliedItem 单个 tool 的 apply 结果。
+// AppliedItem 单个 agent 的 apply 结果。
 type AppliedItem struct {
-	Tool       string    `json:"tool"`
+	Agent       string    `json:"agent"`
 	TargetPath string    `json:"target_path"`
 	Status     string    `json:"status"`          // applied / failed
 	ApplyID    uint      `json:"apply_id,omitempty"`
@@ -138,7 +138,7 @@ type AppliedItem struct {
 	FinishedAt time.Time `json:"finished_at"`
 }
 
-// BatchApplyInput 批量 apply(多 skill × 多 tool 笛卡尔积)。
+// BatchApplyInput 批量 apply(多 skill × 多 agent 笛卡尔积)。
 type BatchApplyInput struct {
 	Items     []ApplyInput
 	// Atomic 任一失败时是否回滚已成功的;v1 强制 true(批量本意就是原子)

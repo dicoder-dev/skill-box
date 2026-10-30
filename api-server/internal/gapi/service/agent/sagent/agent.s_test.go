@@ -1,4 +1,4 @@
-package stool_test
+package sagent_test
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"ginp-api/internal/gapi/entity"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/internal/skilladapter"
 
 	"gorm.io/driver/sqlite"
@@ -16,7 +16,7 @@ import (
 )
 
 // setupTestDB 起一个 sqlite 临时文件 DB,跑 e_tool + e_tool_path AutoMigrate,
-// 写一条用户工具,验证 stool 业务规则。
+// 写一条用户工具,验证 sagent 业务规则。
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dir := t.TempDir()
@@ -25,7 +25,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&entity.Tool{}, &entity.ToolPath{}); err != nil {
+	if err := db.AutoMigrate(&entity.Agent{}, &entity.AgentPath{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
@@ -35,16 +35,16 @@ func setupTestDB(t *testing.T) *gorm.DB {
 // TestCreate_AndList 新建工具后能从 List 看到。
 func TestCreate_AndList(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
+	svc := sagent.New(db, db)
 
-	_, err := svc.Create(&stool.CreateInput{
-		ToolID:      "mytool",
-		DisplayName: "My Tool",
-		MdiIcon:     "mdi:tools",
+	_, err := svc.Create(&sagent.CreateInput{
+		AgentID:      "myagent",
+		DisplayName: "My Agent",
+		MdiIcon:     "mdi:agents",
 		Maturity:    "stable",
 		Enabled:     true,
-		Paths: []stool.PathInput{
-			{Scope: "global", Category: "user", Path: "~/.mytool/skills"},
+		Paths: []sagent.PathInput{
+			{Scope: "global", Category: "user", Path: "~/.myagent/skills"},
 		},
 	})
 	if err != nil {
@@ -56,27 +56,27 @@ func TestCreate_AndList(t *testing.T) {
 		t.Fatalf("list: %v", err)
 	}
 	if len(list) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(list))
+		t.Fatalf("expected 1 agent, got %d", len(list))
 	}
-	if list[0].ToolID != "mytool" {
-		t.Errorf("tool_id: got %q want mytool", list[0].ToolID)
+	if list[0].AgentID != "myagent" {
+		t.Errorf("tool_id: got %q want myagent", list[0].AgentID)
 	}
 	if list[0].IsSystem {
-		t.Error("user-created tool should have is_system=false")
+		t.Error("user-created agent should have is_system=false")
 	}
 	if len(list[0].Paths) != 1 {
 		t.Errorf("expected 1 path, got %d", len(list[0].Paths))
 	}
-	if list[0].Paths[0].Path != "~/.mytool/skills" {
+	if list[0].Paths[0].Path != "~/.myagent/skills" {
 		t.Errorf("path: got %q", list[0].Paths[0].Path)
 	}
 }
 
-// TestCreate_DuplicateToolID 重复 tool_id 应被拒。
-func TestCreate_DuplicateToolID(t *testing.T) {
+// TestCreate_DuplicateAgentID 重复 tool_id 应被拒。
+func TestCreate_DuplicateAgentID(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
-	in := &stool.CreateInput{ToolID: "dup", DisplayName: "D", MdiIcon: "mdi:d", Maturity: "stable"}
+	svc := sagent.New(db, db)
+	in := &sagent.CreateInput{AgentID: "dup", DisplayName: "D", MdiIcon: "mdi:d", Maturity: "stable"}
 	if _, err := svc.Create(in); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
@@ -92,16 +92,16 @@ func TestCreate_DuplicateToolID(t *testing.T) {
 // TestDelete_SystemFrozen 系统工具不可删。
 func TestDelete_SystemFrozen(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
+	svc := sagent.New(db, db)
 	// 手工塞一条系统工具(模拟 seed 出来的)
-	if err := db.Create(&entity.Tool{
-		ToolID: "sys-tool", DisplayName: "S", MdiIcon: "mdi:s", IsSystem: true, Enabled: true,
+	if err := db.Create(&entity.Agent{
+		AgentID: "sys-agent", DisplayName: "S", MdiIcon: "mdi:s", IsSystem: true, Enabled: true,
 	}).Error; err != nil {
-		t.Fatalf("create sys tool: %v", err)
+		t.Fatalf("create sys agent: %v", err)
 	}
-	err := svc.Delete("sys-tool")
+	err := svc.Delete("sys-agent")
 	if err == nil {
-		t.Error("expected ErrSystemToolFrozen, got nil")
+		t.Error("expected ErrSystemAgentFrozen, got nil")
 	}
 }
 
@@ -111,13 +111,13 @@ func TestDelete_SystemFrozen(t *testing.T) {
 // 改完 e_tool 行 → Reload → skilladapter.All() 返回新 name。
 func TestUpdate_AndReload(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
+	svc := sagent.New(db, db)
 
 	// seed 一个工具
-	created, err := svc.Create(&stool.CreateInput{
-		ToolID: "user-tool", DisplayName: "Old Name", MdiIcon: "mdi:tools", Maturity: "stable",
+	created, err := svc.Create(&sagent.CreateInput{
+		AgentID: "user-agent", DisplayName: "Old Name", MdiIcon: "mdi:agents", Maturity: "stable",
 		Enabled: true,
-		Paths: []stool.PathInput{
+		Paths: []sagent.PathInput{
 			{Scope: "global", Category: "user", Path: "~/.ut/skills"},
 			{Scope: "project", Category: "user", Path: ".ut/skills"},
 		},
@@ -144,8 +144,8 @@ func TestUpdate_AndReload(t *testing.T) {
 
 	// 改 display_name
 	newName := "New Name"
-	if _, err := svc.Update(&stool.UpdateInput{
-		ToolID: "user-tool", DisplayName: &newName,
+	if _, err := svc.Update(&sagent.UpdateInput{
+		AgentID: "user-agent", DisplayName: &newName,
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -159,18 +159,18 @@ func TestUpdate_AndReload(t *testing.T) {
 	if a2.DisplayName() != "New Name" {
 		t.Errorf("display_name after reload: got %q want New Name", a2.DisplayName())
 	}
-	if a2.Icon() != "mdi:tools" {
-		t.Errorf("icon: got %q want mdi:tools", a2.Icon())
+	if a2.Icon() != "mdi:agents" {
+		t.Errorf("icon: got %q want mdi:agents", a2.Icon())
 	}
 }
 
 // TestDelete_Cascade 删 user 工具应级联删 e_tool_path。
 func TestDelete_Cascade(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
-	if _, err := svc.Create(&stool.CreateInput{
-		ToolID: "casc", DisplayName: "C", MdiIcon: "mdi:c", Maturity: "stable",
-		Paths: []stool.PathInput{
+	svc := sagent.New(db, db)
+	if _, err := svc.Create(&sagent.CreateInput{
+		AgentID: "casc", DisplayName: "C", MdiIcon: "mdi:c", Maturity: "stable",
+		Paths: []sagent.PathInput{
 			{Scope: "global", Category: "user", Path: "~/.casc"},
 			{Scope: "global", Category: "system", Path: "~/.casc/.system"},
 		},
@@ -182,7 +182,7 @@ func TestDelete_Cascade(t *testing.T) {
 	}
 	// 验证 path 表已清
 	var n int64
-	if err := db.Model(&entity.ToolPath{}).Count(&n).Error; err != nil {
+	if err := db.Model(&entity.AgentPath{}).Count(&n).Error; err != nil {
 		t.Fatalf("count paths: %v", err)
 	}
 	if n != 0 {
@@ -195,13 +195,13 @@ func TestDelete_Cascade(t *testing.T) {
 // 不依赖 DB uniqueIndex 兜底。
 func TestCreate_DuplicateScopeCategoryPaths(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
-	_, err := svc.Create(&stool.CreateInput{
-		ToolID:      "dup",
+	svc := sagent.New(db, db)
+	_, err := svc.Create(&sagent.CreateInput{
+		AgentID:      "dup",
 		DisplayName: "Dup",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",
-		Paths: []stool.PathInput{
+		Paths: []sagent.PathInput{
 			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
 			{Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 1},
 		},
@@ -209,7 +209,7 @@ func TestCreate_DuplicateScopeCategoryPaths(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrPathExisted, got nil")
 	}
-	if !errors.Is(err, stool.ErrPathExisted) {
+	if !errors.Is(err, sagent.ErrPathExisted) {
 		t.Errorf("expected ErrPathExisted, got %v", err)
 	}
 }
@@ -218,27 +218,27 @@ func TestCreate_DuplicateScopeCategoryPaths(t *testing.T) {
 // 重复的入参。
 func TestUpdate_DuplicateScopeCategoryPaths(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
-	if _, err := svc.Create(&stool.CreateInput{
-		ToolID:      "updup",
+	svc := sagent.New(db, db)
+	if _, err := svc.Create(&sagent.CreateInput{
+		AgentID:      "updup",
 		DisplayName: "UpDup",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",
-		Paths: []stool.PathInput{
+		Paths: []sagent.PathInput{
 			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
 		},
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	paths := []stool.PathInput{
+	paths := []sagent.PathInput{
 		{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
 		{Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 1},
 	}
-	_, err := svc.Update(&stool.UpdateInput{ToolID: "updup", Paths: &paths})
+	_, err := svc.Update(&sagent.UpdateInput{AgentID: "updup", Paths: &paths})
 	if err == nil {
 		t.Fatal("expected ErrPathExisted on update, got nil")
 	}
-	if !errors.Is(err, stool.ErrPathExisted) {
+	if !errors.Is(err, sagent.ErrPathExisted) {
 		t.Errorf("expected ErrPathExisted, got %v", err)
 	}
 }
@@ -246,29 +246,29 @@ func TestUpdate_DuplicateScopeCategoryPaths(t *testing.T) {
 // TestAddOnePath_Conflict AddOnePath 第二次同 (scope, category) 必须返 ErrPathExisted。
 func TestAddOnePath_Conflict(t *testing.T) {
 	db := setupTestDB(t)
-	svc := stool.New(db, db)
-	if _, err := svc.Create(&stool.CreateInput{
-		ToolID:      "addp",
+	svc := sagent.New(db, db)
+	if _, err := svc.Create(&sagent.CreateInput{
+		AgentID:      "addp",
 		DisplayName: "AddP",
 		MdiIcon:     "mdi:robot-outline",
 		Maturity:    "stable",
-		Paths: []stool.PathInput{
+		Paths: []sagent.PathInput{
 			{Scope: "global", Category: "user", Path: "~/.agents/skills", PathOrder: 0},
 		},
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err := svc.AddOnePath("addp", stool.PathInput{
+	_, err := svc.AddOnePath("addp", sagent.PathInput{
 		Scope: "global", Category: "user", Path: "~/.cline/skills", PathOrder: 0,
 	})
 	if err == nil {
 		t.Fatal("expected ErrPathExisted on AddOnePath, got nil")
 	}
-	if !errors.Is(err, stool.ErrPathExisted) {
+	if !errors.Is(err, sagent.ErrPathExisted) {
 		t.Errorf("expected ErrPathExisted, got %v", err)
 	}
 	// 不同 (scope, category) 应该 OK
-	if _, err := svc.AddOnePath("addp", stool.PathInput{
+	if _, err := svc.AddOnePath("addp", sagent.PathInput{
 		Scope: "global", Category: "system", Path: "~/.cline/system", PathOrder: 0,
 	}); err != nil {
 		t.Errorf("expected ok on different (scope, category), got %v", err)

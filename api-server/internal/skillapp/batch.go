@@ -9,7 +9,7 @@ import (
 
 // BatchApplier 批量 apply + 原子回滚。
 //
-// 语义:遍历 (skill × tool) 笛卡尔积,任一失败 → 整体回滚已成功的。
+// 语义:遍历 (skill × agent) 笛卡尔积,任一失败 → 整体回滚已成功的。
 // 成功 / 失败的明细都返回给 caller(回滚结果用同一组 tool_id + target_path)。
 type BatchApplier struct {
 	applier *Applier
@@ -20,17 +20,17 @@ func NewBatchApplier(a *Applier) *BatchApplier {
 	return &BatchApplier{applier: a}
 }
 
-// BatchItem 单条 apply 入参(单 skill 单 tool 的笛卡尔基元)。
+// BatchItem 单条 apply 入参(单 skill 单 agent 的笛卡尔基元)。
 // 2026-06-24 改造:用 SkillName + SkillVersion 替代 SkillID。
 // 2026-06-29 增:ProjectRoot = project scope 的真实项目根目录(从 sproject 查);
-// 不为空时,apply 把 <Tool.Project.Rel> 拼到 ProjectRoot 下;为空时退回占位实现。
+// 不为空时,apply 把 <Agent.Project.Rel> 拼到 ProjectRoot 下;为空时退回占位实现。
 type BatchItem struct {
 	SkillName    string
 	SkillVersion string
 	Scope        string
 	ProjectID    uint
 	ProjectRoot  string // scope=project 时的项目 root_path
-	Tool         string
+	Agent         string
 	Canonical    *skilladapter.Canonical
 }
 
@@ -64,7 +64,7 @@ func (b *BatchApplier) Apply(items []BatchItem, atomic bool) *BatchOutput {
 			Scope:       it.Scope,
 			ProjectID:   it.ProjectID,
 			ProjectRoot: it.ProjectRoot,
-			Tools:       []string{it.Tool},
+			Agents:       []string{it.Agent},
 			Canonical:   it.Canonical,
 		})
 		bir := BatchItemResult{BatchItem: it, Result: res}

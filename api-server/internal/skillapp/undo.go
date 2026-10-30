@@ -12,7 +12,7 @@ import (
 type UndoRecord struct {
 	ID         uint
 	TargetPath string
-	Tool       string
+	Agent       string
 	Status     string
 	AppliedAt  time.Time
 }

@@ -19,7 +19,7 @@ type RespondApplyBatch = skillapp.BatchOutput
 
 // ApplyBatch POST /api/skillbox/skills/apply/batch
 //
-// 跑 (skill × tool) 笛卡尔积;atomic=true 时任一失败 → 整体回滚已成功的。
+// 跑 (skill × agent) 笛卡尔积;atomic=true 时任一失败 → 整体回滚已成功的。
 func ApplyBatch(c *ginp.ContextPlus, req *RequestApplyBatch) {
 	svc := newService()
 	out, err := svc.BatchApply(&sskillapp.BatchApplyInput{
@@ -44,7 +44,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply.batch",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply.batch",
-			Description:   "批量 apply(多 skill × 多 tool)",
+			Description:   "批量 apply(多 skill × 多 agent)",
 			RequestParams: RequestApplyBatch{},
 		},
 	})

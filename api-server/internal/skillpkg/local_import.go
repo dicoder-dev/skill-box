@@ -328,7 +328,7 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 	canonical, err := readCanonicalFromDir(dir)
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
-			ToolID: "",
+			AgentID: "",
 			Name:   filepath.Base(dir),
 			OK:     false,
 			Error:  err.Error(),
@@ -337,7 +337,7 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 	}
 	if err := store.Save(canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
-			ToolID:  "",
+			AgentID:  "",
 			Name:    canonical.Manifest.Name,
 			Version: canonical.Manifest.Version,
 			OK:      false,
@@ -346,7 +346,7 @@ func importOneFromDir(store *skillstore.Store, dir string) []skillimporter.Impor
 		return results
 	}
 	results = append(results, skillimporter.ImportResult{
-		ToolID:  "",
+		AgentID:  "",
 		Name:    canonical.Manifest.Name,
 		Version: canonical.Manifest.Version,
 		OK:      true,
@@ -372,7 +372,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 	if skillMDEntry == nil {
 		// 理论不可能:groupEntriesBySkillDir 只收集含 SKILL.md 的目录。
 		results = append(results, skillimporter.ImportResult{
-			ToolID: "",
+			AgentID: "",
 			Name:   path.Base(skillDir),
 			OK:     false,
 			Error:  "internal: skill dir without SKILL.md",
@@ -383,7 +383,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 	skillMDContent, err := readArchiveEntry(*skillMDEntry, maxEntryBytes)
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
-			ToolID: "",
+			AgentID: "",
 			Name:   path.Base(skillDir),
 			OK:     false,
 			Error:  fmt.Sprintf("read SKILL.md: %v", err),
@@ -394,7 +394,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 	canonical, err := skilladapter.ParseSkillMD(string(skillMDContent))
 	if err != nil {
 		results = append(results, skillimporter.ImportResult{
-			ToolID: "",
+			AgentID: "",
 			Name:   path.Base(skillDir),
 			OK:     false,
 			Error:  fmt.Sprintf("parse SKILL.md: %v", err),
@@ -418,7 +418,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 			// 单文件失败不让整条 skill 报废,记录到 Manifest 之外不方便,
 			// 这里直接 abort 当前 skill,让 caller 看到 Error。
 			results = append(results, skillimporter.ImportResult{
-				ToolID:  "",
+				AgentID:  "",
 				Name:    canonical.Manifest.Name,
 				Version: canonical.Manifest.Version,
 				OK:      false,
@@ -434,7 +434,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 
 	if err := store.Save(*canonical, nil); err != nil {
 		results = append(results, skillimporter.ImportResult{
-			ToolID:  "",
+			AgentID:  "",
 			Name:    canonical.Manifest.Name,
 			Version: canonical.Manifest.Version,
 			OK:      false,
@@ -443,7 +443,7 @@ func importOneFromArchiveEntries(store *skillstore.Store, skillDir string, entri
 		return results
 	}
 	results = append(results, skillimporter.ImportResult{
-		ToolID:  "",
+		AgentID:  "",
 		Name:    canonical.Manifest.Name,
 		Version: canonical.Manifest.Version,
 		OK:      true,

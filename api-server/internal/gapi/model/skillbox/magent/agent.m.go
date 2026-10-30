@@ -1,4 +1,4 @@
-package mtool
+package magent
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Model 工具主表 model,带 FindByToolID / ListWithPaths 等业务方法。
+// Model 工具主表 model,带 FindByAgentID / ListWithPaths 等业务方法。
 type Model struct {
 	dbWrite *gorm.DB
 	dbRead  *gorm.DB
@@ -23,19 +23,19 @@ func NewModel(dbWrite_, dbRead_ *gorm.DB) *Model {
 
 // standard CRUD — 与 mpackage 其它模块保持一致。
 
-func (s *Model) Create(dtoCreate *entity.Tool) (*entity.Tool, error) {
+func (s *Model) Create(dtoCreate *entity.Agent) (*entity.Agent, error) {
 	err := dbops.Create(dtoCreate, s.dbWrite)
 	if err != nil {
 		return nil, err
 	}
 	if dtoCreate == nil || dtoCreate.ID <= 0 {
-		return nil, fmt.Errorf("create tool: empty result")
+		return nil, fmt.Errorf("create agent: empty result")
 	}
 	return dtoCreate, nil
 }
 
-func (s *Model) FindOne(wheres []*where.Condition) (*entity.Tool, error) {
-	out := new(entity.Tool)
+func (s *Model) FindOne(wheres []*where.Condition) (*entity.Agent, error) {
+	out := new(entity.Agent)
 	err := dbops.FindOne(&dbops.FindOneConfig{
 		Wheres:    wheres,
 		Db:        s.dbRead,
@@ -45,21 +45,21 @@ func (s *Model) FindOne(wheres []*where.Condition) (*entity.Tool, error) {
 		return nil, err
 	}
 	if out.ID <= 0 {
-		return nil, fmt.Errorf("findone tool: not found")
+		return nil, fmt.Errorf("findone agent: not found")
 	}
 	return out, nil
 }
 
-func (s *Model) FindOneByID(id uint) (*entity.Tool, error) {
+func (s *Model) FindOneByID(id uint) (*entity.Agent, error) {
 	return s.FindOne(where.New(FieldID, "=", id).Conditions())
 }
 
-func (s *Model) FindByToolID(toolID string) (*entity.Tool, error) {
-	return s.FindOne(where.New(FieldToolID, "=", toolID).Conditions())
+func (s *Model) FindByAgentID(agentID string) (*entity.Agent, error) {
+	return s.FindOne(where.New(FieldAgentID, "=", agentID).Conditions())
 }
 
-func (s *Model) FindList(wheres []*where.Condition, extra *where.Extra) ([]*entity.Tool, uint, error) {
-	var list []*entity.Tool
+func (s *Model) FindList(wheres []*where.Condition, extra *where.Extra) ([]*entity.Agent, uint, error) {
+	var list []*entity.Agent
 	err := dbops.FindList(&dbops.FindListConfig{
 		Conditions:    wheres,
 		Db:            s.dbRead,
@@ -69,17 +69,17 @@ func (s *Model) FindList(wheres []*where.Condition, extra *where.Extra) ([]*enti
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := dbops.GetTotal(wheres, new(entity.Tool), s.dbRead)
+	total, err := dbops.GetTotal(wheres, new(entity.Agent), s.dbRead)
 	if err != nil {
-		return []*entity.Tool{}, 0, err
+		return []*entity.Agent{}, 0, err
 	}
 	return list, uint(total), nil
 }
 
-func (s *Model) Update(wheres []*where.Condition, dtoUpdate *entity.Tool, columnsCfg ...string) error {
+func (s *Model) Update(wheres []*where.Condition, dtoUpdate *entity.Agent, columnsCfg ...string) error {
 	return dbops.Update(&dbops.UpdateConfNew{
 		Wheres:           wheres,
-		NewEntity:        new(entity.Tool),
+		NewEntity:        new(entity.Agent),
 		Db:               s.dbWrite,
 		UpdateColumnsCfg: columnsCfg,
 		DataUpdate:       dtoUpdate,
@@ -91,7 +91,7 @@ func (s *Model) Delete(wheres []*where.Condition) error {
 		Wheres:     wheres,
 		Db:         s.dbWrite,
 		SoftDelete: false,
-		NewEntity:  new(entity.Tool),
+		NewEntity:  new(entity.Agent),
 	})
 }
 
@@ -101,12 +101,12 @@ func (s *Model) DeleteByID(id uint) error {
 
 // Count 表行数(0 表示未初始化过,启动期 seed 用此判断)。
 func (s *Model) Count() (int64, error) {
-	return dbops.GetTotal(nil, new(entity.Tool), s.dbRead)
+	return dbops.GetTotal(nil, new(entity.Agent), s.dbRead)
 }
 
 // ListAllEnabled 列出所有 enabled=true 的工具(给 Registry Reload 用)。
 // 排除系统关闭(enabled=false)行,但保留 is_system=true 的也走 enabled 开关。
-func (s *Model) ListAllEnabled() ([]*entity.Tool, error) {
+func (s *Model) ListAllEnabled() ([]*entity.Agent, error) {
 	list, _, err := s.FindList(where.New(FieldEnabled, "=", true).Conditions(), nil)
 	if err != nil {
 		return nil, err

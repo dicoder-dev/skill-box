@@ -19,7 +19,7 @@ type RequestForceUndoSkill struct {
 	Scope     string `json:"scope" form:"scope"`
 	ProjectID uint   `json:"project_id" form:"project_id"`
 	Name      string `json:"name" form:"name"`
-	Tool      string `json:"tool" form:"tool"`
+	Agent      string `json:"agent" form:"agent"`
 }
 
 // ForceUndoSkill POST /api/skillbox/skills/apply/force-undo
@@ -28,8 +28,8 @@ func ForceUndoSkill(c *ginp.ContextPlus, req *RequestForceUndoSkill) {
 		c.JSON(400, gin.H{"error": "name is required"})
 		return
 	}
-	if strings.TrimSpace(req.Tool) == "" {
-		c.JSON(400, gin.H{"error": "tool is required"})
+	if strings.TrimSpace(req.Agent) == "" {
+		c.JSON(400, gin.H{"error": "agent is required"})
 		return
 	}
 	svc := newService()
@@ -37,7 +37,7 @@ func ForceUndoSkill(c *ginp.ContextPlus, req *RequestForceUndoSkill) {
 		Scope:     req.Scope,
 		ProjectID: req.ProjectID,
 		Name:      req.Name,
-		Tool:      req.Tool,
+		Agent:      req.Agent,
 	})
 	if err != nil {
 		switch err {
@@ -62,7 +62,7 @@ func init() {
 		PermissionName: "skillbox.skills.apply.force-undo",
 		Swagger: &ginp.SwaggerInfo{
 			Title:         "skills.apply.force-undo",
-			Description:   "按 (scope, project_id, name, tool) 强制撤销;DB 有记录走标准 Undo,无记录走 scope-status 删磁盘",
+			Description:   "按 (scope, project_id, name, agent) 强制撤销;DB 有记录走标准 Undo,无记录走 scope-status 删磁盘",
 			RequestParams: RequestForceUndoSkill{},
 		},
 	})

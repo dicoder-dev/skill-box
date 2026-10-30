@@ -391,7 +391,7 @@ type PullV2Input struct {
 	RemoteID  string
 	Scope     string   // global / project,缺省 global
 	ProjectID uint     // scope=project 时必填
-	Tools     []string // 可选;空 = skilladapter.AllTools(本机全部 5 个工具)
+	Agents     []string // 可选;空 = skilladapter.AllAgents(本机全部 5 个工具)
 	FinalName string   // 前端确认后的最终 name(支持"另存为"重命名);空 = manifest.Name
 	// 2026-06-30 增:分组路径(多级用 / 分隔,如 "frontend/react")。
 	// 走 NormalizeGroupName 校验(防 ../ / 绝对路径),非空时写到 Manifest.GroupPath,
@@ -409,10 +409,10 @@ type PullV2Result struct {
 	Version      string                     `json:"version"`
 	Scope        string                     `json:"scope"`
 	ProjectID    uint                       `json:"project_id"`
-	Tools        []string                   `json:"tools"`
+	Agents        []string                   `json:"agents"`
 	ApplyResult  *sskillapp.ApplyResult     `json:"apply_result,omitempty"`
 	Canonical    *skilladapter.Canonical    `json:"canonical,omitempty"`
-	SkippedTools []string                   `json:"skipped_tools,omitempty"`
+	SkippedAgents []string                   `json:"skipped_agents,omitempty"`
 	// 2026-06-30 增:实际写入的分组路径(空 = 根);前端用来刷新 tree 时定位
 	GroupPath string `json:"group_path,omitempty"`
 }
@@ -423,9 +423,9 @@ type InstallV2Result = PullV2Result
 // PullV2 一站式:写盘 + apply 到工具。
 //
 // 关键决策(2026-06-30):
-//   - Tools 空数组(0 个) = "不 apply 任何工具,只写盘"(用户主动选择为空时尊重他的意图)
-//     旧行为:Tools=nil 时默认填 AllTools(5 个);2026-06-30 改为尊重空数组语义
-//   - 写盘成功 + apply 部分失败不回滚 store;SkippedTools 列出失败的工具
+//   - Agents 空数组(0 个) = "不 apply 任何工具,只写盘"(用户主动选择为空时尊重他的意图)
+//     旧行为:Agents=nil 时默认填 AllAgents(5 个);2026-06-30 改为尊重空数组语义
+//   - 写盘成功 + apply 部分失败不回滚 store;SkippedAgents 列出失败的工具
 //   - write 阶段就报错时仍然整体返 err(没东西可 apply)
 //   - 重名检测由前端做(传 FinalName),后端不重复检测
 //   - 分组路径(2026-06-30 增):in.GroupPath 写到 Manifest.GroupPath,store.Save 走子目录
@@ -524,22 +524,22 @@ func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, e
 	if cerr != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPullFailed, cerr)
 	}
-	// 8) Tools:空数组 = 不 apply,只写盘(2026-06-30 改:不再默认填 AllTools)
-	tools := in.Tools
+	// 8) Agents:空数组 = 不 apply,只写盘(2026-06-30 改:不再默认填 AllAgents)
+	agents := in.Agents
 	result := &PullV2Result{
 		Name:         finalName,
 		Version:      version,
 		Scope:        scope,
 		ProjectID:    in.ProjectID,
-		Tools:        tools,
+		Agents:        agents,
 		Canonical:    created,
 		GroupPath:    groupPath,
-		SkippedTools: nil,
+		SkippedAgents: nil,
 	}
-	// 9) Apply — Tools 为空时跳过 apply,只返回写盘结果
-	if s.skillAppSvc == nil || len(tools) == 0 {
-		if len(tools) == 0 {
-			result.SkippedTools = nil // 显式置空,前端易判断"未 apply"
+	// 9) Apply — Agents 为空时跳过 apply,只返回写盘结果
+	if s.skillAppSvc == nil || len(agents) == 0 {
+		if len(agents) == 0 {
+			result.SkippedAgents = nil // 显式置空,前端易判断"未 apply"
 		}
 		return result, nil
 	}
@@ -547,15 +547,15 @@ func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, e
 		Scope:     scope,
 		ProjectID: in.ProjectID,
 		Name:      finalName,
-		Tools:     tools,
+		Agents:     agents,
 	})
 	result.ApplyResult = ar
 	// 整体 err 不回滚 store,只记 skipped
 	if aerr != nil {
-		result.SkippedTools = append([]string{}, tools...)
+		result.SkippedAgents = append([]string{}, agents...)
 		return result, nil
 	}
-	// 9) 收集失败 tool
+	// 9) 收集失败 agent
 	skipped := []string{}
 	if ar != nil {
 		for _, x := range ar.Applies {
@@ -563,11 +563,11 @@ func (s *Service) PullV2(ctx context.Context, in *PullV2Input) (*PullV2Result, e
 				continue
 			}
 			if x.Status != skillapp.StatusApplied {
-				skipped = append(skipped, x.Tool)
+				skipped = append(skipped, x.Agent)
 			}
 		}
 	}
-	result.SkippedTools = skipped
+	result.SkippedAgents = skipped
 	return result, nil
 }
 

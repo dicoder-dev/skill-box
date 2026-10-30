@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Registry adapter 注册表:toolID -> Adapter。
+// Registry adapter 注册表:agentID -> Adapter。
 //
 // 启动时由各 adapter 子包在自己的 init() 里调用 defaultRegistry.Register;
 // 调用方通过 Get / MustGet 取出。v1 不做热插拔,所有 adapter 编译期已知。
@@ -25,13 +25,13 @@ func DefaultRegistry() *Registry { return defaultRegistry }
 // Register 把 adapter 注册到默认 registry。同名重复注册会 panic(早期暴露重复实现)。
 func Register(a Adapter) { defaultRegistry.Register(a) }
 
-// Get 取出 toolID 对应的 adapter;不存在返回 (nil, false)。
-func Get(toolID string) (Adapter, bool) { return defaultRegistry.Get(toolID) }
+// Get 取出 agentID 对应的 adapter;不存在返回 (nil, false)。
+func Get(agentID string) (Adapter, bool) { return defaultRegistry.Get(agentID) }
 
 // MustGet 同 Get,缺失时 panic。用于编译期已知一定存在的代码路径。
-func MustGet(toolID string) Adapter { return defaultRegistry.MustGet(toolID) }
+func MustGet(agentID string) Adapter { return defaultRegistry.MustGet(agentID) }
 
-// All 返回已注册 adapter 的列表(按 ToolID 排序,保证调用方顺序稳定)。
+// All 返回已注册 adapter 的列表(按 AgentID 排序,保证调用方顺序稳定)。
 func All() []Adapter { return defaultRegistry.All() }
 
 // Register 把 adapter 注册到当前 registry。同名重复注册会 panic。
@@ -41,30 +41,30 @@ func (r *Registry) Register(a Adapter) {
 	if r.m == nil {
 		r.m = make(map[string]Adapter)
 	}
-	if _, exists := r.m[a.ToolID()]; exists {
-		panic(fmt.Sprintf("skilladapter: duplicate registration for %q", a.ToolID()))
+	if _, exists := r.m[a.AgentID()]; exists {
+		panic(fmt.Sprintf("skilladapter: duplicate registration for %q", a.AgentID()))
 	}
-	r.m[a.ToolID()] = a
+	r.m[a.AgentID()] = a
 }
 
-// Get 取出 toolID 对应的 adapter;不存在返回 (nil, false)。
-func (r *Registry) Get(toolID string) (Adapter, bool) {
+// Get 取出 agentID 对应的 adapter;不存在返回 (nil, false)。
+func (r *Registry) Get(agentID string) (Adapter, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	a, ok := r.m[toolID]
+	a, ok := r.m[agentID]
 	return a, ok
 }
 
 // MustGet 同 Get,缺失时 panic。
-func (r *Registry) MustGet(toolID string) Adapter {
-	a, ok := r.Get(toolID)
+func (r *Registry) MustGet(agentID string) Adapter {
+	a, ok := r.Get(agentID)
 	if !ok {
-		panic(fmt.Sprintf("skilladapter: adapter %q not registered", toolID))
+		panic(fmt.Sprintf("skilladapter: adapter %q not registered", agentID))
 	}
 	return a
 }
 
-// All 返回已注册 adapter 的列表(按 ToolID 排序)。
+// All 返回已注册 adapter 的列表(按 AgentID 排序)。
 func (r *Registry) All() []Adapter {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -72,13 +72,13 @@ func (r *Registry) All() []Adapter {
 	for _, a := range r.m {
 		out = append(out, a)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ToolID() < out[j].ToolID() })
+	sort.Slice(out, func(i, j int) bool { return out[i].AgentID() < out[j].AgentID() })
 	return out
 }
 
 // Reload 用给定的 adapter 列表整体替换 registry 的内容。
 //
-// 2026-06-30 二改:工具元数据从 yaml 改 DB 后,业务层(stool Service)改完
+// 2026-06-30 二改:工具元数据从 yaml 改 DB 后,业务层(sagent Service)改完
 // 工具需要重新加载 — 用 Reload(adapters) 整体替换一次,包括删除用户
 // 在 UI 删掉的工具。比逐个 Add/Remove 简单,且保证"最终状态就是给定列表"。
 //
@@ -89,6 +89,6 @@ func (r *Registry) Reload(adapters []Adapter) {
 	defer r.mu.Unlock()
 	r.m = make(map[string]Adapter, len(adapters))
 	for _, a := range adapters {
-		r.m[a.ToolID()] = a
+		r.m[a.AgentID()] = a
 	}
 }

@@ -1,4 +1,4 @@
-package toolspecs
+package agentspecs
 
 import (
 	"os"
@@ -8,21 +8,21 @@ import (
 	"ginp-api/internal/skilladapter"
 )
 
-// NewSpecAdapter 根据 ToolSpec 构造 skilladapter.BaseAdapter。
+// NewSpecAdapter 根据 AgentSpec 构造 skilladapter.BaseAdapter。
 //
 // 取代 5 个旧 adapter 子包(claude/codex/cursor/opencode/trae)的 boilerplate,
-// 由 toolspecs.init() 在启动期一次性调用,把全部 spec 注册到 default registry。
+// 由 agentspecs.init() 在启动期一次性调用,把全部 spec 注册到 default registry。
 //
 // 关键转换:
 //
-//   - ToolSpec.Paths.*.User / System → BaseAdapter.Tools / SystemPaths
+//   - AgentSpec.Paths.*.User / System → BaseAdapter.Agents / SystemPaths
 //   - 把 "~/" 展开为 $HOME 绝对路径(原 5 个 adapter 子包自己做,
 //     集成后由本工厂统一处理,避免每个 spec 文件夹出现 os.UserHomeDir 重复代码)
 //   - MdiIcon 写入 BaseAdapter.IconEmoji 字段 — 字段名沿用,内容换成 mdi 字符串
 //     (BaseAdapter.Icon() 直接返回 IconEmoji)
 //
 // 项目级路径(.claude/skills、.agents/skills)是相对路径,不展开,原样透传。
-func NewSpecAdapter(spec *ToolSpec) *skilladapter.BaseAdapter {
+func NewSpecAdapter(spec *AgentSpec) *skilladapter.BaseAdapter {
 	home, _ := os.UserHomeDir()
 	expand := func(p string) string {
 		if strings.HasPrefix(p, "~/") {
@@ -46,17 +46,17 @@ func NewSpecAdapter(spec *ToolSpec) *skilladapter.BaseAdapter {
 	}
 
 	return &skilladapter.BaseAdapter{
-		ID:      spec.ToolID,
+		ID:      spec.AgentID,
 		Display: spec.DisplayName,
 		// 字段名沿用 IconEmoji,语义已统一为 mdi 名字符串(2026-06-30 改造)。
 		// 旧 emoji 内容已废弃,BaseAdapter.Icon() 直接返回该字段。
 		IconEmoji: spec.MdiIcon,
-		Tools:     user,
+		Agents:     user,
 		SystemPaths: system,
 	}
 }
 
-func pathsForScope(spec *ToolSpec, scope string) CategoryPaths {
+func pathsForScope(spec *AgentSpec, scope string) CategoryPaths {
 	switch scope {
 	case skilladapter.ScopeGlobal:
 		return spec.Paths.Global

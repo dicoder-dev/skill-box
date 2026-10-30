@@ -54,8 +54,8 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 	report := &skillimporter.Report{
 		StartedAt:   cached.ScannedAt,
 		FinishedAt:  cached.ScannedAt,
-		Tools:       cached.Tools,
-		ToolSummary: cached.Summary,
+		Agents:       cached.Agents,
+		AgentSummary: cached.Summary,
 	}
 	for _, f := range cached.Found {
 		// 从 SourcePath 重新读盘拿完整 Canonical(含 SKILL.md + 全部附属文件)。
@@ -90,8 +90,8 @@ func PostOnboardingImport(c *ginp.ContextPlus, req *RequestOnboardingImport) {
 			}
 		}
 		report.FoundSkills = append(report.FoundSkills, skillimporter.FoundSkill{
-			ToolID:     f.ToolID,
-			ToolName:   f.ToolName,
+			AgentID:     f.AgentID,
+			AgentName:   f.AgentName,
 			SourcePath: f.SourcePath,
 			Canonical:  c,
 		})

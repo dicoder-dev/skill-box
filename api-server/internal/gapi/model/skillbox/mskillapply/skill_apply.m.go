@@ -58,7 +58,7 @@ func (s *Model) FindOneById(id uint) (*entity.SkillApply, error) {
 }
 
 // FindLatestByKey 按 (scope, project_id, name) 找最近一条(applied_at desc)。
-// uniqueIndex 约束下,同一键只可能有一行,函数名仍叫 Latest 是为将来扩 tool 列预留。
+// uniqueIndex 约束下,同一键只可能有一行,函数名仍叫 Latest 是为将来扩 agent 列预留。
 func (s *Model) FindLatestByKey(scope string, projectID uint, name string) (*entity.SkillApply, error) {
 	conds := []*where.Condition{}
 	if sc := strings.TrimSpace(scope); sc != "" {

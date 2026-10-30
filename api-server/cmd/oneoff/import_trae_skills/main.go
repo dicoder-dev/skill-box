@@ -6,7 +6,7 @@
 // 不依赖 HTTP / 桌面端 / DB,直接调 skillimporter 包做 scan + import。
 // 幂等: 二次跑同名 skill 会覆盖。
 //
-// 2026-06-30 改造:不再逐一 import 5 个 adapter 子包,改用 toolspecs 一次注册。
+// 2026-06-30 改造:不再逐一 import 5 个 adapter 子包,改用 agentspecs 一次注册。
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 	"os"
 
 	"ginp-api/internal/skilladapter"
-	_ "ginp-api/internal/skilladapter/toolspecs"
+	_ "ginp-api/internal/skilladapter/agentspecs"
 	"ginp-api/internal/skillimporter"
 	"ginp-api/internal/skillstore"
 )
@@ -32,14 +32,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("scan: %v", err)
 	}
-	fmt.Printf("scan: %d tools, %d skills\n", len(report.Tools), len(report.FoundSkills))
+	fmt.Printf("scan: %d agents, %d skills\n", len(report.Agents), len(report.FoundSkills))
 
-	// 只挑 trae 的(避免覆盖其他 tool 的同名 skill)
+	// 只挑 trae 的(避免覆盖其他 agent 的同名 skill)
 	var traeItems []skillimporter.ImportItem
 	for _, fs := range report.FoundSkills {
-		if fs.ToolID == "trae" {
+		if fs.AgentID == "trae" {
 			traeItems = append(traeItems, skillimporter.ImportItem{
-				ToolID:  fs.ToolID,
+				AgentID:  fs.AgentID,
 				Name:    fs.Canonical.Manifest.Name,
 				Version: fs.Canonical.Manifest.Version,
 			})
@@ -61,7 +61,7 @@ func main() {
 			ok++
 		} else {
 			fail++
-			fmt.Printf("  FAIL %s/%s v%s: %s\n", r.ToolID, r.Name, r.Version, r.Error)
+			fmt.Printf("  FAIL %s/%s v%s: %s\n", r.AgentID, r.Name, r.Version, r.Error)
 		}
 	}
 	fmt.Printf("\nimported: %d ok, %d failed\n", ok, fail)

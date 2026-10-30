@@ -62,14 +62,14 @@ func (a *Applier) resolveMode() string {
 	return m
 }
 
-// ApplyResult 单 tool 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
+// ApplyResult 单 agent 的 apply 结果(含 pre-snapshot,服务层据此落 DB)。
 //
 // 2026-07-03 增:PartialFailure 显式标"调用失败但 Service.Apply 仍返 200"的场景
-// (Service.Apply 设计为宽容语义,逐 tool 失败不阻断其他 tool,最终返 out+nil;
+// (Service.Apply 设计为宽容语义,逐 agent 失败不阻断其他 agent,最终返 out+nil;
 // 这里用 PartialFailure 给前端一个明确信号,前端读 res.partial_failure 弹
 // partial_failed toast,而不是只看 res.all_ok 推断)。
 type ApplyResult struct {
-	Tool           string       `json:"tool"`
+	Agent           string       `json:"agent"`
 	TargetPath     string       `json:"target_path"`
 	Status         string       `json:"status"` // applied / failed
 	ApplyID        uint         `json:"apply_id,omitempty"` // service 写完 DB 后回填
@@ -80,7 +80,7 @@ type ApplyResult struct {
 	FinishedAt     time.Time    `json:"finished_at"`
 }
 
-// ApplyOne 把 canonical 落到 in.Tools[0](单 tool);批量由 caller 循环调。
+// ApplyOne 把 canonical 落到 in.Agents[0](单 agent);批量由 caller 循环调。
 //
 // 失败语义:即使 apply 失败,PreSnapshot 也会带回(部分文件可能已落),
 // service 写 DB 时 status=failed + 仍存 pre_snapshot,方便排查。
@@ -96,8 +96,8 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	if len(in.Canonical.Files) == 0 {
 		return nil, fmt.Errorf("%w: name=%s", ErrEmptyFiles, in.Canonical.Manifest.Name)
 	}
-	if len(in.Tools) == 0 {
-		return nil, ErrEmptyTools
+	if len(in.Agents) == 0 {
+		return nil, ErrEmptyAgents
 	}
 	scope := strings.ToLower(strings.TrimSpace(in.Scope))
 	if scope == "" {
@@ -106,10 +106,10 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 	if scope != skilladapter.ScopeGlobal && scope != skilladapter.ScopeProject {
 		return nil, fmt.Errorf("skillapp: invalid scope %q", in.Scope)
 	}
-	toolID := in.Tools[0]
-	ad, ok := a.resolveRegistry().Get(toolID)
+	agentID := in.Agents[0]
+	ad, ok := a.resolveRegistry().Get(agentID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, toolID)
+		return nil, fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)
 	}
 	targetDir, err := resolveTargetDir(ad, in.Canonical, scope, in.ProjectID, in.ProjectRoot)
 	if err != nil {
@@ -125,7 +125,7 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 		_ = restoreFromSnapshot(targetDir, pre)
 		finished := a.now()
 		return &ApplyResult{
-			Tool:           toolID,
+			Agent:           agentID,
 			TargetPath:     targetDir,
 			Status:         StatusFailed,
 			PreSnapshot:    pre,
@@ -133,13 +133,13 @@ func (a *Applier) ApplyOne(in ApplyInput) (*ApplyResult, error) {
 			PartialFailure: true,
 			StartedAt:      started,
 			FinishedAt:     finished,
-		}, fmt.Errorf("skillapp: apply %s to %s: %w", in.Canonical.Manifest.Name, toolID, err)
+		}, fmt.Errorf("skillapp: apply %s to %s: %w", in.Canonical.Manifest.Name, agentID, err)
 	}
 	post := buildPostFiles(in.Canonical, targetDir, mode)
 	pre.PostFiles = post
 	finished := a.now()
 	return &ApplyResult{
-		Tool:           toolID,
+		Agent:           agentID,
 		TargetPath:     targetDir,
 		Status:         StatusApplied,
 		PreSnapshot:    pre,
@@ -160,7 +160,7 @@ func applyByMode(ad skilladapter.Adapter, c *skilladapter.Canonical, targetDir, 
 			ApplyLink(skilladapter.Canonical, string) error
 		})
 		if !ok {
-			return fmt.Errorf("skillapp: tool %s does not support symlink mode (missing ApplyLink)", ad.ToolID())
+			return fmt.Errorf("skillapp: agent %s does not support symlink mode (missing ApplyLink)", ad.AgentID())
 		}
 		return linker.ApplyLink(*c, targetDir)
 	}
@@ -184,13 +184,13 @@ func buildPostFiles(c *skilladapter.Canonical, targetDir, mode string) []string 
 	return out
 }
 
-// resolveTargetDir 把 (tool + scope + project_id + project_root + name) 拼到具体目录。
+// resolveTargetDir 把 (agent + scope + project_id + project_root + name) 拼到具体目录。
 //
 // 2026-07-08 改:写盘走 user path 单值模型。system path 不参与 apply 落盘
 // (system 是 vendor curated / plugin 内建,只读参考,不能选为写盘目标)。
 // 改前走 DiscoverPaths(scope),会把 user + system 合并 → claude / codex
-// 在 global 下出现 2 条 path → applier 报错 "tool X has 2 paths"。修复:换成
-// Adapter.UserPath(scope),只取 Tools[scope] 单值,6 处其它 caller
+// 在 global 下出现 2 条 path → applier 报错 "agent X has 2 paths"。修复:换成
+// Adapter.UserPath(scope),只取 Agents[scope] 单值,6 处其它 caller
 // (scope-status 3 处 / importer / onboarding / cproject) 仍用 DiscoverPaths,
 // 它们依赖多 path 产生笛卡尔积/多根扫描,语义不冲突。
 //
@@ -206,7 +206,7 @@ func resolveTargetDir(ad skilladapter.Adapter, c *skilladapter.Canonical, scope 
 		return "", err
 	}
 	if parent == "" {
-		return "", fmt.Errorf("skillapp: tool %s has no user path for scope %s", ad.ToolID(), scope)
+		return "", fmt.Errorf("skillapp: agent %s has no user path for scope %s", ad.AgentID(), scope)
 	}
 	if !filepath.IsAbs(parent) {
 		if scope != skilladapter.ScopeProject {

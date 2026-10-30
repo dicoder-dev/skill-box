@@ -13,10 +13,10 @@ import (
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillpkg"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskilltest"
 	_ "ginp-api/internal/gapi/controller/skillbox/cskillversion" // 2026-07-17 增:go-git 版本管理 11 个 HTTP API
-	_ "ginp-api/internal/gapi/controller/skillbox/ctool"
+	_ "ginp-api/internal/gapi/controller/skillbox/cagent"
 	_ "ginp-api/internal/gapi/controller/system/cindex"
 	_ "ginp-api/internal/gapi/controller/user/cuser"
 	//{{placeholder_router_import}}//
 	// 上面的占位符请不要动动，否则会导致生成工具无法自动替换
-	//Please do not move the placeholders above, otherwise it will cause the generation tool to fail to replace them automatically
+	//Please do not move the placeholders above, otherwise it will cause the generation agent to fail to replace them automatically
 )

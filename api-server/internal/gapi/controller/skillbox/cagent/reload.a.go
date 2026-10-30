@@ -1,14 +1,14 @@
-// Package ctool - reload.a.go
-// POST /api/skillbox/tools/reload
+// Package cagent - reload.a.go
+// POST /api/skillbox/agents/reload
 //
 // 重新从 DB 拉一次工具元数据,刷 skilladapter.DefaultRegistry。
 // 前端改完工具后调一次,让 adapter 立刻反映新数据。
-package ctool
+package cagent
 
 import (
 	"github.com/gin-gonic/gin"
 	"ginp-api/internal/db/dbs"
-	"ginp-api/internal/gapi/service/tool/stool"
+	"ginp-api/internal/gapi/service/agent/sagent"
 	"ginp-api/pkg/ginp"
 	"ginp-api/pkg/logger"
 )
@@ -16,11 +16,11 @@ import (
 // RequestReload 重新加载入参(无参)。
 type RequestReload struct{}
 
-// Reload POST /api/skillbox/tools/reload
+// Reload POST /api/skillbox/agents/reload
 func Reload(c *ginp.ContextPlus, _ *RequestReload) {
-	svc := stool.New(dbs.GetWriteDb(), dbs.GetReadDb())
+	svc := sagent.New(dbs.GetWriteDb(), dbs.GetReadDb())
 	if err := svc.Reload(); err != nil {
-		logger.Error("tool reload: %v", err)
+		logger.Error("agent reload: %v", err)
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -29,14 +29,14 @@ func Reload(c *ginp.ContextPlus, _ *RequestReload) {
 
 func init() {
 	ginp.RouterAppend(ginp.RouterItem{
-		Path:           "/api/skillbox/tools/reload",
+		Path:           "/api/skillbox/agents/reload",
 		Handler:        ginp.BindParamsHandler(Reload, &RequestReload{}),
 		HttpType:       ginp.HttpPost,
 		NeedLogin:      false,
 		NeedPermission: false,
-		PermissionName: "skillbox.tools.reload",
+		PermissionName: "skillbox.agents.reload",
 		Swagger: &ginp.SwaggerInfo{
-			Title:         "tools.reload",
+			Title:         "agents.reload",
 			Description:   "重新从 DB 加载工具到 skilladapter.Registry;前端改完工具后调一次,立刻生效",
 			RequestParams: RequestReload{},
 		},

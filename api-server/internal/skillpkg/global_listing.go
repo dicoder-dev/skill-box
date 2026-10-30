@@ -1,10 +1,10 @@
 // Package skillpkg - global_listing.go
 //
 // 2026-07-10 增:首页"导入技能"弹窗新增 Tab「全局目录」,直接列出 ~/.agents/skills
-// 下所有候选 skill(无依赖缓存,不区分 tool/user)。用户可勾选后批量导入 skillbox 库。
+// 下所有候选 skill(无依赖缓存,不区分 agent/user)。用户可勾选后批量导入 skillbox 库。
 //
 // 为什么单独一个文件,不复用 skilladapter.BaseAdapter.Scan:
-//   - BaseAdapter.Scan 是"按某个 adapter 的 Tools[scope] 路径去扫",面向的是
+//   - BaseAdapter.Scan 是"按某个 adapter 的 Agents[scope] 路径去扫",面向的是
 //     claude/codex/trae 等工具各自的语义(允许跳过 SystemPaths 之类)。
 //   - 这里的诉求是"看 ~/.agents/skills 里到底有哪些 skill",跟具体工具无关,
 //     也不该被任何 SystemPaths 跳过(全局目录本身就是 user 根,不是 system)。
