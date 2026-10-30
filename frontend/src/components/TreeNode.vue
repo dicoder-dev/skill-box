@@ -371,17 +371,23 @@ function iconStack(node) {
                   v-else-if="it.img"
                   :src="it.img"
                   :alt="it.key"
-                  width="14"
-                  height="14"
+                  width="12"
+                  height="12"
                   class="tree-icon-img"
                 />
                 <!-- 兜底 mdi 图标(默认图标 / Agent无 icon_file) -->
-                <IconPark v-else :icon="it.icon" width="14" height="14" />
+                <IconPark v-else :icon="it.icon" width="13" height="13" />
               </span>
             </div>
             <span class="tree-name tree-name-skill">{{ node.skill_meta?.name || node.name }}</span>
-            <!-- 2026-07-16 改:列表项不再显示版本号,给右侧详情腾出更多横向空间;
-                 版本号仍在详情区顶栏 badge 展示。 -->
+            <!-- 2026-10-30 v2 改:版本号重新放回列表项(2026-07-16 曾移除)。
+                 当时移除的原因是栏宽 320→260 太挤,名字+版本号挤在一行。
+                 现在栏宽收窄到 224 + 行改成扁平行后,行内反而空出一大块,
+                 用户反馈"两侧空白太多"。
+                 用版本号填掉这段空白 = 顶级 source list 惯例
+                 (VS Code 资源管理器在文件右侧显示大小/git 状态),
+                 既消除死白又提供真实信息,不是纯装饰。 -->
+            <span v-if="node.skill_meta?.version" class="tree-version">@{{ node.skill_meta.version }}</span>
           </div>
         </div>
       </div>
@@ -511,8 +517,13 @@ function iconStack(node) {
    ===================================================== */
 .tree-row-skill {
   --card-accent: var(--accent-blue);
-  padding: 5px 10px;
-  margin: 3px 4px;
+  /* 2026-10-30 v2 改:行内更紧凑 —— 内边距 5/10 → 4/8,
+     外边距 3/4 → 2/2,图标槽 16 → 14px。
+     用户反馈"技能列表行内空白太多":名字普遍很短(code-review),
+     原来图标 16px + gap 6px + padding 10px 一套下来,名字右侧能空出 100px+。
+     这里把行内元素本身收紧,让"内容区"跟着名字走,右侧不再是大片死白。 */
+  padding: 4px 8px;
+  margin: 2px 2px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -556,8 +567,9 @@ function iconStack(node) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  /* 2026-10-30 v2 改:16 → 14px,配合模板里的 svg/img 尺寸一起收小 */
+  width: 14px;
+  height: 14px;
   color: var(--text-dim);
   box-sizing: border-box;
 }
@@ -565,7 +577,7 @@ function iconStack(node) {
 .tree-icon-slot + .tree-icon-slot {
   margin-left: -4px;
 }
-/* 默认图标(无Agent启用 / 全局 Agent):不重叠,单独一个 */
+/* 2026-10-30 v2 改:图标槽 16 → 14px,行内元素更紧凑 */
 .tree-icon-slot.is-default {
   color: var(--text-dim);
 }
@@ -587,12 +599,14 @@ function iconStack(node) {
 /* Agent真实 logo:圆内居中,不拉伸 */
 .tree-icon-img {
   display: block;
-  width: 14px;
-  height: 14px;
+  /* 2026-10-30 v2 改:14 → 12px,跟 14px 图标槽对齐 */
+  width: 12px;
+  height: 12px;
   object-fit: contain;
 }
 .tree-skill-head .tree-name {
-  font-size: 13px;
+  /* 2026-10-30 v2 改:字号 13 → 12.5px,配合更小的图标,整行更紧凑 */
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
 }
@@ -600,10 +614,14 @@ function iconStack(node) {
    图标(mdi:earth + emerald)已能代表全局 Agent 语义。 */
 
 .tree-version {
+  /* 2026-10-30 v2 改:重新启用(见模板注释)。
+     靠右贴边 + 极淡色,填掉名字右侧的空白带,不抢名字的视觉焦点。 */
   font-size: 10px;
   color: var(--text-faint);
   font-family: 'JetBrains Mono', monospace;
   flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 6px;
 }
 
 /* 选中态(skill 行):淡强调底 + 左侧 2px 强调色条 + 强调色文字。

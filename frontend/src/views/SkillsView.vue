@@ -1650,6 +1650,22 @@ function onScopeChange() {
 
 // ===== 左侧技能列表宽度拖拽（grid 第一列列宽，写 CSS 变量 --skills-list-w）=====
 const skillsLayoutEl = ref(null)
+
+// 2026-10-30 增:宽度默认值从 260 收窄到 224(见下方 defaultWidth 注释)。
+// 但 useResizablePanel 会把宽度持久化到 localStorage,老用户本地存的
+// 还是 260,只改 defaultWidth 对他们无效 —— 看到的效果跟没改一样。
+// 这里做一次「旧默认值迁移」:只在用户存的宽度**恰好等于旧默认 260** 时
+// 才删掉存储让新默认生效;如果用户手动拖过(存的是别的值,比如 320),
+// 说明那是他的明确选择,一律保留,不擅自覆盖。
+const SKILLS_LIST_W_STORAGE_KEY = 'skillbox:panel:skills-list-w'
+const SKILLS_LIST_W_OLD_DEFAULT = 260
+try {
+  const stored = localStorage.getItem(SKILLS_LIST_W_STORAGE_KEY)
+  if (stored !== null && Number(stored) === SKILLS_LIST_W_OLD_DEFAULT) {
+    localStorage.removeItem(SKILLS_LIST_W_STORAGE_KEY)
+  }
+} catch (_) { /* localStorage 不可用时忽略,走 defaultWidth */ }
+
 const {
   width: skillsListWidth,
   dragging: skillsDragging,
@@ -1660,7 +1676,12 @@ const {
   target: 'grid-col',
   direction: 'right',
   storageKey: 'skills-list-w',
-  defaultWidth: 260,
+  // 2026-10-30 改:260 → 224。用户反馈技能列表行内空白太多 ——
+  // skill 名普遍很短(code-review / commit-msg),260px 宽的栏里
+  // 名字右侧能空出 100px+,像"半栏没人用"。
+  // 224px 落在 macOS Sidebar Guidelines 推荐的 225-275 区间内,
+  // 又比最短名字(code-review ≈ 80px + 图标 14 + 内边距 16)留足余量。
+  defaultWidth: 224,
   min: 180,
   max: 480,
   applyTo: skillsLayoutEl,
@@ -2347,7 +2368,7 @@ onUnmounted(() => {
 .skills-layout {
   display: grid;
   position: relative;
-  grid-template-columns: var(--skills-list-w, 260px) minmax(0, 1fr);
+  grid-template-columns: var(--skills-list-w, 224px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   grid-auto-rows: minmax(0, 1fr);
   gap: 0;
@@ -2375,7 +2396,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--skills-list-w, 260px);
+  left: var(--skills-list-w, 224px);
   width: 8px;
   transform: translateX(-4px);
   cursor: col-resize;
