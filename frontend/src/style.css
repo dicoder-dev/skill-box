@@ -40,6 +40,11 @@
   --accent-blue: #2563eb;        /* 蓝,主知识/技能 */
   --accent-blue-bg: #eff6ff;
   --accent-blue-border: #bfdbfe;
+  /* 2026-10-30 增:强调色实心底上的前景色(按钮文字)。
+     浅色模式 accent-blue 是深蓝,配白字;暗色模式 accent-blue 变亮蓝,
+     白字对比度不足(实测白字/亮蓝 ≈ 2.3:1,远低于 4.5:1 门槛),
+     所以暗色下改配深色文字。统一走这个 token,避免各处硬编码 #fff。 */
+  --accent-blue-fg: #ffffff;
   --accent-violet: #7c3aed;      /* 紫,项目 */
   --accent-violet-bg: #f5f3ff;
   --accent-violet-border: #ddd6fe;
@@ -123,6 +128,8 @@
   --accent-blue: #60a5fa;
   --accent-blue-bg: #172554;
   --accent-blue-border: #1e3a8a;
+  /* 暗色下 accent-blue 是亮蓝,实心底上的文字改用深色保证对比度 */
+  --accent-blue-fg: #0a0a0a;
   --accent-violet: #a78bfa;
   --accent-violet-bg: #2e1065;
   --accent-violet-border: #4c1d95;

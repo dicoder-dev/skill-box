@@ -427,17 +427,19 @@ function iconStack(node) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease;
-  min-height: 26px;
+  min-height: 24px;
   border: 1px solid transparent;
 }
-/* 2026-06-29 改:分组行加大,容纳更大的 icon(18px) + 加粗 name */
+/* 2026-06-29 改:分组行加大,容纳更大的 icon(18px) + 加粗 name。
+   2026-10-30 改:紧凑化 — min-height 32→26,padding 5→3,
+   分组行只是导航骨架,不该跟内容行抢纵向空间。 */
 .tree-row-group {
-  min-height: 32px;
-  padding: 5px 8px;
+  min-height: 26px;
+  padding: 3px 8px;
 }
 .tree-row:hover {
   background: var(--bg-hover);
@@ -475,10 +477,12 @@ function iconStack(node) {
   font-size: 13px;
 }
 .tree-name-group {
-  /* 2026-06-29 改:分组名加大到 14px + 加粗 600,与 skill 卡片视觉对等 */
+  /* 2026-06-29 改:分组名加大到 14px + 加粗 600,与 skill 卡片视觉对等
+     2026-10-30 改:14→13,分组名跟 skill 名拉开层级靠字重(600)而不是字号,
+     字号一样时上下行高更紧凑,扫读也更快。 */
   color: var(--text);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
 }
 .tree-name-skill { color: var(--text); font-weight: 500; }
 
@@ -492,42 +496,37 @@ function iconStack(node) {
 }
 
 /* =====================================================
-   skill 卡片样式(2026-06-29 改:从"行"强化为"卡片")
-   2026-07-11 美化:加蓝色 accent + 卡顶 4px 条 + 卡顶浅蓝渐变 + hover 蓝色光晕阴影,
-   跟 MarketView 的卡顶 accent 条 + color-mix 配色保持一致风格。
-   --card-accent 抽成局部变量,未来想给不同 skill 走不同 accent 只需覆盖这一个变量。
+   skill 卡片样式
+   2026-10-30 重做(用户反馈左栏"有点丑" + 布局要紧凑):
+   旧版是"渐变卡顶 + 三层蓝色光晕阴影 + 10px 外边距"的浮夸卡片风,
+   在窄侧栏里 7 个技能就撑满整列,视觉噪音大、密度低。
+   改成 Linear / VS Code / Arc 那一套"扁平行"范式:
+     - 去掉渐变、去掉所有 box-shadow、去掉浮起位移
+     - 默认无边框无底色,靠留白分组
+     - hover 才出中性底色(--bg-hover)
+     - 选中 = 淡强调底 + 左侧 2px 色条 + 强调色文字
+       (经典 source list 选中范式,不靠光晕)
+     - 外边距 10px→3px,内边距 8px→5px,行更紧凑
+   保留能力:拖拽落点高亮(dashed + 蓝底)语义不变。
    ===================================================== */
 .tree-row-skill {
   --card-accent: var(--accent-blue);
-  /* 比 .tree-row 更厚的内边距 + 圆角 + 边框,体现"卡片"感 */
-  padding: 8px 10px;
-  /* 2026-06-29 改:卡片之间上下留更多空间(原 2px 4px 太挤) */
-  margin: 10px 4px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  /* 卡顶浅蓝渐变 — 6% accent → bg-card,只在顶部 70% 范围,底部保持纯白。
-     2026-07-11 v2 改:删掉卡顶 4px 实色 accent 条(用户反馈用力过猛),
-     仅保留更克制的渐变"色温"提示,卡片整体不再蓝条高耸。 */
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-accent) 6%, var(--bg-card)) 0%,
-    var(--bg-card) 70%
-  );
-  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  padding: 5px 10px;
+  margin: 3px 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   cursor: pointer;
+  position: relative;
 }
 .tree-row-skill:hover {
-  /* 边框色用 accent 化版本,带轻微蓝色色温(原卡顶条被删除后,这是唯一的"蓝色提示") */
-  border-color: color-mix(in srgb, var(--card-accent) 40%, var(--border));
-  transform: translateY(-1px);
-  /* 蓝色光晕阴影 — 跟 accent 颜色对齐,让卡片"浮"起来时带着色温 */
-  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--card-accent) 30%, transparent);
+  background: var(--bg-hover);
+  border-color: transparent;
 }
 .tree-row-skill:focus-visible {
   outline: 2px solid var(--accent-blue);
-  outline-offset: 1px;
+  outline-offset: -1px;
 }
 
 .tree-skill-main {
@@ -535,7 +534,7 @@ function iconStack(node) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .tree-skill-head {
   display: flex;
@@ -607,36 +606,42 @@ function iconStack(node) {
   flex-shrink: 0;
 }
 
-/* 选中态(skill 卡片):蓝色边框 + accent 渐变背景 + 三层 accent 色光阴影
-   2026-07-11 美化:从单一蓝色边框升级为:
-     - 渐变背景 18% → 6% → bg-card,层次更丰富
-     - 三层阴影叠加:内描边 ring + 主光晕 6px/18px + 微近景 2px/6px
-   2026-07-11 v2:卡顶 4px accent 条已删除,不再需要 border-top-color 单独维护 */
+/* 选中态(skill 行):淡强调底 + 左侧 2px 强调色条 + 强调色文字。
+   2026-10-30 重做:旧版是"蓝色边框 + 三层光晕阴影",在窄栏里过于抢眼、
+   且阴影让整列显得脏。改成 source list 经典范式 ——
+     淡蓝底(--accent-blue-bg)+ 左侧色条 + 蓝色文字,
+   焦点清晰但安静,跟 hover 的中性底色能明确区分。 */
 .tree-node-selected > .tree-row-skill {
-  border-color: var(--accent-blue);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent-blue) 18%, var(--bg-card)) 0%,
-    color-mix(in srgb, var(--accent-blue) 6%, var(--bg-card)) 60%,
-    var(--bg-card) 100%
-  );
-  box-shadow:
-    0 0 0 1px var(--accent-blue),
-    0 6px 18px -4px color-mix(in srgb, var(--accent-blue) 35%, transparent),
-    0 2px 6px -1px color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  background: var(--accent-blue-bg);
+  border-color: transparent;
+  box-shadow: none;
+  position: relative;
+}
+/* 左侧 2px 色条(用 inset box-shadow 实现,不占布局宽度) */
+.tree-node-selected > .tree-row-skill::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-blue);
 }
 .tree-node-selected > .tree-row-skill:hover {
-  border-color: var(--accent-blue);
-  box-shadow:
-    0 0 0 1px var(--accent-blue),
-    0 8px 22px -4px color-mix(in srgb, var(--accent-blue) 45%, transparent);
+  background: var(--accent-blue-bg);
+  border-color: transparent;
 }
-/* 2026-07-11 增:选中卡片内 name 也变蓝,强化焦点 */
+/* 2026-07-11 增:选中行内 name 也变蓝,强化焦点 */
 .tree-node-selected > .tree-row-skill .tree-name {
   color: var(--accent-blue);
 }
 
-.tree-node-selected > .tree-row {
+/* 2026-10-30 改:这条通用选中规则原本也会命中 skill 行
+   (.tree-row-skill 同时带 .tree-row 类),同特异度下后写的这条会盖掉上面
+   skill 行精心设计的"淡底 + 左色条"方案(把底色刷回白、边框刷回蓝边)。
+   用 :not(.tree-row-skill) 把 skill 行排除掉,让它走专属样式。 */
+.tree-node-selected > .tree-row:not(.tree-row-skill) {
   background: var(--bg-card);
   border-color: var(--accent-blue);
 }

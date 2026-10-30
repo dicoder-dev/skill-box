@@ -25,3 +25,4 @@
 - [拖拽把手用绝对定位不占布局](fe-resizable-panel-absolute-handle.md) — grid/flex 把手当子项会挤乱列/撑出横向溢出;一律 position:absolute + 面板宽走 CSS 变量,把手 left/right 引用同一变量;useResizablePanel composable;详情底部横向滚动条真凶是 sfip-viewer-header flex 撑破
 - [自绘 1px 滚动条 v-thin-scrollbar(已弃用)](fe-thin-scrollbar-directive.md) — **2026-07-17 用户反馈不要任何滚动条,指令已删除**;若未来真需要自绘可参考此实现:macOS Chrome 轨道硬下限 11px 需自绘 thumb + ResizeObserver + scroll 联动
 - [全局隐藏滚动条客户端惯例](fe-hide-scrollbar-everywhere.md) — 桌面软件风格不显示滚动条;CSS 双层(::-webkit-scrollbar { display:none } + html { scrollbar-width: none })即可,无需自绘
+- [左侧栏紧凑化范式](fe-compact-source-list-sidebar.md) — 侧栏分区不要 border-bottom 用间距分组;搜索框改填充式;列表项改扁平行(去渐变去阴影,选中=淡底+左色条);强调色实底文字走 --accent-blue-fg token

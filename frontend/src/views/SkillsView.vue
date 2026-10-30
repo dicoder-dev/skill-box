@@ -1701,12 +1701,12 @@ onUnmounted(() => {
     <aside class="skills-pane">
       <!-- 顶部操作栏 -->
       <div class="left-topbar">
-        <button class="left-action" :title="t('skills.list.btnNewSkillTitle')" @click="startNew">
-          <IconPark icon="mdi:plus" width="16" height="16" />
+        <button class="left-action left-action-primary" :title="t('skills.list.btnNewSkillTitle')" @click="startNew">
+          <IconPark icon="mdi:plus" width="14" height="14" />
           <span>{{ t('skills.list.btnNewSkill') }}</span>
         </button>
-        <button class="left-action" :title="t('skills.list.btnImportSkillTitle')" @click="goOnboarding">
-          <IconPark icon="mdi:tray-arrow-down" width="16" height="16" />
+        <button class="left-action left-action-ghost" :title="t('skills.list.btnImportSkillTitle')" @click="goOnboarding">
+          <IconPark icon="mdi:tray-arrow-down" width="14" height="14" />
           <span>{{ t('skills.list.btnImportSkill') }}</span>
         </button>
       </div>
@@ -2414,12 +2414,21 @@ onUnmounted(() => {
   border-right: 1px solid var(--border);
 }
 
+/* ============================================
+   顶部操作区 - 2026-10-30 改:
+   1) 删掉 border-bottom(用户反馈"新建/导入下方那条横线"很丑);
+      改用间距做分组,这是 Linear / VS Code / macOS Source List 的通用做法
+      —— 密集侧栏靠留白分层,不靠横线切割。
+   2) 按钮从"两个同款描边"改成"主 + 次"层级:
+      新建 = 主色实心(唯一主操作),导入 = 无边框 ghost。
+      同权重的两个描边按钮没有视觉焦点,用户扫一眼不知道先点哪个。
+   3) 高度 32→30,内边距 12→8,整体更紧凑。
+   ============================================ */
 .left-topbar {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  padding: 8px 10px;
   background: var(--bg-card);
   flex-shrink: 0;
 }
@@ -2428,46 +2437,74 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  font-size: 13px;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12.5px;
   font-weight: 500;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.left-action:hover {
+/* 主操作:实心强调色,一眼看到该点哪。
+   文字色走 --accent-blue-fg token,暗色模式下自动切深色保证对比度。 */
+.left-action-primary {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue-fg);
+}
+.left-action-primary:hover {
+  background: color-mix(in srgb, var(--accent-blue) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent-blue) 88%, #000);
+  color: var(--accent-blue-fg);
+}
+
+/* 次操作:ghost,hover 才出底色,不跟主操作抢焦点 */
+.left-action-ghost:hover {
   background: var(--bg-hover);
-  border-color: var(--text-faint);
+  border-color: transparent;
+  color: var(--text);
 }
 
+/* ============================================
+   搜索区 - 2026-10-30 改:
+   1) 删掉 border-bottom(用户反馈搜索框"有下划线")。
+   2) 输入框从"带硬边框的输入框"改成"填充式搜索框"(filled search field):
+      靠 --bg-subtle 底色 + 圆角表达边界,焦点时才浮现强调色描边。
+      这是现代桌面应用搜索框的主流形态,比四边描边轻得多。
+   ============================================ */
 .left-search {
   position: relative;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 10px 8px;
   flex-shrink: 0;
 }
 
 .left-search .search-icon {
   position: absolute;
-  left: 22px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 19px;
+  /* 垂直居中:输入框高 30px,图标高 14px,top = (30-14)/2 = 8px */
+  top: 8px;
   color: var(--text-faint);
   pointer-events: none;
 }
 
 .left-search .search-input {
   width: 100%;
-  height: 32px;
-  padding-left: 30px;
-  font-size: 13px;
+  height: 30px;
+  padding-left: 29px;
+  font-size: 12.5px;
+  background: var(--bg-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.left-search .search-input:focus {
   background: var(--bg-card);
+  border-color: var(--accent-blue-border);
+  box-shadow: 0 0 0 3px var(--accent-blue-bg);
 }
 
 .left-error {
@@ -2610,7 +2647,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 6px 12px;
+  padding: 4px 6px 10px;
   /* 2026-06-29 增:容器空白处可右键,给个 cursor 提示 */
   cursor: default;
   /* 2026-06-29 增:根拖入高亮 — 容器整体变蓝底色 + 虚线边框 + 文字"放到根"。
