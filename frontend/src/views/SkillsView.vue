@@ -2358,8 +2358,9 @@ onUnmounted(() => {
   min-height: 0;
   color: var(--text);
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* 2026-10-30 改:去掉主体区外框(原 border + border-radius),
+     与 Market / Agents / Projects 视图保持一致的"无边框平铺"风格。
+     只保留 overflow:hidden 裁剪子面板,不再有圆角。 */
   overflow: hidden;
 }
 
