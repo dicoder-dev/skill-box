@@ -16,12 +16,13 @@
 //	desktop.NewApp + App.Run           ←  构造 Wails 窗口/菜单/托盘,可选
 //
 // macOS 26 Tahoe 启动问题诊断辅助:
-//   桌面端 dmg 装到 /Applications 后双击闪退(2026-07-16 实测:runningboard 报
-//   'termination reported by launchd (0, 0, 256)',LSExitStatus=1),目前根因在
-//   maybeBootstrapLaunchAgent 的 plist 路径漂移(commit c52ab1a 已修)。
-//   但 launchd 派发链上 panic / os.Exit 仍可能发生,本 main.go 在入口处
-//   捕获所有 panic、记录 exit 原因、把日志写到 ~/.skill-box/logs/ 下,方便
-//   后续 syspolicyd / amfi / runningboard 看不到的内部错误也能从用户家目录抓出。
+//
+//	桌面端 dmg 装到 /Applications 后双击闪退(2026-07-16 实测:runningboard 报
+//	'termination reported by launchd (0, 0, 256)',LSExitStatus=1),目前根因在
+//	maybeBootstrapLaunchAgent 的 plist 路径漂移(commit c52ab1a 已修)。
+//	但 launchd 派发链上 panic / os.Exit 仍可能发生,本 main.go 在入口处
+//	捕获所有 panic、记录 exit 原因、把日志写到 ~/.skill-box/logs/ 下,方便
+//	后续 syspolicyd / amfi / runningboard 看不到的内部错误也能从用户家目录抓出。
 package main
 
 import (
@@ -140,12 +141,12 @@ func main() {
 	app := desktop.NewApp(desktop.AppConfig{
 		Name: "Skill-Box",
 		Size: desktop.WindowSizeConfig{
-			Mode:        desktop.WindowSizeModeRatio,
+			Mode:        desktop.WindowSizeModeFixed,
 			WidthRatio:  0.9,
 			HeightRatio: 0.9,
 			AspectRatio: "16:9", // 宽高比锁 16:9,无论屏幕如何窗口都是 16:9
-			MinWidth:    1440,
-			MinHeight:   820,
+			MinWidth:    800,
+			MinHeight:   600,
 		},
 		// 老顶层字段(Width/Height/AutoSizeByScreen)继续兼容,但 Size 配置过时被忽略。
 		FrontendURL: desktop.NewFrontendURLFromEnv("", 0),
@@ -163,19 +164,20 @@ func main() {
 // 同步落到磁盘 + log 包默认 writer(原 stderr 行为不变)。
 //
 // 目录结构(2026-07-16 改):
-//   ~/.skill-box/logs/
-//     ├── startup/
-//     │   ├── 2026/                  ← 第一层:年份
-//     │   │   ├── 2026-07-16/        ← 第二层:月份-日期
-//     │   │   │   └── startup-175948-67581.log  ← 文件
-//     │   │   └── ...
-//     │   └── ...
-//     ├── 2026-07/                   ← 业务 log 月份目录(由 StartGinLogger 写)
-//     │   ├── 2026-07-16.log
-//     │   └── ...
-//     └── 2026-07/                   ← 请求 log 月份目录(由 ginp middleware 写)
-//         ├── 07-16-request.txt
-//         └── ...
+//
+//	~/.skill-box/logs/
+//	  ├── startup/
+//	  │   ├── 2026/                  ← 第一层:年份
+//	  │   │   ├── 2026-07-16/        ← 第二层:月份-日期
+//	  │   │   │   └── startup-175948-67581.log  ← 文件
+//	  │   │   └── ...
+//	  │   └── ...
+//	  ├── 2026-07/                   ← 业务 log 月份目录(由 StartGinLogger 写)
+//	  │   ├── 2026-07-16.log
+//	  │   └── ...
+//	  └── 2026-07/                   ← 请求 log 月份目录(由 ginp middleware 写)
+//	      ├── 07-16-request.txt
+//	      └── ...
 //
 // 清理策略(2026-07-16 增):启动早期调用 cleanupOldLogs,删除 2 个月前的:
 //   - logs/startup/<年份>/              ← 整目录删除
