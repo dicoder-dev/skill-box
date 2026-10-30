@@ -93,31 +93,54 @@ jq -e '
 - `version` 与文件名约定:**`<appName>_<version>_<os>_<arch>.<ext>`**(release.sh 生成)。
 - **不要** 把 manifest 路径直接变成 `releases/latest/index.json` 之类的简化形式 —— GitHub release 不会自动生成 JSON 索引,这条路不通,必须自己生成一份 manifest 并提交到分支。
 
-## 7. 发布流程(`scripts/release.sh`)
+## 7. 发布流程
+
+### 7.1 一键发版(推荐)
 
 ```bash
-VERSION=1.2.3 CHANNEL=stable \
+./run-wails.sh          # 选 5) released
+# 或
+./scripts/release_all.sh
+```
+
+链路:`release_all.sh` → bump 版本 → commit/push → 打 tag → **GitHub Actions 打三平台** →
+本地轮询 GitHub API 等 release → `release.sh MODE=mirror` 拉产物 → 传 Gitee → 生成两份 manifest → 推指针 → 校验。
+
+本地是 macOS,编不出 Windows / Linux(CGO / NSIS / AppImage 链不可用),
+所以三平台**统一**由 `.github/workflows/release.yml` 的 matrix 构建。
+
+### 7.2 单跑发布脚本
+
+```bash
+VERSION=1.2.3 CHANNEL=stable MODE=build \
 GITHUB_TOKEN=xxx GITEE_TOKEN=yyy \
 GITEE_REPO=dicoder/skill-box GITEE_BRANCH=main \
 ./scripts/release.sh
 ```
 
-脚本做这些事:
+`MODE=build`(本地构建发双站)做这些事:
 
 1. 校验 semver + git 工作树干净;
-2. sed 替换各平台版本号(dry-run 模式跳过);
+2. `scripts/bump_version.sh` 替换各平台版本号(dry-run 模式跳过);
 3. build 三平台;
-4. 整理安装包:macOS `.app` → zip、Windows `.exe` → zip、Linux AppImage 直接用;
-5. 算 SHA256,生成 `build/updater/manifest.{github,gitee}.json` 两份;
+4. `scripts/collect_artifacts.sh` 整理安装包:macOS `.app` → zip、Windows `.exe` → zip、Linux AppImage 直接用;
+5. `scripts/gen_manifest.py` 算 SHA256,生成 `build/updater/manifest.{github,gitee}.json` 两份;
 6. 上传 GitHub release + Gitee release(API,不走 `gh` CLI);
 7. 提交并推送两份 manifest 指针到 GitHub + Gitee 两个远端;
 8. HEAD 校验每个下载地址,404 直接失败。
 
-可用 env:
+`MODE=mirror`(本地 mac 发不了 win/linux 时走这条,`release_all.sh` 自动调用):
+从 GitHub release 下载产物 → 上传到 Gitee release → 生成两份 manifest → 推指针 → 校验。
+
+### 7.3 可用 env
 
 | env | 默认 | 说明 |
 | --- | --- | --- |
-| `DRY_RUN` | `0` | 只跑到第 5 步,不推不传(演练用) |
+| `VERSION` | 交互输入 | 严格 semver |
+| `CHANNEL` | `stable` | |
+| `MODE` | `build` | `build` / `mirror` |
+| `WAIT_TIMEOUT` | `3600` | 等 CI 的秒数(仅 release_all.sh) |
+| `DRY_RUN` | `0` | 只跑到"生成 manifest",不推不传(演练用) |
 | `NO_PUSH` | `0` | 跑完但不调上传 API |
 | `GITHUB_REPO` | `dicoder-dev/skill-box` | |
 | `GITHUB_TOKEN` | 空 | 必填(除非 DRY_RUN / NO_PUSH) |
@@ -127,8 +150,12 @@ GITEE_REPO=dicoder/skill-box GITEE_BRANCH=main \
 | `GITEE_BRANCH` | `main` | **必须是 Gitee 仓库的实际分支**,否则 raw 404 |
 | `GITEE_MAX_ATTACH_MB` | `100` | Gitee 单附件上限,超限的包只进 GitHub |
 
+Token 读取顺序:环境变量 → `~/.skill-box/release.env` → 交互输入(不回显,自动记住)。
+
 ## 8. 已知坑
 
+- **发版强依赖 GitHub Actions 跑通**:CI 挂了 `release_all.sh` 会等到超时后报错退出,
+  此时 tag 已经推上去了,需要人工处理(换版本号重发)。
 - **Gitee 附件单文件 100MB 上限**:`bin/Skill-Box` 约 85MB,Windows 安装包更大,
   所以 macOS / Windows 都压缩成 zip 再上传;仍然超限的包只进 GitHub
   (Gitee 那份 manifest 里直接不放这个 asset)。
@@ -137,6 +164,8 @@ GITEE_REPO=dicoder/skill-box GITEE_BRANCH=main \
 - **Gitee raw 会 302 跳转**到实际文件地址,后端 http.Client 默认跟随跳转,不用额外处理。
 - **manifest 缓存 5 分钟,缓存键含源地址列表**:切语言后拿到的是新源的 manifest,
   不会出现"中文用户拿到 GitHub 地址的安装包"。
+- **Linux CI 上没有 PlistBuddy**:`bump_version.sh` 检测不到时会退回 `sed` 改 plist。
+- **Windows runner 上可能没有 `zip`**:`collect_artifacts.sh` 会退回用 `7z`。
 - **历史 bug(已修)**:`release.sh` 早期版本把 `assets[].urls` 写成空数组、`arch` 写死 `amd64`,
   导致下载必失败 / arm64 机器匹配不到 asset。现在由脚本按实际产物生成。
 

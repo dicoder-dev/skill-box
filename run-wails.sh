@@ -6,6 +6,7 @@
 #   2) web  -> wails3 task web
 #   3) build -> wails3 task build
 #   4) app  -> 直接启动 /Applications/skill-box.app(绕过 Gatekeeper)
+#   5) released -> 一键发版(GitHub Actions 打三平台包 → 拉产物 → 同步 Gitee + 生成 manifest)
 # 默认(直接回车) -> 1) dev
 # 启动前会先调用 ./kill_port.sh 释放 9245 端口
 
@@ -23,8 +24,9 @@ echo "  1) dev   (wails3 task dev)"
 echo "  2) web   (wails3 task web)"
 echo "  3) build (wails3 task build)"
 echo "  4) app   (直接启动已装好的 /Applications/skill-box.app)"
+echo "  5) released (发版:GitHub Actions 打三平台包 → 拉产物 → 同步 Gitee → 生成 manifest)"
 echo "─────────────────────────────────"
-read -r -p "请输入选项 [1/2/3/4] (默认 1): " CHOICE
+read -r -p "请输入选项 [1/2/3/4/5] (默认 1): " CHOICE
 
 # 默认值: 空输入 -> 1
 if [ -z "$CHOICE" ]; then
@@ -40,6 +42,16 @@ case "$CHOICE" in
     ;;
   3)
     TASK="build"
+    ;;
+  5)
+    # 一键发版:本地只负责 bump 版本 + 打 tag,三平台编译交给 GitHub Actions,
+    # 产物拉回后同步到 Gitee 并生成两份 manifest 指针文件。
+    # 详细流程见 scripts/release_all.sh 与 .github/workflows/release.yml。
+    echo "✅ 已选择 released (一键发版)"
+    echo "   · 本地 mac 编不出 win/linux,三平台统一由 GitHub Actions 打包"
+    echo "   · CI 完成后自动把产物同步到 Gitee,并生成 / 推送 manifest 指针"
+    echo ""
+    exec bash ./scripts/release_all.sh
     ;;
   4)
     # macOS 26 (Tahoe) Gatekeeper 拒绝 ad-hoc 签名 app 通过 LaunchServices 启动,
@@ -81,7 +93,7 @@ case "$CHOICE" in
     exec arch -arm64 "$APP_BIN"
     ;;
   *)
-    echo "❌ 无效选项: $CHOICE (仅支持 1/2/3/4)"
+    echo "❌ 无效选项: $CHOICE (仅支持 1/2/3/4/5)"
     exit 1
     ;;
 esac

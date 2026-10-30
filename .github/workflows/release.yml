@@ -1,0 +1,190 @@
+name: release
+
+# 发版流水线:
+#   1) 推 tag(v1.2.3)或手动触发 → 三平台并行构建(macOS / Windows / Linux)
+#   2) 构建产物统一按发布命名约定整理(skill-box_<ver>_<os>_<arch>.<ext>)
+#   3) 汇总成一个 GitHub Release
+#
+# Gitee 侧不在 CI 里做(本地 mac 编不出 win/linux,也不想把 Gitee 凭据放进 CI);
+# 走 scripts/release_all.sh → scripts/release.sh MODE=mirror:
+#   从这里下载产物 → 传到 Gitee → 生成并推送两份 manifest 指针。
+#
+# 手动触发时需要填版本号(不含 v);tag 触发时以 tag 为准。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号(不含 v),例如 1.2.3'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: '1.26'
+  NODE_VERSION: '22'
+  WAILS3_VERSION: 'v3.0.0'
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: darwin }
+          - { os: windows-latest, target: windows }
+          - { os: ubuntu-latest, target: linux }
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装 wails3 CLI
+        shell: bash
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
+
+      - name: 解析版本号
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          version="${version#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "解析到版本号: $version"
+
+      - name: 安装平台依赖(Linux:FUSE / AppImage)
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          # appimagetool 需要 FUSE;不同 Ubuntu 版本包名不同,两个都试
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64 || true
+
+      - name: 安装平台依赖(Windows:NSIS)
+        if: matrix.target == 'windows'
+        shell: bash
+        run: choco install nsis -y --no-progress
+
+      - name: 写入版本号
+        shell: bash
+        run: bash scripts/bump_version.sh "$VERSION"
+
+      - name: 构建 + 打包
+        shell: bash
+        env:
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -e
+          case "${{ matrix.target }}" in
+            darwin)
+              # universal 二进制(arm64 + amd64),产物 bin/Skill-Box.app
+              wails3 task darwin:package:universal
+              ;;
+            windows)
+              # nsis 安装包 + 免安装 exe(产物 bin/Skill-Box.exe)
+              wails3 task windows:package
+              ;;
+            linux)
+              # 只打 AppImage(deb/rpm/aur 不参与自升级)
+              wails3 task linux:create:appimage
+              ;;
+          esac
+
+      - name: 整理产物(按发布命名约定)
+        shell: bash
+        run: bash scripts/collect_artifacts.sh "${{ matrix.target }}" "$VERSION"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.target }}
+          path: bin/release/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: 创建 GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 解析版本号
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          version="${version#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: 下载三平台产物
+        uses: actions/download-artifact@v4
+        with:
+          path: bin/release
+          merge-multiple: true
+
+      - name: 产物清单
+        shell: bash
+        run: ls -la bin/release
+
+      - name: 创建 release 并上传产物
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG 已存在,覆盖上传"
+            gh release upload "$TAG" bin/release/* --clobber
+          else
+            # workflow_dispatch 时 tag 可能还不存在,先补一个
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              git tag -a "$TAG" -m "Release $TAG"
+              git push origin "$TAG"
+            fi
+            gh release create "$TAG" bin/release/* --title "$TAG" --notes "Release $TAG"
+          fi
+
+      - name: 输出下载地址
+        shell: bash
+        env:
+          TAG: v${{ steps.ver.outputs.version }}
+        run: |
+          echo "GitHub release 已就绪:"
+          echo "  https://github.com/${{ github.repository }}/releases/download/${TAG}/"
+          echo "接下来在本地跑 scripts/release_all.sh(或 run-wails.sh 选 5)同步到 Gitee。"

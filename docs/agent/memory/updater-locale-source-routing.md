@@ -40,7 +40,23 @@ metadata:
 - **Gitee release 附件直链格式与 GitHub 同形**:
   `https://gitee.com/<owner>/<repo>/releases/download/<tag>/<file>`。
 
+## 发版链路(2026-10-30 补充)
+
+本地是 macOS,Windows / Linux 编不出来(CGO / NSIS / AppImage 链不可用)→
+**三平台统一由 GitHub Actions 打**,产物在 GitHub release 汇合,再由本地脚本下载后同步到 Gitee。
+
+- 入口:`run-wails.sh` 选 `5) released` → `scripts/release_all.sh`。
+- 脚本分工:`bump_version.sh`(版本号)→ `collect_artifacts.sh`(产物整理)→
+  `gen_manifest.py`(两份 manifest)→ `release.sh MODE=build|mirror`。
+- **Gitee 凭据不进 CI**,只在本地 mirror 阶段用 → 不用把 token 塞进 Actions secrets。
+- 产物命名约定:`skill-box_<ver>_<os>_<arch>.<ext>`;`*-installer.exe` / `.dmg` **不进 manifest**
+  (替身脚本装不了),只当手动下载附件。
+- mac 的 universal 包在 manifest 里登记 arm64 + amd64 两条 entry,指向同一个 zip。
+- CI runner 差异:Windows 无 `zip` 用 `7z` 兜底;Linux 无 `PlistBuddy` 用 `sed` 兜底。
+
 ## 相关
 
 - 运维文档:`docs/agent/project/updater-manifest.md`
-- 发布脚本:`scripts/release.sh`(用 curl 调 API,不再依赖 `gh` CLI)
+- 业务文档:`docs/project/desktop/软件更新机制.md`
+- 发布脚本:`scripts/release.sh`(用 curl 调 API,不再依赖 `gh` CLI)、`scripts/release_all.sh`
+- CI:`.github/workflows/release.yml`
